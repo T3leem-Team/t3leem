@@ -127,6 +127,219 @@ export const recentActivity: Activity[] = [
   { id: 'a5', text: 'وردت ٥ طلبات تسجيل جديدة بانتظار المراجعة', time: 'اليوم ٠٨:٣٠ ص', type: 'enrollment' },
 ]
 
+// ── Users & Permissions ──────────────────────────────────────────────
+
+export type PermissionAction = { key: string; label: string }
+export type PermissionGroup = {
+  key: string
+  label: string
+  actions: PermissionAction[]
+}
+
+export const permissionGroups: PermissionGroup[] = [
+  {
+    key: 'students',
+    label: 'الطلاب',
+    actions: [
+      { key: 'students.view', label: 'عرض' },
+      { key: 'students.create', label: 'إضافة' },
+      { key: 'students.edit', label: 'تعديل' },
+      { key: 'students.delete', label: 'حذف' },
+    ],
+  },
+  {
+    key: 'registration',
+    label: 'التسجيل',
+    actions: [
+      { key: 'registration.view', label: 'عرض' },
+      { key: 'registration.manage', label: 'إدارة' },
+    ],
+  },
+  {
+    key: 'teachers',
+    label: 'المعلمون',
+    actions: [
+      { key: 'teachers.view', label: 'عرض' },
+      { key: 'teachers.manage', label: 'إدارة' },
+    ],
+  },
+  {
+    key: 'payments',
+    label: 'المدفوعات',
+    actions: [
+      { key: 'payments.view', label: 'عرض' },
+      { key: 'payments.manage', label: 'إدارة' },
+    ],
+  },
+  {
+    key: 'attendance',
+    label: 'الحضور',
+    actions: [
+      { key: 'attendance.view', label: 'عرض' },
+      { key: 'attendance.manage', label: 'إدارة' },
+    ],
+  },
+  {
+    key: 'users',
+    label: 'المستخدمون',
+    actions: [
+      { key: 'users.view', label: 'عرض' },
+      { key: 'users.manage', label: 'إدارة' },
+    ],
+  },
+  {
+    key: 'settings',
+    label: 'الإعدادات',
+    actions: [{ key: 'settings.manage', label: 'إدارة' }],
+  },
+  {
+    key: 'reports',
+    label: 'التقارير',
+    actions: [{ key: 'reports.view', label: 'عرض' }],
+  },
+]
+
+export const allPermissionKeys: string[] = permissionGroups.flatMap((group) =>
+  group.actions.map((action) => action.key),
+)
+
+export type Role = {
+  key: string
+  label: string
+  description: string
+  permissions: string[]
+}
+
+export const roles: Role[] = [
+  {
+    key: 'admin',
+    label: 'مدير النظام',
+    description: 'صلاحيات كاملة على جميع الأقسام',
+    permissions: allPermissionKeys,
+  },
+  {
+    key: 'admin2',
+    label: 'مدير مساعد',
+    description: 'صلاحيات إدارية دون إعدادات النظام',
+    permissions: allPermissionKeys.filter((key) => key !== 'settings.manage'),
+  },
+  {
+    key: 'supervisor',
+    label: 'مشرف',
+    description: 'متابعة الطلاب والمعلمين والحضور',
+    permissions: [
+      'students.view',
+      'students.edit',
+      'registration.view',
+      'registration.manage',
+      'teachers.view',
+      'teachers.manage',
+      'attendance.view',
+      'attendance.manage',
+      'reports.view',
+    ],
+  },
+  {
+    key: 'teacher',
+    label: 'معلم',
+    description: 'إدارة الحضور والاطلاع على الطلاب',
+    permissions: [
+      'students.view',
+      'attendance.view',
+      'attendance.manage',
+      'reports.view',
+    ],
+  },
+  {
+    key: 'registrar',
+    label: 'مسجّل',
+    description: 'إدخال بيانات الطلاب ومعالجة التسجيل',
+    permissions: [
+      'students.view',
+      'students.create',
+      'students.edit',
+      'registration.view',
+      'registration.manage',
+      'reports.view',
+    ],
+  },
+]
+
+export type User = {
+  id: string
+  username: string
+  fullName: string
+  roleKey: string
+  department: string
+  active: boolean
+  permissions: string[]
+}
+
+function rolePermissions(key: string): string[] {
+  return roles.find((role) => role.key === key)?.permissions ?? []
+}
+
+export const users: User[] = [
+  {
+    id: 'USR-01',
+    username: 'a.alqahtani',
+    fullName: 'عبدالله القحطاني',
+    roleKey: 'admin',
+    department: 'الإدارة العامة',
+    active: true,
+    permissions: rolePermissions('admin'),
+  },
+  {
+    id: 'USR-02',
+    username: 'h.alrashid',
+    fullName: 'هند الرشيد',
+    roleKey: 'admin2',
+    department: 'الشؤون الأكاديمية',
+    active: true,
+    permissions: rolePermissions('admin2'),
+  },
+  {
+    id: 'USR-03',
+    username: 'm.alzahrani',
+    fullName: 'ماجد الزهراني',
+    roleKey: 'supervisor',
+    department: 'الإشراف التربوي',
+    active: true,
+    permissions: rolePermissions('supervisor'),
+  },
+  {
+    id: 'USR-04',
+    username: 'n.alomari',
+    fullName: 'نورة العمري',
+    roleKey: 'teacher',
+    department: 'قسم العلوم',
+    active: true,
+    permissions: rolePermissions('teacher'),
+  },
+  {
+    id: 'USR-05',
+    username: 's.aldosari',
+    fullName: 'سامي الدوسري',
+    roleKey: 'registrar',
+    department: 'شؤون التسجيل',
+    active: false,
+    permissions: rolePermissions('registrar'),
+  },
+  {
+    id: 'USR-06',
+    username: 'r.almalki',
+    fullName: 'ريم المالكي',
+    roleKey: 'teacher',
+    department: 'قسم اللغة العربية',
+    active: true,
+    permissions: rolePermissions('teacher'),
+  },
+]
+
+export function roleLabel(key: string): string {
+  return roles.find((role) => role.key === key)?.label ?? key
+}
+
 export type ChartPoint = { month: string; students: number }
 
 export const enrollmentTrend: ChartPoint[] = [
