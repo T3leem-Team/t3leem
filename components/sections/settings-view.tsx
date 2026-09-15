@@ -1,136 +1,218 @@
-import { School, ShieldCheck, Bell, Palette } from 'lucide-react'
+import Link from 'next/link'
+import {
+  Archive,
+  ArrowLeft,
+  BookOpen,
+  ShieldAlert,
+  ShieldCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
-const roles = [
-  { name: 'مدير النظام', members: '٢', desc: 'صلاحيات كاملة على جميع الأقسام' },
-  { name: 'مدير المدرسة', members: '١', desc: 'إدارة الطلاب والمعلمين والتقارير' },
-  { name: 'موظف تسجيل', members: '٤', desc: 'مراجعة طلبات التسجيل وإدخال البيانات' },
-  { name: 'محاسب', members: '٢', desc: 'إدارة المدفوعات والفواتير' },
+const managementOptions = [
+  {
+    title: 'المستخدمون والصلاحيات',
+    description:
+      'إضافة المستخدمين وإدارة حساباتهم وتحديد الأدوار والصلاحيات لكل مستخدم.',
+    href: '/settings/users',
+    icon: Users,
+    badge: 'إدارة المستخدمين',
+  },
+  {
+    title: 'السنة الدراسية والدورات',
+    description:
+      'إدارة السنة الدراسية، الدورات التابعة لها، مواعيدها وأيام الدراسة.',
+    href: '/settings/academic-year',
+    icon: BookOpen,
+    badge: 'إدارة الدورات',
+  },
+  {
+    title: 'الأرشيف',
+    description:
+      'أرشفة دورة محددة أو سنة دراسية كاملة مع الاحتفاظ بجميع بياناتها.',
+    href: '/settings/archive',
+    icon: Archive,
+    badge: 'الأرشفة',
+  },
+  {
+    title: 'الإجراءات الحساسة',
+    description:
+      'إجراءات إدارية تحتاج إلى صلاحية خاصة، مثل إلغاء دورة.',
+    href: '/settings/danger-zone',
+    icon: ShieldAlert,
+    badge: 'صلاحيات خاصة',
+    danger: true,
+  },
 ]
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground">
-        {label}
-      </label>
-      <div className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm">
-        {value}
-      </div>
-    </div>
-  )
-}
 
 export function SettingsView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="الإدارة والإعدادات"
-        description="ضبط إعدادات النظام والصلاحيات والمعلومات العامة"
-        action={<Button>حفظ التغييرات</Button>}
+        title="الإدارة والتحكم"
+        description="إدارة المستخدمين والصلاحيات والدورات والأرشيف والإجراءات الإدارية"
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <School className="size-5" />
-            </span>
-            <div className="space-y-1">
-              <CardTitle>معلومات المدرسة</CardTitle>
-              <CardDescription>البيانات الأساسية للمنشأة التعليمية</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="اسم المدرسة" value="مدارس تعليم الأهلية" />
-            <Field label="المدينة" value="الرياض" />
-            <Field label="العام الدراسي" value="١٤٤٨ هـ / ٢٠٢٦ م" />
-            <Field label="البريد الإلكتروني" value="info@t3leem.sa" />
-            <Field label="رقم الترخيص" value="EDU-٢٠٢٦-٤٤٨١" />
-            <Field label="عدد المراحل" value="٣ مراحل" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      {/* ملاحظة الإدارة */}
+      <Card>
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <ShieldCheck className="size-5" />
             </span>
-            <div className="space-y-1">
-              <CardTitle>الأدوار والصلاحيات</CardTitle>
-              <CardDescription>إدارة مستويات الوصول</CardDescription>
+
+            <div>
+              <p className="font-medium">منطقة الإدارة</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                هذه الأقسام مخصصة لإدارة النظام والبيانات الحساسة، وتخضع
+                للصلاحيات المحددة لكل مستخدم.
+              </p>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {roles.map((role) => (
-              <div
-                key={role.name}
-                className="flex items-start justify-between gap-3 rounded-lg border border-border p-3"
+          </div>
+
+          <Badge variant="success">Admin</Badge>
+        </CardContent>
+      </Card>
+
+      {/* الخيارات الرئيسية */}
+      <div>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">الإدارة الرئيسية</h2>
+          <p className="text-sm text-muted-foreground">
+            اختر القسم الذي تريد إدارته
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {managementOptions.map((option) => {
+            const Icon = option.icon
+
+            return (
+              <Link
+                key={option.title}
+                href={option.href}
+                className="group block"
               >
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium">{role.name}</p>
-                  <p className="text-xs text-muted-foreground">{role.desc}</p>
-                </div>
-                <Badge variant="neutral">{role.members} أعضاء</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                <Card
+                  className={`h-full transition-colors ${
+                    option.danger
+                      ? 'hover:border-destructive/50'
+                      : 'hover:border-primary/40'
+                  }`}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <span
+                        className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${
+                          option.danger
+                            ? 'bg-destructive/10 text-destructive'
+                            : 'bg-primary/10 text-primary'
+                        }`}
+                      >
+                        <Icon className="size-6" />
+                      </span>
 
-        <Card>
-          <CardHeader className="flex-row items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Bell className="size-5" />
-            </span>
-            <div className="space-y-1">
-              <CardTitle>الإشعارات</CardTitle>
-              <CardDescription>تفضيلات التنبيهات</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span>طلبات التسجيل الجديدة</span>
-              <Badge variant="success">مفعّل</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>تنبيهات المدفوعات المتأخرة</span>
-              <Badge variant="success">مفعّل</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>التقارير الأسبوعية</span>
-              <Badge variant="neutral">معطّل</Badge>
-            </div>
-          </CardContent>
-        </Card>
+                      <ArrowLeft className="mt-2 size-5 text-muted-foreground transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
+                    </div>
 
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Palette className="size-5" />
-            </span>
-            <div className="space-y-1">
-              <CardTitle>مظهر النظام</CardTitle>
-              <CardDescription>تخصيص الواجهة واللغة</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="اللغة" value="العربية" />
-            <Field label="اتجاه الواجهة" value="من اليمين إلى اليسار (RTL)" />
-            <Field label="المنطقة الزمنية" value="توقيت الرياض (GMT+3)" />
-            <Field label="التقويم" value="هجري / ميلادي" />
-          </CardContent>
-        </Card>
+                    <div className="mt-5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold">
+                          {option.title}
+                        </h3>
+
+                        <Badge
+                          variant={option.danger ? 'destructive' : 'neutral'}
+                        >
+                          {option.badge}
+                        </Badge>
+                      </div>
+
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {option.description}
+                      </p>
+
+                      <div className="mt-5 flex items-center text-sm font-medium text-primary">
+                        فتح القسم
+                        <ArrowLeft className="mr-2 size-4 transition-transform group-hover:-translate-x-1" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
       </div>
+
+      {/* الوصول السريع */}
+      <Card>
+        <CardHeader>
+          <CardTitle>الوصول السريع</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="h-auto justify-between py-4"
+              nativeButton={false}
+              render={<Link href="/settings/users" />}
+            >
+              <span className="flex items-center gap-3">
+                <UserPlus className="size-5 text-primary" />
+                <span className="text-right">
+                  <span className="block font-medium">إضافة مستخدم</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    إنشاء مستخدم وتحديد صلاحياته
+                  </span>
+                </span>
+              </span>
+
+              <ArrowLeft className="size-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              className="h-auto justify-between py-4"
+              nativeButton={false}
+              render={<Link href="/settings/academic-year" />}
+            >
+              <span className="flex items-center gap-3">
+                <BookOpen className="size-5 text-primary" />
+                <span className="text-right">
+                  <span className="block font-medium">إدارة الدورات</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    إضافة أو تعديل دورة دراسية
+                  </span>
+                </span>
+              </span>
+
+              <ArrowLeft className="size-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* تنبيه الأرشفة */}
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
+        <CardContent className="flex gap-3 p-5">
+          <Archive className="mt-0.5 size-5 shrink-0 text-amber-600" />
+
+          <div>
+            <p className="font-medium">الأرشفة لا تعني الحذف</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              عند أرشفة دورة أو سنة دراسية، تبقى جميع بيانات الطلاب والحضور
+              والمعلمين والمدفوعات والسجلات محفوظة ويمكن الرجوع إليها لاحقًا.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
