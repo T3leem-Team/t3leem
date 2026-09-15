@@ -60,10 +60,6 @@ const studentColumns = [
 ] as const
 
 
-**لا تغيّر أي شيء ثاني الحين.**
-
-بعد ما تضيفه وتعمل حفظ، قل لي **تم** ونروح للخطوة الثانية: إضافة زر **تخصيص الأعمدة** نفسه.
-
   const [studentList, setStudentList] = useState(students)
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
   const [selectedStudentId, setSelectedStudentId] = useState('')
