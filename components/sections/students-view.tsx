@@ -227,30 +227,22 @@ action={
 
               return (
                 <TableRow key={student.id}>
-                  <TableCell className="font-medium">
-                    {student.name}
-                  </TableCell>
-
+                  <TableCell className="font-medium">{student.name}</TableCell>
                   <TableCell>{student.personalId}</TableCell>
                   <TableCell>{student.grade}</TableCell>
-
                   <TableCell dir="ltr">{student.phone}</TableCell>
                   <TableCell dir="ltr">{student.whatsapp}</TableCell>
-
                   <TableCell>
                     <StatusBadge status={student.paymentStatus} />
                   </TableCell>
-
                   <TableCell>
                     {student.amountPaid.toLocaleString('ar-BH')} د.ب
                   </TableCell>
-
                   <TableCell>
                     {student.paymentStatus === 'معفي'
                       ? '—'
                       : `${remaining.toLocaleString('ar-BH')} د.ب`}
                   </TableCell>
-
                   <TableCell>{student.chronicDiseases}</TableCell>
                   <TableCell>{student.notes || '—'}</TableCell>
                 </TableRow>
@@ -444,6 +436,7 @@ action={
     </div>
   )}
 </div>
+
 
 )
 }
