@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Edit3, Plus, X, Check } from 'lucide-react'
+import { Check, Edit3, Plus, X } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
 const initialSubjects = [
   'اللغة العربية',
@@ -17,7 +16,7 @@ const initialSubjects = [
   'التربية البدنية',
 ]
 
-export default function SubjectsPage() {
+export default function Page() {
   const [subjects, setSubjects] = useState(initialSubjects)
   const [newSubject, setNewSubject] = useState('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -66,13 +65,18 @@ export default function SubjectsPage() {
         description="إضافة وتعديل المواد الدراسية"
       />
 
-      {/* إضافة مادة */}
       <Card>
         <CardContent className="flex flex-col gap-3 p-5 sm:flex-row">
-          <Input
+          <input
             value={newSubject}
             onChange={(event) => setNewSubject(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                addSubject()
+              }
+            }}
             placeholder="اسم المادة"
+            className="h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
           />
 
           <Button onClick={addSubject}>
@@ -82,7 +86,6 @@ export default function SubjectsPage() {
         </CardContent>
       </Card>
 
-      {/* قائمة المواد */}
       <Card>
         <CardContent className="divide-y p-0">
           {subjects.map((subject, index) => (
@@ -92,12 +95,22 @@ export default function SubjectsPage() {
             >
               {editingIndex === index ? (
                 <div className="flex flex-1 gap-2">
-                  <Input
+                  <input
                     value={editingName}
                     onChange={(event) =>
                       setEditingName(event.target.value)
                     }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        saveEdit()
+                      }
+
+                      if (event.key === 'Escape') {
+                        cancelEdit()
+                      }
+                    }}
                     autoFocus
+                    className="h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   />
 
                   <Button
@@ -138,3 +151,4 @@ export default function SubjectsPage() {
     </div>
   )
 }
+
