@@ -55,7 +55,7 @@ setFilters((current) => ({ ...current, [key]: value }))
 const filteredStudents = useMemo(() => {
 const query = search.trim().toLowerCase()
 
-```
+
 return students.filter((student) => {
   const remaining =
     student.paymentStatus === 'معفي'
