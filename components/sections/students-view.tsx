@@ -58,7 +58,7 @@ export function StudentsView() {
           <div className="flex flex-col gap-3 md:flex-row">
             <div className="relative flex-1">
               <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+              <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="بحث في جميع بيانات الطلاب..."
