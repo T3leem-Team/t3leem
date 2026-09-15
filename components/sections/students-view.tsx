@@ -103,7 +103,7 @@ return students.filter((student) => {
 
   return matchesSearch && Object.values(matches).every(Boolean)
 })
-```
+
 
 }, [search, filters])
 
@@ -126,7 +126,7 @@ action={
 }
 />
 
-```
+
   <Card>
     <CardContent className="space-y-4 p-4">
       <div className="relative">
