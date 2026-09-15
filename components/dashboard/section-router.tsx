@@ -15,7 +15,7 @@ const routes: { match: (p: string) => boolean; view: () => React.ReactNode }[] =
   { match: (p) => p.startsWith('/enrollment'), view: () => <EnrollmentView /> },
   { match: (p) => p.startsWith('/teachers'), view: () => <TeachersView /> },
   { match: (p) => p.startsWith('/payments'), view: () => <PaymentsView /> },
-  { match: (p) => p.startsWith('/settings'), view: () => <SettingsView /> },
+  { match: (p) => p === '/settings', view: () => <SettingsView /> },
 ]
 
 export function SectionRouter() {
