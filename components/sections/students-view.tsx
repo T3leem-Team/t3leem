@@ -7,7 +7,6 @@ import { PageHeader } from '@/components/dashboard/page-header'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -63,7 +62,7 @@ export function StudentsView() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="بحث في جميع بيانات الطلاب..."
-                className="pr-9"
+                className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
               />
             </div>
 
