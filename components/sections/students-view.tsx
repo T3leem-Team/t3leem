@@ -48,6 +48,7 @@ const [search, setSearch] = useState('')
 const [filters, setFilters] = useState<Filters>(emptyFilters)
 const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
 const [studentList, setStudentList] = useState(students)
+  
 
 const updateFilter = (key: keyof Filters, value: string) => {
 setFilters((current) => ({ ...current, [key]: value }))
@@ -267,33 +268,83 @@ action={
   </Card>
 
   {isAddStudentOpen && (
-    <div className="fixed inset-0 z-50">
-      <button
-        type="button"
-        aria-label="إغلاق"
-        className="absolute inset-0 bg-black/40"
-        onClick={() => setIsAddStudentOpen(false)}
-      />
+  <div className="fixed inset-0 z-50">
+    <button
+      type="button"
+      aria-label="إغلاق"
+      className="absolute inset-0 bg-black/40"
+      onClick={() => setIsAddStudentOpen(false)}
+    />
 
-      <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">إضافة طالب</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              إدخال بيانات الطالب الأساسية
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsAddStudentOpen(false)}
-            className="rounded-md p-2 hover:bg-muted"
-            aria-label="إغلاق"
-          >
-            <X className="size-5" />
-          </button>
+    <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
+      <div className="flex items-center justify-between border-b px-6 py-4">
+        <div>
+          <h2 className="text-lg font-semibold">إضافة طالب</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            إدخال بيانات الطالب الأساسية
+          </p>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setIsAddStudentOpen(false)}
+          className="rounded-md p-2 hover:bg-muted"
+          aria-label="إغلاق"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+
+          const form = e.currentTarget
+          const data = new FormData(form)
+
+          const name = String(data.get('name') || '').trim()
+          const personalId = String(data.get('personalId') || '').trim()
+          const grade = String(data.get('grade') || '')
+          const phone = String(data.get('phone') || '').trim()
+          const whatsapp = String(data.get('whatsapp') || '').trim()
+          const chronicDiseases =
+            String(data.get('chronicDiseases') || '').trim() || 'لا يوجد'
+          const amountDue = Number(data.get('amountDue') || 0)
+          const amountPaid = Number(data.get('amountPaid') || 0)
+          const notes = String(data.get('notes') || '').trim()
+
+          if (!name || !personalId || !grade) {
+            return
+          }
+
+          const paymentStatus =
+            amountDue === 0 && amountPaid === 0
+              ? 'معفي'
+              : amountPaid >= amountDue
+                ? 'مدفوع بالكامل'
+                : amountPaid > 0
+                  ? 'مدفوع جزئيًا'
+                  : 'غير مدفوع'
+
+          const newStudent = {
+            id: `new-${Date.now()}`,
+            name,
+            personalId,
+            grade,
+            phone,
+            whatsapp,
+            paymentStatus,
+            amountDue,
+            amountPaid,
+            chronicDiseases,
+            notes,
+          }
+
+          setStudentList((current) => [...current, newStudent])
+          setIsAddStudentOpen(false)
+          form.reset()
+        }}
+      >
         <div className="space-y-6 p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -301,7 +352,9 @@ action={
                 اسم الطالب
               </label>
               <input
+                name="name"
                 type="text"
+                required
                 placeholder="أدخل اسم الطالب"
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
               />
@@ -312,7 +365,9 @@ action={
                 الرقم الشخصي
               </label>
               <input
+                name="personalId"
                 type="text"
+                required
                 placeholder="أدخل الرقم الشخصي"
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
               />
@@ -322,7 +377,11 @@ action={
               <label className="mb-2 block text-sm font-medium">
                 الصف الأكاديمي
               </label>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm">
+              <select
+                name="grade"
+                required
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              >
                 <option value="">اختر الصف</option>
                 {academicGrades.map((grade) => (
                   <option key={grade} value={grade}>
@@ -337,6 +396,7 @@ action={
                 رقم الهاتف
               </label>
               <input
+                name="phone"
                 type="tel"
                 placeholder="مثال: 33xxxxxx"
                 dir="ltr"
@@ -349,6 +409,7 @@ action={
                 رقم واتساب
               </label>
               <input
+                name="whatsapp"
                 type="tel"
                 placeholder="مثال: 33xxxxxx"
                 dir="ltr"
@@ -360,16 +421,15 @@ action={
           <div className="border-t pt-5">
             <h3 className="mb-4 text-sm font-semibold">المعلومات الصحية</h3>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                الأمراض المزمنة
-              </label>
-              <input
-                type="text"
-                placeholder="لا يوجد"
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              />
-            </div>
+            <label className="mb-2 block text-sm font-medium">
+              الأمراض المزمنة
+            </label>
+            <input
+              name="chronicDiseases"
+              type="text"
+              placeholder="لا يوجد"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+            />
           </div>
 
           <div className="border-t pt-5">
@@ -381,7 +441,10 @@ action={
                   المبلغ المطلوب
                 </label>
                 <input
+                  name="amountDue"
                   type="number"
+                  min="0"
+                  step="0.001"
                   placeholder="0"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 />
@@ -392,7 +455,10 @@ action={
                   المبلغ المدفوع
                 </label>
                 <input
+                  name="amountPaid"
                   type="number"
+                  min="0"
+                  step="0.001"
                   placeholder="0"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 />
@@ -400,7 +466,7 @@ action={
             </div>
 
             <p className="mt-3 text-xs text-muted-foreground">
-              حالة الدفع والمبلغ المتبقي سيتم حسابهما تلقائيًا.
+              حالة الدفع والمبلغ المتبقي يتم حسابهما تلقائيًا.
             </p>
           </div>
 
@@ -409,6 +475,7 @@ action={
               ملاحظات
             </label>
             <textarea
+              name="notes"
               placeholder="أدخل أي ملاحظات إضافية..."
               rows={4}
               className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
@@ -417,11 +484,7 @@ action={
         </div>
 
         <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
-          <Button
-            type="button"
-            className="flex-1"
-            onClick={() => setIsAddStudentOpen(false)}
-          >
+          <Button type="submit" className="flex-1">
             حفظ الطالب
           </Button>
 
@@ -433,11 +496,8 @@ action={
             إلغاء
           </Button>
         </div>
-      </aside>
-    </div>
-  )}
-</div>
-
-
-)
+      </form>
+    </aside>
+  </div>
+)}
 }
