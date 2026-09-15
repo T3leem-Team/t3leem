@@ -132,224 +132,217 @@ export function StudentsView() {
     setEditingStudentId(null)
   }
 
-  const textFilter = (key: keyof Filters, placeholder: string) => (
-    <div className="relative mt-2">
-      <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-      <input
-        value={filters[key]}
-        onChange={(e) => updateFilter(key, e.target.value)}
-        placeholder={placeholder}
-        className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
-      />
-    </div>
-  )
+ const textFilter = (key: keyof Filters, placeholder: string) => (
+  <div className="relative mt-2">
+    <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+    <input
+      value={filters[key]}
+      onChange={(e) => updateFilter(key, e.target.value)}
+      placeholder={placeholder}
+      className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
+    />
+  </div>
+)
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="الطلاب"
-        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-        action={
-          <Button onClick={openAddStudent}>
-            <UserPlus className="size-4" />
-            إضافة طالب
+return (
+  <div className="space-y-6">
+    <PageHeader
+      title="الطلاب"
+      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+      action={
+        <Button onClick={openAddStudent}>
+          <UserPlus className="size-4" />
+          إضافة طالب
+        </Button>
+      }
+    />
+
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث عام في جميع بيانات الطلاب..."
+            className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">إجمالي الطلاب:</span>{' '}
+              <span className="font-semibold">{studentList.length}</span>
+            </div>
+
+            <div>
+              <span className="text-muted-foreground">النتائج الحالية:</span>{' '}
+              <span className="font-semibold">{filteredStudents.length}</span>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!selectedStudentId}
+            onClick={openEditStudent}
+          >
+            <Pencil className="size-4" />
+            تعديل
           </Button>
-        }
-      />
+        </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث عام في جميع بيانات الطلاب..."
-              className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
-            />
-          </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12 text-center">#</TableHead>
 
-          <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">إجمالي الطلاب:</span>{' '}
-                <span className="font-semibold">{studentList.length}</span>
-              </div>
+                <TableHead>
+                  اسم الطالب
+                  {textFilter('name', 'بحث')}
+                </TableHead>
 
-              <div>
-                <span className="text-muted-foreground">النتائج الحالية:</span>{' '}
-                <span className="font-semibold">{filteredStudents.length}</span>
-              </div>
-            </div>
+                <TableHead>
+                  الرقم الشخصي
+                  {textFilter('personalId', 'بحث')}
+                </TableHead>
 
-            <div className="flex w-full gap-2 sm:w-auto">
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm sm:w-64 sm:flex-none"
-              >
-                <option value="">اختر طالبًا للتعديل</option>
-                {studentList.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.name}
-                  </option>
-                ))}
-              </select>
+                <TableHead>
+                  الصف الأكاديمي
+                  <select
+                    value={filters.grade}
+                    onChange={(e) => updateFilter('grade', e.target.value)}
+                    className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
+                  >
+                    <option value="">الكل</option>
+                    {academicGrades.map((grade) => (
+                      <option key={grade} value={grade}>
+                        {grade}
+                      </option>
+                    ))}
+                  </select>
+                </TableHead>
 
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!selectedStudentId}
-                onClick={openEditStudent}
-              >
-                <Pencil className="size-4" />
-                تعديل
-              </Button>
-            </div>
-          </div>
+                <TableHead>
+                  رقم الهاتف
+                  {textFilter('phone', 'بحث')}
+                </TableHead>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 text-center">#</TableHead>
+                <TableHead>
+                  رقم واتساب
+                  {textFilter('whatsapp', 'بحث')}
+                </TableHead>
 
-                  <TableHead>
-                    اسم الطالب
-                    {textFilter('name', 'بحث')}
-                  </TableHead>
+                <TableHead>
+                  الدفع
+                  <select
+                    value={filters.paymentStatus}
+                    onChange={(e) =>
+                      updateFilter('paymentStatus', e.target.value)
+                    }
+                    className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
+                  >
+                    <option value="">الكل</option>
+                    <option value="مدفوع بالكامل">مدفوع بالكامل</option>
+                    <option value="مدفوع جزئيًا">مدفوع جزئيًا</option>
+                    <option value="غير مدفوع">غير مدفوع</option>
+                    <option value="معفي">معفي</option>
+                  </select>
+                </TableHead>
 
-                  <TableHead>
-                    الرقم الشخصي
-                    {textFilter('personalId', 'بحث')}
-                  </TableHead>
+                <TableHead>
+                  المبلغ المدفوع
+                  {textFilter('amountPaid', 'رقم')}
+                </TableHead>
 
-                  <TableHead>
-                    الصف الأكاديمي
-                    <select
-                      value={filters.grade}
-                      onChange={(e) => updateFilter('grade', e.target.value)}
-                      className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
-                    >
-                      <option value="">الكل</option>
-                      {academicGrades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
-                        </option>
-                      ))}
-                    </select>
-                  </TableHead>
+                <TableHead>
+                  المبلغ المتبقي
+                  {textFilter('amountRemaining', 'رقم')}
+                </TableHead>
 
-                  <TableHead>
-                    رقم الهاتف
-                    {textFilter('phone', 'بحث')}
-                  </TableHead>
+                <TableHead>
+                  الأمراض المزمنة
+                  {textFilter('chronicDiseases', 'بحث')}
+                </TableHead>
 
-                  <TableHead>
-                    رقم واتساب
-                    {textFilter('whatsapp', 'بحث')}
-                  </TableHead>
+                <TableHead>
+                  ملاحظات
+                  {textFilter('notes', 'بحث')}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
 
-                  <TableHead>
-                    الدفع
-                    <select
-                      value={filters.paymentStatus}
-                      onChange={(e) =>
-                        updateFilter('paymentStatus', e.target.value)
-                      }
-                      className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
-                    >
-                      <option value="">الكل</option>
-                      <option value="مدفوع بالكامل">مدفوع بالكامل</option>
-                      <option value="مدفوع جزئيًا">مدفوع جزئيًا</option>
-                      <option value="غير مدفوع">غير مدفوع</option>
-                      <option value="معفي">معفي</option>
-                    </select>
-                  </TableHead>
+            <TableBody>
+              {filteredStudents.map((student, index) => {
+                const remaining =
+                  student.paymentStatus === 'معفي'
+                    ? 0
+                    : Math.max(student.amountDue - student.amountPaid, 0)
 
-                  <TableHead>
-                    المبلغ المدفوع
-                    {textFilter('amountPaid', 'رقم')}
-                  </TableHead>
-
-                  <TableHead>
-                    المبلغ المتبقي
-                    {textFilter('amountRemaining', 'رقم')}
-                  </TableHead>
-
-                  <TableHead>
-                    الأمراض المزمنة
-                    {textFilter('chronicDiseases', 'بحث')}
-                  </TableHead>
-
-                  <TableHead>
-                    ملاحظات
-                    {textFilter('notes', 'بحث')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {filteredStudents.map((student, index) => {
-                  const remaining =
-                    student.paymentStatus === 'معفي'
-                      ? 0
-                      : Math.max(student.amountDue - student.amountPaid, 0)
-
-                  return (
-                    <TableRow key={student.id}>
-                      <TableCell className="text-center text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {student.name}
-                      </TableCell>
-
-                      <TableCell>{student.personalId}</TableCell>
-
-                      <TableCell>{student.grade}</TableCell>
-
-                      <TableCell dir="ltr">{student.phone}</TableCell>
-
-                      <TableCell dir="ltr">{student.whatsapp}</TableCell>
-
-                      <TableCell>
-                        <StatusBadge status={student.paymentStatus} />
-                      </TableCell>
-
-                      <TableCell>
-                        {student.amountPaid.toLocaleString('ar-BH')} د.ب
-                      </TableCell>
-
-                      <TableCell>
-                        {student.paymentStatus === 'معفي'
-                          ? '—'
-                          : `${remaining.toLocaleString('ar-BH')} د.ب`}
-                      </TableCell>
-
-                      <TableCell>{student.chronicDiseases}</TableCell>
-
-                      <TableCell>{student.notes || '—'}</TableCell>
-                    </TableRow>
-                  )
-                })}
-
-                {filteredStudents.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={11}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      لا توجد نتائج مطابقة
+                return (
+                  <TableRow
+                    key={student.id}
+                    onClick={() => setSelectedStudentId(student.id)}
+                    className={
+                      selectedStudentId === student.id
+                        ? 'cursor-pointer bg-muted'
+                        : 'cursor-pointer'
+                    }
+                  >
+                    <TableCell className="text-center text-muted-foreground">
+                      {index + 1}
                     </TableCell>
+
+                    <TableCell className="font-medium">
+                      {student.name}
+                    </TableCell>
+
+                    <TableCell>{student.personalId}</TableCell>
+
+                    <TableCell>{student.grade}</TableCell>
+
+                    <TableCell dir="ltr">{student.phone}</TableCell>
+
+                    <TableCell dir="ltr">{student.whatsapp}</TableCell>
+
+                    <TableCell>
+                      <StatusBadge status={student.paymentStatus} />
+                    </TableCell>
+
+                    <TableCell>
+                      {student.amountPaid.toLocaleString('ar-BH')} د.ب
+                    </TableCell>
+
+                    <TableCell>
+                      {student.paymentStatus === 'معفي'
+                        ? '—'
+                        : `${remaining.toLocaleString('ar-BH')} د.ب`}
+                    </TableCell>
+
+                    <TableCell>{student.chronicDiseases}</TableCell>
+
+                    <TableCell>{student.notes || '—'}</TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                )
+              })}
+
+              {filteredStudents.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={11}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    لا توجد نتائج مطابقة
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
 
       {isAddStudentOpen && (
         <div className="fixed inset-0 z-50">
