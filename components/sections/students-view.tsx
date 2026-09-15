@@ -47,6 +47,7 @@ export function StudentsView() {
 const [search, setSearch] = useState('')
 const [filters, setFilters] = useState<Filters>(emptyFilters)
 const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
+const [studentList, setStudentList] = useState(students)
 
 const updateFilter = (key: keyof Filters, value: string) => {
 setFilters((current) => ({ ...current, [key]: value }))
@@ -56,7 +57,7 @@ const filteredStudents = useMemo(() => {
 const query = search.trim().toLowerCase()
 
 
-return students.filter((student) => {
+return studentList.filter((student) => {
   const remaining =
     student.paymentStatus === 'معفي'
       ? 0
@@ -105,7 +106,7 @@ return students.filter((student) => {
 })
 
 
-}, [search, filters])
+}, [search, filters, studentList])
 
 const textFilter = (key: keyof Filters, placeholder: string) => ( <div className="relative mt-2"> <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
 <input
