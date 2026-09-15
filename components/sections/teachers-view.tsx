@@ -1,39 +1,51 @@
+
 'use client'
 
 import { useMemo, useState } from 'react'
 import {
   ArrowLeftRight,
-  ChevronDown,
+  Check,
   Plus,
   Search,
   UserPlus,
-  Users,
   X,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { StatusBadge } from '@/components/dashboard/status-badge'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { students, academicGrades, teachers } from '@/lib/data'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { academicGrades, students, teachers } from '@/lib/data'
 
 type TeacherStudentMap = Record<string, string[]>
+
+type AttendanceStatus =
+  | 'لم يسجل'
+  | 'حاضر'
+  | 'غائب'
+  | 'متأخر'
+  | 'مستأذن'
+
+type AttendanceMap = Record<string, AttendanceStatus>
 
 type NewTeacher = {
   name: string
   subject: string
-  status: 'دوام كامل' | 'دوام جزئي'
 }
+
+const todayLabel = new Intl.DateTimeFormat('ar-BH', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+}).format(new Date())
 
 export function TeachersView() {
   const [teacherList, setTeacherList] = useState(teachers)
 
+  /*
+   * بيانات التوزيع مؤقتة فقط.
+   * لاحقًا نستبدلها ببيانات Supabase.
+   */
   const [teacherStudents, setTeacherStudents] = useState<TeacherStudentMap>({
     'TCH-301': ['1'],
     'TCH-302': ['2'],
@@ -43,16 +55,28 @@ export function TeachersView() {
     'TCH-306': ['4'],
   })
 
+  const [attendance, setAttendance] = useState<AttendanceMap>({
+    '1': 'حاضر',
+    '2': 'لم يسجل',
+    '3': 'غائب',
+    '4': 'لم يسجل',
+  })
+
+  const [search, setSearch] = useState('')
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
     null,
   )
 
+  const [activePanel, setActivePanel] = useState<
+    'students' | 'addStudents' | 'attendance'
+  >('students')
+
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false)
-  const [isAddStudentsOpen, setIsAddStudentsOpen] = useState(false)
   const [isTransferOpen, setIsTransferOpen] = useState(false)
 
   const [selectedGrade, setSelectedGrade] = useState('')
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
+
   const [transferStudentId, setTransferStudentId] = useState<string | null>(
     null,
   )
@@ -61,8 +85,19 @@ export function TeachersView() {
   const [newTeacher, setNewTeacher] = useState<NewTeacher>({
     name: '',
     subject: '',
-    status: 'دوام كامل',
   })
+
+  const filteredTeachers = useMemo(() => {
+    const query = search.trim().toLowerCase()
+
+    if (!query) return teacherList
+
+    return teacherList.filter(
+      (teacher) =>
+        teacher.name.toLowerCase().includes(query) ||
+        teacher.subject.toLowerCase().includes(query),
+    )
+  }, [search, teacherList])
 
   const selectedTeacher = teacherList.find(
     (teacher) => teacher.id === selectedTeacherId,
@@ -82,39 +117,42 @@ export function TeachersView() {
     if (!selectedGrade) return []
 
     return students.filter((student) => {
+      if (student.grade !== selectedGrade) return false
+
       const assignedToAnotherTeacher = Object.entries(teacherStudents).some(
         ([teacherId, studentIds]) =>
           teacherId !== selectedTeacherId && studentIds.includes(student.id),
       )
 
-      return student.grade === selectedGrade && !assignedToAnotherTeacher
+      return !assignedToAnotherTeacher
     })
   }, [selectedGrade, selectedTeacherId, teacherStudents])
 
   const openTeacher = (teacherId: string) => {
     setSelectedTeacherId(teacherId)
-    setIsAddStudentsOpen(false)
+    setActivePanel('students')
     setIsTransferOpen(false)
   }
 
-  const closeTeacherDetails = () => {
+  const closeTeacher = () => {
     setSelectedTeacherId(null)
-    setIsAddStudentsOpen(false)
     setIsTransferOpen(false)
-  }
-
-  const toggleStudentSelection = (studentId: string) => {
-    setSelectedStudentIds((current) =>
-      current.includes(studentId)
-        ? current.filter((id) => id !== studentId)
-        : [...current, studentId],
-    )
+    setSelectedGrade('')
+    setSelectedStudentIds([])
   }
 
   const openAddStudents = () => {
     setSelectedGrade('')
     setSelectedStudentIds([])
-    setIsAddStudentsOpen(true)
+    setActivePanel('addStudents')
+  }
+
+  const toggleStudent = (studentId: string) => {
+    setSelectedStudentIds((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId],
+    )
   }
 
   const saveStudents = () => {
@@ -123,27 +161,27 @@ export function TeachersView() {
     setTeacherStudents((current) => {
       const updated = { ...current }
 
-      updated[selectedTeacherId] = Array.from(
-        new Set([
-          ...(updated[selectedTeacherId] ?? []),
-          ...selectedStudentIds,
-        ]),
-      )
-
+      /*
+       * الطالب لا يمكن أن يكون عند معلمين.
+       * إذا كان موجودًا عند معلم آخر، ينشال منه أولًا.
+       */
       Object.keys(updated).forEach((teacherId) => {
-        if (teacherId !== selectedTeacherId) {
-          updated[teacherId] = (updated[teacherId] ?? []).filter(
-            (studentId) => !selectedStudentIds.includes(studentId),
-          )
-        }
+        updated[teacherId] = (updated[teacherId] ?? []).filter(
+          (studentId) => !selectedStudentIds.includes(studentId),
+        )
       })
+
+      updated[selectedTeacherId] = [
+        ...(updated[selectedTeacherId] ?? []),
+        ...selectedStudentIds,
+      ]
 
       return updated
     })
 
     setSelectedStudentIds([])
     setSelectedGrade('')
-    setIsAddStudentsOpen(false)
+    setActivePanel('students')
   }
 
   const openTransfer = (studentId: string) => {
@@ -153,18 +191,20 @@ export function TeachersView() {
   }
 
   const saveTransfer = () => {
-    if (!transferStudentId || !selectedTeacherId || !transferTeacherId) return
-    if (transferTeacherId === selectedTeacherId) return
+    if (!selectedTeacherId || !transferStudentId || !transferTeacherId) return
+    if (selectedTeacherId === transferTeacherId) return
 
     setTeacherStudents((current) => {
       const updated = { ...current }
 
+      // إزالة الطالب من أي معلم أولًا
       Object.keys(updated).forEach((teacherId) => {
         updated[teacherId] = (updated[teacherId] ?? []).filter(
           (studentId) => studentId !== transferStudentId,
         )
       })
 
+      // إضافته للمعلم الجديد
       updated[transferTeacherId] = [
         ...(updated[transferTeacherId] ?? []),
         transferStudentId,
@@ -178,40 +218,77 @@ export function TeachersView() {
     setIsTransferOpen(false)
   }
 
+  const updateAttendance = (
+    studentId: string,
+    status: AttendanceStatus,
+  ) => {
+    setAttendance((current) => ({
+      ...current,
+      [studentId]: status,
+    }))
+  }
+
   const addTeacher = () => {
     if (!newTeacher.name.trim() || !newTeacher.subject.trim()) return
 
-    const nextNumber = teacherList.length + 301
-    const newTeacherId = `TCH-${nextNumber}`
+    const nextNumber =
+      Math.max(
+        300,
+        ...teacherList.map((teacher) => {
+          const number = Number(teacher.id.replace('TCH-', ''))
+          return Number.isNaN(number) ? 300 : number
+        }),
+      ) + 1
+
+    const id = `TCH-${nextNumber}`
 
     setTeacherList((current) => [
       ...current,
       {
-        id: newTeacherId,
+        id,
         name: newTeacher.name.trim(),
         subject: newTeacher.subject.trim(),
         classes: 0,
         students: 0,
-        status: newTeacher.status,
+        status: 'دوام كامل',
       },
     ])
 
     setTeacherStudents((current) => ({
       ...current,
-      [newTeacherId]: [],
+      [id]: [],
     }))
 
     setNewTeacher({
       name: '',
       subject: '',
-      status: 'دوام كامل',
     })
 
     setIsAddTeacherOpen(false)
   }
 
-  const getTeacherStudentCount = (teacherId: string) =>
+  const getStudentCount = (teacherId: string) =>
     teacherStudents[teacherId]?.length ?? 0
+
+  const attendanceButtonClass = (status: AttendanceStatus) => {
+    if (status === 'حاضر') {
+      return 'border-green-500 bg-green-50 text-green-700'
+    }
+
+    if (status === 'غائب') {
+      return 'border-red-500 bg-red-50 text-red-700'
+    }
+
+    if (status === 'متأخر') {
+      return 'border-amber-500 bg-amber-50 text-amber-700'
+    }
+
+    if (status === 'مستأذن') {
+      return 'border-blue-500 bg-blue-50 text-blue-700'
+    }
+
+    return 'border-border bg-background text-muted-foreground'
+  }
 
   return (
     <div className="space-y-6">
@@ -226,79 +303,117 @@ export function TeachersView() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {teacherList.map((teacher) => {
-          const initials = teacher.name
-            .replace(/^أ\.?\s*/, '')
-            .split(' ')
-            .slice(0, 2)
-            .map((word) => word[0])
-            .join(' ')
+      {/* البحث */}
+      <div className="relative max-w-md">
+        <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-          const studentCount = getTeacherStudentCount(teacher.id)
-
-          return (
-            <Card
-              key={teacher.id}
-              className="cursor-pointer transition-shadow hover:shadow-md"
-              onClick={() => openTeacher(teacher.id)}
-            >
-              <CardHeader className="flex-row items-start gap-3">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {initials}
-                </span>
-
-                <div className="min-w-0 flex-1 space-y-1">
-                  <CardTitle className="truncate text-sm">
-                    {teacher.name}
-                  </CardTitle>
-
-                  <CardDescription>{teacher.subject}</CardDescription>
-                </div>
-
-                <StatusBadge status={teacher.status} />
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">عدد الفصول</span>
-                  <span className="font-medium tabular-nums">
-                    {teacher.classes}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">عدد الطلاب</span>
-                  <span className="font-medium tabular-nums">
-                    {studentCount}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-border pt-3">
-                  <span className="text-xs text-muted-foreground">
-                    إدارة الطلاب
-                  </span>
-
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {teacher.id}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="البحث عن معلم..."
+          className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+        />
       </div>
 
+      {/* جدول المعلمين */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-right font-medium">
+                    المعلم
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    المادة
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    المستوى
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium">
+                    عدد الطلاب
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredTeachers.map((teacher) => {
+                  const teacherStudentIds =
+                    teacherStudents[teacher.id] ?? []
+
+                  const teacherGrades = Array.from(
+                    new Set(
+                      students
+                        .filter((student) =>
+                          teacherStudentIds.includes(student.id),
+                        )
+                        .map((student) => student.grade),
+                    ),
+                  )
+
+                  return (
+                    <tr
+                      key={teacher.id}
+                      onClick={() => openTeacher(teacher.id)}
+                      className="cursor-pointer border-t transition-colors hover:bg-muted/40"
+                    >
+                      <td className="px-4 py-4">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            openTeacher(teacher.id)
+                          }}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {teacher.name}
+                        </button>
+                      </td>
+
+                      <td className="px-4 py-4">{teacher.subject}</td>
+
+                      <td className="px-4 py-4">
+                        {teacherGrades.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {teacherGrades.map((grade) => (
+                              <span
+                                key={grade}
+                                className="rounded-full bg-muted px-2.5 py-1 text-xs"
+                              >
+                                {grade}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4 font-medium tabular-nums">
+                        {getStudentCount(teacher.id)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredTeachers.length === 0 && (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              لا توجد نتائج مطابقة.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* إضافة معلم */}
       {isAddTeacherOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-lg">
-            <CardHeader className="flex-row items-start justify-between">
-              <div>
-                <CardTitle>إضافة معلم</CardTitle>
-                <CardDescription>
-                  أضف بيانات المعلم الأساسية
-                </CardDescription>
-              </div>
+          <Card className="w-full max-w-md">
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>إضافة معلم</CardTitle>
 
               <Button
                 variant="ghost"
@@ -312,6 +427,7 @@ export function TeachersView() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">اسم المعلم</label>
+
                 <input
                   value={newTeacher.name}
                   onChange={(event) =>
@@ -321,12 +437,13 @@ export function TeachersView() {
                     }))
                   }
                   placeholder="مثال: أ. أحمد محمد"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                 />
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">المادة</label>
+
                 <input
                   value={newTeacher.subject}
                   onChange={(event) =>
@@ -336,28 +453,8 @@ export function TeachersView() {
                     }))
                   }
                   placeholder="مثال: الرياضيات"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">نوع الدوام</label>
-
-                <select
-                  value={newTeacher.status}
-                  onChange={(event) =>
-                    setNewTeacher((current) => ({
-                      ...current,
-                      status: event.target.value as
-                        | 'دوام كامل'
-                        | 'دوام جزئي',
-                    }))
-                  }
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                >
-                  <option value="دوام كامل">دوام كامل</option>
-                  <option value="دوام جزئي">دوام جزئي</option>
-                </select>
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -368,44 +465,72 @@ export function TeachersView() {
                   إلغاء
                 </Button>
 
-                <Button onClick={addTeacher}>حفظ المعلم</Button>
+                <Button onClick={addTeacher}>حفظ</Button>
               </div>
             </CardContent>
           </Card>
         </div>
       )}
 
+      {/* تفاصيل المعلم */}
       {selectedTeacher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="max-h-[90vh] w-full max-w-4xl overflow-hidden">
-            <CardHeader className="border-b">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <CardTitle>{selectedTeacher.name}</CardTitle>
-                  <CardDescription>
-                    {selectedTeacher.subject} ·{' '}
-                    {getTeacherStudentCount(selectedTeacher.id)} طالب
-                  </CardDescription>
-                </div>
+        <div className="fixed inset-0 z-50 bg-background">
+          <div className="mx-auto flex h-full max-w-6xl flex-col">
+            <div className="flex items-center justify-between border-b px-4 py-4 sm:px-6">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  {selectedTeacher.name}
+                </h2>
+
+                <p className="text-sm text-muted-foreground">
+                  {selectedTeacher.subject} ·{' '}
+                  {getStudentCount(selectedTeacher.id)} طالب
+                </p>
+              </div>
+
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={closeTeacher}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            {/* أزرار التفاصيل */}
+            <div className="border-b px-4 py-3 sm:px-6">
+              <div className="flex gap-2 overflow-x-auto">
+                <Button
+                  variant={
+                    activePanel === 'students' ? 'default' : 'outline'
+                  }
+                  onClick={() => setActivePanel('students')}
+                  className="shrink-0"
+                >
+                  الطلاب
+                </Button>
 
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={closeTeacherDetails}
+                  variant={
+                    activePanel === 'attendance' ? 'default' : 'outline'
+                  }
+                  onClick={() => setActivePanel('attendance')}
+                  className="shrink-0"
                 >
-                  <X className="size-4" />
+                  الحضور والغياب
                 </Button>
               </div>
-            </CardHeader>
+            </div>
 
-            <CardContent className="max-h-[calc(90vh-100px)] overflow-y-auto p-6">
-              {!isAddStudentsOpen && !isTransferOpen && (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {/* الطلاب */}
+              {activePanel === 'students' && (
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold">الطلاب المخصصون</h3>
+                      <h3 className="font-semibold">طلاب المعلم</h3>
                       <p className="text-sm text-muted-foreground">
-                        الطلاب المسجلون حاليًا لدى هذا المعلم
+                        إدارة الطلاب وتوزيعهم
                       </p>
                     </div>
 
@@ -417,10 +542,10 @@ export function TeachersView() {
 
                   {assignedStudents.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-10 text-center">
-                      <Users className="mx-auto mb-3 size-8 text-muted-foreground" />
-                      <p className="font-medium">لا يوجد طلاب مخصصون</p>
+                      <p className="font-medium">لا يوجد طلاب حاليًا</p>
+
                       <p className="mt-1 text-sm text-muted-foreground">
-                        استخدم زر إضافة طلاب لتوزيع الطلاب على هذا المعلم.
+                        أضف الطلاب حسب المستوى الأكاديمي.
                       </p>
                     </div>
                   ) : (
@@ -429,7 +554,7 @@ export function TeachersView() {
                         <thead className="bg-muted/50">
                           <tr>
                             <th className="px-4 py-3 text-right font-medium">
-                              اسم الطالب
+                              الطالب
                             </th>
                             <th className="px-4 py-3 text-right font-medium">
                               الرقم الشخصي
@@ -447,20 +572,27 @@ export function TeachersView() {
                           {assignedStudents.map((student) => (
                             <tr
                               key={student.id}
-                              className="border-t hover:bg-muted/30"
+                              className="border-t"
                             >
                               <td className="px-4 py-3 font-medium">
                                 {student.name}
                               </td>
+
                               <td className="px-4 py-3">
                                 {student.personalId}
                               </td>
-                              <td className="px-4 py-3">{student.grade}</td>
+
+                              <td className="px-4 py-3">
+                                {student.grade}
+                              </td>
+
                               <td className="px-4 py-3">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => openTransfer(student.id)}
+                                  onClick={() =>
+                                    openTransfer(student.id)
+                                  }
                                 >
                                   <ArrowLeftRight className="size-4" />
                                   نقل
@@ -472,23 +604,30 @@ export function TeachersView() {
                       </table>
                     </div>
                   )}
+
+                  {/* إضافة الطلاب */}
+                  {activePanel === 'students' &&
+                    selectedStudentIds.length === 0 &&
+                    false}
                 </div>
               )}
 
-              {isAddStudentsOpen && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between gap-3">
+              {/* إضافة الطلاب */}
+              {activePanel === 'addStudents' && (
+                <div className="mx-auto max-w-3xl space-y-5">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">إضافة طلاب</h3>
+
                       <p className="text-sm text-muted-foreground">
-                        اختر المستوى ثم حدد طالبًا أو أكثر.
+                        اختر المستوى ثم حدد الطلاب المطلوب إضافتهم.
                       </p>
                     </div>
 
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setIsAddStudentsOpen(false)}
+                      onClick={() => setActivePanel('students')}
                     >
                       <X className="size-4" />
                     </Button>
@@ -505,164 +644,4 @@ export function TeachersView() {
                         setSelectedGrade(event.target.value)
                         setSelectedStudentIds([])
                       }}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    >
-                      <option value="">اختر المستوى</option>
-
-                      {academicGrades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {selectedGrade && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">
-                          الطلاب المتاحون
-                        </span>
-
-                        <span className="text-xs text-muted-foreground">
-                          {availableStudents.length} طالب
-                        </span>
-                      </div>
-
-                      {availableStudents.length === 0 ? (
-                        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                          لا يوجد طلاب متاحون لهذا المستوى.
-                        </div>
-                      ) : (
-                        <div className="max-h-80 overflow-y-auto rounded-lg border">
-                          {availableStudents.map((student) => {
-                            const checked = selectedStudentIds.includes(
-                              student.id,
-                            )
-
-                            return (
-                              <label
-                                key={student.id}
-                                className="flex cursor-pointer items-center gap-3 border-b p-3 last:border-b-0 hover:bg-muted/30"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() =>
-                                    toggleStudentSelection(student.id)
-                                  }
-                                  className="size-4"
-                                />
-
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-medium">{student.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {student.personalId} · {student.grade}
-                                  </p>
-                                </div>
-                              </label>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-2 border-t pt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsAddStudentsOpen(false)}
-                    >
-                      إلغاء
-                    </Button>
-
-                    <Button
-                      onClick={saveStudents}
-                      disabled={selectedStudentIds.length === 0}
-                    >
-                      حفظ الطلاب
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {isTransferOpen && transferStudentId && (
-                <div className="space-y-5">
-                  {(() => {
-                    const student = students.find(
-                      (item) => item.id === transferStudentId,
-                    )
-
-                    return (
-                      <>
-                        <div>
-                          <h3 className="font-semibold">نقل الطالب</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            سيتم إزالة الطالب من هذا المعلم وتعيينه للمعلم
-                            الجديد.
-                          </p>
-                        </div>
-
-                        <div className="rounded-lg border bg-muted/30 p-4">
-                          <p className="font-medium">{student?.name}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {student?.grade} · {student?.personalId}
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">
-                            نقل إلى المعلم
-                          </label>
-
-                          <select
-                            value={transferTeacherId}
-                            onChange={(event) =>
-                              setTransferTeacherId(event.target.value)
-                            }
-                            className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                          >
-                            <option value="">اختر المعلم الجديد</option>
-
-                            {teacherList
-                              .filter(
-                                (teacher) =>
-                                  teacher.id !== selectedTeacherId,
-                              )
-                              .map((teacher) => (
-                                <option key={teacher.id} value={teacher.id}>
-                                  {teacher.name} — {teacher.subject}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        <div className="flex justify-end gap-2 border-t pt-4">
-                          <Button
-                            variant="outline"
-                            onClick={() => setIsTransferOpen(false)}
-                          >
-                            إلغاء
-                          </Button>
-
-                          <Button
-                            onClick={saveTransfer}
-                            disabled={!transferTeacherId}
-                          >
-                            <ArrowLeftRight className="size-4" />
-                            تأكيد النقل
-                          </Button>
-                        </div>
-                      </>
-                    )
-                  })()}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  )
-}
-
+                      
