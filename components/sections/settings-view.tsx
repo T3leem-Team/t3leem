@@ -5,13 +5,11 @@ import {
   BookOpen,
   ShieldAlert,
   ShieldCheck,
-  UserPlus,
   Users,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 const managementOptions = [
@@ -30,6 +28,14 @@ const managementOptions = [
     href: '/settings/academic-year',
     icon: BookOpen,
     badge: 'إدارة الدورات',
+  },
+  {
+    title: 'المواد الدراسية',
+    description:
+      'إضافة وتعديل المواد الدراسية التي يستخدمها النظام والمعلمون.',
+    href: '/settings/subjects',
+    icon: BookOpen,
+    badge: 'المواد',
   },
   {
     title: 'الأرشيف',
@@ -55,10 +61,9 @@ export function SettingsView() {
     <div className="space-y-6">
       <PageHeader
         title="الإدارة والتحكم"
-        description="إدارة المستخدمين والصلاحيات والدورات والأرشيف والإجراءات الإدارية"
+        description="إدارة المستخدمين والصلاحيات والدورات والمواد والأرشيف والإجراءات الإدارية"
       />
 
-      {/* ملاحظة الإدارة */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -79,7 +84,6 @@ export function SettingsView() {
         </CardContent>
       </Card>
 
-      {/* الخيارات الرئيسية */}
       <div>
         <div className="mb-4">
           <h2 className="text-lg font-semibold">الإدارة الرئيسية</h2>
@@ -150,56 +154,6 @@ export function SettingsView() {
         </div>
       </div>
 
-      {/* الوصول السريع */}
-      <Card>
-        <CardHeader>
-          <CardTitle>الوصول السريع</CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              variant="outline"
-              className="h-auto justify-between py-4"
-              nativeButton={false}
-              render={<Link href="/settings/users" />}
-            >
-              <span className="flex items-center gap-3">
-                <UserPlus className="size-5 text-primary" />
-                <span className="text-right">
-                  <span className="block font-medium">إضافة مستخدم</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    إنشاء مستخدم وتحديد صلاحياته
-                  </span>
-                </span>
-              </span>
-
-              <ArrowLeft className="size-4" />
-            </Button>
-
-            <Button
-              variant="outline"
-              className="h-auto justify-between py-4"
-              nativeButton={false}
-              render={<Link href="/settings/academic-year" />}
-            >
-              <span className="flex items-center gap-3">
-                <BookOpen className="size-5 text-primary" />
-                <span className="text-right">
-                  <span className="block font-medium">إدارة الدورات</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    إضافة أو تعديل دورة دراسية
-                  </span>
-                </span>
-              </span>
-
-              <ArrowLeft className="size-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* تنبيه الأرشفة */}
       <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
         <CardContent className="flex gap-3 p-5">
           <Archive className="mt-0.5 size-5 shrink-0 text-amber-600" />
@@ -216,3 +170,4 @@ export function SettingsView() {
     </div>
   )
 }
+
