@@ -46,6 +46,24 @@ const emptyFilters: Filters = {
 export function StudentsView() {
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
+const studentColumns = [
+  { key: 'name', label: 'اسم الطالب' },
+  { key: 'personalId', label: 'الرقم الشخصي' },
+  { key: 'grade', label: 'الصف الأكاديمي' },
+  { key: 'phone', label: 'رقم الهاتف' },
+  { key: 'whatsapp', label: 'رقم واتساب' },
+  { key: 'paymentStatus', label: 'الدفع' },
+  { key: 'amountPaid', label: 'المبلغ المدفوع' },
+  { key: 'amountRemaining', label: 'المبلغ المتبقي' },
+  { key: 'chronicDiseases', label: 'الأمراض المزمنة' },
+  { key: 'notes', label: 'ملاحظات' },
+] as const
+
+
+**لا تغيّر أي شيء ثاني الحين.**
+
+بعد ما تضيفه وتعمل حفظ، قل لي **تم** ونروح للخطوة الثانية: إضافة زر **تخصيص الأعمدة** نفسه.
+
   const [studentList, setStudentList] = useState(students)
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
   const [selectedStudentId, setSelectedStudentId] = useState('')
