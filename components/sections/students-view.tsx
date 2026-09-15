@@ -182,15 +182,41 @@ return (
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!selectedStudentId}
-            onClick={openEditStudent}
-          >
-            <Pencil className="size-4" />
-            تعديل
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!selectedStudentId}
+              onClick={openEditStudent}
+            >
+              <Pencil className="size-4" />
+              تعديل
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!selectedStudentId}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
+                )
+
+                if (!confirmed) return
+
+                setStudentList((current) =>
+                  current.filter(
+                    (student) => student.id !== selectedStudentId
+                  )
+                )
+
+                setSelectedStudentId('')
+              }}
+            >
+              <X className="size-4" />
+              مسح
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -343,6 +369,7 @@ return (
         </div>
       </CardContent>
     </Card>
+
 
       {isAddStudentOpen && (
         <div className="fixed inset-0 z-50">
