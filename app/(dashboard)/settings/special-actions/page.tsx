@@ -19,7 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 
 type StudentResult = {
   id: string
@@ -79,6 +78,9 @@ const demoStudents: StudentResult[] = [
     eligible: true,
   },
 ]
+
+const inputClass =
+  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
@@ -262,7 +264,7 @@ export default function Page() {
         description="تحديد فترة الاحتساب وسياسة النسب وشروط التكريم ثم تجهيز قائمة الطلاب المستحقين."
       />
 
-      {/* الفترة */}
+      {/* فترة الاحتساب */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -296,13 +298,14 @@ export default function Page() {
                 من تاريخ
               </label>
 
-              <Input
+              <input
                 id="from-date"
                 type="date"
                 value={fromDate}
                 onChange={(event) =>
                   setFromDate(event.target.value)
                 }
+                className={inputClass}
               />
             </div>
 
@@ -314,13 +317,14 @@ export default function Page() {
                 إلى تاريخ
               </label>
 
-              <Input
+              <input
                 id="to-date"
                 type="date"
                 value={toDate}
                 onChange={(event) =>
                   setToDate(event.target.value)
                 }
+                className={inputClass}
               />
             </div>
           </div>
@@ -343,7 +347,7 @@ export default function Page() {
             </label>
 
             <select
-              className={selectClass + ' max-w-md'}
+              className={`${selectClass} max-w-md`}
               value={unregisteredCourse}
               onChange={(event) =>
                 setUnregisteredCourse(
@@ -409,7 +413,7 @@ export default function Page() {
             </label>
 
             <select
-              className={selectClass + ' max-w-md'}
+              className={`${selectClass} max-w-md`}
               value={cancelledCounts}
               onChange={(event) =>
                 setCancelledCounts(
@@ -451,7 +455,7 @@ export default function Page() {
               </label>
 
               <div className="relative max-w-md">
-                <Input
+                <input
                   id="minimum-percentage"
                   type="number"
                   min="0"
@@ -463,7 +467,7 @@ export default function Page() {
                       event.target.value,
                     )
                   }
-                  className="pl-10"
+                  className={`${inputClass} pl-10`}
                 />
 
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
@@ -494,7 +498,7 @@ export default function Page() {
         </CardContent>
       </Card>
 
-      {/* احتساب */}
+      {/* زر الاحتساب */}
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -561,18 +565,20 @@ export default function Page() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {/* الفلاتر */}
             <div className="flex items-center gap-2 text-sm font-medium">
               <Filter className="size-4 text-primary" />
               فلترة النتائج
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <Input
+              <input
                 placeholder="فلتر الطالب"
                 value={filters.name}
                 onChange={(event) =>
                   updateFilter('name', event.target.value)
                 }
+                className={inputClass}
               />
 
               <select
@@ -616,7 +622,7 @@ export default function Page() {
                 ))}
               </select>
 
-              <Input
+              <input
                 placeholder="فلتر الدورة الأولى"
                 value={filters.course1}
                 onChange={(event) =>
@@ -625,9 +631,10 @@ export default function Page() {
                     event.target.value,
                   )
                 }
+                className={inputClass}
               />
 
-              <Input
+              <input
                 placeholder="فلتر الدورة الثانية"
                 value={filters.course2}
                 onChange={(event) =>
@@ -636,9 +643,10 @@ export default function Page() {
                     event.target.value,
                   )
                 }
+                className={inputClass}
               />
 
-              <Input
+              <input
                 placeholder="فلتر الدورة الثالثة"
                 value={filters.course3}
                 onChange={(event) =>
@@ -647,9 +655,10 @@ export default function Page() {
                     event.target.value,
                   )
                 }
+                className={inputClass}
               />
 
-              <Input
+              <input
                 placeholder="فلتر النسبة الإجمالية"
                 value={filters.annualPercentage}
                 onChange={(event) =>
@@ -658,6 +667,7 @@ export default function Page() {
                     event.target.value,
                   )
                 }
+                className={inputClass}
               />
 
               <select
@@ -694,6 +704,7 @@ export default function Page() {
               </Button>
             )}
 
+            {/* جدول النتائج */}
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full min-w-[1000px] text-sm">
                 <thead>
@@ -701,24 +712,31 @@ export default function Page() {
                     <th className="px-4 py-3 text-right font-medium">
                       الطالب
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       الصف
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       المعلم
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الأولى
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الثانية
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الثالثة
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       النسبة الإجمالية
                     </th>
+
                     <th className="px-4 py-3 text-right font-medium">
                       الحالة
                     </th>
