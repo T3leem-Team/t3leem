@@ -130,17 +130,18 @@ export type EnrollmentRequest = {
   guardian: string
   phone: string
   submittedAt: string
+  chronicDiseases: string
+  notes: string
   status: 'قيد المراجعة' | 'مقبول' | 'مرفوض'
 }
 
 export const enrollmentRequests: EnrollmentRequest[] = [
-  { id: 'REQ-2201', name: 'تالا عبدالعزيز السبيعي', grade: 'الصف الأول', guardian: 'عبدالعزيز السبيعي', phone: '٠٥٠١٢٣٤٥٦٧', submittedAt: '١٤ سبتمبر ٢٠٢٦', status: 'قيد المراجعة' },
-  { id: 'REQ-2202', name: 'فيصل تركي العنزي', grade: 'الصف الثالث', guardian: 'تركي العنزي', phone: '٠٥٥٧٦٥٤٣٢١', submittedAt: '١٣ سبتمبر ٢٠٢٦', status: 'قيد المراجعة' },
-  { id: 'REQ-2203', name: 'رهف سلطان القرني', grade: 'الصف الأول المتوسط', guardian: 'سلطان القرني', phone: '٠٥٣٩٨٧٦٥٤٣', submittedAt: '١٢ سبتمبر ٢٠٢٦', status: 'مقبول' },
-  { id: 'REQ-2204', name: 'نواف بندر الشمري', grade: 'الصف الثاني', guardian: 'بندر الشمري', phone: '٠٥٦١٢٣٤٥٦٧', submittedAt: '١١ سبتمبر ٢٠٢٦', status: 'مرفوض' },
-  { id: 'REQ-2205', name: 'ملاك راشد البقمي', grade: 'الصف الرابع', guardian: 'راشد البقمي', phone: '٠٥٠٩٨٧٦٥٤٣', submittedAt: '١٠ سبتمبر ٢٠٢٦', status: 'قيد المراجعة' },
+  { id: 'REQ-2201', name: 'تالا عبدالعزيز السبيعي', grade: 'الأول ابتدائي', guardian: 'عبدالعزيز السبيعي', phone: '٠٥٠١٢٣٤٥٦٧', submittedAt: '١٤ سبتمبر ٢٠٢٦', chronicDiseases: 'لا يوجد', notes: '', status: 'قيد المراجعة' },
+  { id: 'REQ-2202', name: 'فيصل تركي العنزي', grade: 'الثالث ابتدائي', guardian: 'تركي العنزي', phone: '٠٥٥٧٦٥٤٣٢١', submittedAt: '١٣ سبتمبر ٢٠٢٦', chronicDiseases: 'ربو', notes: 'يحتاج متابعة أثناء الحصة', status: 'قيد المراجعة' },
+  { id: 'REQ-2203', name: 'رهف سلطان القرني', grade: 'الأول إعدادي', guardian: 'سلطان القرني', phone: '٠٥٣٩٨٧٦٥٤٣', submittedAt: '١٢ سبتمبر ٢٠٢٦', chronicDiseases: 'لا يوجد', notes: '', status: 'مقبول' },
+  { id: 'REQ-2204', name: 'نواف بندر الشمري', grade: 'الثاني ابتدائي', guardian: 'بندر الشمري', phone: '٠٥٦١٢٣٤٥٦٧', submittedAt: '١١ سبتمبر ٢٠٢٦', chronicDiseases: 'لا يوجد', notes: '', status: 'مرفوض' },
+  { id: 'REQ-2205', name: 'ملاك راشد البقمي', grade: 'الرابع ابتدائي', guardian: 'راشد البقمي', phone: '٠٥٠٩٨٧٦٥٤٣', submittedAt: '١٠ سبتمبر ٢٠٢٦', chronicDiseases: 'لا يوجد', notes: 'طلب ولي الأمر متابعة خاصة', status: 'قيد المراجعة' },
 ]
-
 export type Teacher = {
   id: string
   name: string
