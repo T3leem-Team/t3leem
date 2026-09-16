@@ -220,18 +220,22 @@ export function StudentsView() {
   const visibleColumnCount =
     Object.values(visibleColumns).filter(Boolean).length + 1
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="الطلاب"
-        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-        action={
-          <Button onClick={openAddStudent}>
-            <UserPlus className="size-4" />
-            إضافة طالب
-          </Button>
-        }
-      />
+ return (
+  <div className="space-y-6">
+    <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+      {supabaseStatus}
+    </div>
+
+    <PageHeader
+      title="الطلاب"
+      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+      action={
+        <Button onClick={openAddStudent}>
+          <UserPlus className="size-4" />
+          إضافة طالب
+        </Button>
+      }
+    />
 
       <Card>
         <CardContent className="space-y-4 p-4">
