@@ -238,25 +238,25 @@ export function StudentsView() {
     </div>
   )
 
-  const visibleColumnCount =
+    const visibleColumnCount =
     Object.values(visibleColumns).filter(Boolean).length + 1
 
- return (
-  <div className="space-y-6">
-    <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
-      {supabaseStatus}
-    </div>
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+        {supabaseStatus}
+      </div>
 
-    <PageHeader
-      title="الطلاب"
-      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-      action={
-        <Button onClick={openAddStudent}>
-          <UserPlus className="size-4" />
-          إضافة طالب
-        </Button>
-      }
-    />
+      <PageHeader
+        title="الطلاب"
+        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+        action={
+          <Button onClick={openAddStudent}>
+            <UserPlus className="size-4" />
+            إضافة طالب
+          </Button>
+        }
+      />
 
       <Card>
         <CardContent className="space-y-4 p-4">
@@ -307,7 +307,7 @@ export function StudentsView() {
                 type="button"
                 variant="destructive"
                 disabled={!selectedStudentId}
-                onClick={() => {
+                onClick={async () => {
                   const confirmed = window.confirm(
                     '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
                   )
@@ -315,28 +315,29 @@ export function StudentsView() {
                   if (!confirmed) return
 
                   const { error } = await supabase
-  .from('students')
-  .delete()
-  .eq('id', selectedStudentId)
+                    .from('students')
+                    .delete()
+                    .eq('id', selectedStudentId)
 
-if (error) {
-  setSupabaseStatus(
-    `خطأ في حذف الطالب: ${error.message}`
-  )
-  return
-}
+                  if (error) {
+                    setSupabaseStatus(
+                      `خطأ في حذف الطالب: ${error.message}`
+                    )
+                    return
+                  }
 
-setStudentList((current) =>
-  current.filter(
-    (student) => student.id !== selectedStudentId
-  )
-)
+                  setStudentList((current) =>
+                    current.filter(
+                      (student) =>
+                        student.id !== selectedStudentId
+                    )
+                  )
 
-setSelectedStudentId('')
+                  setSelectedStudentId('')
 
-setSupabaseStatus(
-  'تم حذف الطالب من Supabase ✅'
-)
+                  setSupabaseStatus(
+                    'تم حذف الطالب من Supabase ✅'
+                  )
                 }}
               >
                 <X className="size-4" />
@@ -355,6 +356,7 @@ setSupabaseStatus(
                 }}
               >
                 تخصيص الأعمدة
+    
               </Button>
             </div>
           </div>
