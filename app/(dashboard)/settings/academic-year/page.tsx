@@ -1,16 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarDays, Edit3, Plus, Trash2, X } from 'lucide-react'
+import { CalendarDays, Check, Edit3, Plus, Trash2, X } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
+type DayOfWeek =
+  | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+
 type Course = {
   name: string
   startDate: string
   endDate: string
+  days: DayOfWeek[]
 }
 
 type AcademicYear = {
@@ -21,12 +31,29 @@ type AcademicYear = {
   courses: Course[]
 }
 
+const days: { value: DayOfWeek; label: string }[] = [
+  { value: 'sunday', label: 'الأحد' },
+  { value: 'monday', label: 'الاثنين' },
+  { value: 'tuesday', label: 'الثلاثاء' },
+  { value: 'wednesday', label: 'الأربعاء' },
+  { value: 'thursday', label: 'الخميس' },
+  { value: 'friday', label: 'الجمعة' },
+  { value: 'saturday', label: 'السبت' },
+]
+
+const defaultDays: DayOfWeek[] = [
+  'sunday',
+  'tuesday',
+  'thursday',
+]
+
 const initialYears: AcademicYear[] = []
 
 const createEmptyCourse = (): Course => ({
   name: '',
   startDate: '',
   endDate: '',
+  days: [...defaultDays],
 })
 
 export default function Page() {
@@ -73,7 +100,13 @@ export default function Page() {
 
     setCourses(
       year.courses.length > 0
-        ? year.courses.map((course) => ({ ...course }))
+        ? year.courses.map((course) => ({
+            ...course,
+            days:
+              course.days && course.days.length > 0
+                ? [...course.days]
+                : [...defaultDays],
+          }))
         : Array.from({ length: 3 }, createEmptyCourse),
     )
 
@@ -112,6 +145,30 @@ export default function Page() {
     )
   }
 
+  const toggleCourseDay = (
+    courseIndex: number,
+    day: DayOfWeek,
+  ) => {
+    setCourses((current) =>
+      current.map((course, index) => {
+        if (index !== courseIndex) {
+          return course
+        }
+
+        const alreadySelected = course.days.includes(day)
+
+        return {
+          ...course,
+          days: alreadySelected
+            ? course.days.filter(
+                (currentDay) => currentDay !== day,
+              )
+            : [...course.days, day],
+        }
+      }),
+    )
+  }
+
   const handleSave = () => {
     const newYear: AcademicYear = {
       id: editingId ?? Date.now(),
@@ -122,6 +179,7 @@ export default function Page() {
         name: course.name.trim(),
         startDate: course.startDate,
         endDate: course.endDate,
+        days: [...course.days],
       })),
     }
 
@@ -156,6 +214,10 @@ export default function Page() {
     )
   }
 
+  const getDayLabel = (day: DayOfWeek) => {
+    return days.find((item) => item.value === day)?.label ?? day
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -185,7 +247,7 @@ export default function Page() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  يمكنك إدخال البيانات المطلوبة أو تركها فارغة وتعديلها لاحقًا.
+                  يمكنك إدخال البيانات أو تركها فارغة وتعديلها لاحقًا.
                 </p>
               </div>
 
@@ -306,6 +368,7 @@ export default function Page() {
                     </h4>
 
                     <div className="grid gap-4 md:grid-cols-3">
+                      {/* اسم الدورة */}
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
                           اسم الدورة
@@ -326,6 +389,7 @@ export default function Page() {
                         />
                       </div>
 
+                      {/* تاريخ البداية */}
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
                           من
@@ -345,6 +409,7 @@ export default function Page() {
                         />
                       </div>
 
+                      {/* تاريخ النهاية */}
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
                           إلى
@@ -362,6 +427,60 @@ export default function Page() {
                           }
                           className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                         />
+                      </div>
+                    </div>
+
+                    {/* أيام الدورة */}
+                    <div className="mt-5">
+                      <div className="mb-3">
+                        <label className="text-sm font-medium">
+                          أيام الدورة
+                        </label>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          الأيام الافتراضية: الأحد والثلاثاء والخميس، ويمكن تعديلها.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                        {days.map((day) => {
+                          const selected = course.days.includes(
+                            day.value,
+                          )
+
+                          return (
+                            <button
+                              key={day.value}
+                              type="button"
+                              onClick={() =>
+                                toggleCourseDay(
+                                  index,
+                                  day.value,
+                                )
+                              }
+                              className={`flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition-colors ${
+                                selected
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                              }`}
+                            >
+                              {selected && (
+                                <Check className="size-4" />
+                              )}
+
+                              {day.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        الأيام المختارة:{' '}
+                        {course.days.length > 0
+                          ? course.days
+                              .map(getDayLabel)
+                              .join('، ')
+                          : 'لا توجد أيام محددة'}
                       </div>
                     </div>
                   </div>
@@ -463,4 +582,3 @@ export default function Page() {
     </div>
   )
 }
-
