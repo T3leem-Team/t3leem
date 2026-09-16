@@ -86,22 +86,14 @@ const courses: Course[] = [
 
 const currentCourse = courses[0]
 
-const todayLabel = new Intl.DateTimeFormat('ar-BH', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-}).format(new Date())
-
 export function TeachersView() {
   const [teacherList, setTeacherList] = useState(teachers)
 
   /*
    * الطلاب الأساسيون للمعلمين.
    *
-   * التوزيع ما زال مرتبطًا بالدورة داخليًا،
-   * لكن واجهة المعلم تعرض طلابه فقط،
-   * ولا تعرض قائمة مستقلة باسم "طلاب الدورة الحالية".
+   * التوزيع مرتبط بالدورة داخليًا،
+   * لكن واجهة المعلم تعرض طلابه فقط.
    */
   const [teacherStudents, setTeacherStudents] =
     useState<TeacherStudentsByCourse>({
@@ -125,7 +117,7 @@ export function TeachersView() {
     })
 
   /*
-   * الجلسات الفعلية.
+   * الجلسات الفعلية للدورة الحالية.
    *
    * الجلسة الملغاة لا تدخل في نسبة الحضور.
    */
@@ -198,12 +190,32 @@ export function TeachersView() {
       },
     ])
 
+  /*
+   * الملاحظات مرتبطة بالجلسة + الطالب.
+   *
+   * مثال:
+   * session-1:1
+   * session-2:1
+   *
+   * حتى لو عدلنا ملاحظة أحمد في يوم،
+   * لا تتغير ملاحظته في يوم آخر.
+   */
   const [attendanceNotes, setAttendanceNotes] =
     useState<AttendanceNotes>({
-      'course-1:1': '',
-      'course-1:2': '',
-      'course-1:3': '',
-      'course-1:4': '',
+      'session-1:1': '',
+      'session-1:2': '',
+      'session-1:3': '',
+      'session-1:4': '',
+
+      'session-2:1': '',
+      'session-2:2': '',
+      'session-2:3': '',
+      'session-2:4': '',
+
+      'session-3:1': '',
+      'session-3:2': '',
+      'session-3:3': '',
+      'session-3:4': '',
     })
 
   const [search, setSearch] = useState('')
@@ -238,6 +250,18 @@ export function TeachersView() {
       name: '',
       subject: '',
     })
+
+  /*
+   * إذا كانت null:
+   * المعلم في الحضور الحالي.
+   *
+   * إذا فيها sessionId:
+   * المعلم يعدل يومًا سابقًا من الأرشيف.
+   */
+  const [
+    selectedAttendanceSessionId,
+    setSelectedAttendanceSessionId,
+  ] = useState<string | null>(null)
 
   const currentTeacherStudents =
     teacherStudents[currentCourse.id] ?? {}
@@ -303,6 +327,7 @@ export function TeachersView() {
     setSelectedTeacherId(teacherId)
     setActivePanel('students')
     setIsTransferOpen(false)
+    setSelectedAttendanceSessionId(null)
   }
 
   const closeTeacher = () => {
@@ -313,6 +338,7 @@ export function TeachersView() {
     setIsTransferOpen(false)
     setTransferStudentId(null)
     setTransferTeacherId('')
+    setSelectedAttendanceSessionId(null)
   }
 
   const openAddStudents = () => {
@@ -433,22 +459,52 @@ export function TeachersView() {
           !session.cancelled,
       ) ?? null
 
+  /*
+   * الجلسة التي يعرضها جدول الحضور حاليًا.
+   *
+   * null = الجلسة الحالية.
+   * sessionId = يوم قديم يتم تعديله من الأرشيف.
+   */
+  const displayedAttendanceSession =
+    selectedAttendanceSessionId
+      ? attendanceSessions.find(
+          (session) =>
+            session.id === selectedAttendanceSessionId &&
+            session.courseId === currentCourse.id,
+        ) ?? null
+      : currentAttendanceSession
+
+  /*
+   * تعديل حالة حضور طالب في جلسة محددة.
+   */
   const updateAttendance = (
     studentId: string,
     status: AttendanceStatus,
+    sessionId?: string,
   ) => {
+    const targetSessionId =
+      sessionId ?? displayedAttendanceSession?.id
+
     if (
-      !currentAttendanceSession ||
+      !targetSessionId ||
       status === 'لم يسجل'
     ) {
+      return
+    }
+
+    const targetSession =
+      attendanceSessions.find(
+        (session) => session.id === targetSessionId,
+      )
+
+    if (!targetSession || targetSession.cancelled) {
       return
     }
 
     setAttendanceRecords((current) => {
       const existingIndex = current.findIndex(
         (record) =>
-          record.sessionId ===
-            currentAttendanceSession.id &&
+          record.sessionId === targetSessionId &&
           record.courseId === currentCourse.id &&
           record.studentId === studentId,
       )
@@ -457,7 +513,7 @@ export function TeachersView() {
         return [
           ...current,
           {
-            sessionId: currentAttendanceSession.id,
+            sessionId: targetSessionId,
             courseId: currentCourse.id,
             studentId,
             status,
@@ -476,11 +532,22 @@ export function TeachersView() {
     })
   }
 
+  /*
+   * تعديل ملاحظة لطالب في جلسة محددة.
+   */
   const updateAttendanceNote = (
     studentId: string,
     value: string,
+    sessionId?: string,
   ) => {
-    const key = `${currentCourse.id}:${studentId}`
+    const targetSessionId =
+      sessionId ?? displayedAttendanceSession?.id
+
+    if (!targetSessionId) {
+      return
+    }
+
+    const key = `${targetSessionId}:${studentId}`
 
     setAttendanceNotes((current) => ({
       ...current,
@@ -488,16 +555,21 @@ export function TeachersView() {
     }))
   }
 
-  const getCurrentStatus = (studentId: string) => {
-    if (!currentAttendanceSession) {
+  /*
+   * جلب حالة طالب في جلسة محددة.
+   */
+  const getSessionStatus = (
+    studentId: string,
+    sessionId: string | null,
+  ) => {
+    if (!sessionId) {
       return 'لم يسجل' as AttendanceStatus
     }
 
     return (
       attendanceRecords.find(
         (record) =>
-          record.sessionId ===
-            currentAttendanceSession.id &&
+          record.sessionId === sessionId &&
           record.courseId === currentCourse.id &&
           record.studentId === studentId,
       )?.status ?? 'لم يسجل'
@@ -507,7 +579,10 @@ export function TeachersView() {
   /*
    * نسبة الطالب في الدورة الحالية.
    *
-   * الجلسات الملغاة لا تدخل.
+   * حاضر + متأخر + مستأذن = حضور.
+   * غائب = لا يحسب حضورًا.
+   *
+   * الجلسات الملغاة لا تدخل في المقام.
    */
   const getAttendanceStats = (
     studentId: string,
@@ -548,6 +623,57 @@ export function TeachersView() {
       total: actualSessions.length,
       percentage,
     }
+  }
+
+  /*
+   * تنسيق تاريخ الجلسة.
+   */
+  const formatSessionDate = (date: string) => {
+    const parsedDate = new Date(`${date}T00:00:00`)
+
+    return new Intl.DateTimeFormat('ar-BH', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(parsedDate)
+  }
+
+  /*
+   * فتح يوم سابق من الأرشيف.
+   */
+  const openAttendanceArchive = (
+    sessionId: string,
+  ) => {
+    const session = attendanceSessions.find(
+      (item) => item.id === sessionId,
+    )
+
+    if (!session || session.cancelled) {
+      return
+    }
+
+    setSelectedAttendanceSessionId(sessionId)
+  }
+
+  /*
+   * الرجوع من تعديل اليوم إلى الأرشيف.
+   */
+  const closeAttendanceArchive = () => {
+    setSelectedAttendanceSessionId(null)
+  }
+
+  /*
+   * حفظ التعديلات.
+   *
+   * حاليًا البيانات محفوظة مباشرة في local state،
+   * لذلك الزر ينهي وضع التعديل ويرجع للأرشيف.
+   *
+   * عند ربط Supabase لاحقًا:
+   * هنا ستكون عملية الحفظ في قاعدة البيانات + Audit.
+   */
+  const saveAttendanceEdits = () => {
+    setSelectedAttendanceSessionId(null)
   }
 
   const addTeacher = () => {
@@ -628,6 +754,21 @@ export function TeachersView() {
 
   const formatPercentage = (value: number) =>
     `${value.toFixed(1)}%`
+
+  /*
+   * الأرشيف لهذه الدورة فقط.
+   *
+   * الجلسة الحالية لا نكررها في الأرشيف.
+   */
+  const attendanceArchive = attendanceSessions
+    .filter(
+      (session) =>
+        session.courseId === currentCourse.id &&
+        session.id !== currentAttendanceSession?.id,
+    )
+    .sort((a, b) =>
+      b.date.localeCompare(a.date),
+    )
 
   return (
     <div className="space-y-6">
@@ -914,7 +1055,7 @@ export function TeachersView() {
               </div>
             </div>
 
-            {/* تبويبات بسيطة */}
+            {/* التبويبات */}
             <div className="border-b px-4 py-3 sm:px-6">
               <div className="flex gap-2">
                 <Button
@@ -923,9 +1064,10 @@ export function TeachersView() {
                       ? 'default'
                       : 'outline'
                   }
-                  onClick={() =>
+                  onClick={() => {
                     setActivePanel('students')
-                  }
+                    setSelectedAttendanceSessionId(null)
+                  }}
                 >
                   الطلاب
                 </Button>
@@ -936,9 +1078,10 @@ export function TeachersView() {
                       ? 'default'
                       : 'outline'
                   }
-                  onClick={() =>
+                  onClick={() => {
                     setActivePanel('attendance')
-                  }
+                    setSelectedAttendanceSessionId(null)
+                  }}
                 >
                   الحضور والغياب
                 </Button>
@@ -1182,154 +1325,450 @@ export function TeachersView() {
 
               {/* الحضور */}
               {activePanel === 'attendance' && (
-                <div className="space-y-5">
-                  <div>
-                    <h3 className="text-lg font-semibold">
-                      الحضور والغياب
-                    </h3>
+                <div className="space-y-6">
+                  {/* إذا المعلم يعدل يوم سابق */}
+                  {selectedAttendanceSessionId &&
+                  displayedAttendanceSession ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            تعديل حضور
+                          </p>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {currentCourse.name} · {todayLabel}
-                    </p>
-                  </div>
+                          <h3 className="text-lg font-semibold">
+                            {formatSessionDate(
+                              displayedAttendanceSession.date,
+                            )}
+                          </h3>
 
-                  {assignedStudents.length === 0 ? (
-                    <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-                      لا يوجد طلاب لتسجيل الحضور.
-                    </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {currentCourse.name}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="outline"
+                          onClick={
+                            closeAttendanceArchive
+                          }
+                        >
+                          العودة للأرشيف
+                        </Button>
+                      </div>
+
+                      {assignedStudents.length === 0 ? (
+                        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+                          لا يوجد طلاب لتعديل الحضور.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="px-4 py-3 text-right font-medium">
+                                  اسم الطالب
+                                </th>
+
+                                <th className="px-4 py-3 text-right font-medium">
+                                  الوضع
+                                </th>
+
+                                <th className="px-4 py-3 text-right font-medium">
+                                  ملاحظات
+                                </th>
+
+                                <th className="px-4 py-3 text-right font-medium">
+                                  نسبة الحضور —{' '}
+                                  {currentCourse.name}
+                                </th>
+                              </tr>
+                            </thead>
+
+                            <tbody>
+                              {assignedStudents.map(
+                                (student) => {
+                                  const currentStatus =
+                                    getSessionStatus(
+                                      student.id,
+                                      displayedAttendanceSession.id,
+                                    )
+
+                                  const stats =
+                                    getAttendanceStats(
+                                      student.id,
+                                      currentCourse.id,
+                                    )
+
+                                  const noteKey = `${displayedAttendanceSession.id}:${student.id}`
+
+                                  const statuses: AttendanceStatus[] =
+                                    [
+                                      'حاضر',
+                                      'غائب',
+                                      'متأخر',
+                                      'مستأذن',
+                                    ]
+
+                                  return (
+                                    <tr
+                                      key={student.id}
+                                      className="border-t"
+                                    >
+                                      <td className="px-4 py-4">
+                                        <p className="font-medium">
+                                          {student.name}
+                                        </p>
+
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {student.grade}
+                                        </p>
+                                      </td>
+
+                                      <td className="px-4 py-4">
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {statuses.map(
+                                            (status) => (
+                                              <button
+                                                key={status}
+                                                type="button"
+                                                onClick={() =>
+                                                  updateAttendance(
+                                                    student.id,
+                                                    status,
+                                                    displayedAttendanceSession.id,
+                                                  )
+                                                }
+                                                className={`rounded-md border px-3 py-2 text-xs font-medium transition ${getAttendanceClass(
+                                                  currentStatus,
+                                                  status,
+                                                )}`}
+                                              >
+                                                {currentStatus ===
+                                                  status && (
+                                                  <Check className="ml-1 inline-block size-3.5" />
+                                                )}
+
+                                                {status}
+                                              </button>
+                                            ),
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      <td className="px-4 py-4">
+                                        <input
+                                          value={
+                                            attendanceNotes[
+                                              noteKey
+                                            ] ?? ''
+                                          }
+                                          onChange={(
+                                            event,
+                                          ) =>
+                                            updateAttendanceNote(
+                                              student.id,
+                                              event.target
+                                                .value,
+                                              displayedAttendanceSession.id,
+                                            )
+                                          }
+                                          placeholder="ملاحظة..."
+                                          className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                      </td>
+
+                                      <td className="px-4 py-4">
+                                        <div className="font-semibold tabular-nums">
+                                          {stats.present} /{' '}
+                                          {stats.total}{' '}
+                                          —{' '}
+                                          {formatPercentage(
+                                            stats.percentage,
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
+                                },
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end gap-2 border-t pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={
+                            closeAttendanceArchive
+                          }
+                        >
+                          إلغاء
+                        </Button>
+
+                        <Button
+                          onClick={saveAttendanceEdits}
+                        >
+                          حفظ التعديلات
+                        </Button>
+                      </div>
+                    </>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50">
-                          <tr>
-                            <th className="px-4 py-3 text-right font-medium">
-                              اسم الطالب
-                            </th>
+                    <>
+                      {/* الحضور الحالي */}
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          الحضور والغياب
+                        </h3>
 
-                            <th className="px-4 py-3 text-right font-medium">
-                              الوضع
-                            </th>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {currentCourse.name}
+                          {currentAttendanceSession
+                            ? ` · ${formatSessionDate(
+                                currentAttendanceSession.date,
+                              )}`
+                            : ''}
+                        </p>
+                      </div>
 
-                            <th className="px-4 py-3 text-right font-medium">
-                              ملاحظات
-                            </th>
+                      {assignedStudents.length === 0 ? (
+                        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+                          لا يوجد طلاب لتسجيل الحضور.
+                        </div>
+                      ) : currentAttendanceSession ? (
+                        <div className="overflow-x-auto rounded-lg border">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50">
+                              <tr>
+                                <th className="px-4 py-3 text-right font-medium">
+                                  اسم الطالب
+                                </th>
 
-                            <th className="px-4 py-3 text-right font-medium">
-                              نسبة الحضور —{' '}
-                              {currentCourse.name}
-                            </th>
-                          </tr>
-                        </thead>
+                                <th className="px-4 py-3 text-right font-medium">
+                                  الوضع
+                                </th>
 
-                        <tbody>
-                          {assignedStudents.map(
-                            (student) => {
-                              const currentStatus =
-                                getCurrentStatus(
-                                  student.id,
-                                )
+                                <th className="px-4 py-3 text-right font-medium">
+                                  ملاحظات
+                                </th>
 
-                              const stats =
-                                getAttendanceStats(
-                                  student.id,
-                                  currentCourse.id,
-                                )
+                                <th className="px-4 py-3 text-right font-medium">
+                                  نسبة الحضور —{' '}
+                                  {currentCourse.name}
+                                </th>
+                              </tr>
+                            </thead>
 
-                              const noteKey = `${currentCourse.id}:${student.id}`
+                            <tbody>
+                              {assignedStudents.map(
+                                (student) => {
+                                  const currentStatus =
+                                    getSessionStatus(
+                                      student.id,
+                                      currentAttendanceSession.id,
+                                    )
 
-                              const statuses: AttendanceStatus[] =
-                                [
-                                  'حاضر',
-                                  'غائب',
-                                  'متأخر',
-                                  'مستأذن',
-                                ]
+                                  const stats =
+                                    getAttendanceStats(
+                                      student.id,
+                                      currentCourse.id,
+                                    )
 
-                              return (
-                                <tr
-                                  key={student.id}
-                                  className="border-t"
-                                >
-                                  {/* اسم الطالب */}
-                                  <td className="px-4 py-4">
-                                    <p className="font-medium">
-                                      {student.name}
-                                    </p>
+                                  const noteKey = `${currentAttendanceSession.id}:${student.id}`
 
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {student.grade}
-                                    </p>
-                                  </td>
+                                  const statuses: AttendanceStatus[] =
+                                    [
+                                      'حاضر',
+                                      'غائب',
+                                      'متأخر',
+                                      'مستأذن',
+                                    ]
 
-                                  {/* الوضع */}
-                                  <td className="px-4 py-4">
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {statuses.map(
-                                        (status) => (
-                                          <button
-                                            key={status}
-                                            type="button"
+                                  return (
+                                    <tr
+                                      key={student.id}
+                                      className="border-t"
+                                    >
+                                      {/* اسم الطالب */}
+                                      <td className="px-4 py-4">
+                                        <p className="font-medium">
+                                          {student.name}
+                                        </p>
+
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {student.grade}
+                                        </p>
+                                      </td>
+
+                                      {/* الوضع */}
+                                      <td className="px-4 py-4">
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {statuses.map(
+                                            (status) => (
+                                              <button
+                                                key={status}
+                                                type="button"
+                                                onClick={() =>
+                                                  updateAttendance(
+                                                    student.id,
+                                                    status,
+                                                    currentAttendanceSession.id,
+                                                  )
+                                                }
+                                                className={`rounded-md border px-3 py-2 text-xs font-medium transition ${getAttendanceClass(
+                                                  currentStatus,
+                                                  status,
+                                                )}`}
+                                              >
+                                                {currentStatus ===
+                                                  status && (
+                                                  <Check className="ml-1 inline-block size-3.5" />
+                                                )}
+
+                                                {status}
+                                              </button>
+                                            ),
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      {/* الملاحظات */}
+                                      <td className="px-4 py-4">
+                                        <input
+                                          value={
+                                            attendanceNotes[
+                                              noteKey
+                                            ] ?? ''
+                                          }
+                                          onChange={(
+                                            event,
+                                          ) =>
+                                            updateAttendanceNote(
+                                              student.id,
+                                              event.target
+                                                .value,
+                                              currentAttendanceSession.id,
+                                            )
+                                          }
+                                          placeholder="ملاحظة..."
+                                          className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                      </td>
+
+                                      {/* النسبة */}
+                                      <td className="px-4 py-4">
+                                        <div className="font-semibold tabular-nums">
+                                          {stats.present} /{' '}
+                                          {stats.total}{' '}
+                                          —{' '}
+                                          {formatPercentage(
+                                            stats.percentage,
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
+                                },
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+                          لا توجد جلسة حضور حالية.
+                        </div>
+                      )}
+
+                      {/* أرشيف الحضور */}
+                      <div className="space-y-3 border-t pt-6">
+                        <div>
+                          <h3 className="font-semibold">
+                            أرشيف الحضور
+                          </h3>
+
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            أيام الحضور السابقة في{' '}
+                            {currentCourse.name} فقط.
+                          </p>
+                        </div>
+
+                        {attendanceArchive.length === 0 ? (
+                          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                            لا يوجد أرشيف حضور حتى الآن.
+                          </div>
+                        ) : (
+                          <div className="overflow-hidden rounded-lg border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50">
+                                <tr>
+                                  <th className="px-4 py-3 text-right font-medium">
+                                    التاريخ
+                                  </th>
+
+                                  <th className="px-4 py-3 text-right font-medium">
+                                    الحالة
+                                  </th>
+
+                                  <th className="px-4 py-3 text-right font-medium">
+                                    الإجراء
+                                  </th>
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {attendanceArchive.map(
+                                  (session) => (
+                                    <tr
+                                      key={session.id}
+                                      className="border-t"
+                                    >
+                                      <td className="px-4 py-4 font-medium">
+                                        {formatSessionDate(
+                                          session.date,
+                                        )}
+                                      </td>
+
+                                      <td className="px-4 py-4">
+                                        {session.cancelled ? (
+                                          <span className="inline-flex rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+                                            ملغي
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">
+                                            مكتمل
+                                          </span>
+                                        )}
+                                      </td>
+
+                                      <td className="px-4 py-4">
+                                        {session.cancelled ? (
+                                          <span className="text-sm text-muted-foreground">
+                                            لا يمكن تعديل يوم ملغي
+                                          </span>
+                                        ) : (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
                                             onClick={() =>
-                                              updateAttendance(
-                                                student.id,
-                                                status,
+                                              openAttendanceArchive(
+                                                session.id,
                                               )
                                             }
-                                            className={`rounded-md border px-3 py-2 text-xs font-medium transition ${getAttendanceClass(
-                                              currentStatus,
-                                              status,
-                                            )}`}
                                           >
-                                            {currentStatus ===
-                                              status && (
-                                              <Check className="ml-1 inline-block size-3.5" />
-                                            )}
-
-                                            {status}
-                                          </button>
-                                        ),
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* الملاحظات */}
-                                  <td className="px-4 py-4">
-                                    <input
-                                      value={
-                                        attendanceNotes[
-                                          noteKey
-                                        ] ?? ''
-                                      }
-                                      onChange={(event) =>
-                                        updateAttendanceNote(
-                                          student.id,
-                                          event.target
-                                            .value,
-                                        )
-                                      }
-                                      placeholder="ملاحظة..."
-                                      className="h-9 min-w-[180px] rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                                    />
-                                  </td>
-
-                                  {/* النسبة */}
-                                  <td className="px-4 py-4">
-                                    <div className="font-semibold tabular-nums">
-                                      {stats.present} /{' '}
-                                      {stats.total}{' '}
-                                      —{' '}
-                                      {formatPercentage(
-                                        stats.percentage,
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            },
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                                            تعديل
+                                          </Button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
