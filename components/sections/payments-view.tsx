@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, X, Eye } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -63,6 +64,14 @@ const emptyFilters: Filters = {
 }
 
 export function PaymentsView() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const returnPath = searchParams.get('return') || ''
+  const studentIdFromUrl = searchParams.get('student')
+
+  const autoOpenedStudentRef = useRef<string | null>(null)
+
   const [filters, setFilters] = useState<Filters>(emptyFilters)
 
   const [studentList, setStudentList] = useState<StudentRow[]>([])
@@ -218,10 +227,6 @@ export function PaymentsView() {
 
       setStudentList(mappedStudents)
 
-      /*
-       * إذا كانت نافذة التفاصيل مفتوحة، نحدث بيانات الطالب
-       * بعد تسجيل دفعة جديدة.
-       */
       if (detailsStudent) {
         const updatedStudent = mappedStudents.find(
           (student) => student.id === detailsStudent.id,
@@ -253,6 +258,57 @@ export function PaymentsView() {
     loadPayments()
   }, [])
 
+  /*
+   * فتح نافذة إضافة الدفعة تلقائياً عندما نصل
+   * من صفحة الطلاب بهذا الشكل:
+   *
+   * /payments?student=STUDENT_ID&return=/students
+   *
+   * الفتح يتم مرة واحدة فقط حتى لا تعود النافذة
+   * للظهور بعد إغلاقها.
+   */
+  useEffect(() => {
+    if (
+      loading ||
+      !studentIdFromUrl ||
+      paymentDialogOpen ||
+      autoOpenedStudentRef.current === studentIdFromUrl
+    ) {
+      return
+    }
+
+    const student = studentList.find(
+      (item) => item.id === studentIdFromUrl,
+    )
+
+    if (!student) {
+      return
+    }
+
+    const remaining = Math.max(
+      student.amountDue - student.amountPaid,
+      0,
+    )
+
+    if (
+      student.paymentStatus === 'معفي' ||
+      remaining <= 0
+    ) {
+      autoOpenedStudentRef.current = studentIdFromUrl
+      return
+    }
+
+    autoOpenedStudentRef.current = studentIdFromUrl
+
+    setSelectedStudent(student)
+    setPaymentDialogOpen(true)
+  }, [
+    loading,
+    studentIdFromUrl,
+    studentList,
+    paymentDialogOpen,
+  ])
+
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters((current) => ({
       ...current,
@@ -271,7 +327,11 @@ export function PaymentsView() {
   const paymentStatuses = useMemo(
     () =>
       Array.from(
-        new Set(studentList.map((student) => student.paymentStatus)),
+        new Set(
+          studentList.map(
+            (student) => student.paymentStatus,
+          ),
+        ),
       ),
     [studentList],
   )
@@ -337,7 +397,9 @@ export function PaymentsView() {
   ).length
 
   const collectionPercentage =
-    totalDue > 0 ? Math.round((totalPaid / totalDue) * 100) : 0
+    totalDue > 0
+      ? Math.round((totalPaid / totalDue) * 100)
+      : 0
 
   const exemptionPercentage =
     filteredStudents.length > 0
@@ -388,6 +450,18 @@ export function PaymentsView() {
   }
 
   const openPaymentDialog = (student: StudentRow) => {
+    const remaining = Math.max(
+      student.amountDue - student.amountPaid,
+      0,
+    )
+
+    if (
+      student.paymentStatus === 'معفي' ||
+      remaining <= 0
+    ) {
+      return
+    }
+
     setSelectedStudent(student)
     setPaymentDialogOpen(true)
   }
@@ -454,12 +528,15 @@ export function PaymentsView() {
       return
     }
 
+    const studentBeingPaid = selectedStudent
+    const studentBeingPaidId = selectedStudent.id
+
     const formData = new FormData(event.currentTarget)
 
     const amount = Number(formData.get('amount') || 0)
 
     const paymentMethod =
-      String(formData.get('paymentMethod') || 'نقدي')
+      String(formData.get('paymentMethod') || 'نقدي') as PaymentMethod
 
     const paymentDate =
       String(formData.get('paymentDate') || '')
@@ -492,7 +569,7 @@ export function PaymentsView() {
       const { error } = await supabase
         .from('payments')
         .insert({
-          student_id: selectedStudent.id,
+          student_id: studentBeingPaidId,
           academic_year_id: currentAcademicYearId,
           amount,
           payment_method: paymentMethod,
@@ -511,18 +588,33 @@ export function PaymentsView() {
       await loadPayments()
 
       /*
+       * إذا كانت الدفعة تمت من صفحة الطلاب،
+       * نرجع تلقائياً إلى صفحة الطلاب بعد الحفظ.
+       */
+      if (returnPath) {
+        router.push(returnPath)
+        return
+      }
+
+      /*
        * إذا كانت نافذة التفاصيل مفتوحة لنفس الطالب،
-       * نعيد تحميل سجل الدفعات مباشرة.
+       * نعيد تحميل سجل الدفعات.
        */
       if (
         detailsDialogOpen &&
-        detailsStudent?.id === selectedStudent.id
+        detailsStudent?.id === studentBeingPaidId
       ) {
-        await openDetailsDialog(
+        const updatedStudent =
           studentList.find(
-            (student) => student.id === selectedStudent.id,
-          ) ?? selectedStudent,
-        )
+            (student) =>
+              student.id === studentBeingPaidId,
+          ) ?? {
+            ...studentBeingPaid,
+            amountPaid:
+              studentBeingPaid.amountPaid + amount,
+          }
+
+        await openDetailsDialog(updatedStudent)
       }
     } catch (error) {
       console.error('Failed to add payment:', error)
@@ -809,21 +901,20 @@ export function PaymentsView() {
                               تفاصيل
                             </Button>
 
-                            {student.paymentStatus ===
-                            'معفي' ? (
-                              '—'
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() =>
-                                  openPaymentDialog(student)
-                                }
-                              >
-                                <Plus className="ml-1 size-4" />
-                                إضافة دفعة
-                              </Button>
-                            )}
+                            {student.paymentStatus !==
+                              'معفي' &&
+                              remaining > 0 && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() =>
+                                    openPaymentDialog(student)
+                                  }
+                                >
+                                  <Plus className="ml-1 size-4" />
+                                  إضافة دفعة
+                                </Button>
+                              )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -885,9 +976,11 @@ export function PaymentsView() {
                   </p>
 
                   <p className="mt-1 font-semibold tabular-nums">
-                    {formatCurrency(
-                      detailsStudent.amountDue,
-                    )}
+                    {detailsStudent.paymentStatus === 'معفي'
+                      ? '—'
+                      : formatCurrency(
+                          detailsStudent.amountDue,
+                        )}
                   </p>
                 </div>
 
@@ -897,9 +990,11 @@ export function PaymentsView() {
                   </p>
 
                   <p className="mt-1 font-semibold tabular-nums">
-                    {formatCurrency(
-                      detailsStudent.amountPaid,
-                    )}
+                    {detailsStudent.paymentStatus === 'معفي'
+                      ? '—'
+                      : formatCurrency(
+                          detailsStudent.amountPaid,
+                        )}
                   </p>
                 </div>
 
@@ -909,13 +1004,15 @@ export function PaymentsView() {
                   </p>
 
                   <p className="mt-1 font-semibold tabular-nums">
-                    {formatCurrency(
-                      Math.max(
-                        detailsStudent.amountDue -
-                          detailsStudent.amountPaid,
-                        0,
-                      ),
-                    )}
+                    {detailsStudent.paymentStatus === 'معفي'
+                      ? '—'
+                      : formatCurrency(
+                          Math.max(
+                            detailsStudent.amountDue -
+                              detailsStudent.amountPaid,
+                            0,
+                          ),
+                        )}
                   </p>
                 </div>
               </div>
@@ -933,19 +1030,24 @@ export function PaymentsView() {
                   </div>
 
                   {detailsStudent.paymentStatus !==
-                    'معفي' && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        setDetailsDialogOpen(false)
-                        openPaymentDialog(detailsStudent)
-                      }}
-                    >
-                      <Plus className="ml-1 size-4" />
-                      تسجيل دفعة
-                    </Button>
-                  )}
+                    'معفي' &&
+                    Math.max(
+                      detailsStudent.amountDue -
+                        detailsStudent.amountPaid,
+                      0,
+                    ) > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setDetailsDialogOpen(false)
+                          openPaymentDialog(detailsStudent)
+                        }}
+                      >
+                        <Plus className="ml-1 size-4" />
+                        تسجيل دفعة
+                      </Button>
+                    )}
                 </div>
 
                 <div className="min-h-0 overflow-y-auto px-6 pb-6">
@@ -1070,9 +1172,12 @@ export function PaymentsView() {
                   </p>
 
                   <p className="mt-1 font-semibold tabular-nums">
-                    {formatCurrency(
-                      selectedStudent.amountDue,
-                    )}
+                    {selectedStudent.paymentStatus ===
+                    'معفي'
+                      ? '—'
+                      : formatCurrency(
+                          selectedStudent.amountDue,
+                        )}
                   </p>
                 </div>
 
@@ -1116,128 +1221,3 @@ export function PaymentsView() {
                     className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    طريقة الدفع
-                  </label>
-
-                  <select
-                    name="paymentMethod"
-                    defaultValue="نقدي"
-                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="نقدي">
-                      نقدي
-                    </option>
-
-                    <option value="تحويل">
-                      تحويل
-                    </option>
-
-                    <option value="بطاقة">
-                      بطاقة
-                    </option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    تاريخ الدفع
-                  </label>
-
-                  <input
-                    name="paymentDate"
-                    type="date"
-                    defaultValue={getToday()}
-                    required
-                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    رقم العملية
-                    <span className="mr-1 text-xs text-muted-foreground">
-                      اختياري
-                    </span>
-                  </label>
-
-                  <input
-                    name="referenceNumber"
-                    type="text"
-                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">
-                    ملاحظات
-                    <span className="mr-1 text-xs text-muted-foreground">
-                      اختياري
-                    </span>
-                  </label>
-
-                  <textarea
-                    name="notes"
-                    rows={3}
-                    className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={closePaymentDialog}
-                    disabled={savingPayment}
-                  >
-                    إلغاء
-                  </Button>
-
-                  <Button
-                    type="submit"
-                    disabled={savingPayment}
-                  >
-                    {savingPayment
-                      ? 'جاري الحفظ...'
-                      : 'حفظ الدفعة'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function formatCurrency(value: number) {
-  return `${value.toLocaleString('ar-BH', {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  })} د.ب`
-}
-
-function formatPaymentDate(value: string) {
-  if (!value) return '—'
-
-  const [year, month, day] = value.split('-')
-
-  if (!year || !month || !day) {
-    return value
-  }
-
-  return `${day}/${month}/${year}`
-}
-
-function getToday() {
-  const today = new Date()
-
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
