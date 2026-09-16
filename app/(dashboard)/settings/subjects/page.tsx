@@ -17,7 +17,7 @@ const initialSubjects = [
 ]
 
 export default function Page() {
-  const [subjects, setSubjects] = useState(initialSubjects)
+  const [subjects, setSubjects] = useState<string[]>(initialSubjects)
   const [newSubject, setNewSubject] = useState('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -25,11 +25,13 @@ export default function Page() {
   const addSubject = () => {
     const name = newSubject.trim()
 
-    if (!name) return
+    if (!name) {
+      alert('اكتب اسم المادة أولاً')
+      return
+    }
 
-    // منع تكرار المادة
     const exists = subjects.some(
-      (subject) => subject.trim().toLowerCase() === name.toLowerCase(),
+      (subject) => subject.trim() === name,
     )
 
     if (exists) {
@@ -51,12 +53,15 @@ export default function Page() {
 
     const name = editingName.trim()
 
-    if (!name) return
+    if (!name) {
+      alert('اكتب اسم المادة أولاً')
+      return
+    }
 
     const exists = subjects.some(
       (subject, index) =>
         index !== editingIndex &&
-        subject.trim().toLowerCase() === name.toLowerCase(),
+        subject.trim() === name,
     )
 
     if (exists) {
@@ -108,6 +113,7 @@ export default function Page() {
       <Card>
         <CardContent className="flex flex-col gap-3 p-5 sm:flex-row">
           <input
+            type="text"
             value={newSubject}
             onChange={(event) => setNewSubject(event.target.value)}
             onKeyDown={(event) => {
@@ -120,7 +126,10 @@ export default function Page() {
             className="h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
           />
 
-          <Button type="button" onClick={addSubject}>
+          <Button
+            type="button"
+            onClick={addSubject}
+          >
             <Plus className="size-4" />
             إضافة مادة
           </Button>
@@ -143,16 +152,19 @@ export default function Page() {
                 {editingIndex === index ? (
                   <div className="flex flex-1 gap-2">
                     <input
+                      type="text"
                       value={editingName}
                       onChange={(event) =>
                         setEditingName(event.target.value)
                       }
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
+                          event.preventDefault()
                           saveEdit()
                         }
 
                         if (event.key === 'Escape') {
+                          event.preventDefault()
                           cancelEdit()
                         }
                       }}
@@ -181,7 +193,9 @@ export default function Page() {
                   </div>
                 ) : (
                   <>
-                    <span className="font-medium">{subject}</span>
+                    <span className="font-medium">
+                      {subject}
+                    </span>
 
                     <div className="flex items-center gap-2">
                       <Button
@@ -199,7 +213,6 @@ export default function Page() {
                         variant="outline"
                         size="sm"
                         onClick={() => deleteSubject(index)}
-                        aria-label={`حذف ${subject}`}
                       >
                         <Trash2 className="size-4" />
                         حذف
