@@ -71,6 +71,10 @@ export default function Page() {
     Array.from({ length: 3 }, createEmptyCourse),
   )
 
+  const [openDaysDropdown, setOpenDaysDropdown] = useState<number | null>(
+    null,
+  )
+
   const resetForm = () => {
     setYearName('')
     setStartDate('')
@@ -79,6 +83,7 @@ export default function Page() {
     setCourses(Array.from({ length: 3 }, createEmptyCourse))
     setEditingId(null)
     setShowForm(false)
+    setOpenDaysDropdown(null)
   }
 
   const openAddForm = () => {
@@ -88,6 +93,7 @@ export default function Page() {
     setEndDate('')
     setCourseCount(3)
     setCourses(Array.from({ length: 3 }, createEmptyCourse))
+    setOpenDaysDropdown(null)
     setShowForm(true)
   }
 
@@ -110,6 +116,7 @@ export default function Page() {
         : Array.from({ length: 3 }, createEmptyCourse),
     )
 
+    setOpenDaysDropdown(null)
     setShowForm(true)
   }
 
@@ -133,7 +140,7 @@ export default function Page() {
 
   const updateCourse = (
     index: number,
-    field: keyof Course,
+    field: 'name' | 'startDate' | 'endDate',
     value: string,
   ) => {
     setCourses((current) =>
@@ -167,6 +174,17 @@ export default function Page() {
         }
       }),
     )
+  }
+
+  const getSelectedDaysLabel = (course: Course) => {
+    if (course.days.length === 0) {
+      return 'اختر الأيام'
+    }
+
+    return days
+      .filter((day) => course.days.includes(day.value))
+      .map((day) => day.label)
+      .join('، ')
   }
 
   const handleSave = () => {
@@ -212,10 +230,6 @@ export default function Page() {
     setYears((current) =>
       current.filter((item) => item.id !== id),
     )
-  }
-
-  const getDayLabel = (day: DayOfWeek) => {
-    return days.find((item) => item.value === day)?.label ?? day
   }
 
   return (
@@ -367,7 +381,8 @@ export default function Page() {
                       الدورة {index + 1}
                     </h4>
 
-                    <div className="grid gap-4 md:grid-cols-3">
+                    {/* كل بيانات الدورة في نفس السطر */}
+                    <div className="grid gap-4 md:grid-cols-4">
                       {/* اسم الدورة */}
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
@@ -428,59 +443,93 @@ export default function Page() {
                           className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                         />
                       </div>
-                    </div>
 
-                    {/* أيام الدورة */}
-                    <div className="mt-5">
-                      <div className="mb-3">
+                      {/* Dropdown الأيام */}
+                      <div className="relative space-y-2">
                         <label className="text-sm font-medium">
                           أيام الدورة
                         </label>
 
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          الأيام الافتراضية: الأحد والثلاثاء والخميس، ويمكن تعديلها.
-                        </p>
-                      </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenDaysDropdown(
+                              openDaysDropdown === index
+                                ? null
+                                : index,
+                            )
+                          }
+                          className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus:ring-2 focus:ring-primary/30"
+                        >
+                          <span
+                            className={
+                              course.days.length === 0
+                                ? 'text-muted-foreground'
+                                : 'truncate'
+                            }
+                          >
+                            {getSelectedDaysLabel(course)}
+                          </span>
 
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-                        {days.map((day) => {
-                          const selected = course.days.includes(
-                            day.value,
-                          )
+                          <span className="mr-2 text-xs text-muted-foreground">
+                            ▼
+                          </span>
+                        </button>
 
-                          return (
-                            <button
-                              key={day.value}
-                              type="button"
-                              onClick={() =>
-                                toggleCourseDay(
-                                  index,
-                                  day.value,
+                        {openDaysDropdown === index && (
+                          <div className="absolute right-0 z-50 mt-1 w-full min-w-[220px] rounded-md border bg-background p-2 shadow-lg">
+                            <div className="space-y-1">
+                              {days.map((day) => {
+                                const selected =
+                                  course.days.includes(
+                                    day.value,
+                                  )
+
+                                return (
+                                  <button
+                                    key={day.value}
+                                    type="button"
+                                    onClick={() =>
+                                      toggleCourseDay(
+                                        index,
+                                        day.value,
+                                      )
+                                    }
+                                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
+                                  >
+                                    <span
+                                      className={`flex size-4 items-center justify-center rounded-sm border ${
+                                        selected
+                                          ? 'border-primary bg-primary text-primary-foreground'
+                                          : 'border-muted-foreground/40'
+                                      }`}
+                                    >
+                                      {selected && (
+                                        <Check className="size-3" />
+                                      )}
+                                    </span>
+
+                                    <span>
+                                      {day.label}
+                                    </span>
+                                  </button>
                                 )
-                              }
-                              className={`flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition-colors ${
-                                selected
-                                  ? 'border-primary bg-primary/10 text-primary'
-                                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                              }`}
-                            >
-                              {selected && (
-                                <Check className="size-4" />
-                              )}
+                              })}
+                            </div>
 
-                              {day.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        الأيام المختارة:{' '}
-                        {course.days.length > 0
-                          ? course.days
-                              .map(getDayLabel)
-                              .join('، ')
-                          : 'لا توجد أيام محددة'}
+                            <div className="mt-2 border-t pt-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setOpenDaysDropdown(null)
+                                }
+                                className="w-full rounded-md px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                              >
+                                تم
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
