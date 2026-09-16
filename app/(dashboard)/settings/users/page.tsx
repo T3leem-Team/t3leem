@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   Edit3,
-  Plus,
   Shield,
   Trash2,
   UserPlus,
@@ -17,6 +16,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
+import { permissions, type Permission } from '@/lib/permissions'
+
 type Role =
   | 'admin'
   | 'manager'
@@ -24,22 +25,13 @@ type Role =
   | 'registration'
   | 'accountant'
 
-type Permission =
-  | 'students'
-  | 'enrollment'
-  | 'teachers'
-  | 'payments'
-  | 'academic'
-  | 'archive'
-  | 'sensitive'
-
 type User = {
   id: number
   name: string
   email: string
   password: string
   role: Role
-  permissions: Permission[]
+  permissions: string[]
   active: boolean
 }
 
@@ -49,19 +41,6 @@ const roles: { value: Role; label: string }[] = [
   { value: 'teacher', label: 'معلم' },
   { value: 'registration', label: 'موظف تسجيل' },
   { value: 'accountant', label: 'محاسب' },
-]
-
-const permissions: {
-  value: Permission
-  label: string
-}[] = [
-  { value: 'students', label: 'الطلاب' },
-  { value: 'enrollment', label: 'طلبات التسجيل' },
-  { value: 'teachers', label: 'المعلمون' },
-  { value: 'payments', label: 'المدفوعات' },
-  { value: 'academic', label: 'السنة الدراسية والدورات' },
-  { value: 'archive', label: 'الأرشيف' },
-  { value: 'sensitive', label: 'الإجراءات الحساسة' },
 ]
 
 const initialUsers: User[] = []
@@ -76,9 +55,7 @@ export default function Page() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('teacher')
-  const [selectedPermissions, setSelectedPermissions] = useState<
-    Permission[]
-  >([])
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
 
   const [openPermissions, setOpenPermissions] = useState(false)
 
@@ -115,7 +92,7 @@ export default function Page() {
     setShowForm(true)
   }
 
-  const togglePermission = (permission: Permission) => {
+  const togglePermission = (permission: string) => {
     setSelectedPermissions((current) =>
       current.includes(permission)
         ? current.filter((item) => item !== permission)
@@ -212,10 +189,10 @@ export default function Page() {
     )
   }
 
-  const getPermissionLabel = (value: Permission) => {
+  const getPermissionLabel = (value: string) => {
     return (
       permissions.find(
-        (permission) => permission.value === value,
+        (permission) => permission.key === value,
       )?.label ?? value
     )
   }
@@ -376,19 +353,19 @@ export default function Page() {
                 {openPermissions && (
                   <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-md border bg-background p-2 shadow-lg">
                     <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {permissions.map((permission) => {
+                      {permissions.map((permission: Permission) => {
                         const selected =
                           selectedPermissions.includes(
-                            permission.value,
+                            permission.key,
                           )
 
                         return (
                           <button
-                            key={permission.value}
+                            key={permission.key}
                             type="button"
                             onClick={() =>
                               togglePermission(
-                                permission.value,
+                                permission.key,
                               )
                             }
                             className="flex items-center gap-2 rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
@@ -550,8 +527,7 @@ export default function Page() {
 
                             {user.permissions.length > 3 && (
                               <Badge variant="neutral">
-                                +
-                                {user.permissions.length - 3}
+                                +{user.permissions.length - 3}
                               </Badge>
                             )}
                           </div>
@@ -621,3 +597,4 @@ export default function Page() {
     </div>
   )
 }
+
