@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CalendarDays, Check, Edit3, Plus, Trash2, X } from 'lucide-react'
+
+import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,7 +26,7 @@ type Course = {
 }
 
 type AcademicYear = {
-  id: number
+  id: string
   name: string
   startDate: string
   endDate: string
@@ -47,8 +49,6 @@ const defaultDays: DayOfWeek[] = [
   'thursday',
 ]
 
-const initialYears: AcademicYear[] = []
-
 const createEmptyCourse = (): Course => ({
   name: '',
   startDate: '',
@@ -57,10 +57,13 @@ const createEmptyCourse = (): Course => ({
 })
 
 export default function Page() {
-  const [years, setYears] = useState<AcademicYear[]>(initialYears)
+  const [years, setYears] = useState<AcademicYear[]>([])
+  const [loadingYears, setLoadingYears] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [supabaseStatus, setSupabaseStatus] = useState('')
 
   const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const [yearName, setYearName] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -74,6 +77,41 @@ export default function Page() {
   const [openDaysDropdown, setOpenDaysDropdown] = useState<number | null>(
     null,
   )
+
+  useEffect(() => {
+    const loadYears = async () => {
+      setLoadingYears(true)
+
+      const { data, error } = await supabase
+        .from('academic_years')
+        .select(
+          'id, name, start_date, end_date, is_current, is_active, created_at',
+        )
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        setSupabaseStatus(
+          `خطأ في تحميل السنوات الدراسية: ${error.message}`,
+        )
+        setLoadingYears(false)
+        return
+      }
+
+      const mappedYears: AcademicYear[] = (data ?? []).map((year) => ({
+        id: year.id,
+        name: year.name ?? '',
+        startDate: year.start_date ?? '',
+        endDate: year.end_date ?? '',
+        courses: [],
+      }))
+
+      setYears(mappedYears)
+      setSupabaseStatus('متصل بـ Supabase ✅')
+      setLoadingYears(false)
+    }
+
+    loadYears()
+  }, [])
 
   const resetForm = () => {
     setYearName('')
@@ -187,12 +225,100 @@ export default function Page() {
       .join('، ')
   }
 
-  const handleSave = () => {
-    const newYear: AcademicYear = {
-      id: editingId ?? Date.now(),
-      name: yearName.trim(),
-      startDate,
-      endDate,
+  const handleSave = async () => {
+    const trimmedName = yearName.trim()
+
+    if (!trimmedName) {
+      setSupabaseStatus('يرجى إدخال اسم السنة الدراسية')
+      return
+    }
+
+    setSaving(true)
+    setSupabaseStatus('جاري الحفظ...')
+
+    if (editingId !== null) {
+      const { data: updatedYear, error } = await supabase
+        .from('academic_years')
+        .update({
+          name: trimmedName,
+          start_date: startDate || null,
+          end_date: endDate || null,
+        })
+        .eq('id', editingId)
+        .select(
+          'id, name, start_date, end_date, is_current, is_active, created_at',
+        )
+        .single()
+
+      if (error) {
+        setSupabaseStatus(
+          `خطأ في تعديل السنة الدراسية: ${error.message}`,
+        )
+        setSaving(false)
+        return
+      }
+
+      setYears((current) =>
+        current.map((year) =>
+          year.id === editingId
+            ? {
+                ...year,
+                name: updatedYear.name ?? '',
+                startDate: updatedYear.start_date ?? '',
+                endDate: updatedYear.end_date ?? '',
+              }
+            : year,
+        ),
+      )
+
+      setSupabaseStatus('تم تعديل السنة الدراسية في Supabase ✅')
+      setSaving(false)
+      resetForm()
+      return
+    }
+
+    const { error: resetCurrentError } = await supabase
+      .from('academic_years')
+      .update({
+        is_current: false,
+      })
+      .eq('is_current', true)
+
+    if (resetCurrentError) {
+      setSupabaseStatus(
+        `خطأ في تحديث السنة الحالية: ${resetCurrentError.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const { data: newYear, error } = await supabase
+      .from('academic_years')
+      .insert({
+        name: trimmedName,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        is_current: true,
+        is_active: true,
+      })
+      .select(
+        'id, name, start_date, end_date, is_current, is_active, created_at',
+      )
+      .single()
+
+    if (error) {
+      setSupabaseStatus(
+        `خطأ في إضافة السنة الدراسية: ${error.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const mappedNewYear: AcademicYear = {
+      id: newYear.id,
+      name: newYear.name ?? '',
+      startDate: newYear.start_date ?? '',
+      endDate: newYear.end_date ?? '',
       courses: courses.map((course) => ({
         name: course.name.trim(),
         startDate: course.startDate,
@@ -201,20 +327,17 @@ export default function Page() {
       })),
     }
 
-    if (editingId !== null) {
-      setYears((current) =>
-        current.map((year) =>
-          year.id === editingId ? newYear : year,
-        ),
-      )
-    } else {
-      setYears((current) => [...current, newYear])
-    }
+    setYears((current) => [
+      mappedNewYear,
+      ...current.map((year) => year),
+    ])
 
+    setSupabaseStatus('تمت إضافة السنة الدراسية في Supabase ✅')
+    setSaving(false)
     resetForm()
   }
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: string) => {
     const year = years.find((item) => item.id === id)
 
     if (!year) return
@@ -227,9 +350,28 @@ export default function Page() {
 
     if (!confirmed) return
 
+    setSaving(true)
+    setSupabaseStatus('جاري المسح...')
+
+    const { error } = await supabase
+      .from('academic_years')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      setSupabaseStatus(
+        `خطأ في مسح السنة الدراسية: ${error.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
     setYears((current) =>
       current.filter((item) => item.id !== id),
     )
+
+    setSupabaseStatus('تم مسح السنة الدراسية من Supabase ✅')
+    setSaving(false)
   }
 
   return (
@@ -239,9 +381,19 @@ export default function Page() {
         description="إدارة السنوات الدراسية والدورات التابعة لها"
       />
 
+      {supabaseStatus && (
+        <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm">
+          {supabaseStatus}
+        </div>
+      )}
+
       {!showForm && (
         <div className="flex justify-end">
-          <Button type="button" onClick={openAddForm}>
+          <Button
+            type="button"
+            onClick={openAddForm}
+            disabled={saving}
+          >
             <Plus className="size-4" />
             إضافة سنة جديدة
           </Button>
@@ -271,6 +423,7 @@ export default function Page() {
                 size="icon"
                 onClick={resetForm}
                 aria-label="إغلاق"
+                disabled={saving}
               >
                 <X className="size-4" />
               </Button>
@@ -543,6 +696,7 @@ export default function Page() {
                 type="button"
                 variant="outline"
                 onClick={resetForm}
+                disabled={saving}
               >
                 إلغاء
               </Button>
@@ -550,10 +704,13 @@ export default function Page() {
               <Button
                 type="button"
                 onClick={handleSave}
+                disabled={saving}
               >
-                {editingId !== null
-                  ? 'حفظ التعديلات'
-                  : 'حفظ'}
+                {saving
+                  ? 'جاري الحفظ...'
+                  : editingId !== null
+                    ? 'حفظ التعديلات'
+                    : 'حفظ'}
               </Button>
             </div>
           </CardContent>
@@ -561,7 +718,15 @@ export default function Page() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            {years.length === 0 ? (
+            {loadingYears ? (
+              <div className="p-10 text-center">
+                <CalendarDays className="mx-auto size-10 animate-pulse text-muted-foreground" />
+
+                <h3 className="mt-4 font-semibold">
+                  جاري تحميل السنوات الدراسية...
+                </h3>
+              </div>
+            ) : years.length === 0 ? (
               <div className="p-10 text-center">
                 <CalendarDays className="mx-auto size-10 text-muted-foreground" />
 
@@ -581,9 +746,11 @@ export default function Page() {
                     className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between"
                   >
                     <div className="min-w-0">
-                      <h3 className="font-semibold">
-                        {year.name || 'بدون اسم'}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold">
+                          {year.name || 'بدون اسم'}
+                        </h3>
+                      </div>
 
                       {(year.startDate || year.endDate) && (
                         <p className="mt-1 text-sm text-muted-foreground">
@@ -606,6 +773,7 @@ export default function Page() {
                         variant="outline"
                         size="sm"
                         onClick={() => openEditForm(year)}
+                        disabled={saving}
                       >
                         <Edit3 className="size-4" />
                         تعديل
@@ -616,6 +784,7 @@ export default function Page() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDelete(year.id)}
+                        disabled={saving}
                       >
                         <Trash2 className="size-4" />
                         مسح
