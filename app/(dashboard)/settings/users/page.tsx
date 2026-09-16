@@ -16,7 +16,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-import { permissions, type Permission } from '@/lib/permissions'
+import { navItems } from '@/lib/nav'
 
 type Role =
   | 'admin'
@@ -45,6 +45,15 @@ const roles: { value: Role; label: string }[] = [
 
 const initialUsers: User[] = []
 
+// الصلاحيات تُبنى تلقائيًا من التبويبات الموجودة في nav.ts
+// لوحة التحكم الرئيسية لا تحتاج صلاحية مستقلة.
+const permissions = navItems
+  .filter((item) => item.key !== 'dashboard')
+  .map((item) => ({
+    key: item.key,
+    label: item.title,
+  }))
+
 export default function Page() {
   const [users, setUsers] = useState<User[]>(initialUsers)
 
@@ -55,7 +64,9 @@ export default function Page() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('teacher')
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(
+    [],
+  )
 
   const [openPermissions, setOpenPermissions] = useState(false)
 
@@ -353,7 +364,7 @@ export default function Page() {
                 {openPermissions && (
                   <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-md border bg-background p-2 shadow-lg">
                     <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                      {permissions.map((permission: Permission) => {
+                      {permissions.map((permission) => {
                         const selected =
                           selectedPermissions.includes(
                             permission.key,
@@ -597,4 +608,4 @@ export default function Page() {
     </div>
   )
 }
-
+.
