@@ -13,10 +13,13 @@ import {
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type StudentResult = {
   id: string
@@ -72,10 +75,13 @@ const demoStudents: StudentResult[] = [
     course1: 98,
     course2: 97,
     course3: 99,
-    annualPercentage: 98.0,
+    annualPercentage: 98,
     eligible: true,
   },
 ]
+
+const selectClass =
+  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 export default function Page() {
   const [fromDate, setFromDate] = useState('2026-09-01')
@@ -138,17 +144,6 @@ export default function Page() {
   }
 
   const calculateResults = () => {
-    /*
-     * حالياً نستخدم بيانات تجريبية.
-     *
-     * لاحقاً هنا يتم:
-     * 1. جلب جلسات الحضور من الأرشيف حسب الفترة.
-     * 2. تطبيق سياسة الاحتساب.
-     * 3. حساب نسبة كل دورة.
-     * 4. حساب النسبة الإجمالية بشكل موزون.
-     * 5. تطبيق شروط التكريم.
-     */
-
     const minimum = Number(minimumPercentage) || 0
 
     const calculated = demoStudents.map((student) => ({
@@ -181,23 +176,27 @@ export default function Page() {
 
       const matchesCourse1 =
         !filters.course1 ||
-        String(student.course1 ?? '')
-          .includes(filters.course1)
+        String(student.course1 ?? '').includes(
+          filters.course1,
+        )
 
       const matchesCourse2 =
         !filters.course2 ||
-        String(student.course2 ?? '')
-          .includes(filters.course2)
+        String(student.course2 ?? '').includes(
+          filters.course2,
+        )
 
       const matchesCourse3 =
         !filters.course3 ||
-        String(student.course3 ?? '')
-          .includes(filters.course3)
+        String(student.course3 ?? '').includes(
+          filters.course3,
+        )
 
       const matchesAnnual =
         !filters.annualPercentage ||
-        String(student.annualPercentage)
-          .includes(filters.annualPercentage)
+        String(student.annualPercentage).includes(
+          filters.annualPercentage,
+        )
 
       const matchesStatus =
         !filters.status ||
@@ -221,28 +220,31 @@ export default function Page() {
   const hasFilters = Object.values(filters).some(Boolean)
 
   const exportToExcel = () => {
-    /*
-     * لاحقاً نربطه بمكتبة xlsx الموجودة في المشروع.
-     * حالياً يتم تجهيز البيانات المفلترة فقط.
-     */
-
     const rows = filteredResults.map((student) => ({
       الطالب: student.name,
       الصف: student.grade,
       المعلم: student.teacher,
       'الدورة الأولى':
-        student.course1 === null ? '' : `${student.course1}%`,
+        student.course1 === null
+          ? ''
+          : `${student.course1}%`,
       'الدورة الثانية':
-        student.course2 === null ? '' : `${student.course2}%`,
+        student.course2 === null
+          ? ''
+          : `${student.course2}%`,
       'الدورة الثالثة':
-        student.course3 === null ? '' : `${student.course3}%`,
+        student.course3 === null
+          ? ''
+          : `${student.course3}%`,
       'النسبة الإجمالية': `${student.annualPercentage}%`,
       الحالة: student.eligible ? 'مستحق' : 'غير مستحق',
     }))
 
     console.log('Excel export:', rows)
 
-    alert('تم تجهيز بيانات Excel التجريبية. سيتم ربط التصدير الفعلي لاحقاً.')
+    alert(
+      'تم تجهيز بيانات Excel التجريبية. سنربط التصدير الفعلي لاحقاً.',
+    )
   }
 
   const grades = Array.from(
@@ -272,23 +274,27 @@ export default function Page() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>السنة الدراسية</Label>
+              <label className="text-sm font-medium">
+                السنة الدراسية
+              </label>
 
-              <Select defaultValue="2026-2027">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="2026-2027">
-                    2026 / 2027
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                className={selectClass}
+                defaultValue="2026-2027"
+              >
+                <option value="2026-2027">
+                  2026 / 2027
+                </option>
+              </select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="from-date">من تاريخ</Label>
+              <label
+                htmlFor="from-date"
+                className="text-sm font-medium"
+              >
+                من تاريخ
+              </label>
 
               <Input
                 id="from-date"
@@ -301,7 +307,12 @@ export default function Page() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="to-date">إلى تاريخ</Label>
+              <label
+                htmlFor="to-date"
+                className="text-sm font-medium"
+              >
+                إلى تاريخ
+              </label>
 
               <Input
                 id="to-date"
@@ -320,43 +331,42 @@ export default function Page() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calculator className="size-5 text-primary" />
+            <Settings2 className="size-5 text-primary" />
             سياسة احتساب النسبة
           </CardTitle>
         </CardHeader>
 
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label>
+            <label className="text-sm font-medium">
               الطالب غير المسجل في دورة
-            </Label>
+            </label>
 
-            <Select
+            <select
+              className={selectClass + ' max-w-md'}
               value={unregisteredCourse}
-              onValueChange={(value) =>
+              onChange={(event) =>
                 setUnregisteredCourse(
-                  value as 'exclude' | 'absence',
+                  event.target.value as
+                    | 'exclude'
+                    | 'absence',
                 )
               }
             >
-              <SelectTrigger className="max-w-md">
-                <SelectValue />
-              </SelectTrigger>
+              <option value="exclude">
+                استبعاد الدورة من الحساب
+              </option>
 
-              <SelectContent>
-                <SelectItem value="exclude">
-                  استبعاد الدورة من الحساب
-                </SelectItem>
-
-                <SelectItem value="absence">
-                  احتسابها كغياب
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="absence">
+                احتسابها كغياب
+              </option>
+            </select>
           </div>
 
           <div>
-            <Label>حالات الحضور المحتسبة</Label>
+            <p className="text-sm font-medium">
+              حالات الحضور المحتسبة
+            </p>
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -394,30 +404,29 @@ export default function Page() {
           </div>
 
           <div className="space-y-2">
-            <Label>الدروس أو الأيام الملغاة</Label>
+            <label className="text-sm font-medium">
+              الدروس أو الأيام الملغاة
+            </label>
 
-            <Select
+            <select
+              className={selectClass + ' max-w-md'}
               value={cancelledCounts}
-              onValueChange={(value) =>
+              onChange={(event) =>
                 setCancelledCounts(
-                  value as 'exclude' | 'include',
+                  event.target.value as
+                    | 'exclude'
+                    | 'include',
                 )
               }
             >
-              <SelectTrigger className="max-w-md">
-                <SelectValue />
-              </SelectTrigger>
+              <option value="exclude">
+                تستبعد من الحساب
+              </option>
 
-              <SelectContent>
-                <SelectItem value="exclude">
-                  تستبعد من الحساب
-                </SelectItem>
-
-                <SelectItem value="include">
-                  تدخل في الحساب
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="include">
+                تدخل في الحساب
+              </option>
+            </select>
           </div>
         </CardContent>
       </Card>
@@ -434,9 +443,12 @@ export default function Page() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="minimum-percentage">
+              <label
+                htmlFor="minimum-percentage"
+                className="text-sm font-medium"
+              >
                 الحد الأدنى لنسبة الحضور
-              </Label>
+              </label>
 
               <div className="relative max-w-md">
                 <Input
@@ -447,7 +459,9 @@ export default function Page() {
                   step="0.1"
                   value={minimumPercentage}
                   onChange={(event) =>
-                    setMinimumPercentage(event.target.value)
+                    setMinimumPercentage(
+                      event.target.value,
+                    )
                   }
                   className="pl-10"
                 />
@@ -547,7 +561,6 @@ export default function Page() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* فلاتر الأعمدة */}
             <div className="flex items-center gap-2 text-sm font-medium">
               <Filter className="size-4 text-primary" />
               فلترة النتائج
@@ -562,60 +575,46 @@ export default function Page() {
                 }
               />
 
-              <Select
-                value={filters.grade || 'all'}
-                onValueChange={(value) =>
+              <select
+                className={selectClass}
+                value={filters.grade}
+                onChange={(event) =>
                   updateFilter(
                     'grade',
-                    value === 'all' ? '' : value,
+                    event.target.value,
                   )
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="فلتر الصف" />
-                </SelectTrigger>
+                <option value="">جميع الصفوف</option>
 
-                <SelectContent>
-                  <SelectItem value="all">
-                    جميع الصفوف
-                  </SelectItem>
+                {grades.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}
+                  </option>
+                ))}
+              </select>
 
-                  {grades.map((grade) => (
-                    <SelectItem key={grade} value={grade}>
-                      {grade}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={filters.teacher || 'all'}
-                onValueChange={(value) =>
+              <select
+                className={selectClass}
+                value={filters.teacher}
+                onChange={(event) =>
                   updateFilter(
                     'teacher',
-                    value === 'all' ? '' : value,
+                    event.target.value,
                   )
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="فلتر المعلم" />
-                </SelectTrigger>
+                <option value="">جميع المعلمين</option>
 
-                <SelectContent>
-                  <SelectItem value="all">
-                    جميع المعلمين
-                  </SelectItem>
-
-                  {teachers.map((teacher) => (
-                    <SelectItem
-                      key={teacher}
-                      value={teacher}
-                    >
-                      {teacher}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {teachers.map((teacher) => (
+                  <option
+                    key={teacher}
+                    value={teacher}
+                  >
+                    {teacher}
+                  </option>
+                ))}
+              </select>
 
               <Input
                 placeholder="فلتر الدورة الأولى"
@@ -661,33 +660,26 @@ export default function Page() {
                 }
               />
 
-              <Select
-                value={filters.status || 'all'}
-                onValueChange={(value) =>
+              <select
+                className={selectClass}
+                value={filters.status}
+                onChange={(event) =>
                   updateFilter(
                     'status',
-                    value === 'all' ? '' : value,
+                    event.target.value,
                   )
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="فلتر الحالة" />
-                </SelectTrigger>
+                <option value="">جميع الحالات</option>
 
-                <SelectContent>
-                  <SelectItem value="all">
-                    جميع الحالات
-                  </SelectItem>
+                <option value="eligible">
+                  مستحق
+                </option>
 
-                  <SelectItem value="eligible">
-                    مستحق
-                  </SelectItem>
-
-                  <SelectItem value="not-eligible">
-                    غير مستحق
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                <option value="not-eligible">
+                  غير مستحق
+                </option>
+              </select>
             </div>
 
             {hasFilters && (
@@ -702,7 +694,6 @@ export default function Page() {
               </Button>
             )}
 
-            {/* الجدول */}
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full min-w-[1000px] text-sm">
                 <thead>
@@ -710,31 +701,24 @@ export default function Page() {
                     <th className="px-4 py-3 text-right font-medium">
                       الطالب
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       الصف
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       المعلم
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الأولى
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الثانية
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       الدورة الثالثة
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       النسبة الإجمالية
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       الحالة
                     </th>
