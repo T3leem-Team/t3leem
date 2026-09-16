@@ -314,13 +314,29 @@ export function StudentsView() {
 
                   if (!confirmed) return
 
-                  setStudentList((current) =>
-                    current.filter(
-                      (student) => student.id !== selectedStudentId
-                    )
-                  )
+                  const { error } = await supabase
+  .from('students')
+  .delete()
+  .eq('id', selectedStudentId)
 
-                  setSelectedStudentId('')
+if (error) {
+  setSupabaseStatus(
+    `خطأ في حذف الطالب: ${error.message}`
+  )
+  return
+}
+
+setStudentList((current) =>
+  current.filter(
+    (student) => student.id !== selectedStudentId
+  )
+)
+
+setSelectedStudentId('')
+
+setSupabaseStatus(
+  'تم حذف الطالب من Supabase ✅'
+)
                 }}
               >
                 <X className="size-4" />
@@ -330,7 +346,7 @@ export function StudentsView() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
+                onClick={async () => {
                   const menu = document.getElementById(
                     'student-columns-menu'
                   )
