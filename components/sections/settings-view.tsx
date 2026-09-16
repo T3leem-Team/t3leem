@@ -55,13 +55,13 @@ icon: Archive,
 badge: 'الأرشفة',
 },
 {
-title: 'الإجراءات الحساسة',
-description:
-'إجراءات إدارية تحتاج إلى صلاحية خاصة، مثل إلغاء دورة.',
-href: '/settings/danger-zone',
-icon: ShieldAlert,
-badge: 'صلاحيات خاصة',
-danger: true,
+  title: 'الإجراءات الإدارية الخاصة',
+  description:
+    'إجراءات إدارية خاصة تحتاج إلى صلاحية محددة، مثل احتساب نسب الحضور وتجهيز قوائم التكريم وبعض الإجراءات الحساسة.',
+  href: '/settings/special-actions',
+  icon: ShieldAlert,
+  badge: 'إجراءات خاصة',
+  danger: true,
 },
 ]
 
