@@ -771,7 +771,7 @@ export function StudentsView() {
                 form.reset()
               }}
             >
-            >
+            
               <div className="space-y-6 p-6">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="sm:col-span-2">
