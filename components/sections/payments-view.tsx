@@ -1221,3 +1221,128 @@ export function PaymentsView() {
                     className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    طريقة الدفع
+                  </label>
+
+                  <select
+                    name="paymentMethod"
+                    defaultValue="نقدي"
+                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="نقدي">
+                      نقدي
+                    </option>
+
+                    <option value="تحويل">
+                      تحويل
+                    </option>
+
+                    <option value="بطاقة">
+                      بطاقة
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    تاريخ الدفع
+                  </label>
+
+                  <input
+                    name="paymentDate"
+                    type="date"
+                    defaultValue={getToday()}
+                    required
+                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    رقم العملية
+                    <span className="mr-1 text-xs text-muted-foreground">
+                      اختياري
+                    </span>
+                  </label>
+
+                  <input
+                    name="referenceNumber"
+                    type="text"
+                    className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    ملاحظات
+                    <span className="mr-1 text-xs text-muted-foreground">
+                      اختياري
+                    </span>
+                  </label>
+
+                  <textarea
+                    name="notes"
+                    rows={3}
+                    className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closePaymentDialog}
+                    disabled={savingPayment}
+                  >
+                    إلغاء
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    disabled={savingPayment}
+                  >
+                    {savingPayment
+                      ? 'جاري الحفظ...'
+                      : 'حفظ الدفعة'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatCurrency(value: number) {
+  return `${value.toLocaleString('ar-BH', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })} د.ب`
+}
+
+function formatPaymentDate(value: string) {
+  if (!value) return '—'
+
+  const [year, month, day] = value.split('-')
+
+  if (!year || !month || !day) {
+    return value
+  }
+
+  return `${day}/${month}/${year}`
+}
+
+function getToday() {
+  const today = new Date()
+
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
