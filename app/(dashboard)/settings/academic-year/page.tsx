@@ -23,6 +23,12 @@ type AcademicYear = {
 
 const initialYears: AcademicYear[] = []
 
+const createEmptyCourse = (): Course => ({
+  name: '',
+  startDate: '',
+  endDate: '',
+})
+
 export default function Page() {
   const [years, setYears] = useState<AcademicYear[]>(initialYears)
 
@@ -33,14 +39,17 @@ export default function Page() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [courseCount, setCourseCount] = useState(3)
-  const [courses, setCourses] = useState<Course[]>([])
+
+  const [courses, setCourses] = useState<Course[]>(
+    Array.from({ length: 3 }, createEmptyCourse),
+  )
 
   const resetForm = () => {
     setYearName('')
     setStartDate('')
     setEndDate('')
     setCourseCount(3)
-    setCourses([])
+    setCourses(Array.from({ length: 3 }, createEmptyCourse))
     setEditingId(null)
     setShowForm(false)
   }
@@ -51,13 +60,7 @@ export default function Page() {
     setStartDate('')
     setEndDate('')
     setCourseCount(3)
-    setCourses(
-      Array.from({ length: 3 }, () => ({
-        name: '',
-        startDate: '',
-        endDate: '',
-      })),
-    )
+    setCourses(Array.from({ length: 3 }, createEmptyCourse))
     setShowForm(true)
   }
 
@@ -66,8 +69,14 @@ export default function Page() {
     setYearName(year.name)
     setStartDate(year.startDate)
     setEndDate(year.endDate)
-    setCourseCount(year.courses.length)
-    setCourses(year.courses.map((course) => ({ ...course })))
+    setCourseCount(year.courses.length || 3)
+
+    setCourses(
+      year.courses.length > 0
+        ? year.courses.map((course) => ({ ...course }))
+        : Array.from({ length: 3 }, createEmptyCourse),
+    )
+
     setShowForm(true)
   }
 
@@ -79,11 +88,7 @@ export default function Page() {
 
       if (count > updated.length) {
         while (updated.length < count) {
-          updated.push({
-            name: '',
-            startDate: '',
-            endDate: '',
-          })
+          updated.push(createEmptyCourse())
         }
       } else {
         updated.splice(count)
@@ -108,46 +113,16 @@ export default function Page() {
   }
 
   const handleSave = () => {
-    if (!yearName.trim()) {
-      alert('اكتب اسم السنة الدراسية')
-      return
-    }
-
-    if (!startDate || !endDate) {
-      alert('حدد تاريخ بداية ونهاية السنة الدراسية')
-      return
-    }
-
-    if (startDate > endDate) {
-      alert('تاريخ بداية السنة يجب أن يكون قبل تاريخ النهاية')
-      return
-    }
-
-    for (let index = 0; index < courses.length; index++) {
-      const course = courses[index]
-
-      if (!course.name.trim()) {
-        alert(`اكتب اسم الدورة ${index + 1}`)
-        return
-      }
-
-      if (!course.startDate || !course.endDate) {
-        alert(`حدد تاريخ بداية ونهاية الدورة ${index + 1}`)
-        return
-      }
-
-      if (course.startDate > course.endDate) {
-        alert(`تاريخ بداية الدورة ${index + 1} يجب أن يكون قبل تاريخ النهاية`)
-        return
-      }
-    }
-
     const newYear: AcademicYear = {
       id: editingId ?? Date.now(),
       name: yearName.trim(),
       startDate,
       endDate,
-      courses,
+      courses: courses.map((course) => ({
+        name: course.name.trim(),
+        startDate: course.startDate,
+        endDate: course.endDate,
+      })),
     }
 
     if (editingId !== null) {
@@ -168,8 +143,10 @@ export default function Page() {
 
     if (!year) return
 
+    const displayName = year.name || 'هذه السنة الدراسية'
+
     const confirmed = window.confirm(
-      `هل أنت متأكد من حذف السنة الدراسية "${year.name}"؟`,
+      `هل أنت متأكد من مسح "${displayName}"؟`,
     )
 
     if (!confirmed) return
@@ -198,6 +175,7 @@ export default function Page() {
       {showForm ? (
         <Card>
           <CardContent className="space-y-6 p-6">
+            {/* عنوان النموذج */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -207,7 +185,7 @@ export default function Page() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  أدخل بيانات السنة والدورات التابعة لها
+                  يمكنك إدخال البيانات المطلوبة أو تركها فارغة وتعديلها لاحقًا.
                 </p>
               </div>
 
@@ -235,7 +213,7 @@ export default function Page() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
-                    السنة الدراسية
+                    اسم السنة الدراسية
                   </label>
 
                   <input
@@ -290,7 +268,7 @@ export default function Page() {
                   </h3>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    يمكن إضافة من دورة واحدة إلى خمس دورات
+                    العدد الافتراضي 3، ويمكن تغييره من 1 إلى 5.
                   </p>
                 </div>
 
@@ -405,7 +383,9 @@ export default function Page() {
                 type="button"
                 onClick={handleSave}
               >
-                {editingId !== null ? 'حفظ التعديلات' : 'حفظ'}
+                {editingId !== null
+                  ? 'حفظ التعديلات'
+                  : 'حفظ'}
               </Button>
             </div>
           </CardContent>
@@ -434,12 +414,15 @@ export default function Page() {
                   >
                     <div className="min-w-0">
                       <h3 className="font-semibold">
-                        {year.name}
+                        {year.name || 'بدون اسم'}
                       </h3>
 
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {year.startDate} → {year.endDate}
-                      </p>
+                      {(year.startDate || year.endDate) && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {year.startDate || '—'} →{' '}
+                          {year.endDate || '—'}
+                        </p>
+                      )}
 
                       <p className="mt-2 text-sm">
                         عدد الدورات:{' '}
