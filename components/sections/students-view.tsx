@@ -1,7 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search, UserPlus, Filter, X, Pencil } from 'lucide-react'
+import {
+  Search,
+  UserPlus,
+  Filter,
+  X,
+  Pencil,
+  Plus,
+} from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -63,6 +71,8 @@ const studentColumns = [
 ] as const
 
 export function StudentsView() {
+  const router = useRouter()
+
   const [supabaseStatus, setSupabaseStatus] = useState(
     'جاري الاختبار...'
   )
@@ -100,10 +110,13 @@ export function StudentsView() {
   })
 
   const [studentList, setStudentList] = useState<any[]>([])
+
   const [isAddStudentOpen, setIsAddStudentOpen] =
     useState(false)
+
   const [selectedStudentId, setSelectedStudentId] =
     useState('')
+
   const [editingStudentId, setEditingStudentId] =
     useState<string | null>(null)
 
@@ -159,13 +172,15 @@ export function StudentsView() {
 
       setAcademicLevels(levels ?? [])
 
-      const { data: enrollmentRows, error: enrollmentsError } =
-        await supabase
-          .from('enrollments')
-          .select(
-            'student_id, level_id, academic_year_id, status'
-          )
-          .eq('academic_year_id', currentYear.id)
+      const {
+        data: enrollmentRows,
+        error: enrollmentsError,
+      } = await supabase
+        .from('enrollments')
+        .select(
+          'student_id, level_id, academic_year_id, status'
+        )
+        .eq('academic_year_id', currentYear.id)
 
       if (enrollmentsError) {
         setSupabaseStatus(
@@ -191,6 +206,26 @@ export function StudentsView() {
         return
       }
 
+      const {
+        data: paymentsData,
+        error: paymentsError,
+      } = await supabase
+        .from('payments')
+        .select(
+          'student_id, academic_year_id, amount'
+        )
+        .eq(
+          'academic_year_id',
+          currentYear.id
+        )
+
+      if (paymentsError) {
+        setSupabaseStatus(
+          `خطأ في تحميل الدفعات: ${paymentsError.message}`
+        )
+        return
+      }
+
       const levelMap = new Map(
         (levels ?? []).map((level) => [
           level.id,
@@ -199,31 +234,65 @@ export function StudentsView() {
       )
 
       const enrollmentMap = new Map(
-        (enrollmentRows ?? []).map((enrollment) => [
-          enrollment.student_id,
-          levelMap.get(enrollment.level_id) ?? '',
-        ])
+        (enrollmentRows ?? []).map(
+          (enrollment) => [
+            enrollment.student_id,
+            levelMap.get(
+              enrollment.level_id
+            ) ?? '',
+          ]
+        )
       )
 
-      const mappedStudents = (studentsData ?? []).map(
-        (student) => ({
+      const paidMap = new Map<string, number>()
+
+      ;(paymentsData ?? []).forEach(
+        (payment) => {
+          const currentPaid =
+            paidMap.get(payment.student_id) ?? 0
+
+          paidMap.set(
+            payment.student_id,
+            currentPaid +
+              Number(payment.amount ?? 0)
+          )
+        }
+      )
+
+      const mappedStudents = (
+        studentsData ?? []
+      ).map((student) => {
+        const amountPaid =
+          paidMap.get(student.id) ?? 0
+
+        const paymentStatus =
+          annualFee === 0
+            ? ('معفي' as const)
+            : amountPaid >= annualFee
+              ? ('مدفوع بالكامل' as const)
+              : amountPaid > 0
+                ? ('مدفوع جزئيًا' as const)
+                : ('غير مدفوع' as const)
+
+        return {
           id: student.id,
           name: student.name,
-          personalId: student.personal_id ?? '',
-          grade: enrollmentMap.get(student.id) ?? '',
+          personalId:
+            student.personal_id ?? '',
+          grade:
+            enrollmentMap.get(student.id) ??
+            '',
           phone: student.phone ?? '',
           whatsapp: student.whatsapp ?? '',
-          paymentStatus:
-            currentAnnualFee === 0
-              ? ('معفي' as const)
-              : ('غير مدفوع' as const),
-          amountDue: currentAnnualFee,
-          amountPaid: 0,
+          paymentStatus,
+          amountDue: annualFee,
+          amountPaid,
           chronicDiseases:
-            student.health_notes ?? 'لا يوجد',
+            student.health_notes ??
+            'لا يوجد',
           notes: student.notes ?? '',
-        })
-      )
+        }
+      })
 
       setStudentList(mappedStudents)
 
@@ -253,16 +322,18 @@ export function StudentsView() {
         student.paymentStatus === 'معفي'
           ? 0
           : Math.max(
-              student.amountDue - student.amountPaid,
+              student.amountDue -
+                student.amountPaid,
               0
             )
 
       const matchesSearch =
         !query ||
-        Object.values(student).some((value) =>
-          String(value)
-            .toLowerCase()
-            .includes(query)
+        Object.values(student).some(
+          (value) =>
+            String(value)
+              .toLowerCase()
+              .includes(query)
         ) ||
         String(remaining).includes(query)
 
@@ -287,7 +358,9 @@ export function StudentsView() {
 
         phone:
           !filters.phone ||
-          student.phone.includes(filters.phone),
+          student.phone.includes(
+            filters.phone
+          ),
 
         whatsapp:
           !filters.whatsapp ||
@@ -302,7 +375,9 @@ export function StudentsView() {
 
         amountPaid:
           !filters.amountPaid ||
-          String(student.amountPaid).includes(
+          String(
+            student.amountPaid
+          ).includes(
             filters.amountPaid
           ),
 
@@ -331,7 +406,9 @@ export function StudentsView() {
 
       return (
         matchesSearch &&
-        Object.values(matches).every(Boolean)
+        Object.values(matches).every(
+          Boolean
+        )
       )
     })
   }, [search, filters, studentList])
@@ -358,14 +435,29 @@ export function StudentsView() {
     setEditingStudentId(null)
   }
 
+  const openPaymentForStudent = (
+    studentId: string
+  ) => {
+    router.push(
+      `/payments?student=${encodeURIComponent(
+        studentId
+      )}&return=/students`
+    )
+  }
+
   const toggleColumn = (
     key: (typeof studentColumns)[number]['key']
   ) => {
     setVisibleColumns((current) => {
       const visibleCount =
-        Object.values(current).filter(Boolean).length
+        Object.values(current).filter(
+          Boolean
+        ).length
 
-      if (current[key] && visibleCount === 1) {
+      if (
+        current[key] &&
+        visibleCount === 1
+      ) {
         return current
       }
 
@@ -386,7 +478,10 @@ export function StudentsView() {
       <input
         value={filters[key]}
         onChange={(e) =>
-          updateFilter(key, e.target.value)
+          updateFilter(
+            key,
+            e.target.value
+          )
         }
         placeholder={placeholder}
         className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
@@ -395,8 +490,9 @@ export function StudentsView() {
   )
 
   const visibleColumnCount =
-    Object.values(visibleColumns).filter(Boolean).length +
-    1
+    Object.values(visibleColumns).filter(
+      Boolean
+    ).length + 2
 
   return (
     <div className="space-y-6">
@@ -535,7 +631,9 @@ export function StudentsView() {
                       'student-columns-menu'
                     )
 
-                  menu?.classList.toggle('hidden')
+                  menu?.classList.toggle(
+                    'hidden'
+                  )
                 }}
               >
                 تخصيص الأعمدة
@@ -552,28 +650,30 @@ export function StudentsView() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {studentColumns.map((column) => (
-                <label
-                  key={column.key}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      visibleColumns[
-                        column.key
-                      ]
-                    }
-                    onChange={() =>
-                      toggleColumn(
-                        column.key
-                      )
-                    }
-                  />
+              {studentColumns.map(
+                (column) => (
+                  <label
+                    key={column.key}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        visibleColumns[
+                          column.key
+                        ]
+                      }
+                      onChange={() =>
+                        toggleColumn(
+                          column.key
+                        )
+                      }
+                    />
 
-                  {column.label}
-                </label>
-              ))}
+                    {column.label}
+                  </label>
+                )
+              )}
             </div>
 
             <p className="mt-2 text-xs text-muted-foreground">
@@ -614,7 +714,9 @@ export function StudentsView() {
                       الصف الأكاديمي
 
                       <select
-                        value={filters.grade}
+                        value={
+                          filters.grade
+                        }
                         onChange={(e) =>
                           updateFilter(
                             'grade',
@@ -631,7 +733,9 @@ export function StudentsView() {
                           (level) => (
                             <option
                               key={level.id}
-                              value={level.name}
+                              value={
+                                level.name
+                              }
                             >
                               {level.name}
                             </option>
@@ -735,6 +839,10 @@ export function StudentsView() {
                       )}
                     </TableHead>
                   )}
+
+                  <TableHead className="min-w-[130px]">
+                    الإجراءات
+                  </TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -778,7 +886,9 @@ export function StudentsView() {
 
                         {visibleColumns.personalId && (
                           <TableCell>
-                            {student.personalId}
+                            {
+                              student.personalId
+                            }
                           </TableCell>
                         )}
 
@@ -814,7 +924,11 @@ export function StudentsView() {
                         {visibleColumns.amountPaid && (
                           <TableCell>
                             {student.amountPaid.toLocaleString(
-                              'ar-BH'
+                              'ar-BH',
+                              {
+                                minimumFractionDigits: 3,
+                                maximumFractionDigits: 3,
+                              }
                             )}{' '}
                             د.ب
                           </TableCell>
@@ -826,7 +940,11 @@ export function StudentsView() {
                             'معفي'
                               ? '—'
                               : `${remaining.toLocaleString(
-                                  'ar-BH'
+                                  'ar-BH',
+                                  {
+                                    minimumFractionDigits: 3,
+                                    maximumFractionDigits: 3,
+                                  }
                                 )} د.ب`}
                           </TableCell>
                         )}
@@ -845,6 +963,29 @@ export function StudentsView() {
                               '—'}
                           </TableCell>
                         )}
+
+                        <TableCell>
+                          {student.paymentStatus !==
+                            'معفي' &&
+                            remaining > 0 && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={(
+                                  event
+                                ) => {
+                                  event.stopPropagation()
+
+                                  openPaymentForStudent(
+                                    student.id
+                                  )
+                                }}
+                              >
+                                <Plus className="ml-1 size-4" />
+                                إضافة دفعة
+                              </Button>
+                            )}
+                        </TableCell>
                       </TableRow>
                     )
                   }
@@ -908,7 +1049,8 @@ export function StudentsView() {
 
             <form
               key={
-                editingStudent?.id ?? 'new'
+                editingStudent?.id ??
+                'new'
               }
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -920,9 +1062,12 @@ export function StudentsView() {
                   data.get('name') || ''
                 ).trim()
 
-                const personalId = String(
-                  data.get('personalId') || ''
-                ).trim()
+                const personalId =
+                  String(
+                    data.get(
+                      'personalId'
+                    ) || ''
+                  ).trim()
 
                 const grade = String(
                   data.get('grade') || ''
@@ -932,9 +1077,12 @@ export function StudentsView() {
                   data.get('phone') || ''
                 ).trim()
 
-                const whatsapp = String(
-                  data.get('whatsapp') || ''
-                ).trim()
+                const whatsapp =
+                  String(
+                    data.get(
+                      'whatsapp'
+                    ) || ''
+                  ).trim()
 
                 const chronicDiseases =
                   String(
@@ -943,9 +1091,12 @@ export function StudentsView() {
                     ) || ''
                   ).trim() || 'لا يوجد'
 
-                const amountPaid = Number(
-                  data.get('amountPaid') || 0
-                )
+                const amountPaid =
+                  Number(
+                    data.get(
+                      'amountPaid'
+                    ) || 0
+                  )
 
                 const notes = String(
                   data.get('notes') || ''
@@ -959,7 +1110,21 @@ export function StudentsView() {
                   return
                 }
 
-                if (!currentAcademicYearId) {
+                if (
+                  !Number.isFinite(
+                    amountPaid
+                  ) ||
+                  amountPaid < 0
+                ) {
+                  setSupabaseStatus(
+                    'خطأ: المبلغ المدفوع غير صحيح'
+                  )
+                  return
+                }
+
+                if (
+                  !currentAcademicYearId
+                ) {
                   setSupabaseStatus(
                     'خطأ: لا توجد سنة دراسية حالية مفعلة'
                   )
@@ -969,7 +1134,8 @@ export function StudentsView() {
                 const selectedLevel =
                   academicLevels.find(
                     (level) =>
-                      level.name === grade
+                      level.name ===
+                      grade
                   )
 
                 if (!selectedLevel) {
@@ -979,20 +1145,29 @@ export function StudentsView() {
                   return
                 }
 
-                const amountDue =
-                  editingStudent?.amountDue ??
-                  currentAnnualFee
+                if (
+                  !editingStudent &&
+                  currentAnnualFee === 0 &&
+                  amountPaid > 0
+                ) {
+                  setSupabaseStatus(
+                    'خطأ: الطالب معفي لأن الرسوم السنوية الحالية تساوي 0 د.ب، لذلك لا يمكن تسجيل دفعة.'
+                  )
+                  return
+                }
 
-                const paymentStatus =
-                  amountDue === 0 &&
-                  amountPaid === 0
-                    ? 'معفي'
-                    : amountPaid >=
-                        amountDue
-                      ? 'مدفوع بالكامل'
-                      : amountPaid > 0
-                        ? 'مدفوع جزئيًا'
-                        : 'غير مدفوع'
+                if (
+                  !editingStudent &&
+                  amountPaid >
+                    currentAnnualFee
+                ) {
+                  setSupabaseStatus(
+                    `خطأ: المبلغ المدفوع لا يمكن أن يتجاوز الرسوم السنوية (${currentAnnualFee.toFixed(
+                      3
+                    )} د.ب)`
+                  )
+                  return
+                }
 
                 if (editingStudent) {
                   const {
@@ -1027,7 +1202,8 @@ export function StudentsView() {
                   }
 
                   const {
-                    data: existingEnrollment,
+                    data:
+                      existingEnrollment,
                     error:
                       enrollmentLookupError,
                   } = await supabase
@@ -1043,14 +1219,18 @@ export function StudentsView() {
                     )
                     .maybeSingle()
 
-                  if (enrollmentLookupError) {
+                  if (
+                    enrollmentLookupError
+                  ) {
                     setSupabaseStatus(
                       `خطأ في قراءة ربط الصف الأكاديمي: ${enrollmentLookupError.message}`
                     )
                     return
                   }
 
-                  if (existingEnrollment) {
+                  if (
+                    existingEnrollment
+                  ) {
                     const {
                       error:
                         enrollmentUpdateError,
@@ -1127,9 +1307,6 @@ export function StudentsView() {
                                   updatedStudent.notes ??
                                   '',
                                 grade,
-                                paymentStatus,
-                                amountDue,
-                                amountPaid,
                               }
                             : student
                       )
@@ -1198,27 +1375,95 @@ export function StudentsView() {
                     return
                   }
 
-                  const mappedStudent = {
-                    id: newStudent.id,
-                    name: newStudent.name,
-                    personalId:
-                      newStudent.personal_id ??
-                      '',
-                    grade,
-                    phone:
-                      newStudent.phone ?? '',
-                    whatsapp:
-                      newStudent.whatsapp ??
-                      '',
-                    paymentStatus,
-                    amountDue: currentAnnualFee,
-                    amountPaid,
-                    chronicDiseases:
-                      newStudent.health_notes ??
-                      'لا يوجد',
-                    notes:
-                      newStudent.notes ?? '',
+                  if (amountPaid > 0) {
+                    const {
+                      error:
+                        paymentError,
+                    } = await supabase
+                      .from('payments')
+                      .insert({
+                        student_id:
+                          newStudent.id,
+                        academic_year_id:
+                          currentAcademicYearId,
+                        amount:
+                          amountPaid,
+                        payment_method:
+                          'نقدي',
+                        payment_date:
+                          new Date()
+                            .toISOString()
+                            .slice(
+                              0,
+                              10
+                            ),
+                      })
+
+                    if (paymentError) {
+                      await supabase
+                        .from('enrollments')
+                        .delete()
+                        .eq(
+                          'student_id',
+                          newStudent.id
+                        )
+                        .eq(
+                          'academic_year_id',
+                          currentAcademicYearId
+                        )
+
+                      await supabase
+                        .from('students')
+                        .delete()
+                        .eq(
+                          'id',
+                          newStudent.id
+                        )
+
+                      setSupabaseStatus(
+                        `خطأ في حفظ الدفعة الأولى: ${paymentError.message}`
+                      )
+                      return
+                    }
                   }
+
+                  const paymentStatus =
+                    currentAnnualFee ===
+                    0
+                      ? 'معفي'
+                      : amountPaid >=
+                          currentAnnualFee
+                        ? 'مدفوع بالكامل'
+                        : amountPaid > 0
+                          ? 'مدفوع جزئيًا'
+                          : 'غير مدفوع'
+
+                  const mappedStudent =
+                    {
+                      id: newStudent.id,
+                      name:
+                        newStudent.name,
+                      personalId:
+                        newStudent.personal_id ??
+                        '',
+                      grade,
+                      phone:
+                        newStudent.phone ??
+                        '',
+                      whatsapp:
+                        newStudent.whatsapp ??
+                        '',
+                      paymentStatus,
+                      amountDue:
+                        currentAnnualFee,
+                      amountPaid,
+                      chronicDiseases:
+                        newStudent.health_notes ??
+                        'لا يوجد',
+                      notes:
+                        newStudent.notes ??
+                        '',
+                    }
 
                   setStudentList(
                     (current) => [
@@ -1228,7 +1473,9 @@ export function StudentsView() {
                   )
 
                   setSupabaseStatus(
-                    'تم حفظ الطالب وربط الصف الأكاديمي في Supabase ✅'
+                    amountPaid > 0
+                      ? 'تم حفظ الطالب والدفعة الأولى وربط الصف الأكاديمي في Supabase ✅'
+                      : 'تم حفظ الطالب وربط الصف الأكاديمي في Supabase ✅'
                   )
                 }
 
@@ -1296,7 +1543,9 @@ export function StudentsView() {
                         (level) => (
                           <option
                             key={level.id}
-                            value={level.name}
+                            value={
+                              level.name
+                            }
                           >
                             {level.name}
                           </option>
@@ -1377,7 +1626,9 @@ export function StudentsView() {
 
                         <p className="mt-1 text-xs text-muted-foreground">
                           حسب السنة الدراسية الحالية:{' '}
-                          {currentAcademicYearName}
+                          {
+                            currentAcademicYearName
+                          }
                         </p>
                       </div>
 
@@ -1394,31 +1645,64 @@ export function StudentsView() {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <label className="mb-2 block text-sm font-medium">
-                      المبلغ المدفوع
-                    </label>
+                  {!editingStudent ? (
+                    <>
+                      <div className="mt-4">
+                        <label className="mb-2 block text-sm font-medium">
+                          الدفعة الأولى
+                        </label>
 
-                    <input
-                      name="amountPaid"
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      defaultValue={
-                        editingStudent?.amountPaid ??
-                        0
-                      }
-                      placeholder="0"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
+                        <input
+                          name="amountPaid"
+                          type="number"
+                          min="0"
+                          max={
+                            currentAnnualFee
+                          }
+                          step="0.001"
+                          defaultValue="0"
+                          placeholder="0"
+                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                        />
+                      </div>
 
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    الرسوم السنوية يتم أخذها تلقائيًا من
-                    السنة الدراسية الحالية. المبلغ المدفوع
-                    يمكن إدخاله كدفعة حالية، وسيتم بناء نظام
-                    الدفعات الكامل لاحقًا.
-                  </p>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        يمكنك تسجيل الدفعة الأولى مع
+                        إضافة الطالب. سيتم حفظها كدفعة
+                        فعلية، ويمكن إضافة الدفعات اللاحقة
+                        من قسم المدفوعات.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-4 rounded-md border bg-muted/30 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium">
+                            المدفوع حتى الآن
+                          </p>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            لتسجيل دفعة جديدة استخدم زر
+                            «إضافة دفعة» من قائمة الطلاب.
+                          </p>
+                        </div>
+
+                        <div className="text-lg font-semibold">
+                          {Number(
+                            editingStudent?.amountPaid ??
+                              0
+                          ).toLocaleString(
+                            'ar-BH',
+                            {
+                              minimumFractionDigits: 3,
+                              maximumFractionDigits: 3,
+                            }
+                          )}{' '}
+                          د.ب
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t pt-5">
