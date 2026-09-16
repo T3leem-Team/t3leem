@@ -12,10 +12,32 @@ import {
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { academicGrades, students, teachers } from '@/lib/data'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  academicGrades,
+  students,
+  teachers,
+} from '@/lib/data'
+
+type Course = {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  days: string[]
+}
 
 type TeacherStudentMap = Record<string, string[]>
+
+type TeacherStudentsByCourse = Record<
+  string,
+  TeacherStudentMap
+>
 
 type AttendanceStatus =
   | 'لم يسجل'
@@ -24,12 +46,40 @@ type AttendanceStatus =
   | 'متأخر'
   | 'مستأذن'
 
-type AttendanceMap = Record<string, AttendanceStatus>
+type AttendanceMap = Record<
+  string,
+  AttendanceStatus
+>
 
 type NewTeacher = {
   name: string
   subject: string
 }
+
+const courses: Course[] = [
+  {
+    id: 'course-1',
+    name: 'الدورة الأولى',
+    startDate: '01/09/2026',
+    endDate: '30/11/2026',
+    days: ['الأحد', 'الثلاثاء', 'الخميس'],
+  },
+  {
+    id: 'course-2',
+    name: 'الدورة الثانية',
+    startDate: '01/12/2026',
+    endDate: '28/02/2027',
+    days: ['الأحد', 'الثلاثاء', 'الخميس'],
+  },
+]
+
+/*
+ * الدورة الحالية.
+ *
+ * لاحقًا لن تكون مكتوبة هنا، وإنما ستأتي من Supabase
+ * حسب السنة الدراسية والتاريخ الحالي.
+ */
+const currentCourse = courses[0]
 
 const todayLabel = new Intl.DateTimeFormat('ar-BH', {
   weekday: 'long',
@@ -41,46 +91,87 @@ const todayLabel = new Intl.DateTimeFormat('ar-BH', {
 export function TeachersView() {
   const [teacherList, setTeacherList] = useState(teachers)
 
+  /*
+   * التوزيع أصبح مرتبطًا بالدورة.
+   *
+   * كل دورة تبدأ بتوزيع مستقل.
+   * لا يوجد أي نسخ تلقائي من الدورة السابقة.
+   */
   const [teacherStudents, setTeacherStudents] =
-    useState<TeacherStudentMap>({
-      'TCH-301': ['1'],
-      'TCH-302': ['2'],
-      'TCH-303': ['3'],
-      'TCH-304': [],
-      'TCH-305': [],
-      'TCH-306': ['4'],
+    useState<TeacherStudentsByCourse>({
+      'course-1': {
+        'TCH-301': ['1'],
+        'TCH-302': ['2'],
+        'TCH-303': ['3'],
+        'TCH-304': [],
+        'TCH-305': [],
+        'TCH-306': ['4'],
+      },
+
+      /*
+       * الدورة الثانية تبدأ من الصفر.
+       *
+       * يمكن أن نضيف طلابًا هنا لاحقًا من خلال الواجهة.
+       */
+      'course-2': {
+        'TCH-301': [],
+        'TCH-302': [],
+        'TCH-303': [],
+        'TCH-304': [],
+        'TCH-305': [],
+        'TCH-306': [],
+      },
     })
 
-  const [attendance, setAttendance] = useState<AttendanceMap>({
-    '1': 'حاضر',
-    '2': 'لم يسجل',
-    '3': 'غائب',
-    '4': 'لم يسجل',
-  })
+  /*
+   * الحضور مربوط بالدورة + الطالب.
+   *
+   * مثال:
+   * course-1:1
+   * course-2:1
+   */
+  const [attendance, setAttendance] =
+    useState<AttendanceMap>({
+      'course-1:1': 'حاضر',
+      'course-1:2': 'لم يسجل',
+      'course-1:3': 'غائب',
+      'course-1:4': 'لم يسجل',
+    })
 
   const [search, setSearch] = useState('')
+
   const [selectedTeacherId, setSelectedTeacherId] =
     useState<string | null>(null)
 
   const [activePanel, setActivePanel] = useState<
-    'students' | 'addStudents' | 'attendance'
+    'students' | 'addStudents' | 'attendance' | 'courseStudents'
   >('students')
 
-  const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false)
-  const [isTransferOpen, setIsTransferOpen] = useState(false)
+  const [isAddTeacherOpen, setIsAddTeacherOpen] =
+    useState(false)
+
+  const [isTransferOpen, setIsTransferOpen] =
+    useState(false)
 
   const [selectedGrade, setSelectedGrade] = useState('')
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
+
+  const [selectedStudentIds, setSelectedStudentIds] =
+    useState<string[]>([])
 
   const [transferStudentId, setTransferStudentId] =
     useState<string | null>(null)
 
-  const [transferTeacherId, setTransferTeacherId] = useState('')
+  const [transferTeacherId, setTransferTeacherId] =
+    useState('')
 
-  const [newTeacher, setNewTeacher] = useState<NewTeacher>({
-    name: '',
-    subject: '',
-  })
+  const [newTeacher, setNewTeacher] =
+    useState<NewTeacher>({
+      name: '',
+      subject: '',
+    })
+
+  const currentTeacherStudents =
+    teacherStudents[currentCourse.id] ?? {}
 
   const filteredTeachers = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -100,8 +191,12 @@ export function TeachersView() {
     (teacher) => teacher.id === selectedTeacherId,
   )
 
+  /*
+   * الطلاب الموزعون حاليًا على المعلم
+   * في الدورة الحالية فقط.
+   */
   const assignedStudentIds = selectedTeacherId
-    ? teacherStudents[selectedTeacherId] ?? []
+    ? currentTeacherStudents[selectedTeacherId] ?? []
     : []
 
   const assignedStudents = useMemo(() => {
@@ -110,6 +205,94 @@ export function TeachersView() {
     )
   }, [assignedStudentIds])
 
+  /*
+   * جميع الطلاب الذين تم توزيعهم على أي معلم
+   * في الدورة الحالية.
+   *
+   * هؤلاء هم "حاضرون/مسجلون في الدورة الحالية"
+   * حسب النظام الذي اتفقنا عليه.
+   */
+  const currentCourseStudentIds = useMemo(() => {
+    return Array.from(
+      new Set(
+        Object.values(currentTeacherStudents).flat(),
+      ),
+    )
+  }, [currentTeacherStudents])
+
+  const currentCourseStudents = useMemo(() => {
+    return students.filter((student) =>
+      currentCourseStudentIds.includes(student.id),
+    )
+  }, [currentCourseStudentIds])
+
+  /*
+   * الطلاب غير الموزعين على أي معلم في الدورة الحالية.
+   *
+   * هؤلاء يعتبرون "لم يحضروا الدورة" حاليًا.
+   */
+  const notInCurrentCourseStudents = useMemo(() => {
+    return students.filter(
+      (student) =>
+        !currentCourseStudentIds.includes(student.id),
+    )
+  }, [currentCourseStudentIds])
+
+  /*
+   * سجل الطالب السابق مع المعلمين.
+   *
+   * هذا للعرض فقط.
+   * لا يتم استخدامه لتوزيع الطالب تلقائيًا.
+   */
+  const getStudentHistory = (studentId: string) => {
+    return courses
+      .filter((course) => course.id !== currentCourse.id)
+      .map((course) => {
+        const courseTeacherMap =
+          teacherStudents[course.id] ?? {}
+
+        const teacherId = Object.entries(
+          courseTeacherMap,
+        ).find(([, studentIds]) =>
+          studentIds.includes(studentId),
+        )?.[0]
+
+        if (!teacherId) {
+          return null
+        }
+
+        const teacher = teacherList.find(
+          (item) => item.id === teacherId,
+        )
+
+        if (!teacher) {
+          return null
+        }
+
+        return {
+          course,
+          teacher,
+        }
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          course: Course
+          teacher: (typeof teacherList)[number]
+        } => Boolean(item),
+      )
+  }
+
+  /*
+   * الطالب المتاح للإضافة:
+   *
+   * - من قائمة الطلاب الأساسية
+   * - حسب المستوى
+   * - ليس موزعًا على معلم آخر في الدورة الحالية
+   *
+   * لا ننظر إلى توزيع الدورات السابقة.
+   */
   const availableStudents = useMemo(() => {
     if (!selectedGrade) {
       return []
@@ -121,7 +304,7 @@ export function TeachersView() {
       }
 
       const assignedToAnotherTeacher = Object.entries(
-        teacherStudents,
+        currentTeacherStudents,
       ).some(
         ([teacherId, studentIds]) =>
           teacherId !== selectedTeacherId &&
@@ -130,10 +313,14 @@ export function TeachersView() {
 
       return !assignedToAnotherTeacher
     })
-  }, [selectedGrade, selectedTeacherId, teacherStudents])
+  }, [
+    selectedGrade,
+    selectedTeacherId,
+    currentTeacherStudents,
+  ])
 
   const getStudentCount = (teacherId: string) => {
-    return teacherStudents[teacherId]?.length ?? 0
+    return currentTeacherStudents[teacherId]?.length ?? 0
   }
 
   const openTeacher = (teacherId: string) => {
@@ -168,26 +355,42 @@ export function TeachersView() {
     })
   }
 
+  /*
+   * إضافة الطلاب للمعلم في الدورة الحالية فقط.
+   */
   const saveStudents = () => {
-    if (!selectedTeacherId || selectedStudentIds.length === 0) {
+    if (
+      !selectedTeacherId ||
+      selectedStudentIds.length === 0
+    ) {
       return
     }
 
     setTeacherStudents((current) => {
-      const updated = { ...current }
+      const courseMap = {
+        ...(current[currentCourse.id] ?? {}),
+      }
 
-      Object.keys(updated).forEach((teacherId) => {
-        updated[teacherId] = (updated[teacherId] ?? []).filter(
-          (studentId) => !selectedStudentIds.includes(studentId),
+      Object.keys(courseMap).forEach((teacherId) => {
+        courseMap[teacherId] = (
+          courseMap[teacherId] ?? []
+        ).filter(
+          (studentId) =>
+            !selectedStudentIds.includes(studentId),
         )
       })
 
-      updated[selectedTeacherId] = [
-        ...(updated[selectedTeacherId] ?? []),
-        ...selectedStudentIds,
-      ]
+      courseMap[selectedTeacherId] = Array.from(
+        new Set([
+          ...(courseMap[selectedTeacherId] ?? []),
+          ...selectedStudentIds,
+        ]),
+      )
 
-      return updated
+      return {
+        ...current,
+        [currentCourse.id]: courseMap,
+      }
     })
 
     setSelectedStudentIds([])
@@ -201,6 +404,9 @@ export function TeachersView() {
     setIsTransferOpen(true)
   }
 
+  /*
+   * النقل داخل الدورة الحالية فقط.
+   */
   const saveTransfer = () => {
     if (
       !selectedTeacherId ||
@@ -212,20 +418,29 @@ export function TeachersView() {
     }
 
     setTeacherStudents((current) => {
-      const updated = { ...current }
+      const courseMap = {
+        ...(current[currentCourse.id] ?? {}),
+      }
 
-      Object.keys(updated).forEach((teacherId) => {
-        updated[teacherId] = (updated[teacherId] ?? []).filter(
+      Object.keys(courseMap).forEach((teacherId) => {
+        courseMap[teacherId] = (
+          courseMap[teacherId] ?? []
+        ).filter(
           (studentId) => studentId !== transferStudentId,
         )
       })
 
-      updated[transferTeacherId] = [
-        ...(updated[transferTeacherId] ?? []),
-        transferStudentId,
-      ]
+      courseMap[transferTeacherId] = Array.from(
+        new Set([
+          ...(courseMap[transferTeacherId] ?? []),
+          transferStudentId,
+        ]),
+      )
 
-      return updated
+      return {
+        ...current,
+        [currentCourse.id]: courseMap,
+      }
     })
 
     setTransferStudentId(null)
@@ -233,23 +448,33 @@ export function TeachersView() {
     setIsTransferOpen(false)
   }
 
+  /*
+   * الحضور مربوط بالدورة الحالية + الطالب.
+   */
   const updateAttendance = (
     studentId: string,
     status: AttendanceStatus,
   ) => {
+    const attendanceKey = `${currentCourse.id}:${studentId}`
+
     setAttendance((current) => ({
       ...current,
-      [studentId]: status,
+      [attendanceKey]: status,
     }))
   }
 
   const addTeacher = () => {
-    if (!newTeacher.name.trim() || !newTeacher.subject.trim()) {
+    if (
+      !newTeacher.name.trim() ||
+      !newTeacher.subject.trim()
+    ) {
       return
     }
 
     const numbers = teacherList.map((teacher) => {
-      const number = Number(teacher.id.replace('TCH-', ''))
+      const number = Number(
+        teacher.id.replace('TCH-', ''),
+      )
 
       return Number.isNaN(number) ? 300 : number
     })
@@ -269,9 +494,16 @@ export function TeachersView() {
       },
     ])
 
+    /*
+     * إضافة المعلم للدورة الحالية بدون
+     * التأثير على أي دورة أخرى.
+     */
     setTeacherStudents((current) => ({
       ...current,
-      [id]: [],
+      [currentCourse.id]: {
+        ...(current[currentCourse.id] ?? {}),
+        [id]: [],
+      },
     }))
 
     setNewTeacher({
@@ -322,12 +554,78 @@ export function TeachersView() {
         }
       />
 
+      {/* الدورة الحالية */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                الدورة الحالية
+              </p>
+
+              <h2 className="mt-1 text-lg font-semibold">
+                {currentCourse.name}
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-sm">
+              <span className="rounded-full bg-muted px-3 py-1.5">
+                {currentCourse.startDate} —{' '}
+                {currentCourse.endDate}
+              </span>
+
+              <span className="rounded-full bg-muted px-3 py-1.5">
+                {currentCourse.days.join(' • ')}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ملخص الدورة */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">
+              طلاب الدورة الحالية
+            </p>
+
+            <p className="mt-1 text-2xl font-semibold">
+              {currentCourseStudents.length}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              تم توزيعهم على معلم في هذه الدورة
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">
+              لم يحضروا الدورة
+            </p>
+
+            <p className="mt-1 text-2xl font-semibold">
+              {notInCurrentCourseStudents.length}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              طلاب موجودون في القائمة الأساسية ولم يتم
+              توزيعهم في الدورة الحالية
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="relative max-w-md">
         <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
         <input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) =>
+            setSearch(event.target.value)
+          }
           placeholder="البحث عن معلم..."
           className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-primary/20"
         />
@@ -342,14 +640,17 @@ export function TeachersView() {
                   <th className="px-4 py-3 text-right font-medium">
                     المعلم
                   </th>
+
                   <th className="px-4 py-3 text-right font-medium">
                     المادة
                   </th>
+
                   <th className="px-4 py-3 text-right font-medium">
                     المستوى
                   </th>
+
                   <th className="px-4 py-3 text-right font-medium">
-                    عدد الطلاب
+                    طلاب الدورة
                   </th>
                 </tr>
               </thead>
@@ -357,13 +658,15 @@ export function TeachersView() {
               <tbody>
                 {filteredTeachers.map((teacher) => {
                   const teacherStudentIds =
-                    teacherStudents[teacher.id] ?? []
+                    currentTeacherStudents[teacher.id] ?? []
 
                   const teacherGrades = Array.from(
                     new Set(
                       students
                         .filter((student) =>
-                          teacherStudentIds.includes(student.id),
+                          teacherStudentIds.includes(
+                            student.id,
+                          ),
                         )
                         .map((student) => student.grade),
                     ),
@@ -438,7 +741,9 @@ export function TeachersView() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setIsAddTeacherOpen(false)}
+                onClick={() =>
+                  setIsAddTeacherOpen(false)
+                }
               >
                 <X className="size-4" />
               </Button>
@@ -484,12 +789,16 @@ export function TeachersView() {
               <div className="flex justify-end gap-2 pt-2">
                 <Button
                   variant="outline"
-                  onClick={() => setIsAddTeacherOpen(false)}
+                  onClick={() =>
+                    setIsAddTeacherOpen(false)
+                  }
                 >
                   إلغاء
                 </Button>
 
-                <Button onClick={addTeacher}>حفظ</Button>
+                <Button onClick={addTeacher}>
+                  حفظ
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -508,6 +817,8 @@ export function TeachersView() {
                 <p className="text-sm text-muted-foreground">
                   {selectedTeacher.subject} ·{' '}
                   {getStudentCount(selectedTeacher.id)} طالب
+                  {' · '}
+                  {currentCourse.name}
                 </p>
               </div>
 
@@ -520,6 +831,30 @@ export function TeachersView() {
               </Button>
             </div>
 
+            {/* معلومات الدورة */}
+            <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الدورة الحالية
+                  </p>
+
+                  <p className="font-semibold">
+                    {currentCourse.name}
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-background px-3 py-1.5 text-sm">
+                  {currentCourse.startDate} —{' '}
+                  {currentCourse.endDate}
+                </span>
+
+                <span className="rounded-full bg-background px-3 py-1.5 text-sm">
+                  {currentCourse.days.join(' • ')}
+                </span>
+              </div>
+            </div>
+
             <div className="border-b px-4 py-3 sm:px-6">
               <div className="flex gap-2 overflow-x-auto">
                 <Button
@@ -528,10 +863,26 @@ export function TeachersView() {
                       ? 'default'
                       : 'outline'
                   }
-                  onClick={() => setActivePanel('students')}
+                  onClick={() =>
+                    setActivePanel('students')
+                  }
                   className="shrink-0"
                 >
                   الطلاب
+                </Button>
+
+                <Button
+                  variant={
+                    activePanel === 'courseStudents'
+                      ? 'default'
+                      : 'outline'
+                  }
+                  onClick={() =>
+                    setActivePanel('courseStudents')
+                  }
+                  className="shrink-0"
+                >
+                  طلاب الدورة الحالية
                 </Button>
 
                 <Button
@@ -540,7 +891,9 @@ export function TeachersView() {
                       ? 'default'
                       : 'outline'
                   }
-                  onClick={() => setActivePanel('attendance')}
+                  onClick={() =>
+                    setActivePanel('attendance')
+                  }
                   className="shrink-0"
                 >
                   الحضور والغياب
@@ -554,11 +907,11 @@ export function TeachersView() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">
-                        طلاب المعلم
+                        طلاب المعلم في الدورة الحالية
                       </h3>
 
                       <p className="text-sm text-muted-foreground">
-                        إدارة الطلاب وتوزيعهم
+                        التوزيع مستقل عن الدورات السابقة.
                       </p>
                     </div>
 
@@ -575,7 +928,8 @@ export function TeachersView() {
                       </p>
 
                       <p className="mt-1 text-sm text-muted-foreground">
-                        أضف الطلاب حسب المستوى الأكاديمي.
+                        أضف الطلاب من القائمة الأساسية لهذه
+                        الدورة.
                       </p>
                     </div>
                   ) : (
@@ -586,12 +940,19 @@ export function TeachersView() {
                             <th className="px-4 py-3 text-right font-medium">
                               الطالب
                             </th>
+
                             <th className="px-4 py-3 text-right font-medium">
                               الرقم الشخصي
                             </th>
+
                             <th className="px-4 py-3 text-right font-medium">
                               المستوى
                             </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              السجل السابق
+                            </th>
+
                             <th className="px-4 py-3 text-right font-medium">
                               إجراء
                             </th>
@@ -599,41 +960,222 @@ export function TeachersView() {
                         </thead>
 
                         <tbody>
-                          {assignedStudents.map((student) => (
-                            <tr
-                              key={student.id}
-                              className="border-t"
-                            >
-                              <td className="px-4 py-3 font-medium">
-                                {student.name}
-                              </td>
+                          {assignedStudents.map(
+                            (student) => {
+                              const history =
+                                getStudentHistory(
+                                  student.id,
+                                )
 
-                              <td className="px-4 py-3">
-                                {student.personalId}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {student.grade}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    openTransfer(student.id)
-                                  }
+                              return (
+                                <tr
+                                  key={student.id}
+                                  className="border-t"
                                 >
-                                  <ArrowLeftRight className="size-4" />
-                                  نقل
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
+                                  <td className="px-4 py-3 font-medium">
+                                    {student.name}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {student.personalId}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {student.grade}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {history.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {history.map(
+                                          (item) => (
+                                            <p
+                                              key={
+                                                item.course.id
+                                              }
+                                              className="text-xs text-muted-foreground"
+                                            >
+                                              {item.course.name}{' '}
+                                              →{' '}
+                                              {
+                                                item.teacher
+                                                  .name
+                                              }
+                                            </p>
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        لا يوجد توزيع سابق
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        openTransfer(
+                                          student.id,
+                                        )
+                                      }
+                                    >
+                                      <ArrowLeftRight className="size-4" />
+                                      نقل
+                                    </Button>
+                                  </td>
+                                </tr>
+                              )
+                            },
+                          )}
                         </tbody>
                       </table>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activePanel === 'courseStudents' && (
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="font-semibold">
+                      طلاب الدورة الحالية
+                    </h3>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      هؤلاء هم الطلاب الذين تم توزيعهم على
+                      معلم في {currentCourse.name}.
+                    </p>
+                  </div>
+
+                  {currentCourseStudents.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-10 text-center">
+                      <p className="font-medium">
+                        لا يوجد طلاب مسجلون في الدورة حتى الآن
+                      </p>
+
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        عند إضافة الطالب إلى أي معلم في هذه
+                        الدورة سيظهر هنا.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-4 py-3 text-right font-medium">
+                              الطالب
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              المستوى
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              المعلم
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              السجل السابق
+                            </th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {currentCourseStudents.map(
+                            (student) => {
+                              const teacherId =
+                                Object.entries(
+                                  currentTeacherStudents,
+                                ).find(
+                                  ([, studentIds]) =>
+                                    studentIds.includes(
+                                      student.id,
+                                    ),
+                                )?.[0]
+
+                              const teacher =
+                                teacherList.find(
+                                  (item) =>
+                                    item.id === teacherId,
+                                )
+
+                              const history =
+                                getStudentHistory(
+                                  student.id,
+                                )
+
+                              return (
+                                <tr
+                                  key={student.id}
+                                  className="border-t"
+                                >
+                                  <td className="px-4 py-3 font-medium">
+                                    {student.name}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {student.grade}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {teacher?.name ?? '—'}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {history.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {history.map(
+                                          (item) => (
+                                            <p
+                                              key={
+                                                item.course.id
+                                              }
+                                              className="text-xs text-muted-foreground"
+                                            >
+                                              {item.course.name}{' '}
+                                              →{' '}
+                                              {
+                                                item.teacher
+                                                  .name
+                                              }
+                                            </p>
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        لا يوجد توزيع سابق
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            },
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <p className="font-medium">
+                      غير موزعين في الدورة الحالية
+                    </p>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      هؤلاء من قائمة الطلاب الأساسية، لكن لم
+                      تتم إضافتهم لأي معلم في هذه الدورة.
+                      لذلك لا يدخلون في نسبة حضور هذه الدورة.
+                    </p>
+
+                    <p className="mt-3 text-2xl font-semibold">
+                      {notInCurrentCourseStudents.length}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -642,12 +1184,13 @@ export function TeachersView() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-semibold">
-                        إضافة طلاب
+                        إضافة طلاب للدورة الحالية
                       </h3>
 
                       <p className="text-sm text-muted-foreground">
-                        اختر المستوى ثم حدد الطلاب المطلوب
-                        إضافتهم.
+                        اختر الطلاب من القائمة الأساسية ثم
+                        أضفهم إلى هذا المعلم في{' '}
+                        {currentCourse.name}.
                       </p>
                     </div>
 
@@ -662,6 +1205,18 @@ export function TeachersView() {
                     </Button>
                   </div>
 
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <p className="text-sm font-medium">
+                      الدورة الحالية
+                    </p>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {currentCourse.name} ·{' '}
+                      {currentCourse.startDate} —{' '}
+                      {currentCourse.endDate}
+                    </p>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
                       المستوى الأكاديمي
@@ -670,7 +1225,9 @@ export function TeachersView() {
                     <select
                       value={selectedGrade}
                       onChange={(event) => {
-                        setSelectedGrade(event.target.value)
+                        setSelectedGrade(
+                          event.target.value,
+                        )
                         setSelectedStudentIds([])
                       }}
                       className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -680,7 +1237,10 @@ export function TeachersView() {
                       </option>
 
                       {academicGrades.map((grade) => (
-                        <option key={grade} value={grade}>
+                        <option
+                          key={grade}
+                          value={grade}
+                        >
                           {grade}
                         </option>
                       ))}
@@ -695,7 +1255,8 @@ export function TeachersView() {
                         </span>
 
                         <span className="text-xs text-muted-foreground">
-                          تم تحديد {selectedStudentIds.length}
+                          تم تحديد{' '}
+                          {selectedStudentIds.length}
                         </span>
                       </div>
 
@@ -705,38 +1266,75 @@ export function TeachersView() {
                         </div>
                       ) : (
                         <div className="overflow-hidden rounded-lg border">
-                          {availableStudents.map((student) => {
-                            const selected =
-                              selectedStudentIds.includes(
-                                student.id,
+                          {availableStudents.map(
+                            (student) => {
+                              const selected =
+                                selectedStudentIds.includes(
+                                  student.id,
+                                )
+
+                              const history =
+                                getStudentHistory(
+                                  student.id,
+                                )
+
+                              return (
+                                <label
+                                  key={student.id}
+                                  className="flex cursor-pointer items-start gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() =>
+                                      toggleStudent(
+                                        student.id,
+                                      )
+                                    }
+                                    className="mt-1 size-4"
+                                  />
+
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium">
+                                      {student.name}
+                                    </p>
+
+                                    <p className="text-xs text-muted-foreground">
+                                      {student.personalId}
+                                    </p>
+
+                                    {history.length > 0 && (
+                                      <div className="mt-2 space-y-1">
+                                        {history.map(
+                                          (item) => (
+                                            <p
+                                              key={
+                                                item.course.id
+                                              }
+                                              className="text-xs text-muted-foreground"
+                                            >
+                                              سبق أن كان مع{' '}
+                                              <span className="font-medium text-foreground">
+                                                {
+                                                  item.teacher
+                                                    .name
+                                                }
+                                              </span>{' '}
+                                              في{' '}
+                                              {
+                                                item.course
+                                                  .name
+                                              }
+                                            </p>
+                                          ),
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
                               )
-
-                            return (
-                              <label
-                                key={student.id}
-                                className="flex cursor-pointer items-center gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  onChange={() =>
-                                    toggleStudent(student.id)
-                                  }
-                                  className="size-4"
-                                />
-
-                                <div className="min-w-0">
-                                  <p className="font-medium">
-                                    {student.name}
-                                  </p>
-
-                                  <p className="text-xs text-muted-foreground">
-                                    {student.personalId}
-                                  </p>
-                                </div>
-                              </label>
-                            )
-                          })}
+                            },
+                          )}
                         </div>
                       )}
                     </div>
@@ -754,7 +1352,9 @@ export function TeachersView() {
 
                     <Button
                       onClick={saveStudents}
-                      disabled={selectedStudentIds.length === 0}
+                      disabled={
+                        selectedStudentIds.length === 0
+                      }
                     >
                       حفظ
                     </Button>
@@ -770,7 +1370,12 @@ export function TeachersView() {
                     </h3>
 
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {todayLabel}
+                      {currentCourse.name} · {todayLabel}
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      يتم احتساب الحضور فقط للطلاب الموزعين
+                      في الدورة الحالية.
                     </p>
                   </div>
 
@@ -781,15 +1386,19 @@ export function TeachersView() {
                   ) : (
                     <div className="space-y-2">
                       {assignedStudents.map((student) => {
-                        const currentStatus =
-                          attendance[student.id] ?? 'لم يسجل'
+                        const attendanceKey = `${currentCourse.id}:${student.id}`
 
-                        const statuses: AttendanceStatus[] = [
-                          'حاضر',
-                          'غائب',
-                          'متأخر',
-                          'مستأذن',
-                        ]
+                        const currentStatus =
+                          attendance[attendanceKey] ??
+                          'لم يسجل'
+
+                        const statuses: AttendanceStatus[] =
+                          [
+                            'حاضر',
+                            'غائب',
+                            'متأخر',
+                            'مستأذن',
+                          ]
 
                         return (
                           <div
@@ -807,28 +1416,31 @@ export function TeachersView() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                              {statuses.map((status) => (
-                                <button
-                                  key={status}
-                                  type="button"
-                                  onClick={() =>
-                                    updateAttendance(
-                                      student.id,
+                              {statuses.map(
+                                (status) => (
+                                  <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() =>
+                                      updateAttendance(
+                                        student.id,
+                                        status,
+                                      )
+                                    }
+                                    className={`min-h-11 rounded-md border px-3 py-2 text-sm font-medium transition ${getAttendanceClass(
+                                      currentStatus,
                                       status,
-                                    )
-                                  }
-                                  className={`min-h-11 rounded-md border px-3 py-2 text-sm font-medium transition ${getAttendanceClass(
-                                    currentStatus,
-                                    status,
-                                  )}`}
-                                >
-                                  {currentStatus === status && (
-                                    <Check className="ml-1 inline-block size-4" />
-                                  )}
+                                    )}`}
+                                  >
+                                    {currentStatus ===
+                                      status && (
+                                      <Check className="ml-1 inline-block size-4" />
+                                    )}
 
-                                  {status}
-                                </button>
-                              ))}
+                                    {status}
+                                  </button>
+                                ),
+                              )}
                             </div>
                           </div>
                         )
@@ -842,84 +1454,97 @@ export function TeachersView() {
         </div>
       )}
 
-      {isTransferOpen && transferStudentId && selectedTeacher && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>نقل الطالب</CardTitle>
-            </CardHeader>
+      {isTransferOpen &&
+        transferStudentId &&
+        selectedTeacher && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle>نقل الطالب</CardTitle>
+              </CardHeader>
 
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                سيتم إزالة الطالب من{' '}
-                <span className="font-medium text-foreground">
-                  {selectedTeacher.name}
-                </span>{' '}
-                وتعيينه للمعلم الجديد.
-              </p>
-
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <p className="font-medium">
-                  {
-                    students.find(
-                      (student) =>
-                        student.id === transferStudentId,
-                    )?.name
-                  }
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  سيتم نقل الطالب من{' '}
+                  <span className="font-medium text-foreground">
+                    {selectedTeacher.name}
+                  </span>{' '}
+                  إلى المعلم الجديد في{' '}
+                  <span className="font-medium text-foreground">
+                    {currentCourse.name}
+                  </span>
+                  فقط.
                 </p>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  المعلم الجديد
-                </label>
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <p className="font-medium">
+                    {
+                      students.find(
+                        (student) =>
+                          student.id === transferStudentId,
+                      )?.name
+                    }
+                  </p>
+                </div>
 
-                <select
-                  value={transferTeacherId}
-                  onChange={(event) =>
-                    setTransferTeacherId(event.target.value)
-                  }
-                  className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                >
-                  <option value="">اختر المعلم</option>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    المعلم الجديد
+                  </label>
 
-                  {teacherList
-                    .filter(
-                      (teacher) =>
-                        teacher.id !== selectedTeacher.id,
-                    )
-                    .map((teacher) => (
-                      <option
-                        key={teacher.id}
-                        value={teacher.id}
-                      >
-                        {teacher.name} — {teacher.subject}
-                      </option>
-                    ))}
-                </select>
-              </div>
+                  <select
+                    value={transferTeacherId}
+                    onChange={(event) =>
+                      setTransferTeacherId(
+                        event.target.value,
+                      )
+                    }
+                    className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  >
+                    <option value="">
+                      اختر المعلم
+                    </option>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsTransferOpen(false)}
-                >
-                  إلغاء
-                </Button>
+                    {teacherList
+                      .filter(
+                        (teacher) =>
+                          teacher.id !==
+                          selectedTeacher.id,
+                      )
+                      .map((teacher) => (
+                        <option
+                          key={teacher.id}
+                          value={teacher.id}
+                        >
+                          {teacher.name} —{' '}
+                          {teacher.subject}
+                        </option>
+                      ))}
+                  </select>
+                </div>
 
-                <Button
-                  onClick={saveTransfer}
-                  disabled={!transferTeacherId}
-                >
-                  <ArrowLeftRight className="size-4" />
-                  تأكيد النقل
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setIsTransferOpen(false)
+                    }
+                  >
+                    إلغاء
+                  </Button>
+
+                  <Button
+                    onClick={saveTransfer}
+                    disabled={!transferTeacherId}
+                  >
+                    <ArrowLeftRight className="size-4" />
+                    تأكيد النقل
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
     </div>
   )
 }
-
