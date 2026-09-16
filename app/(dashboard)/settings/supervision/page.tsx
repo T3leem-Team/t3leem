@@ -174,7 +174,7 @@ if (
 }
 
 const newRecord: SupervisionRecord = {
-  id: `supervision-${Date.now()}`,
+  id: 'supervision-' + Date.now(),
   type: selectedType,
   date: selectedDate,
   teacher:
