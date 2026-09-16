@@ -109,7 +109,7 @@ switch (type) {
 case 'teacher_absent':
 return 'destructive' as const
 
-```
+
 case 'day_cancelled':
 case 'lesson_cancelled':
   return 'warning' as const
