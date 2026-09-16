@@ -9,7 +9,10 @@ import { TeachersView } from '@/components/sections/teachers-view'
 import { PaymentsView } from '@/components/sections/payments-view'
 import { SettingsView } from '@/components/sections/settings-view'
 
-const routes: { match: (p: string) => boolean; view: () => React.ReactNode }[] = [
+const routes: {
+  match: (p: string) => boolean
+  view: () => React.ReactNode
+}[] = [
   { match: (p) => p === '/', view: () => <DashboardView /> },
   { match: (p) => p.startsWith('/students'), view: () => <StudentsView /> },
   { match: (p) => p.startsWith('/enrollment'), view: () => <EnrollmentView /> },
@@ -21,8 +24,10 @@ const routes: { match: (p: string) => boolean; view: () => React.ReactNode }[] =
 export function SectionRouter() {
   const pathname = usePathname()
 
-  // Settings sub-pages are handled by Next.js pages.
-  if (pathname.startsWith('/settings/subjects')) {
+  // Any nested route is handled by the Next.js App Router.
+  const isSubPage = pathname.split('/').filter(Boolean).length > 1
+
+  if (isSubPage) {
     return null
   }
 
