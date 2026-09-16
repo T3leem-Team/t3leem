@@ -696,26 +696,58 @@ export function StudentsView() {
                         : 'غير مدفوع'
 
                 if (editingStudent) {
-                  setStudentList((current) =>
-                    current.map((student) =>
-                      student.id === editingStudent.id
-                        ? {
-                            ...student,
-                            name,
-                            personalId,
-                            grade,
-                            phone,
-                            whatsapp,
-                            paymentStatus,
-                            amountDue,
-                            amountPaid,
-                            chronicDiseases,
-                            notes,
-                          }
-                        : student
-                    )
-                  )
-                } else {
+  const { data: updatedStudent, error } =
+    await supabase
+      .from('students')
+      .update({
+        name,
+        personal_id: personalId,
+        phone,
+        whatsapp,
+        notes,
+        health_notes: chronicDiseases,
+      })
+      .eq('id', editingStudent.id)
+      .select(
+        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+      )
+      .single()
+
+  if (error) {
+    setSupabaseStatus(
+      `خطأ في تعديل الطالب: ${error.message}`
+    )
+    return
+  }
+
+  setStudentList((current) =>
+    current.map((student) =>
+      student.id === editingStudent.id
+        ? {
+            ...student,
+            name: updatedStudent.name,
+            personalId:
+              updatedStudent.personal_id ?? '',
+            phone: updatedStudent.phone ?? '',
+            whatsapp:
+              updatedStudent.whatsapp ?? '',
+            chronicDiseases:
+              updatedStudent.health_notes ??
+              'لا يوجد',
+            notes: updatedStudent.notes ?? '',
+            grade,
+            paymentStatus,
+            amountDue,
+            amountPaid,
+          }
+        : student
+    )
+  )
+
+  setSupabaseStatus(
+    'تم تعديل الطالب في Supabase ✅'
+  )
+} else {
                   const { data: newStudent, error } =
                     await supabase
                       .from('students')
