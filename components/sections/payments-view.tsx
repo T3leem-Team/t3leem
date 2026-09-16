@@ -16,66 +16,92 @@ import {
 } from '@/components/ui/table'
 import { students, type Stat } from '@/lib/data'
 
-function formatCurrency(value: number) {
-  return `${value.toLocaleString('ar-BH')} د.ب`
+type Filters = {
+  name: string
+  grade: string
+  amountDue: string
+  amountPaid: string
+  amountRemaining: string
+  paymentStatus: string
 }
 
-function parseAmount(value: string) {
-  if (value.trim() === '') return null
-
-  const number = Number(value)
-
-  return Number.isFinite(number) ? number : null
+const emptyFilters: Filters = {
+  name: '',
+  grade: '',
+  amountDue: '',
+  amountPaid: '',
+  amountRemaining: '',
+  paymentStatus: '',
 }
 
 export function PaymentsView() {
-  const [dueMin, setDueMin] = useState('')
-  const [dueMax, setDueMax] = useState('')
+  const [filters, setFilters] = useState<Filters>(emptyFilters)
 
-  const [paidMin, setPaidMin] = useState('')
-  const [paidMax, setPaidMax] = useState('')
+  const updateFilter = (key: keyof Filters, value: string) => {
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }))
+  }
 
-  const [remainingMin, setRemainingMin] = useState('')
-  const [remainingMax, setRemainingMax] = useState('')
+  const grades = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((student) => student.grade)),
+      ).sort(),
+    [],
+  )
+
+  const paymentStatuses = useMemo(
+    () =>
+      Array.from(
+        new Set(students.map((student) => student.paymentStatus)),
+      ),
+    [],
+  )
 
   const filteredStudents = useMemo(() => {
-    const dueMinValue = parseAmount(dueMin)
-    const dueMaxValue = parseAmount(dueMax)
-
-    const paidMinValue = parseAmount(paidMin)
-    const paidMaxValue = parseAmount(paidMax)
-
-    const remainingMinValue = parseAmount(remainingMin)
-    const remainingMaxValue = parseAmount(remainingMax)
-
     return students.filter((student) => {
       const remaining =
         student.paymentStatus === 'معفي'
           ? 0
           : Math.max(student.amountDue - student.amountPaid, 0)
 
+      const matchesName =
+        !filters.name ||
+        student.name
+          .toLowerCase()
+          .includes(filters.name.toLowerCase())
+
+      const matchesGrade =
+        !filters.grade || student.grade === filters.grade
+
       const matchesDue =
-        (dueMinValue === null || student.amountDue >= dueMinValue) &&
-        (dueMaxValue === null || student.amountDue <= dueMaxValue)
+        !filters.amountDue ||
+        String(student.amountDue).includes(filters.amountDue)
 
       const matchesPaid =
-        (paidMinValue === null || student.amountPaid >= paidMinValue) &&
-        (paidMaxValue === null || student.amountPaid <= paidMaxValue)
+        !filters.amountPaid ||
+        String(student.amountPaid).includes(filters.amountPaid)
 
       const matchesRemaining =
-        (remainingMinValue === null || remaining >= remainingMinValue) &&
-        (remainingMaxValue === null || remaining <= remainingMaxValue)
+        !filters.amountRemaining ||
+        String(remaining).includes(filters.amountRemaining)
 
-      return matchesDue && matchesPaid && matchesRemaining
+      const matchesStatus =
+        !filters.paymentStatus ||
+        student.paymentStatus === filters.paymentStatus
+
+      return (
+        matchesName &&
+        matchesGrade &&
+        matchesDue &&
+        matchesPaid &&
+        matchesRemaining &&
+        matchesStatus
+      )
     })
-  }, [
-    dueMin,
-    dueMax,
-    paidMin,
-    paidMax,
-    remainingMin,
-    remainingMax,
-  ])
+  }, [filters])
 
   const totalDue = filteredStudents.reduce(
     (total, student) => total + student.amountDue,
@@ -130,22 +156,13 @@ export function PaymentsView() {
     },
   ]
 
-  const clearFilters = () => {
-    setDueMin('')
-    setDueMax('')
-    setPaidMin('')
-    setPaidMax('')
-    setRemainingMin('')
-    setRemainingMax('')
-  }
+  const hasFilters = Object.values(filters).some(
+    (value) => value !== '',
+  )
 
-  const hasFilters =
-    dueMin ||
-    dueMax ||
-    paidMin ||
-    paidMax ||
-    remainingMin ||
-    remainingMax
+  const clearFilters = () => {
+    setFilters(emptyFilters)
+  }
 
   return (
     <div className="space-y-6">
@@ -161,189 +178,237 @@ export function PaymentsView() {
       </div>
 
       <Card>
-        <CardContent className="space-y-5 p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-sm font-semibold">
-                فلترة المبالغ
-              </h2>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-[190px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        الطالب
+                      </div>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                حدد الحد الأدنى والأقصى لكل مبلغ.
-              </p>
-            </div>
+                      <input
+                        type="text"
+                        value={filters.name}
+                        onChange={(event) =>
+                          updateFilter(
+                            'name',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث عن طالب..."
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </TableHead>
 
-            {hasFilters && (
+                  <TableHead className="min-w-[150px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        المستوى
+                      </div>
+
+                      <select
+                        value={filters.grade}
+                        onChange={(event) =>
+                          updateFilter(
+                            'grade',
+                            event.target.value,
+                          )
+                        }
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      >
+                        <option value="">الكل</option>
+
+                        {grades.map((grade) => (
+                          <option key={grade} value={grade}>
+                            {grade}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </TableHead>
+
+                  <TableHead className="min-w-[170px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        المبلغ المستحق
+                      </div>
+
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={filters.amountDue}
+                        onChange={(event) =>
+                          updateFilter(
+                            'amountDue',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث بالمبلغ..."
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </TableHead>
+
+                  <TableHead className="min-w-[170px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        المبلغ المدفوع
+                      </div>
+
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={filters.amountPaid}
+                        onChange={(event) =>
+                          updateFilter(
+                            'amountPaid',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث بالمبلغ..."
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </TableHead>
+
+                  <TableHead className="min-w-[170px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        المبلغ المتبقي
+                      </div>
+
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={filters.amountRemaining}
+                        onChange={(event) =>
+                          updateFilter(
+                            'amountRemaining',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث بالمبلغ..."
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </TableHead>
+
+                  <TableHead className="min-w-[150px]">
+                    <div className="space-y-2 py-1">
+                      <div className="font-medium">
+                        الحالة
+                      </div>
+
+                      <select
+                        value={filters.paymentStatus}
+                        onChange={(event) =>
+                          updateFilter(
+                            'paymentStatus',
+                            event.target.value,
+                          )
+                        }
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                      >
+                        <option value="">الكل</option>
+
+                        {paymentStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="py-10 text-center text-muted-foreground"
+                    >
+                      لا توجد نتائج مطابقة للفلاتر
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredStudents.map((student) => {
+                    const remaining =
+                      student.paymentStatus === 'معفي'
+                        ? 0
+                        : Math.max(
+                            student.amountDue -
+                              student.amountPaid,
+                            0,
+                          )
+
+                    return (
+                      <TableRow key={student.id}>
+                        <TableCell className="font-medium">
+                          {student.name}
+                        </TableCell>
+
+                        <TableCell className="text-muted-foreground">
+                          {student.grade}
+                        </TableCell>
+
+                        <TableCell className="font-medium tabular-nums">
+                          {student.paymentStatus === 'معفي'
+                            ? '—'
+                            : formatCurrency(
+                                student.amountDue,
+                              )}
+                        </TableCell>
+
+                        <TableCell className="font-medium tabular-nums">
+                          {student.paymentStatus === 'معفي'
+                            ? '—'
+                            : formatCurrency(
+                                student.amountPaid,
+                              )}
+                        </TableCell>
+
+                        <TableCell className="font-medium tabular-nums">
+                          {student.paymentStatus === 'معفي'
+                            ? '—'
+                            : formatCurrency(remaining)}
+                        </TableCell>
+
+                        <TableCell>
+                          <StatusBadge
+                            status={student.paymentStatus}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {hasFilters && (
+            <div className="flex justify-end border-t px-5 py-3">
               <button
                 type="button"
                 onClick={clearFilters}
                 className="text-sm font-medium text-primary hover:underline"
               >
-                مسح الفلاتر
+                مسح جميع الفلاتر
               </button>
-            )}
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                المبلغ المستحق
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  value={dueMin}
-                  onChange={(event) => setDueMin(event.target.value)}
-                  placeholder="من"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-
-                <input
-                  type="number"
-                  min="0"
-                  value={dueMax}
-                  onChange={(event) => setDueMax(event.target.value)}
-                  placeholder="إلى"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                المبلغ المدفوع
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  value={paidMin}
-                  onChange={(event) => setPaidMin(event.target.value)}
-                  placeholder="من"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-
-                <input
-                  type="number"
-                  min="0"
-                  value={paidMax}
-                  onChange={(event) => setPaidMax(event.target.value)}
-                  placeholder="إلى"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                المبلغ المتبقي
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  value={remainingMin}
-                  onChange={(event) =>
-                    setRemainingMin(event.target.value)
-                  }
-                  placeholder="من"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-
-                <input
-                  type="number"
-                  min="0"
-                  value={remainingMax}
-                  onChange={(event) =>
-                    setRemainingMax(event.target.value)
-                  }
-                  placeholder="إلى"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>الطالب</TableHead>
-                <TableHead>المستوى</TableHead>
-                <TableHead>المبلغ المستحق</TableHead>
-                <TableHead>المبلغ المدفوع</TableHead>
-                <TableHead>المبلغ المتبقي</TableHead>
-                <TableHead>الحالة</TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {filteredStudents.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    لا توجد نتائج مطابقة للفلاتر
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredStudents.map((student) => {
-                  const remaining =
-                    student.paymentStatus === 'معفي'
-                      ? 0
-                      : Math.max(
-                          student.amountDue - student.amountPaid,
-                          0,
-                        )
-
-                  return (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium">
-                        {student.name}
-                      </TableCell>
-
-                      <TableCell className="text-muted-foreground">
-                        {student.grade}
-                      </TableCell>
-
-                      <TableCell className="font-medium tabular-nums">
-                        {student.paymentStatus === 'معفي'
-                          ? '—'
-                          : formatCurrency(student.amountDue)}
-                      </TableCell>
-
-                      <TableCell className="font-medium tabular-nums">
-                        {student.paymentStatus === 'معفي'
-                          ? '—'
-                          : formatCurrency(student.amountPaid)}
-                      </TableCell>
-
-                      <TableCell className="font-medium tabular-nums">
-                        {student.paymentStatus === 'معفي'
-                          ? '—'
-                          : formatCurrency(remaining)}
-                      </TableCell>
-
-                      <TableCell>
-                        <StatusBadge status={student.paymentStatus} />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
 
+function formatCurrency(value: number) {
+  return `${value.toLocaleString('ar-BH')} د.ب`
+}
