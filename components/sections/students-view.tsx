@@ -17,13 +17,6 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-type Level = {
-  id: string
-  name: string
-  sort_order: number
-  is_active: boolean
-}
-
 type Filters = {
   name: string
   personalId: string
@@ -35,6 +28,12 @@ type Filters = {
   amountRemaining: string
   chronicDiseases: string
   notes: string
+}
+
+type AcademicLevel = {
+  id: string
+  name: string
+  sort_order: number
 }
 
 const emptyFilters: Filters = {
@@ -64,15 +63,20 @@ const studentColumns = [
 ] as const
 
 export function StudentsView() {
-  const [supabaseStatus, setSupabaseStatus] = useState('جاري الاختبار...')
+  const [supabaseStatus, setSupabaseStatus] = useState(
+    'جاري الاختبار...'
+  )
 
-  const [levels, setLevels] = useState<Level[]>([])
-  const [currentAcademicYearId, setCurrentAcademicYearId] = useState<
-    string | null
-  >(null)
+  const [academicLevels, setAcademicLevels] = useState<
+    AcademicLevel[]
+  >([])
+
+  const [currentAcademicYearId, setCurrentAcademicYearId] =
+    useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const [filters, setFilters] =
+    useState<Filters>(emptyFilters)
 
   const [visibleColumns, setVisibleColumns] = useState<
     Record<(typeof studentColumns)[number]['key'], boolean>
@@ -90,132 +94,140 @@ export function StudentsView() {
   })
 
   const [studentList, setStudentList] = useState<any[]>([])
-  const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
-  const [selectedStudentId, setSelectedStudentId] = useState('')
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(
-    null
-  )
+  const [isAddStudentOpen, setIsAddStudentOpen] =
+    useState(false)
+  const [selectedStudentId, setSelectedStudentId] =
+    useState('')
+  const [editingStudentId, setEditingStudentId] =
+    useState<string | null>(null)
 
   useEffect(() => {
-    const loadStudents = async () => {
-      const [
-        { data: studentsData, error: studentsError },
-        { data: levelsData, error: levelsError },
-        { data: currentYear, error: yearError },
-      ] = await Promise.all([
-        supabase
-          .from('students')
-          .select(
-            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-          )
-          .order('created_at', { ascending: false }),
+    const loadData = async () => {
+      setSupabaseStatus('جاري تحميل بيانات النظام...')
 
-        supabase
-          .from('levels')
-          .select('id, name, sort_order, is_active')
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true }),
-
-        supabase
+      const { data: currentYear, error: yearError } =
+        await supabase
           .from('academic_years')
-          .select('id, name, is_current, is_active')
+          .select('id, name')
           .eq('is_current', true)
           .eq('is_active', true)
-          .maybeSingle(),
-      ])
-
-      if (studentsError) {
-        setSupabaseStatus(`خطأ في تحميل الطلاب: ${studentsError.message}`)
-        return
-      }
-
-      if (levelsError) {
-        setSupabaseStatus(`خطأ في تحميل الصفوف: ${levelsError.message}`)
-        return
-      }
+          .maybeSingle()
 
       if (yearError) {
         setSupabaseStatus(
-          `خطأ في تحميل السنة الدراسية الحالية: ${yearError.message}`
+          `خطأ في تحميل السنة الدراسية: ${yearError.message}`
         )
         return
       }
 
       if (!currentYear) {
-        setSupabaseStatus('لا توجد سنة دراسية حالية في النظام')
+        setSupabaseStatus(
+          'لا توجد سنة دراسية حالية مفعلة'
+        )
         return
       }
 
-      setLevels(levelsData ?? [])
       setCurrentAcademicYearId(currentYear.id)
 
-      const studentIds = (studentsData ?? []).map(
-        (student) => student.id
-      )
+      const { data: levels, error: levelsError } =
+        await supabase
+          .from('levels')
+          .select('id, name, sort_order')
+          .eq('is_active', true)
+          .order('sort_order', {
+            ascending: true,
+          })
 
-      let enrollmentsData: any[] = []
+      if (levelsError) {
+        setSupabaseStatus(
+          `خطأ في تحميل الصفوف الأكاديمية: ${levelsError.message}`
+        )
+        return
+      }
 
-      if (studentIds.length > 0) {
-        const { data, error: enrollmentsError } = await supabase
+      setAcademicLevels(levels ?? [])
+
+      const { data: enrollmentRows, error: enrollmentsError } =
+        await supabase
           .from('enrollments')
-          .select('student_id, level_id, status')
-          .eq('academic_year_id', currentYear.id)
-          .in('student_id', studentIds)
-
-        if (enrollmentsError) {
-          setSupabaseStatus(
-            `خطأ في تحميل الصفوف المرتبطة بالطلاب: ${enrollmentsError.message}`
+          .select(
+            'student_id, level_id, academic_year_id, status'
           )
-          return
-        }
+          .eq('academic_year_id', currentYear.id)
 
-        enrollmentsData = data ?? []
+      if (enrollmentsError) {
+        setSupabaseStatus(
+          `خطأ في تحميل ربط الصفوف: ${enrollmentsError.message}`
+        )
+        return
+      }
+
+      const { data: studentsData, error: studentsError } =
+        await supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+          )
+          .order('created_at', {
+            ascending: false,
+          })
+
+      if (studentsError) {
+        setSupabaseStatus(
+          `خطأ في تحميل الطلاب: ${studentsError.message}`
+        )
+        return
       }
 
       const levelMap = new Map(
-        (levelsData ?? []).map((level) => [
+        (levels ?? []).map((level) => [
           level.id,
           level.name,
         ])
       )
 
       const enrollmentMap = new Map(
-        enrollmentsData.map((enrollment) => [
+        (enrollmentRows ?? []).map((enrollment) => [
           enrollment.student_id,
-          enrollment.level_id,
+          levelMap.get(enrollment.level_id) ?? '',
         ])
       )
 
-      const mappedStudents = (studentsData ?? []).map((student) => {
-        const levelId = enrollmentMap.get(student.id)
-
-        return {
+      const mappedStudents = (studentsData ?? []).map(
+        (student) => ({
           id: student.id,
           name: student.name,
           personalId: student.personal_id ?? '',
-          grade: levelId
-            ? levelMap.get(levelId) ?? ''
-            : '',
-          levelId: levelId ?? '',
+          grade: enrollmentMap.get(student.id) ?? '',
           phone: student.phone ?? '',
           whatsapp: student.whatsapp ?? '',
           paymentStatus: 'غير مدفوع' as const,
           amountDue: 0,
           amountPaid: 0,
-          chronicDiseases: student.health_notes ?? 'لا يوجد',
+          chronicDiseases:
+            student.health_notes ?? 'لا يوجد',
           notes: student.notes ?? '',
-        }
-      })
+        })
+      )
 
       setStudentList(mappedStudents)
-      setSupabaseStatus('متصل بـ Supabase ✅')
+
+      setSupabaseStatus(
+        `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name}`
+      )
     }
 
-    loadStudents()
+    loadData()
   }, [])
 
-  const updateFilter = (key: keyof Filters, value: string) => {
-    setFilters((current) => ({ ...current, [key]: value }))
+  const updateFilter = (
+    key: keyof Filters,
+    value: string
+  ) => {
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }))
   }
 
   const filteredStudents = useMemo(() => {
@@ -225,63 +237,93 @@ export function StudentsView() {
       const remaining =
         student.paymentStatus === 'معفي'
           ? 0
-          : Math.max(student.amountDue - student.amountPaid, 0)
+          : Math.max(
+              student.amountDue - student.amountPaid,
+              0
+            )
 
       const matchesSearch =
         !query ||
         Object.values(student).some((value) =>
-          String(value).toLowerCase().includes(query)
+          String(value)
+            .toLowerCase()
+            .includes(query)
         ) ||
         String(remaining).includes(query)
 
       const matches = {
         name:
           !filters.name ||
-          student.name.toLowerCase().includes(filters.name.toLowerCase()),
+          student.name
+            .toLowerCase()
+            .includes(
+              filters.name.toLowerCase()
+            ),
 
         personalId:
           !filters.personalId ||
-          student.personalId.includes(filters.personalId),
+          student.personalId.includes(
+            filters.personalId
+          ),
 
-        grade: !filters.grade || student.grade === filters.grade,
+        grade:
+          !filters.grade ||
+          student.grade === filters.grade,
 
-        phone: !filters.phone || student.phone.includes(filters.phone),
+        phone:
+          !filters.phone ||
+          student.phone.includes(filters.phone),
 
         whatsapp:
           !filters.whatsapp ||
-          student.whatsapp.includes(filters.whatsapp),
+          student.whatsapp.includes(
+            filters.whatsapp
+          ),
 
         paymentStatus:
           !filters.paymentStatus ||
-          student.paymentStatus === filters.paymentStatus,
+          student.paymentStatus ===
+            filters.paymentStatus,
 
         amountPaid:
           !filters.amountPaid ||
-          String(student.amountPaid).includes(filters.amountPaid),
+          String(student.amountPaid).includes(
+            filters.amountPaid
+          ),
 
         amountRemaining:
           !filters.amountRemaining ||
-          String(remaining).includes(filters.amountRemaining),
+          String(remaining).includes(
+            filters.amountRemaining
+          ),
 
         chronicDiseases:
           !filters.chronicDiseases ||
           student.chronicDiseases
             .toLowerCase()
-            .includes(filters.chronicDiseases.toLowerCase()),
+            .includes(
+              filters.chronicDiseases.toLowerCase()
+            ),
 
         notes:
           !filters.notes ||
           student.notes
             .toLowerCase()
-            .includes(filters.notes.toLowerCase()),
+            .includes(
+              filters.notes.toLowerCase()
+            ),
       }
 
-      return matchesSearch && Object.values(matches).every(Boolean)
+      return (
+        matchesSearch &&
+        Object.values(matches).every(Boolean)
+      )
     })
   }, [search, filters, studentList])
 
   const editingStudent = studentList.find(
-    (student) => student.id === editingStudentId
+    (student) =>
+      student.id === editingStudentId
   )
 
   const openAddStudent = () => {
@@ -305,7 +347,8 @@ export function StudentsView() {
     key: (typeof studentColumns)[number]['key']
   ) => {
     setVisibleColumns((current) => {
-      const visibleCount = Object.values(current).filter(Boolean).length
+      const visibleCount =
+        Object.values(current).filter(Boolean).length
 
       if (current[key] && visibleCount === 1) {
         return current
@@ -318,8 +361,27 @@ export function StudentsView() {
     })
   }
 
+  const textFilter = (
+    key: keyof Filters,
+    placeholder: string
+  ) => (
+    <div className="relative mt-2">
+      <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+
+      <input
+        value={filters[key]}
+        onChange={(e) =>
+          updateFilter(key, e.target.value)
+        }
+        placeholder={placeholder}
+        className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
+      />
+    </div>
+  )
+
   const visibleColumnCount =
-    Object.values(visibleColumns).filter(Boolean).length + 1
+    Object.values(visibleColumns).filter(Boolean).length +
+    1
 
   return (
     <div className="space-y-6">
@@ -345,7 +407,9 @@ export function StudentsView() {
 
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
               placeholder="بحث عام في جميع بيانات الطلاب..."
               className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
             />
@@ -388,16 +452,21 @@ export function StudentsView() {
                 variant="destructive"
                 disabled={!selectedStudentId}
                 onClick={async () => {
-                  const confirmed = window.confirm(
-                    '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
-                  )
+                  const confirmed =
+                    window.confirm(
+                      '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
+                    )
 
                   if (!confirmed) return
 
-                  const { error } = await supabase
-                    .from('students')
-                    .delete()
-                    .eq('id', selectedStudentId)
+                  const { error } =
+                    await supabase
+                      .from('students')
+                      .delete()
+                      .eq(
+                        'id',
+                        selectedStudentId
+                      )
 
                   if (error) {
                     setSupabaseStatus(
@@ -406,11 +475,13 @@ export function StudentsView() {
                     return
                   }
 
-                  setStudentList((current) =>
-                    current.filter(
-                      (student) =>
-                        student.id !== selectedStudentId
-                    )
+                  setStudentList(
+                    (current) =>
+                      current.filter(
+                        (student) =>
+                          student.id !==
+                          selectedStudentId
+                      )
                   )
 
                   setSelectedStudentId('')
@@ -428,9 +499,10 @@ export function StudentsView() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  const menu = document.getElementById(
-                    'student-columns-menu'
-                  )
+                  const menu =
+                    document.getElementById(
+                      'student-columns-menu'
+                    )
 
                   menu?.classList.toggle('hidden')
                 }}
@@ -456,8 +528,16 @@ export function StudentsView() {
                 >
                   <input
                     type="checkbox"
-                    checked={visibleColumns[column.key]}
-                    onChange={() => toggleColumn(column.key)}
+                    checked={
+                      visibleColumns[
+                        column.key
+                      ]
+                    }
+                    onChange={() =>
+                      toggleColumn(
+                        column.key
+                      )
+                    }
                   />
 
                   {column.label}
@@ -481,14 +561,20 @@ export function StudentsView() {
                   {visibleColumns.name && (
                     <TableHead>
                       اسم الطالب
-                      {textFilter('name', 'بحث')}
+                      {textFilter(
+                        'name',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
 
                   {visibleColumns.personalId && (
                     <TableHead>
                       الرقم الشخصي
-                      {textFilter('personalId', 'بحث')}
+                      {textFilter(
+                        'personalId',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
 
@@ -499,20 +585,27 @@ export function StudentsView() {
                       <select
                         value={filters.grade}
                         onChange={(e) =>
-                          updateFilter('grade', e.target.value)
+                          updateFilter(
+                            'grade',
+                            e.target.value
+                          )
                         }
                         className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
                       >
-                        <option value="">الكل</option>
+                        <option value="">
+                          الكل
+                        </option>
 
-                        {levels.map((level) => (
-                          <option
-                            key={level.id}
-                            value={level.name}
-                          >
-                            {level.name}
-                          </option>
-                        ))}
+                        {academicLevels.map(
+                          (level) => (
+                            <option
+                              key={level.id}
+                              value={level.name}
+                            >
+                              {level.name}
+                            </option>
+                          )
+                        )}
                       </select>
                     </TableHead>
                   )}
@@ -520,14 +613,20 @@ export function StudentsView() {
                   {visibleColumns.phone && (
                     <TableHead>
                       رقم الهاتف
-                      {textFilter('phone', 'بحث')}
+                      {textFilter(
+                        'phone',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
 
                   {visibleColumns.whatsapp && (
                     <TableHead>
                       رقم واتساب
-                      {textFilter('whatsapp', 'بحث')}
+                      {textFilter(
+                        'whatsapp',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
 
@@ -536,7 +635,9 @@ export function StudentsView() {
                       الدفع
 
                       <select
-                        value={filters.paymentStatus}
+                        value={
+                          filters.paymentStatus
+                        }
                         onChange={(e) =>
                           updateFilter(
                             'paymentStatus',
@@ -545,7 +646,9 @@ export function StudentsView() {
                         }
                         className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
                       >
-                        <option value="">الكل</option>
+                        <option value="">
+                          الكل
+                        </option>
                         <option value="مدفوع بالكامل">
                           مدفوع بالكامل
                         </option>
@@ -555,7 +658,9 @@ export function StudentsView() {
                         <option value="غير مدفوع">
                           غير مدفوع
                         </option>
-                        <option value="معفي">معفي</option>
+                        <option value="معفي">
+                          معفي
+                        </option>
                       </select>
                     </TableHead>
                   )}
@@ -563,133 +668,164 @@ export function StudentsView() {
                   {visibleColumns.amountPaid && (
                     <TableHead>
                       المبلغ المدفوع
-                      {textFilter('amountPaid', 'رقم')}
+                      {textFilter(
+                        'amountPaid',
+                        'رقم'
+                      )}
                     </TableHead>
                   )}
 
                   {visibleColumns.amountRemaining && (
                     <TableHead>
                       المبلغ المتبقي
-                      {textFilter('amountRemaining', 'رقم')}
+                      {textFilter(
+                        'amountRemaining',
+                        'رقم'
+                      )}
                     </TableHead>
                   )}
 
                   {visibleColumns.chronicDiseases && (
                     <TableHead>
                       الأمراض المزمنة
-                      {textFilter('chronicDiseases', 'بحث')}
+                      {textFilter(
+                        'chronicDiseases',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
 
                   {visibleColumns.notes && (
                     <TableHead>
                       ملاحظات
-                      {textFilter('notes', 'بحث')}
+                      {textFilter(
+                        'notes',
+                        'بحث'
+                      )}
                     </TableHead>
                   )}
                 </TableRow>
               </TableHeader>
 
               <TableBody>
-                {filteredStudents.map((student, index) => {
-                  const remaining =
-                    student.paymentStatus === 'معفي'
-                      ? 0
-                      : Math.max(
-                          student.amountDue - student.amountPaid,
-                          0
-                        )
+                {filteredStudents.map(
+                  (student, index) => {
+                    const remaining =
+                      student.paymentStatus ===
+                      'معفي'
+                        ? 0
+                        : Math.max(
+                            student.amountDue -
+                              student.amountPaid,
+                            0
+                          )
 
-                  return (
-                    <TableRow
-                      key={student.id}
-                      onClick={() =>
-                        setSelectedStudentId(student.id)
-                      }
-                      className={
-                        selectedStudentId === student.id
-                          ? 'cursor-pointer bg-muted'
-                          : 'cursor-pointer'
-                      }
-                    >
-                      <TableCell className="text-center text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-
-                      {visibleColumns.name && (
-                        <TableCell className="font-medium">
-                          {student.name}
+                    return (
+                      <TableRow
+                        key={student.id}
+                        onClick={() =>
+                          setSelectedStudentId(
+                            student.id
+                          )
+                        }
+                        className={
+                          selectedStudentId ===
+                          student.id
+                            ? 'cursor-pointer bg-muted'
+                            : 'cursor-pointer'
+                        }
+                      >
+                        <TableCell className="text-center text-muted-foreground">
+                          {index + 1}
                         </TableCell>
-                      )}
 
-                      {visibleColumns.personalId && (
-                        <TableCell>
-                          {student.personalId}
-                        </TableCell>
-                      )}
+                        {visibleColumns.name && (
+                          <TableCell className="font-medium">
+                            {student.name}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.grade && (
-                        <TableCell>{student.grade}</TableCell>
-                      )}
+                        {visibleColumns.personalId && (
+                          <TableCell>
+                            {student.personalId}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.phone && (
-                        <TableCell dir="ltr">
-                          {student.phone}
-                        </TableCell>
-                      )}
+                        {visibleColumns.grade && (
+                          <TableCell>
+                            {student.grade ||
+                              '—'}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.whatsapp && (
-                        <TableCell dir="ltr">
-                          {student.whatsapp}
-                        </TableCell>
-                      )}
+                        {visibleColumns.phone && (
+                          <TableCell dir="ltr">
+                            {student.phone}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.paymentStatus && (
-                        <TableCell>
-                          <StatusBadge
-                            status={student.paymentStatus}
-                          />
-                        </TableCell>
-                      )}
+                        {visibleColumns.whatsapp && (
+                          <TableCell dir="ltr">
+                            {student.whatsapp}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.amountPaid && (
-                        <TableCell>
-                          {student.amountPaid.toLocaleString(
-                            'ar-BH'
-                          )}{' '}
-                          د.ب
-                        </TableCell>
-                      )}
+                        {visibleColumns.paymentStatus && (
+                          <TableCell>
+                            <StatusBadge
+                              status={
+                                student.paymentStatus
+                              }
+                            />
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.amountRemaining && (
-                        <TableCell>
-                          {student.paymentStatus === 'معفي'
-                            ? '—'
-                            : `${remaining.toLocaleString(
-                                'ar-BH'
-                              )} د.ب`}
-                        </TableCell>
-                      )}
+                        {visibleColumns.amountPaid && (
+                          <TableCell>
+                            {student.amountPaid.toLocaleString(
+                              'ar-BH'
+                            )}{' '}
+                            د.ب
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.chronicDiseases && (
-                        <TableCell>
-                          {student.chronicDiseases}
-                        </TableCell>
-                      )}
+                        {visibleColumns.amountRemaining && (
+                          <TableCell>
+                            {student.paymentStatus ===
+                            'معفي'
+                              ? '—'
+                              : `${remaining.toLocaleString(
+                                  'ar-BH'
+                                )} د.ب`}
+                          </TableCell>
+                        )}
 
-                      {visibleColumns.notes && (
-                        <TableCell>
-                          {student.notes || '—'}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  )
-                })}
+                        {visibleColumns.chronicDiseases && (
+                          <TableCell>
+                            {
+                              student.chronicDiseases
+                            }
+                          </TableCell>
+                        )}
 
-                {filteredStudents.length === 0 && (
+                        {visibleColumns.notes && (
+                          <TableCell>
+                            {student.notes ||
+                              '—'}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  }
+                )}
+
+                {filteredStudents.length ===
+                  0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={visibleColumnCount}
+                      colSpan={
+                        visibleColumnCount
+                      }
                       className="h-24 text-center text-muted-foreground"
                     >
                       لا توجد نتائج مطابقة
@@ -729,7 +865,9 @@ export function StudentsView() {
 
               <button
                 type="button"
-                onClick={closeStudentDrawer}
+                onClick={
+                  closeStudentDrawer
+                }
                 className="rounded-md p-2 hover:bg-muted"
                 aria-label="إغلاق"
               >
@@ -738,7 +876,9 @@ export function StudentsView() {
             </div>
 
             <form
-              key={editingStudent?.id ?? 'new'}
+              key={
+                editingStudent?.id ?? 'new'
+              }
               onSubmit={async (e) => {
                 e.preventDefault()
 
@@ -767,7 +907,9 @@ export function StudentsView() {
 
                 const chronicDiseases =
                   String(
-                    data.get('chronicDiseases') || ''
+                    data.get(
+                      'chronicDiseases'
+                    ) || ''
                   ).trim() || 'لا يوجد'
 
                 const amountDue = Number(
@@ -782,54 +924,69 @@ export function StudentsView() {
                   data.get('notes') || ''
                 ).trim()
 
-                if (!name || !personalId || !grade) {
+                if (
+                  !name ||
+                  !personalId ||
+                  !grade
+                ) {
                   return
                 }
 
                 if (!currentAcademicYearId) {
                   setSupabaseStatus(
-                    'لا توجد سنة دراسية حالية، يرجى إعداد السنة الدراسية أولًا.'
+                    'خطأ: لا توجد سنة دراسية حالية مفعلة'
                   )
                   return
                 }
 
-                const selectedLevel = levels.find(
-                  (level) => level.name === grade
-                )
+                const selectedLevel =
+                  academicLevels.find(
+                    (level) =>
+                      level.name === grade
+                  )
 
                 if (!selectedLevel) {
                   setSupabaseStatus(
-                    'الصف الأكاديمي المحدد غير موجود في النظام.'
+                    'خطأ: الصف الأكاديمي المحدد غير موجود'
                   )
                   return
                 }
 
                 const paymentStatus =
-                  amountDue === 0 && amountPaid === 0
+                  amountDue === 0 &&
+                  amountPaid === 0
                     ? 'معفي'
-                    : amountPaid >= amountDue
+                    : amountPaid >=
+                        amountDue
                       ? 'مدفوع بالكامل'
                       : amountPaid > 0
                         ? 'مدفوع جزئيًا'
                         : 'غير مدفوع'
 
                 if (editingStudent) {
-                  const { data: updatedStudent, error } =
-                    await supabase
-                      .from('students')
-                      .update({
-                        name,
-                        personal_id: personalId,
-                        phone,
-                        whatsapp,
-                        notes,
-                        health_notes: chronicDiseases,
-                      })
-                      .eq('id', editingStudent.id)
-                      .select(
-                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-                      )
-                      .single()
+                  const {
+                    data: updatedStudent,
+                    error,
+                  } = await supabase
+                    .from('students')
+                    .update({
+                      name,
+                      personal_id:
+                        personalId,
+                      phone,
+                      whatsapp,
+                      notes,
+                      health_notes:
+                        chronicDiseases,
+                    })
+                    .eq(
+                      'id',
+                      editingStudent.id
+                    )
+                    .select(
+                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                    )
+                    .single()
 
                   if (error) {
                     setSupabaseStatus(
@@ -838,108 +995,139 @@ export function StudentsView() {
                     return
                   }
 
-                  const { data: existingEnrollment, error: enrollmentLookupError } =
-                    await supabase
-                      .from('enrollments')
-                      .select('id')
-                      .eq('student_id', editingStudent.id)
-                      .eq(
-                        'academic_year_id',
-                        currentAcademicYearId
-                      )
-                      .maybeSingle()
+                  const {
+                    data: existingEnrollment,
+                    error:
+                      enrollmentLookupError,
+                  } = await supabase
+                    .from('enrollments')
+                    .select('id')
+                    .eq(
+                      'student_id',
+                      editingStudent.id
+                    )
+                    .eq(
+                      'academic_year_id',
+                      currentAcademicYearId
+                    )
+                    .maybeSingle()
 
                   if (enrollmentLookupError) {
                     setSupabaseStatus(
-                      `خطأ في التحقق من تسجيل الطالب: ${enrollmentLookupError.message}`
+                      `خطأ في قراءة ربط الصف الأكاديمي: ${enrollmentLookupError.message}`
                     )
                     return
                   }
 
                   if (existingEnrollment) {
-                    const { error: enrollmentUpdateError } =
-                      await supabase
-                        .from('enrollments')
-                        .update({
-                          level_id: selectedLevel.id,
-                          status: 'نشط',
-                        })
-                        .eq('id', existingEnrollment.id)
+                    const {
+                      error:
+                        enrollmentUpdateError,
+                    } = await supabase
+                      .from('enrollments')
+                      .update({
+                        level_id:
+                          selectedLevel.id,
+                        status: 'نشط',
+                      })
+                      .eq(
+                        'id',
+                        existingEnrollment.id
+                      )
 
-                    if (enrollmentUpdateError) {
+                    if (
+                      enrollmentUpdateError
+                    ) {
                       setSupabaseStatus(
-                        `تم تعديل الطالب لكن تعذر تعديل الصف: ${enrollmentUpdateError.message}`
+                        `خطأ في تعديل الصف الأكاديمي: ${enrollmentUpdateError.message}`
                       )
                       return
                     }
                   } else {
-                    const { error: enrollmentInsertError } =
-                      await supabase
-                        .from('enrollments')
-                        .insert({
-                          student_id: editingStudent.id,
-                          academic_year_id:
-                            currentAcademicYearId,
-                          level_id: selectedLevel.id,
-                          class_id: null,
-                          status: 'نشط',
-                        })
+                    const {
+                      error:
+                        enrollmentInsertError,
+                    } = await supabase
+                      .from('enrollments')
+                      .insert({
+                        student_id:
+                          editingStudent.id,
+                        academic_year_id:
+                          currentAcademicYearId,
+                        level_id:
+                          selectedLevel.id,
+                        class_id: null,
+                        status: 'نشط',
+                      })
 
-                    if (enrollmentInsertError) {
+                    if (
+                      enrollmentInsertError
+                    ) {
                       setSupabaseStatus(
-                        `تم تعديل الطالب لكن تعذر ربط الصف: ${enrollmentInsertError.message}`
+                        `خطأ في ربط الصف الأكاديمي: ${enrollmentInsertError.message}`
                       )
                       return
                     }
                   }
 
-                  setStudentList((current) =>
-                    current.map((student) =>
-                      student.id === editingStudent.id
-                        ? {
-                            ...student,
-                            name: updatedStudent.name,
-                            personalId:
-                              updatedStudent.personal_id ?? '',
-                            phone:
-                              updatedStudent.phone ?? '',
-                            whatsapp:
-                              updatedStudent.whatsapp ?? '',
-                            chronicDiseases:
-                              updatedStudent.health_notes ??
-                              'لا يوجد',
-                            notes:
-                              updatedStudent.notes ?? '',
-                            grade,
-                            levelId: selectedLevel.id,
-                            paymentStatus,
-                            amountDue,
-                            amountPaid,
-                          }
-                        : student
-                    )
+                  setStudentList(
+                    (current) =>
+                      current.map(
+                        (student) =>
+                          student.id ===
+                          editingStudent.id
+                            ? {
+                                ...student,
+                                name:
+                                  updatedStudent.name,
+                                personalId:
+                                  updatedStudent.personal_id ??
+                                  '',
+                                phone:
+                                  updatedStudent.phone ??
+                                  '',
+                                whatsapp:
+                                  updatedStudent.whatsapp ??
+                                  '',
+                                chronicDiseases:
+                                  updatedStudent.health_notes ??
+                                  'لا يوجد',
+                                notes:
+                                  updatedStudent.notes ??
+                                  '',
+                                grade,
+                                paymentStatus,
+                                amountDue,
+                                amountPaid,
+                              }
+                            : student
+                      )
                   )
 
                   setSupabaseStatus(
-                    'تم تعديل الطالب والصف في Supabase ✅'
+                    'تم تعديل الطالب وربط الصف الأكاديمي في Supabase ✅'
                   )
                 } else {
-                  const { data: newStudent, error } =
-                    await supabase
-                      .from('students')
-                      .insert({
-                        name,
-                        personal_id: personalId,
-                        phone,
-                        whatsapp,
-                        notes,
-                        health_notes: chronicDiseases,
-                        status: 'نشط',
-                      })
-                      .select(
-                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-                      )
-                      .single()
+                  const {
+                    data: newStudent,
+                    error,
+                  } = await supabase
+                    .from('students')
+                    .insert({
+                      name,
+                      personal_id:
+                        personalId,
+                      phone,
+                      whatsapp,
+                      notes,
+                      health_notes:
+                        chronicDiseases,
+                      status: 'نشط',
+                    })
+                    .select(
+                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                    )
+                    .single()
 
                   if (error) {
                     setSupabaseStatus(
@@ -948,21 +1136,33 @@ export function StudentsView() {
                     return
                   }
 
-                  const { error: enrollmentError } =
-                    await supabase
-                      .from('enrollments')
-                      .insert({
-                        student_id: newStudent.id,
-                        academic_year_id:
-                          currentAcademicYearId,
-                        level_id: selectedLevel.id,
-                        class_id: null,
-                        status: 'نشط',
-                      })
+                  const {
+                    error:
+                      enrollmentError,
+                  } = await supabase
+                    .from('enrollments')
+                    .insert({
+                      student_id:
+                        newStudent.id,
+                      academic_year_id:
+                        currentAcademicYearId,
+                      level_id:
+                        selectedLevel.id,
+                      class_id: null,
+                      status: 'نشط',
+                    })
 
                   if (enrollmentError) {
+                    await supabase
+                      .from('students')
+                      .delete()
+                      .eq(
+                        'id',
+                        newStudent.id
+                      )
+
                     setSupabaseStatus(
-                      `تم حفظ الطالب لكن تعذر ربط الصف: ${enrollmentError.message}`
+                      `خطأ في ربط الصف الأكاديمي: ${enrollmentError.message}`
                     )
                     return
                   }
@@ -971,27 +1171,33 @@ export function StudentsView() {
                     id: newStudent.id,
                     name: newStudent.name,
                     personalId:
-                      newStudent.personal_id ?? '',
+                      newStudent.personal_id ??
+                      '',
                     grade,
-                    levelId: selectedLevel.id,
-                    phone: newStudent.phone ?? '',
-                    whatsapp: newStudent.whatsapp ?? '',
+                    phone:
+                      newStudent.phone ?? '',
+                    whatsapp:
+                      newStudent.whatsapp ??
+                      '',
                     paymentStatus,
                     amountDue,
                     amountPaid,
                     chronicDiseases:
                       newStudent.health_notes ??
                       'لا يوجد',
-                    notes: newStudent.notes ?? '',
+                    notes:
+                      newStudent.notes ?? '',
                   }
 
-                  setStudentList((current) => [
-                    mappedStudent,
-                    ...current,
-                  ])
+                  setStudentList(
+                    (current) => [
+                      mappedStudent,
+                      ...current,
+                    ]
+                  )
 
                   setSupabaseStatus(
-                    'تم حفظ الطالب والصف في Supabase ✅'
+                    'تم حفظ الطالب وربط الصف الأكاديمي في Supabase ✅'
                   )
                 }
 
@@ -1011,7 +1217,8 @@ export function StudentsView() {
                       type="text"
                       required
                       defaultValue={
-                        editingStudent?.name ?? ''
+                        editingStudent?.name ??
+                        ''
                       }
                       placeholder="أدخل اسم الطالب"
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1028,7 +1235,8 @@ export function StudentsView() {
                       type="text"
                       required
                       defaultValue={
-                        editingStudent?.personalId ?? ''
+                        editingStudent?.personalId ??
+                        ''
                       }
                       placeholder="أدخل الرقم الشخصي"
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1044,20 +1252,25 @@ export function StudentsView() {
                       name="grade"
                       required
                       defaultValue={
-                        editingStudent?.grade ?? ''
+                        editingStudent?.grade ??
+                        ''
                       }
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                     >
-                      <option value="">اختر الصف</option>
+                      <option value="">
+                        اختر الصف
+                      </option>
 
-                      {levels.map((level) => (
-                        <option
-                          key={level.id}
-                          value={level.name}
-                        >
-                          {level.name}
-                        </option>
-                      ))}
+                      {academicLevels.map(
+                        (level) => (
+                          <option
+                            key={level.id}
+                            value={level.name}
+                          >
+                            {level.name}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
@@ -1070,7 +1283,8 @@ export function StudentsView() {
                       name="phone"
                       type="tel"
                       defaultValue={
-                        editingStudent?.phone ?? ''
+                        editingStudent?.phone ??
+                        ''
                       }
                       placeholder="مثال: 33xxxxxx"
                       dir="ltr"
@@ -1087,7 +1301,8 @@ export function StudentsView() {
                       name="whatsapp"
                       type="tel"
                       defaultValue={
-                        editingStudent?.whatsapp ?? ''
+                        editingStudent?.whatsapp ??
+                        ''
                       }
                       placeholder="مثال: 33xxxxxx"
                       dir="ltr"
@@ -1109,7 +1324,8 @@ export function StudentsView() {
                     name="chronicDiseases"
                     type="text"
                     defaultValue={
-                      editingStudent?.chronicDiseases ?? ''
+                      editingStudent?.chronicDiseases ??
+                      ''
                     }
                     placeholder="لا يوجد"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1133,7 +1349,8 @@ export function StudentsView() {
                         min="0"
                         step="0.001"
                         defaultValue={
-                          editingStudent?.amountDue ?? ''
+                          editingStudent?.amountDue ??
+                          ''
                         }
                         placeholder="0"
                         className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1151,7 +1368,8 @@ export function StudentsView() {
                         min="0"
                         step="0.001"
                         defaultValue={
-                          editingStudent?.amountPaid ?? ''
+                          editingStudent?.amountPaid ??
+                          ''
                         }
                         placeholder="0"
                         className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1172,7 +1390,10 @@ export function StudentsView() {
 
                   <textarea
                     name="notes"
-                    defaultValue={editingStudent?.notes ?? ''}
+                    defaultValue={
+                      editingStudent?.notes ??
+                      ''
+                    }
                     placeholder="أدخل أي ملاحظات إضافية..."
                     rows={4}
                     className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
@@ -1181,7 +1402,10 @@ export function StudentsView() {
               </div>
 
               <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
-                <Button type="submit" className="flex-1">
+                <Button
+                  type="submit"
+                  className="flex-1"
+                >
                   {editingStudent
                     ? 'حفظ التعديلات'
                     : 'حفظ الطالب'}
@@ -1190,7 +1414,9 @@ export function StudentsView() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={closeStudentDrawer}
+                  onClick={
+                    closeStudentDrawer
+                  }
                 >
                   إلغاء
                 </Button>
@@ -1201,8 +1427,4 @@ export function StudentsView() {
       )}
     </div>
   )
-}
-
-function textFilter(key: keyof Filters, placeholder: string) {
-  return null
 }
