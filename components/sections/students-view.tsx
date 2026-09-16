@@ -16,7 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { students, academicGrades } from '@/lib/data'
+
+type Level = {
+  id: string
+  name: string
+  sort_order: number
+  is_active: boolean
+}
 
 type Filters = {
   name: string
@@ -60,41 +66,10 @@ const studentColumns = [
 export function StudentsView() {
   const [supabaseStatus, setSupabaseStatus] = useState('جاري الاختبار...')
 
-  useEffect(() => {
-    const loadStudents = async () => {
-      const { data, error } = await supabase
-        .from('students')
-        .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-        )
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        setSupabaseStatus(`خطأ: ${error.message}`)
-        return
-      }
-
-      setSupabaseStatus('متصل بـ Supabase ✅')
-
-      const mappedStudents = (data ?? []).map((student) => ({
-        id: student.id,
-        name: student.name,
-        personalId: student.personal_id ?? '',
-        grade: '',
-        phone: student.phone ?? '',
-        whatsapp: student.whatsapp ?? '',
-        paymentStatus: 'غير مدفوع' as const,
-        amountDue: 0,
-        amountPaid: 0,
-        chronicDiseases: student.health_notes ?? 'لا يوجد',
-        notes: student.notes ?? '',
-      }))
-
-      setStudentList(mappedStudents)
-    }
-
-    loadStudents()
-  }, [])
+  const [levels, setLevels] = useState<Level[]>([])
+  const [currentAcademicYearId, setCurrentAcademicYearId] = useState<
+    string | null
+  >(null)
 
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
@@ -120,6 +95,124 @@ export function StudentsView() {
   const [editingStudentId, setEditingStudentId] = useState<string | null>(
     null
   )
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      const [
+        { data: studentsData, error: studentsError },
+        { data: levelsData, error: levelsError },
+        { data: currentYear, error: yearError },
+      ] = await Promise.all([
+        supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+          )
+          .order('created_at', { ascending: false }),
+
+        supabase
+          .from('levels')
+          .select('id, name, sort_order, is_active')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true }),
+
+        supabase
+          .from('academic_years')
+          .select('id, name, is_current, is_active')
+          .eq('is_current', true)
+          .eq('is_active', true)
+          .maybeSingle(),
+      ])
+
+      if (studentsError) {
+        setSupabaseStatus(`خطأ في تحميل الطلاب: ${studentsError.message}`)
+        return
+      }
+
+      if (levelsError) {
+        setSupabaseStatus(`خطأ في تحميل الصفوف: ${levelsError.message}`)
+        return
+      }
+
+      if (yearError) {
+        setSupabaseStatus(
+          `خطأ في تحميل السنة الدراسية الحالية: ${yearError.message}`
+        )
+        return
+      }
+
+      if (!currentYear) {
+        setSupabaseStatus('لا توجد سنة دراسية حالية في النظام')
+        return
+      }
+
+      setLevels(levelsData ?? [])
+      setCurrentAcademicYearId(currentYear.id)
+
+      const studentIds = (studentsData ?? []).map(
+        (student) => student.id
+      )
+
+      let enrollmentsData: any[] = []
+
+      if (studentIds.length > 0) {
+        const { data, error: enrollmentsError } = await supabase
+          .from('enrollments')
+          .select('student_id, level_id, status')
+          .eq('academic_year_id', currentYear.id)
+          .in('student_id', studentIds)
+
+        if (enrollmentsError) {
+          setSupabaseStatus(
+            `خطأ في تحميل الصفوف المرتبطة بالطلاب: ${enrollmentsError.message}`
+          )
+          return
+        }
+
+        enrollmentsData = data ?? []
+      }
+
+      const levelMap = new Map(
+        (levelsData ?? []).map((level) => [
+          level.id,
+          level.name,
+        ])
+      )
+
+      const enrollmentMap = new Map(
+        enrollmentsData.map((enrollment) => [
+          enrollment.student_id,
+          enrollment.level_id,
+        ])
+      )
+
+      const mappedStudents = (studentsData ?? []).map((student) => {
+        const levelId = enrollmentMap.get(student.id)
+
+        return {
+          id: student.id,
+          name: student.name,
+          personalId: student.personal_id ?? '',
+          grade: levelId
+            ? levelMap.get(levelId) ?? ''
+            : '',
+          levelId: levelId ?? '',
+          phone: student.phone ?? '',
+          whatsapp: student.whatsapp ?? '',
+          paymentStatus: 'غير مدفوع' as const,
+          amountDue: 0,
+          amountPaid: 0,
+          chronicDiseases: student.health_notes ?? 'لا يوجد',
+          notes: student.notes ?? '',
+        }
+      })
+
+      setStudentList(mappedStudents)
+      setSupabaseStatus('متصل بـ Supabase ✅')
+    }
+
+    loadStudents()
+  }, [])
 
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters((current) => ({ ...current, [key]: value }))
@@ -225,20 +318,7 @@ export function StudentsView() {
     })
   }
 
-  const textFilter = (key: keyof Filters, placeholder: string) => (
-    <div className="relative mt-2">
-      <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-
-      <input
-        value={filters[key]}
-        onChange={(e) => updateFilter(key, e.target.value)}
-        placeholder={placeholder}
-        className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
-      />
-    </div>
-  )
-
-    const visibleColumnCount =
+  const visibleColumnCount =
     Object.values(visibleColumns).filter(Boolean).length + 1
 
   return (
@@ -347,7 +427,7 @@ export function StudentsView() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={async () => {
+                onClick={() => {
                   const menu = document.getElementById(
                     'student-columns-menu'
                   )
@@ -356,7 +436,6 @@ export function StudentsView() {
                 }}
               >
                 تخصيص الأعمدة
-    
               </Button>
             </div>
           </div>
@@ -426,9 +505,12 @@ export function StudentsView() {
                       >
                         <option value="">الكل</option>
 
-                        {academicGrades.map((grade) => (
-                          <option key={grade} value={grade}>
-                            {grade}
+                        {levels.map((level) => (
+                          <option
+                            key={level.id}
+                            value={level.name}
+                          >
+                            {level.name}
                           </option>
                         ))}
                       </select>
@@ -655,7 +737,7 @@ export function StudentsView() {
               </button>
             </div>
 
-                     <form
+            <form
               key={editingStudent?.id ?? 'new'}
               onSubmit={async (e) => {
                 e.preventDefault()
@@ -704,6 +786,24 @@ export function StudentsView() {
                   return
                 }
 
+                if (!currentAcademicYearId) {
+                  setSupabaseStatus(
+                    'لا توجد سنة دراسية حالية، يرجى إعداد السنة الدراسية أولًا.'
+                  )
+                  return
+                }
+
+                const selectedLevel = levels.find(
+                  (level) => level.name === grade
+                )
+
+                if (!selectedLevel) {
+                  setSupabaseStatus(
+                    'الصف الأكاديمي المحدد غير موجود في النظام.'
+                  )
+                  return
+                }
+
                 const paymentStatus =
                   amountDue === 0 && amountPaid === 0
                     ? 'معفي'
@@ -714,58 +814,116 @@ export function StudentsView() {
                         : 'غير مدفوع'
 
                 if (editingStudent) {
-  const { data: updatedStudent, error } =
-    await supabase
-      .from('students')
-      .update({
-        name,
-        personal_id: personalId,
-        phone,
-        whatsapp,
-        notes,
-        health_notes: chronicDiseases,
-      })
-      .eq('id', editingStudent.id)
-      .select(
-        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-      )
-      .single()
+                  const { data: updatedStudent, error } =
+                    await supabase
+                      .from('students')
+                      .update({
+                        name,
+                        personal_id: personalId,
+                        phone,
+                        whatsapp,
+                        notes,
+                        health_notes: chronicDiseases,
+                      })
+                      .eq('id', editingStudent.id)
+                      .select(
+                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                      )
+                      .single()
 
-  if (error) {
-    setSupabaseStatus(
-      `خطأ في تعديل الطالب: ${error.message}`
-    )
-    return
-  }
+                  if (error) {
+                    setSupabaseStatus(
+                      `خطأ في تعديل الطالب: ${error.message}`
+                    )
+                    return
+                  }
 
-  setStudentList((current) =>
-    current.map((student) =>
-      student.id === editingStudent.id
-        ? {
-            ...student,
-            name: updatedStudent.name,
-            personalId:
-              updatedStudent.personal_id ?? '',
-            phone: updatedStudent.phone ?? '',
-            whatsapp:
-              updatedStudent.whatsapp ?? '',
-            chronicDiseases:
-              updatedStudent.health_notes ??
-              'لا يوجد',
-            notes: updatedStudent.notes ?? '',
-            grade,
-            paymentStatus,
-            amountDue,
-            amountPaid,
-          }
-        : student
-    )
-  )
+                  const { data: existingEnrollment, error: enrollmentLookupError } =
+                    await supabase
+                      .from('enrollments')
+                      .select('id')
+                      .eq('student_id', editingStudent.id)
+                      .eq(
+                        'academic_year_id',
+                        currentAcademicYearId
+                      )
+                      .maybeSingle()
 
-  setSupabaseStatus(
-    'تم تعديل الطالب في Supabase ✅'
-  )
-} else {
+                  if (enrollmentLookupError) {
+                    setSupabaseStatus(
+                      `خطأ في التحقق من تسجيل الطالب: ${enrollmentLookupError.message}`
+                    )
+                    return
+                  }
+
+                  if (existingEnrollment) {
+                    const { error: enrollmentUpdateError } =
+                      await supabase
+                        .from('enrollments')
+                        .update({
+                          level_id: selectedLevel.id,
+                          status: 'نشط',
+                        })
+                        .eq('id', existingEnrollment.id)
+
+                    if (enrollmentUpdateError) {
+                      setSupabaseStatus(
+                        `تم تعديل الطالب لكن تعذر تعديل الصف: ${enrollmentUpdateError.message}`
+                      )
+                      return
+                    }
+                  } else {
+                    const { error: enrollmentInsertError } =
+                      await supabase
+                        .from('enrollments')
+                        .insert({
+                          student_id: editingStudent.id,
+                          academic_year_id:
+                            currentAcademicYearId,
+                          level_id: selectedLevel.id,
+                          class_id: null,
+                          status: 'نشط',
+                        })
+
+                    if (enrollmentInsertError) {
+                      setSupabaseStatus(
+                        `تم تعديل الطالب لكن تعذر ربط الصف: ${enrollmentInsertError.message}`
+                      )
+                      return
+                    }
+                  }
+
+                  setStudentList((current) =>
+                    current.map((student) =>
+                      student.id === editingStudent.id
+                        ? {
+                            ...student,
+                            name: updatedStudent.name,
+                            personalId:
+                              updatedStudent.personal_id ?? '',
+                            phone:
+                              updatedStudent.phone ?? '',
+                            whatsapp:
+                              updatedStudent.whatsapp ?? '',
+                            chronicDiseases:
+                              updatedStudent.health_notes ??
+                              'لا يوجد',
+                            notes:
+                              updatedStudent.notes ?? '',
+                            grade,
+                            levelId: selectedLevel.id,
+                            paymentStatus,
+                            amountDue,
+                            amountPaid,
+                          }
+                        : student
+                    )
+                  )
+
+                  setSupabaseStatus(
+                    'تم تعديل الطالب والصف في Supabase ✅'
+                  )
+                } else {
                   const { data: newStudent, error } =
                     await supabase
                       .from('students')
@@ -790,12 +948,32 @@ export function StudentsView() {
                     return
                   }
 
+                  const { error: enrollmentError } =
+                    await supabase
+                      .from('enrollments')
+                      .insert({
+                        student_id: newStudent.id,
+                        academic_year_id:
+                          currentAcademicYearId,
+                        level_id: selectedLevel.id,
+                        class_id: null,
+                        status: 'نشط',
+                      })
+
+                  if (enrollmentError) {
+                    setSupabaseStatus(
+                      `تم حفظ الطالب لكن تعذر ربط الصف: ${enrollmentError.message}`
+                    )
+                    return
+                  }
+
                   const mappedStudent = {
                     id: newStudent.id,
                     name: newStudent.name,
                     personalId:
                       newStudent.personal_id ?? '',
                     grade,
+                    levelId: selectedLevel.id,
                     phone: newStudent.phone ?? '',
                     whatsapp: newStudent.whatsapp ?? '',
                     paymentStatus,
@@ -813,7 +991,7 @@ export function StudentsView() {
                   ])
 
                   setSupabaseStatus(
-                    'تم حفظ الطالب في Supabase ✅'
+                    'تم حفظ الطالب والصف في Supabase ✅'
                   )
                 }
 
@@ -821,7 +999,6 @@ export function StudentsView() {
                 form.reset()
               }}
             >
-            
               <div className="space-y-6 p-6">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="sm:col-span-2">
@@ -873,9 +1050,12 @@ export function StudentsView() {
                     >
                       <option value="">اختر الصف</option>
 
-                      {academicGrades.map((grade) => (
-                        <option key={grade} value={grade}>
-                          {grade}
+                      {levels.map((level) => (
+                        <option
+                          key={level.id}
+                          value={level.name}
+                        >
+                          {level.name}
                         </option>
                       ))}
                     </select>
@@ -1023,3 +1203,6 @@ export function StudentsView() {
   )
 }
 
+function textFilter(key: keyof Filters, placeholder: string) {
+  return null
+}
