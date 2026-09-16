@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search, UserPlus, Filter, X, Pencil } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { StatusBadge } from '@/components/dashboard/status-badge'
@@ -57,6 +58,23 @@ const studentColumns = [
 ] as const
 
 export function StudentsView() {
+  const [supabaseStatus, setSupabaseStatus] = useState('جاري الاختبار...')
+
+  useEffect(() => {
+    const testConnection = async () => {
+      const { error } = await supabase
+        .from('students')
+        .select('id')
+        .limit(1)
+
+      setSupabaseStatus(
+        error ? `خطأ: ${error.message}` : 'متصل بـ Supabase ✅'
+      )
+    }
+
+    testConnection()
+  }, [])
+
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
 
