@@ -7,6 +7,7 @@ import {
   Eye,
   Filter,
   ShieldCheck,
+  Power,
   X,
 } from 'lucide-react'
 
@@ -27,6 +28,12 @@ type Filters = {
   status: string
 }
 
+type RegistrationRules = {
+  diseaseNeedsSupervisor: boolean
+  notesNeedSupervisor: boolean
+  requireCompleteData: boolean
+}
+
 const emptyFilters: Filters = {
   id: '',
   name: '',
@@ -43,12 +50,18 @@ const inputClass =
 const selectClass =
   'h-9 w-full min-w-[130px] rounded-md border border-input bg-background px-2 text-xs'
 
-function hasSpecialInformation(request: EnrollmentRequest) {
+function hasSpecialInformation(
+  request: EnrollmentRequest,
+  rules: RegistrationRules,
+) {
   const hasDisease =
+    rules.diseaseNeedsSupervisor &&
     request.chronicDiseases.trim() !== '' &&
     request.chronicDiseases.trim() !== 'لا يوجد'
 
-  const hasNotes = request.notes.trim() !== ''
+  const hasNotes =
+    rules.notesNeedSupervisor &&
+    request.notes.trim() !== ''
 
   return hasDisease || hasNotes
 }
@@ -65,6 +78,15 @@ export function EnrollmentView() {
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
+  const [registrationOpen, setRegistrationOpen] =
+    useState(true)
+
+  const [rules, setRules] = useState<RegistrationRules>({
+    diseaseNeedsSupervisor: true,
+    notesNeedSupervisor: true,
+    requireCompleteData: true,
+  })
+
   const updateFilter = (
     key: keyof Filters,
     value: string,
@@ -79,19 +101,28 @@ export function EnrollmentView() {
     setFilters(emptyFilters)
   }
 
+  const updateRule = (
+    key: keyof RegistrationRules,
+  ) => {
+    setRules((current) => ({
+      ...current,
+      [key]: !current[key],
+    }))
+  }
+
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
       const matchesId =
         !filters.id ||
-        request.id
-          .toLowerCase()
-          .includes(filters.id.toLowerCase())
+        request.id.toLowerCase().includes(
+          filters.id.toLowerCase(),
+        )
 
       const matchesName =
         !filters.name ||
-        request.name
-          .toLowerCase()
-          .includes(filters.name.toLowerCase())
+        request.name.toLowerCase().includes(
+          filters.name.toLowerCase(),
+        )
 
       const matchesGrade =
         !filters.grade ||
@@ -99,9 +130,9 @@ export function EnrollmentView() {
 
       const matchesGuardian =
         !filters.guardian ||
-        request.guardian
-          .toLowerCase()
-          .includes(filters.guardian.toLowerCase())
+        request.guardian.toLowerCase().includes(
+          filters.guardian.toLowerCase(),
+        )
 
       const matchesPhone =
         !filters.phone ||
@@ -136,7 +167,7 @@ export function EnrollmentView() {
   const supervisorCount = requests.filter(
     (request) =>
       request.status === 'قيد المراجعة' &&
-      hasSpecialInformation(request),
+      hasSpecialInformation(request, rules),
   ).length
 
   const openReview = (request: EnrollmentRequest) => {
@@ -150,16 +181,34 @@ export function EnrollmentView() {
   }
 
   const approveRequest = (request: EnrollmentRequest) => {
-    if (hasSpecialInformation(request)) {
+    if (!registrationOpen) {
+      alert('التسجيل موقوف حاليًا.')
+      return
+    }
+
+    if (
+      rules.requireCompleteData &&
+      (!request.name.trim() ||
+        !request.grade.trim() ||
+        !request.guardian.trim() ||
+        !request.phone.trim())
+    ) {
       alert(
-        'لا يمكن ترحيل هذا الطالب مباشرة. توجد أمراض أو ملاحظات وتحتاج الحالة إلى اعتماد المشرف أولاً.',
+        'لا يمكن قبول الطلب لأن بعض البيانات الأساسية ناقصة.',
+      )
+      return
+    }
+
+    if (hasSpecialInformation(request, rules)) {
+      alert(
+        'لا يمكن ترحيل هذا الطالب مباشرة. توجد بيانات تحتاج اعتماد المشرف أولًا.',
       )
       return
     }
 
     const alreadyExists = students.some(
       (student) =>
-        student.personalId === request.phone ||
+        student.phone === request.phone ||
         student.name.trim() === request.name.trim(),
     )
 
@@ -178,7 +227,8 @@ export function EnrollmentView() {
       paymentStatus: 'غير مدفوع',
       amountDue: 0,
       amountPaid: 0,
-      chronicDiseases: request.chronicDiseases || 'لا يوجد',
+      chronicDiseases:
+        request.chronicDiseases || 'لا يوجد',
       notes: request.notes || '',
     }
 
@@ -198,14 +248,14 @@ export function EnrollmentView() {
     closeReview()
   }
 
-  const rejectRequest = (request: EnrollmentRequest) => {
+  const rejectRequest = (
+    request: EnrollmentRequest,
+  ) => {
     const confirmed = window.confirm(
       `هل أنت متأكد من رفض طلب تسجيل ${request.name}؟`,
     )
 
-    if (!confirmed) {
-      return
-    }
+    if (!confirmed) return
 
     setRequests((current) =>
       current.map((item) =>
@@ -230,16 +280,156 @@ export function EnrollmentView() {
         description={`${pendingCount} طلب بانتظار المراجعة من إجمالي ${requests.length} طلب`}
       />
 
-      {/* قواعد استقبال وترحيل طلبات التسجيل */}
+      {/* إعدادات التسجيل */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="size-5 text-primary" />
-            قواعد قبول وترحيل طلبات التسجيل
+            إعدادات التسجيل وقواعد القبول
           </CardTitle>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="space-y-5">
+          {/* حالة التسجيل */}
+          <div
+            className={`flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${
+              registrationOpen
+                ? 'border-emerald-200 bg-emerald-50'
+                : 'border-red-200 bg-red-50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Power
+                className={`mt-0.5 size-5 ${
+                  registrationOpen
+                    ? 'text-emerald-600'
+                    : 'text-red-600'
+                }`}
+              />
+
+              <div>
+                <p className="font-medium">
+                  استقبال طلبات التسجيل
+                </p>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {registrationOpen
+                    ? 'التسجيل مفتوح ويمكن استقبال طلبات جديدة.'
+                    : 'التسجيل موقوف حاليًا ولا يتم استقبال طلبات جديدة.'}
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant={
+                registrationOpen
+                  ? 'destructive'
+                  : 'default'
+              }
+              onClick={() =>
+                setRegistrationOpen(
+                  (current) => !current,
+                )
+              }
+              className="gap-2"
+            >
+              <Power className="size-4" />
+
+              {registrationOpen
+                ? 'إيقاف التسجيل'
+                : 'فتح التسجيل'}
+            </Button>
+          </div>
+
+          {/* القواعد التخصيصية */}
+          <div>
+            <div className="mb-3">
+              <p className="font-medium">
+                قواعد القبول والتسجيل
+              </p>
+
+              <p className="text-sm text-muted-foreground">
+                يمكنك تخصيص القواعد التي تطبق عند مراجعة
+                وترحيل الطلبات.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+                <input
+                  type="checkbox"
+                  checked={
+                    rules.diseaseNeedsSupervisor
+                  }
+                  onChange={() =>
+                    updateRule(
+                      'diseaseNeedsSupervisor',
+                    )
+                  }
+                  className="mt-1 size-4"
+                />
+
+                <span>
+                  <span className="block font-medium">
+                    الأمراض المزمنة
+                  </span>
+
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    تتطلب اعتماد المشرف قبل الترحيل.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+                <input
+                  type="checkbox"
+                  checked={rules.notesNeedSupervisor}
+                  onChange={() =>
+                    updateRule(
+                      'notesNeedSupervisor',
+                    )
+                  }
+                  className="mt-1 size-4"
+                />
+
+                <span>
+                  <span className="block font-medium">
+                    الملاحظات الخاصة
+                  </span>
+
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    تتطلب اعتماد المشرف قبل الترحيل.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4">
+                <input
+                  type="checkbox"
+                  checked={rules.requireCompleteData}
+                  onChange={() =>
+                    updateRule(
+                      'requireCompleteData',
+                    )
+                  }
+                  className="mt-1 size-4"
+                />
+
+                <span>
+                  <span className="block font-medium">
+                    اكتمال البيانات
+                  </span>
+
+                  <span className="mt-1 block text-sm text-muted-foreground">
+                    يمنع قبول الطلب إذا كانت البيانات
+                    الأساسية ناقصة.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* القواعد الأساسية */}
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border p-4">
               <p className="font-medium">
@@ -247,31 +437,30 @@ export function EnrollmentView() {
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                أي طالب جديد يتم تسجيله يمر على طلبات
-                التسجيل أولاً قبل إضافته إلى قائمة الطلاب.
+                أي طالب جديد يمر على طلبات التسجيل قبل
+                إضافته إلى قائمة الطلاب الأساسية.
               </p>
             </div>
 
             <div className="rounded-lg border p-4">
               <p className="font-medium">
-                ٢. وجود مرض أو ملاحظة
+                ٢. الترحيل بعد القبول
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                إذا كان في الطلب مرض مزمن أو ملاحظة،
-                يحتاج إلى اعتماد المشرف قبل الترحيل.
+                عند قبول الطلب يتم إنشاء الطالب في قائمة
+                الطلاب الأساسية.
               </p>
             </div>
 
             <div className="rounded-lg border p-4">
               <p className="font-medium">
-                ٣. الترحيل إلى قائمة الطلاب
+                ٣. اعتماد الحالات الخاصة
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                بعد قبول الطلب، يتم إنشاء الطالب في قائمة
-                الطلاب الأساسية ولا يحتاج الموظف لإضافته
-                مرة ثانية.
+                حسب الإعدادات أعلاه، قد تحتاج الأمراض أو
+                الملاحظات إلى اعتماد المشرف.
               </p>
             </div>
 
@@ -281,14 +470,31 @@ export function EnrollmentView() {
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                الطلب المرفوض يبقى محفوظًا كسجل تسجيل ولا
-                تتم إضافته إلى قائمة الطلاب.
+                الطلب المرفوض يبقى محفوظًا كسجل ولا تتم
+                إضافته إلى قائمة الطلاب.
               </p>
             </div>
           </div>
 
+          {!registrationOpen && (
+            <div className="flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 p-4 text-red-900">
+              <AlertTriangle className="size-5 shrink-0" />
+
+              <div>
+                <p className="font-medium">
+                  التسجيل موقوف
+                </p>
+
+                <p className="text-sm">
+                  لن يتم قبول أو ترحيل طلبات جديدة حتى يتم
+                  فتح التسجيل مرة أخرى.
+                </p>
+              </div>
+            </div>
+          )}
+
           {supervisorCount > 0 && (
-            <div className="mt-4 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
+            <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
               <AlertTriangle className="size-5 shrink-0" />
 
               <div>
@@ -297,8 +503,8 @@ export function EnrollmentView() {
                 </p>
 
                 <p className="text-sm">
-                  توجد أمراض مزمنة أو ملاحظات في هذه
-                  الطلبات.
+                  توجد بيانات في هذه الطلبات تتطلب اعتمادًا
+                  حسب القواعد الحالية.
                 </p>
               </div>
             </div>
@@ -316,14 +522,10 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>رقم الطلب</div>
-
                       <input
                         value={filters.id}
                         onChange={(event) =>
-                          updateFilter(
-                            'id',
-                            event.target.value,
-                          )
+                          updateFilter('id', event.target.value)
                         }
                         placeholder="بحث"
                         className={inputClass}
@@ -334,14 +536,10 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>اسم الطالب</div>
-
                       <input
                         value={filters.name}
                         onChange={(event) =>
-                          updateFilter(
-                            'name',
-                            event.target.value,
-                          )
+                          updateFilter('name', event.target.value)
                         }
                         placeholder="بحث"
                         className={inputClass}
@@ -352,26 +550,16 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>الصف المطلوب</div>
-
                       <select
                         value={filters.grade}
                         onChange={(event) =>
-                          updateFilter(
-                            'grade',
-                            event.target.value,
-                          )
+                          updateFilter('grade', event.target.value)
                         }
                         className={selectClass}
                       >
-                        <option value="">
-                          جميع الصفوف
-                        </option>
-
+                        <option value="">جميع الصفوف</option>
                         {academicGrades.map((grade) => (
-                          <option
-                            key={grade}
-                            value={grade}
-                          >
+                          <option key={grade} value={grade}>
                             {grade}
                           </option>
                         ))}
@@ -382,14 +570,10 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>ولي الأمر</div>
-
                       <input
                         value={filters.guardian}
                         onChange={(event) =>
-                          updateFilter(
-                            'guardian',
-                            event.target.value,
-                          )
+                          updateFilter('guardian', event.target.value)
                         }
                         placeholder="بحث"
                         className={inputClass}
@@ -400,14 +584,10 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>رقم الجوال</div>
-
                       <input
                         value={filters.phone}
                         onChange={(event) =>
-                          updateFilter(
-                            'phone',
-                            event.target.value,
-                          )
+                          updateFilter('phone', event.target.value)
                         }
                         placeholder="بحث"
                         className={inputClass}
@@ -418,7 +598,6 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>تاريخ التقديم</div>
-
                       <input
                         value={filters.submittedAt}
                         onChange={(event) =>
@@ -436,32 +615,19 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>الحالة</div>
-
                       <select
                         value={filters.status}
                         onChange={(event) =>
-                          updateFilter(
-                            'status',
-                            event.target.value,
-                          )
+                          updateFilter('status', event.target.value)
                         }
                         className={selectClass}
                       >
-                        <option value="">
-                          جميع الحالات
-                        </option>
-
+                        <option value="">جميع الحالات</option>
                         <option value="قيد المراجعة">
                           قيد المراجعة
                         </option>
-
-                        <option value="مقبول">
-                          مقبول
-                        </option>
-
-                        <option value="مرفوض">
-                          مرفوض
-                        </option>
+                        <option value="مقبول">مقبول</option>
+                        <option value="مرفوض">مرفوض</option>
                       </select>
                     </div>
                   </th>
@@ -485,7 +651,7 @@ export function EnrollmentView() {
                 ) : (
                   filteredRequests.map((request) => {
                     const needsSupervisor =
-                      hasSpecialInformation(request)
+                      hasSpecialInformation(request, rules)
 
                     return (
                       <tr
@@ -524,18 +690,14 @@ export function EnrollmentView() {
                         </td>
 
                         <td className="px-4 py-4">
-                          <StatusBadge
-                            status={request.status}
-                          />
+                          <StatusBadge status={request.status} />
                         </td>
 
                         <td className="px-4 py-4">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() =>
-                              openReview(request)
-                            }
+                            onClick={() => openReview(request)}
                             className="gap-2"
                           >
                             <Eye className="size-4" />
@@ -554,8 +716,7 @@ export function EnrollmentView() {
             <div className="flex items-center justify-between border-t px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Filter className="size-4" />
-                عرض {filteredRequests.length} من{' '}
-                {requests.length} طلب
+                عرض {filteredRequests.length} من {requests.length} طلب
               </div>
 
               <Button
@@ -600,7 +761,6 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     اسم الطالب
                   </p>
-
                   <p className="mt-1 font-medium">
                     {selectedRequest.name}
                   </p>
@@ -610,7 +770,6 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     الصف المطلوب
                   </p>
-
                   <p className="mt-1 font-medium">
                     {selectedRequest.grade}
                   </p>
@@ -620,7 +779,6 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     ولي الأمر
                   </p>
-
                   <p className="mt-1 font-medium">
                     {selectedRequest.guardian}
                   </p>
@@ -630,7 +788,6 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     رقم الجوال
                   </p>
-
                   <p className="mt-1 font-medium tabular-nums">
                     {selectedRequest.phone}
                   </p>
@@ -641,10 +798,8 @@ export function EnrollmentView() {
                 <p className="text-sm font-medium">
                   الأمراض المزمنة
                 </p>
-
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {selectedRequest.chronicDiseases ||
-                    'لا يوجد'}
+                  {selectedRequest.chronicDiseases || 'لا يوجد'}
                 </p>
               </div>
 
@@ -652,7 +807,6 @@ export function EnrollmentView() {
                 <p className="text-sm font-medium">
                   الملاحظات
                 </p>
-
                 <p className="mt-2 text-sm text-muted-foreground">
                   {selectedRequest.notes || 'لا توجد ملاحظات'}
                 </p>
@@ -660,9 +814,9 @@ export function EnrollmentView() {
 
               {hasSpecialInformation(
                 selectedRequest,
+                rules,
               ) &&
-                selectedRequest.status ===
-                  'قيد المراجعة' && (
+                selectedRequest.status === 'قيد المراجعة' && (
                   <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
                     <AlertTriangle className="mt-0.5 size-5 shrink-0" />
 
@@ -672,31 +826,24 @@ export function EnrollmentView() {
                       </p>
 
                       <p className="mt-1 text-sm">
-                        لا يتم ترحيل الطالب إلى قائمة
-                        الطلاب قبل اعتماد الحالة من
-                        المشرف.
+                        لا يتم ترحيل الطالب إلى قائمة الطلاب قبل
+                        اعتماد الحالة من المشرف.
                       </p>
                     </div>
                   </div>
                 )}
 
               <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-                <Button
-                  variant="ghost"
-                  onClick={closeReview}
-                >
+                <Button variant="ghost" onClick={closeReview}>
                   إغلاق
                 </Button>
 
-                {selectedRequest.status ===
-                  'قيد المراجعة' && (
+                {selectedRequest.status === 'قيد المراجعة' && (
                   <>
                     <Button
                       variant="outline"
                       onClick={() =>
-                        rejectRequest(
-                          selectedRequest,
-                        )
+                        rejectRequest(selectedRequest)
                       }
                       className="gap-2"
                     >
@@ -706,13 +853,15 @@ export function EnrollmentView() {
 
                     <Button
                       onClick={() =>
-                        approveRequest(
+                        approveRequest(selectedRequest)
+                      }
+                      disabled={
+                        !registrationOpen ||
+                        hasSpecialInformation(
                           selectedRequest,
+                          rules,
                         )
                       }
-                      disabled={hasSpecialInformation(
-                        selectedRequest,
-                      )}
                       className="gap-2"
                     >
                       <Check className="size-4" />
