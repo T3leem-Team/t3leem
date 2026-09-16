@@ -637,105 +637,140 @@ export function StudentsView() {
               </button>
             </div>
 
-           <form
-  key={editingStudent?.id ?? 'new'}
-  onSubmit={async (e) => {
-    e.preventDefault()
+                     <form
+              key={editingStudent?.id ?? 'new'}
+              onSubmit={async (e) => {
+                e.preventDefault()
 
-    const form = e.currentTarget
-    const data = new FormData(form)
+                const form = e.currentTarget
+                const data = new FormData(form)
 
-    const name = String(data.get('name') || '').trim()
-    const personalId = String(data.get('personalId') || '').trim()
-    const grade = String(data.get('grade') || '')
-    const phone = String(data.get('phone') || '').trim()
-    const whatsapp = String(data.get('whatsapp') || '').trim()
+                const name = String(
+                  data.get('name') || ''
+                ).trim()
 
-    const chronicDiseases =
-      String(data.get('chronicDiseases') || '').trim() || 'لا يوجد'
+                const personalId = String(
+                  data.get('personalId') || ''
+                ).trim()
 
-    const amountDue = Number(data.get('amountDue') || 0)
-    const amountPaid = Number(data.get('amountPaid') || 0)
+                const grade = String(
+                  data.get('grade') || ''
+                )
 
-    const notes = String(data.get('notes') || '').trim()
+                const phone = String(
+                  data.get('phone') || ''
+                ).trim()
 
-    if (!name || !personalId || !grade) {
-      return
-    }
+                const whatsapp = String(
+                  data.get('whatsapp') || ''
+                ).trim()
 
-    const paymentStatus =
-      amountDue === 0 && amountPaid === 0
-        ? 'معفي'
-        : amountPaid >= amountDue
-          ? 'مدفوع بالكامل'
-          : amountPaid > 0
-            ? 'مدفوع جزئيًا'
-            : 'غير مدفوع'
+                const chronicDiseases =
+                  String(
+                    data.get('chronicDiseases') || ''
+                  ).trim() || 'لا يوجد'
 
-    if (editingStudent) {
-      setStudentList((current) =>
-        current.map((student) =>
-          student.id === editingStudent.id
-            ? {
-                ...student,
-                name,
-                personalId,
-                grade,
-                phone,
-                whatsapp,
-                paymentStatus,
-                amountDue,
-                amountPaid,
-                chronicDiseases,
-                notes,
-              }
-            : student
-        )
-      )
-    } else {
-      const { data: newStudent, error } = await supabase
-        .from('students')
-        .insert({
-          name,
-          personal_id: personalId,
-          phone,
-          whatsapp,
-          notes,
-          health_notes: chronicDiseases,
-          status: 'نشط',
-        })
-        .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
-        )
-        .single()
+                const amountDue = Number(
+                  data.get('amountDue') || 0
+                )
 
-      if (error) {
-        setSupabaseStatus(`خطأ في حفظ الطالب: ${error.message}`)
-        return
-      }
+                const amountPaid = Number(
+                  data.get('amountPaid') || 0
+                )
 
-      const mappedStudent = {
-        id: newStudent.id,
-        name: newStudent.name,
-        personalId: newStudent.personal_id ?? '',
-        grade,
-        phone: newStudent.phone ?? '',
-        whatsapp: newStudent.whatsapp ?? '',
-        paymentStatus,
-        amountDue,
-        amountPaid,
-        chronicDiseases: newStudent.health_notes ?? 'لا يوجد',
-        notes: newStudent.notes ?? '',
-      }
+                const notes = String(
+                  data.get('notes') || ''
+                ).trim()
 
-      setStudentList((current) => [mappedStudent, ...current])
-      setSupabaseStatus('تم حفظ الطالب في Supabase ✅')
-    }
+                if (!name || !personalId || !grade) {
+                  return
+                }
 
-    closeStudentDrawer()
-    form.reset()
-  }}
->
+                const paymentStatus =
+                  amountDue === 0 && amountPaid === 0
+                    ? 'معفي'
+                    : amountPaid >= amountDue
+                      ? 'مدفوع بالكامل'
+                      : amountPaid > 0
+                        ? 'مدفوع جزئيًا'
+                        : 'غير مدفوع'
+
+                if (editingStudent) {
+                  setStudentList((current) =>
+                    current.map((student) =>
+                      student.id === editingStudent.id
+                        ? {
+                            ...student,
+                            name,
+                            personalId,
+                            grade,
+                            phone,
+                            whatsapp,
+                            paymentStatus,
+                            amountDue,
+                            amountPaid,
+                            chronicDiseases,
+                            notes,
+                          }
+                        : student
+                    )
+                  )
+                } else {
+                  const { data: newStudent, error } =
+                    await supabase
+                      .from('students')
+                      .insert({
+                        name,
+                        personal_id: personalId,
+                        phone,
+                        whatsapp,
+                        notes,
+                        health_notes: chronicDiseases,
+                        status: 'نشط',
+                      })
+                      .select(
+                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                      )
+                      .single()
+
+                  if (error) {
+                    setSupabaseStatus(
+                      `خطأ في حفظ الطالب: ${error.message}`
+                    )
+                    return
+                  }
+
+                  const mappedStudent = {
+                    id: newStudent.id,
+                    name: newStudent.name,
+                    personalId:
+                      newStudent.personal_id ?? '',
+                    grade,
+                    phone: newStudent.phone ?? '',
+                    whatsapp: newStudent.whatsapp ?? '',
+                    paymentStatus,
+                    amountDue,
+                    amountPaid,
+                    chronicDiseases:
+                      newStudent.health_notes ??
+                      'لا يوجد',
+                    notes: newStudent.notes ?? '',
+                  }
+
+                  setStudentList((current) => [
+                    mappedStudent,
+                    ...current,
+                  ])
+
+                  setSupabaseStatus(
+                    'تم حفظ الطالب في Supabase ✅'
+                  )
+                }
+
+                closeStudentDrawer()
+                form.reset()
+              }}
+            >
             >
               <div className="space-y-6 p-6">
                 <div className="grid gap-4 sm:grid-cols-2">
