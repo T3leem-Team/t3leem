@@ -20,6 +20,14 @@ const routes: { match: (p: string) => boolean; view: () => React.ReactNode }[] =
 
 export function SectionRouter() {
   const pathname = usePathname()
+
+  // Settings sub-pages are handled by Next.js pages.
+  if (pathname.startsWith('/settings/subjects')) {
+    return null
+  }
+
   const active = routes.find((route) => route.match(pathname)) ?? routes[0]
+
   return active.view()
 }
+
