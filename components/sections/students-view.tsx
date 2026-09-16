@@ -74,6 +74,12 @@ export function StudentsView() {
   const [currentAcademicYearId, setCurrentAcademicYearId] =
     useState<string | null>(null)
 
+  const [currentAcademicYearName, setCurrentAcademicYearName] =
+    useState('')
+
+  const [currentAnnualFee, setCurrentAnnualFee] =
+    useState(0)
+
   const [search, setSearch] = useState('')
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
@@ -108,7 +114,7 @@ export function StudentsView() {
       const { data: currentYear, error: yearError } =
         await supabase
           .from('academic_years')
-          .select('id, name')
+          .select('id, name, annual_fee')
           .eq('is_current', true)
           .eq('is_active', true)
           .maybeSingle()
@@ -127,7 +133,13 @@ export function StudentsView() {
         return
       }
 
+      const annualFee = Number(
+        currentYear.annual_fee ?? 0
+      )
+
       setCurrentAcademicYearId(currentYear.id)
+      setCurrentAcademicYearName(currentYear.name ?? '')
+      setCurrentAnnualFee(annualFee)
 
       const { data: levels, error: levelsError } =
         await supabase
@@ -201,8 +213,11 @@ export function StudentsView() {
           grade: enrollmentMap.get(student.id) ?? '',
           phone: student.phone ?? '',
           whatsapp: student.whatsapp ?? '',
-          paymentStatus: 'غير مدفوع' as const,
-          amountDue: 0,
+          paymentStatus:
+            currentAnnualFee === 0
+              ? ('معفي' as const)
+              : ('غير مدفوع' as const),
+          amountDue: currentAnnualFee,
           amountPaid: 0,
           chronicDiseases:
             student.health_notes ?? 'لا يوجد',
@@ -213,7 +228,7 @@ export function StudentsView() {
       setStudentList(mappedStudents)
 
       setSupabaseStatus(
-        `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name}`
+        `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
       )
     }
 
@@ -432,6 +447,22 @@ export function StudentsView() {
                 </span>{' '}
                 <span className="font-semibold">
                   {filteredStudents.length}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-muted-foreground">
+                  الرسوم السنوية:
+                </span>{' '}
+                <span className="font-semibold">
+                  {currentAnnualFee.toLocaleString(
+                    'ar-BH',
+                    {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    }
+                  )}{' '}
+                  د.ب
                 </span>
               </div>
             </div>
@@ -912,10 +943,6 @@ export function StudentsView() {
                     ) || ''
                   ).trim() || 'لا يوجد'
 
-                const amountDue = Number(
-                  data.get('amountDue') || 0
-                )
-
                 const amountPaid = Number(
                   data.get('amountPaid') || 0
                 )
@@ -951,6 +978,10 @@ export function StudentsView() {
                   )
                   return
                 }
+
+                const amountDue =
+                  editingStudent?.amountDue ??
+                  currentAnnualFee
 
                 const paymentStatus =
                   amountDue === 0 &&
@@ -1180,7 +1211,7 @@ export function StudentsView() {
                       newStudent.whatsapp ??
                       '',
                     paymentStatus,
-                    amountDue,
+                    amountDue: currentAnnualFee,
                     amountPaid,
                     chronicDiseases:
                       newStudent.health_notes ??
@@ -1337,49 +1368,56 @@ export function StudentsView() {
                     المعلومات المالية
                   </h3>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        المبلغ المطلوب
-                      </label>
+                  <div className="rounded-md border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">
+                          الرسوم السنوية
+                        </p>
 
-                      <input
-                        name="amountDue"
-                        type="number"
-                        min="0"
-                        step="0.001"
-                        defaultValue={
-                          editingStudent?.amountDue ??
-                          ''
-                        }
-                        placeholder="0"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-                    </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          حسب السنة الدراسية الحالية:{' '}
+                          {currentAcademicYearName}
+                        </p>
+                      </div>
 
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        المبلغ المدفوع
-                      </label>
-
-                      <input
-                        name="amountPaid"
-                        type="number"
-                        min="0"
-                        step="0.001"
-                        defaultValue={
-                          editingStudent?.amountPaid ??
-                          ''
-                        }
-                        placeholder="0"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
+                      <div className="text-lg font-semibold">
+                        {currentAnnualFee.toLocaleString(
+                          'ar-BH',
+                          {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          }
+                        )}{' '}
+                        د.ب
+                      </div>
                     </div>
                   </div>
 
+                  <div className="mt-4">
+                    <label className="mb-2 block text-sm font-medium">
+                      المبلغ المدفوع
+                    </label>
+
+                    <input
+                      name="amountPaid"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      defaultValue={
+                        editingStudent?.amountPaid ??
+                        0
+                      }
+                      placeholder="0"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                    />
+                  </div>
+
                   <p className="mt-3 text-xs text-muted-foreground">
-                    حالة الدفع والمبلغ المتبقي يتم حسابهما
-                    تلقائيًا.
+                    الرسوم السنوية يتم أخذها تلقائيًا من
+                    السنة الدراسية الحالية. المبلغ المدفوع
+                    يمكن إدخاله كدفعة حالية، وسيتم بناء نظام
+                    الدفعات الكامل لاحقًا.
                   </p>
                 </div>
 
