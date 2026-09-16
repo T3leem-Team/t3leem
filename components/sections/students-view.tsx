@@ -61,18 +61,39 @@ export function StudentsView() {
   const [supabaseStatus, setSupabaseStatus] = useState('جاري الاختبار...')
 
   useEffect(() => {
-    const testConnection = async () => {
-      const { error } = await supabase
+    const loadStudents = async () => {
+      const { data, error } = await supabase
         .from('students')
-        .select('id')
-        .limit(1)
+        .select(
+          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+        )
+        .order('created_at', { ascending: false })
 
-      setSupabaseStatus(
-        error ? `خطأ: ${error.message}` : 'متصل بـ Supabase ✅'
-      )
+      if (error) {
+        setSupabaseStatus(`خطأ: ${error.message}`)
+        return
+      }
+
+      setSupabaseStatus('متصل بـ Supabase ✅')
+
+      const mappedStudents = (data ?? []).map((student) => ({
+        id: student.id,
+        name: student.name,
+        personalId: student.personal_id ?? '',
+        grade: '',
+        phone: student.phone ?? '',
+        whatsapp: student.whatsapp ?? '',
+        paymentStatus: 'غير مدفوع' as const,
+        amountDue: 0,
+        amountPaid: 0,
+        chronicDiseases: student.health_notes ?? 'لا يوجد',
+        notes: student.notes ?? '',
+      }))
+
+      setStudentList(mappedStudents)
     }
 
-    testConnection()
+    loadStudents()
   }, [])
 
   const [search, setSearch] = useState('')
@@ -93,7 +114,7 @@ export function StudentsView() {
     notes: true,
   })
 
-  const [studentList, setStudentList] = useState(students)
+  const [studentList, setStudentList] = useState<any[]>([])
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [editingStudentId, setEditingStudentId] = useState<string | null>(
