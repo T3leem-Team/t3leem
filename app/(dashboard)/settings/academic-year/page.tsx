@@ -30,6 +30,7 @@ type AcademicYear = {
   name: string
   startDate: string
   endDate: string
+  annualFee: number
   courses: Course[]
 }
 
@@ -68,6 +69,7 @@ export default function Page() {
   const [yearName, setYearName] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [annualFee, setAnnualFee] = useState('')
   const [courseCount, setCourseCount] = useState(3)
 
   const [courses, setCourses] = useState<Course[]>(
@@ -85,7 +87,7 @@ export default function Page() {
       const { data, error } = await supabase
         .from('academic_years')
         .select(
-          'id, name, start_date, end_date, is_current, is_active, created_at',
+          'id, name, start_date, end_date, annual_fee, is_current, is_active, created_at',
         )
         .order('created_at', { ascending: false })
 
@@ -102,6 +104,7 @@ export default function Page() {
         name: year.name ?? '',
         startDate: year.start_date ?? '',
         endDate: year.end_date ?? '',
+        annualFee: Number(year.annual_fee ?? 0),
         courses: [],
       }))
 
@@ -117,6 +120,7 @@ export default function Page() {
     setYearName('')
     setStartDate('')
     setEndDate('')
+    setAnnualFee('')
     setCourseCount(3)
     setCourses(Array.from({ length: 3 }, createEmptyCourse))
     setEditingId(null)
@@ -129,6 +133,7 @@ export default function Page() {
     setYearName('')
     setStartDate('')
     setEndDate('')
+    setAnnualFee('')
     setCourseCount(3)
     setCourses(Array.from({ length: 3 }, createEmptyCourse))
     setOpenDaysDropdown(null)
@@ -140,6 +145,11 @@ export default function Page() {
     setYearName(year.name)
     setStartDate(year.startDate)
     setEndDate(year.endDate)
+    setAnnualFee(
+      year.annualFee !== undefined && year.annualFee !== null
+        ? String(year.annualFee)
+        : '',
+    )
     setCourseCount(year.courses.length || 3)
 
     setCourses(
@@ -227,9 +237,16 @@ export default function Page() {
 
   const handleSave = async () => {
     const trimmedName = yearName.trim()
+    const parsedAnnualFee =
+      annualFee.trim() === '' ? 0 : Number(annualFee)
 
     if (!trimmedName) {
       setSupabaseStatus('يرجى إدخال اسم السنة الدراسية')
+      return
+    }
+
+    if (!Number.isFinite(parsedAnnualFee) || parsedAnnualFee < 0) {
+      setSupabaseStatus('يرجى إدخال رسوم سنوية صحيحة')
       return
     }
 
@@ -243,10 +260,11 @@ export default function Page() {
           name: trimmedName,
           start_date: startDate || null,
           end_date: endDate || null,
+          annual_fee: parsedAnnualFee,
         })
         .eq('id', editingId)
         .select(
-          'id, name, start_date, end_date, is_current, is_active, created_at',
+          'id, name, start_date, end_date, annual_fee, is_current, is_active, created_at',
         )
         .single()
 
@@ -266,6 +284,7 @@ export default function Page() {
                 name: updatedYear.name ?? '',
                 startDate: updatedYear.start_date ?? '',
                 endDate: updatedYear.end_date ?? '',
+                annualFee: Number(updatedYear.annual_fee ?? 0),
               }
             : year,
         ),
@@ -298,11 +317,12 @@ export default function Page() {
         name: trimmedName,
         start_date: startDate || null,
         end_date: endDate || null,
+        annual_fee: parsedAnnualFee,
         is_current: true,
         is_active: true,
       })
       .select(
-        'id, name, start_date, end_date, is_current, is_active, created_at',
+        'id, name, start_date, end_date, annual_fee, is_current, is_active, created_at',
       )
       .single()
 
@@ -319,6 +339,7 @@ export default function Page() {
       name: newYear.name ?? '',
       startDate: newYear.start_date ?? '',
       endDate: newYear.end_date ?? '',
+      annualFee: Number(newYear.annual_fee ?? 0),
       courses: courses.map((course) => ({
         name: course.name.trim(),
         startDate: course.startDate,
@@ -439,7 +460,7 @@ export default function Page() {
                 </h3>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     اسم السنة الدراسية
@@ -484,6 +505,30 @@ export default function Page() {
                     }
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    الرسوم السنوية
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={annualFee}
+                      onChange={(event) =>
+                        setAnnualFee(event.target.value)
+                      }
+                      placeholder="مثال: 120"
+                      className="h-10 w-full rounded-md border bg-background px-3 pl-14 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      د.ب
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -759,12 +804,21 @@ export default function Page() {
                         </p>
                       )}
 
-                      <p className="mt-2 text-sm">
-                        عدد الدورات:{' '}
-                        <span className="font-medium">
-                          {year.courses.length}
-                        </span>
-                      </p>
+                      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                        <p>
+                          الرسوم السنوية:{' '}
+                          <span className="font-medium">
+                            {year.annualFee.toFixed(3)} د.ب
+                          </span>
+                        </p>
+
+                        <p>
+                          عدد الدورات:{' '}
+                          <span className="font-medium">
+                            {year.courses.length}
+                          </span>
+                        </p>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
