@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Plus, X, Eye } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -65,16 +65,19 @@ const emptyFilters: Filters = {
 
 export function PaymentsView() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  const returnPath = searchParams.get('return') || ''
-  const studentIdFromUrl = searchParams.get('student')
+  const [returnPath, setReturnPath] = useState('')
+  const [studentIdFromUrl, setStudentIdFromUrl] =
+    useState<string | null>(null)
 
-  const autoOpenedStudentRef = useRef<string | null>(null)
+  const autoOpenedStudentRef =
+    useRef<string | null>(null)
 
   const [filters, setFilters] = useState<Filters>(emptyFilters)
 
-  const [studentList, setStudentList] = useState<StudentRow[]>([])
+  const [studentList, setStudentList] =
+    useState<StudentRow[]>([])
+
   const [loading, setLoading] = useState(true)
 
   const [currentAcademicYearId, setCurrentAcademicYearId] =
@@ -83,16 +86,20 @@ export function PaymentsView() {
   const [currentAcademicYearName, setCurrentAcademicYearName] =
     useState('')
 
-  const [currentAnnualFee, setCurrentAnnualFee] = useState(0)
+  const [currentAnnualFee, setCurrentAnnualFee] =
+    useState(0)
 
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] =
+    useState(false)
 
   const [selectedStudent, setSelectedStudent] =
     useState<StudentRow | null>(null)
 
-  const [savingPayment, setSavingPayment] = useState(false)
+  const [savingPayment, setSavingPayment] =
+    useState(false)
 
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [detailsDialogOpen, setDetailsDialogOpen] =
+    useState(false)
 
   const [detailsStudent, setDetailsStudent] =
     useState<StudentRow | null>(null)
@@ -100,7 +107,22 @@ export function PaymentsView() {
   const [paymentHistory, setPaymentHistory] =
     useState<PaymentRecord[]>([])
 
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [loadingHistory, setLoadingHistory] =
+    useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(
+      window.location.search
+    )
+
+    setReturnPath(
+      params.get('return') || ''
+    )
+
+    setStudentIdFromUrl(
+      params.get('student')
+    )
+  }, [])
 
   const loadPayments = async () => {
     setLoading(true)
