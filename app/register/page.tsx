@@ -366,7 +366,9 @@ export default function RegisterPage() {
     return ''
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault()
 
     setErrorMessage('')
@@ -397,95 +399,159 @@ export default function RegisterPage() {
 
       const trackingToken = crypto.randomUUID()
 
-      const insertResult = await supabase
-        .from('registration_requests')
-        .insert({
-          request_number: generatedRequestNumber,
-          tracking_token: trackingToken,
+      /*
+       * إنشاء الطلب عن طريق RPC
+       * بدل INSERT مباشر على registration_requests.
+       */
+      const rpcResult = await supabase.rpc(
+        'create_registration_request',
+        {
+          p_request_number:
+            generatedRequestNumber,
 
-          name: settings.show_name
+          p_tracking_token:
+            trackingToken,
+
+          p_name: settings.show_name
             ? name.trim()
             : '',
 
-          personal_id: settings.show_personal_id
-            ? personalId.trim() || null
-            : null,
+          p_personal_id:
+            settings.show_personal_id
+              ? personalId.trim() || null
+              : null,
 
-          phone: settings.show_phone
-            ? phone.trim() || null
-            : null,
+          p_phone:
+            settings.show_phone
+              ? phone.trim() || null
+              : null,
 
-          whatsapp: settings.show_whatsapp
-            ? whatsapp.trim() || null
-            : null,
+          p_whatsapp:
+            settings.show_whatsapp
+              ? whatsapp.trim() || null
+              : null,
 
-          level_id: settings.show_level
-            ? levelId || null
-            : null,
+          p_level_id:
+            settings.show_level
+              ? levelId || null
+              : null,
 
-          notes: settings.show_notes
-            ? notes.trim() || null
-            : null,
+          p_notes:
+            settings.show_notes
+              ? notes.trim() || null
+              : null,
 
-          health_notes: settings.show_health_notes
-            ? healthNotes.trim() || null
-            : null,
+          p_health_notes:
+            settings.show_health_notes
+              ? healthNotes.trim() || null
+              : null,
 
-          status: 'pending',
+          p_payment_method:
+            settings.payment_enabled
+              ? paymentMethod
+              : null,
 
-          processing_mode: 'review',
+          p_payment_amount:
+            settings.payment_enabled
+              ? settings.payment_amount
+              : null,
 
-          payment_method: settings.payment_enabled
-            ? paymentMethod
-            : null,
+          p_payment_reference:
+            settings.payment_enabled
+              ? paymentReference.trim() || null
+              : null,
 
-          payment_amount: settings.payment_enabled
-            ? settings.payment_amount
-            : null,
+          p_payment_status:
+            settings.payment_enabled
+              ? 'pending'
+              : 'not_required',
+        },
+      )
 
-          payment_reference: settings.payment_enabled
-            ? paymentReference.trim() || null
-            : null,
+      if (rpcResult.error) {
+        console.error(
+          'create_registration_request RPC error:',
+          rpcResult.error,
+        )
 
-          payment_status: settings.payment_enabled
-            ? 'pending'
-            : 'not_required',
-        })
-        .select('id, request_number')
-        .single()
-
-      if (insertResult.error) {
         throw new Error(
-          `تعذر إرسال طلب التسجيل: ${insertResult.error.message}`,
+          `تعذر إرسال طلب التسجيل: ${rpcResult.error.message}`,
         )
       }
 
+      /*
+       * RPC يرجع صفًا واحدًا:
+       *
+       * {
+       *   id,
+       *   request_number,
+       *   tracking_token
+       * }
+       */
+      const createdRequest = Array.isArray(
+        rpcResult.data,
+      )
+        ? rpcResult.data[0]
+        : rpcResult.data
+
+      if (
+        !createdRequest ||
+        !createdRequest.id
+      ) {
+        throw new Error(
+          'تم إنشاء الطلب ولكن لم يتم استلام رقم الطلب من النظام.',
+        )
+      }
+
+      /*
+       * رفع إثبات الدفع بعد إنشاء الطلب.
+       */
       if (
         settings.payment_enabled &&
         settings.payment_proof_enabled &&
         paymentProof
       ) {
-        const proofUrl = await uploadPaymentProof(
-          paymentProof,
-          insertResult.data.id,
-        )
+        const proofUrl =
+          await uploadPaymentProof(
+            paymentProof,
+            createdRequest.id,
+          )
 
-        const updateResult = await supabase
-          .from('registration_requests')
-          .update({
-            payment_proof_url: proofUrl,
-          })
-          .eq('id', insertResult.data.id)
+        /*
+         * تحديث payment_proof_url.
+         *
+         * هذا التحديث لن نستخدم فيه الجدول مباشرة
+         * من الصفحة العامة إذا كان RLS يمنعه.
+         *
+         * لذلك نستخدم RPC منفصل.
+         */
+        const proofResult =
+          await supabase.rpc(
+            'set_registration_payment_proof',
+            {
+              p_request_id:
+                createdRequest.id,
 
-        if (updateResult.error) {
+              p_payment_proof_url:
+                proofUrl,
+            },
+          )
+
+        if (proofResult.error) {
+          console.error(
+            'set_registration_payment_proof RPC error:',
+            proofResult.error,
+          )
+
           throw new Error(
-            `تم إنشاء الطلب لكن تعذر حفظ إثبات الدفع: ${updateResult.error.message}`,
+            `تم إنشاء الطلب لكن تعذر حفظ إثبات الدفع: ${proofResult.error.message}`,
           )
         }
       }
 
       setRequestNumber(
-        insertResult.data.request_number,
+        createdRequest.request_number ||
+          generatedRequestNumber,
       )
 
       setSuccessMessage(
@@ -503,9 +569,10 @@ export default function RegisterPage() {
       setPaymentReference('')
       setPaymentProof(null)
 
-      const fileInput = document.getElementById(
-        'paymentProof',
-      ) as HTMLInputElement | null
+      const fileInput =
+        document.getElementById(
+          'paymentProof',
+        ) as HTMLInputElement | null
 
       if (fileInput) {
         fileInput.value = ''
@@ -670,16 +737,22 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="الاسم"
-                      required={settings.required_name}
+                      required={
+                        settings.required_name
+                      }
                     />
 
                     <Input
                       value={name}
                       onChange={(event) =>
-                        setName(event.target.value)
+                        setName(
+                          event.target.value,
+                        )
                       }
                       placeholder="أدخل اسم الطالب"
-                      required={settings.required_name}
+                      required={
+                        settings.required_name
+                      }
                     />
                   </div>
                 )}
@@ -688,16 +761,22 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="الرقم الشخصي"
-                      required={settings.required_personal_id}
+                      required={
+                        settings.required_personal_id
+                      }
                     />
 
                     <Input
                       value={personalId}
                       onChange={(event) =>
-                        setPersonalId(event.target.value)
+                        setPersonalId(
+                          event.target.value,
+                        )
                       }
                       placeholder="أدخل الرقم الشخصي"
-                      required={settings.required_personal_id}
+                      required={
+                        settings.required_personal_id
+                      }
                     />
                   </div>
                 )}
@@ -706,17 +785,23 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="رقم الاتصال"
-                      required={settings.required_phone}
+                      required={
+                        settings.required_phone
+                      }
                     />
 
                     <Input
                       type="tel"
                       value={phone}
                       onChange={(event) =>
-                        setPhone(event.target.value)
+                        setPhone(
+                          event.target.value,
+                        )
                       }
                       placeholder="أدخل رقم الاتصال"
-                      required={settings.required_phone}
+                      required={
+                        settings.required_phone
+                      }
                     />
                   </div>
                 )}
@@ -725,17 +810,23 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="رقم الواتساب"
-                      required={settings.required_whatsapp}
+                      required={
+                        settings.required_whatsapp
+                      }
                     />
 
                     <Input
                       type="tel"
                       value={whatsapp}
                       onChange={(event) =>
-                        setWhatsapp(event.target.value)
+                        setWhatsapp(
+                          event.target.value,
+                        )
                       }
                       placeholder="أدخل رقم الواتساب"
-                      required={settings.required_whatsapp}
+                      required={
+                        settings.required_whatsapp
+                      }
                     />
                   </div>
                 )}
@@ -744,15 +835,21 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="الصف / المستوى"
-                      required={settings.required_level}
+                      required={
+                        settings.required_level
+                      }
                     />
 
                     <select
                       value={levelId}
                       onChange={(event) =>
-                        setLevelId(event.target.value)
+                        setLevelId(
+                          event.target.value,
+                        )
                       }
-                      required={settings.required_level}
+                      required={
+                        settings.required_level
+                      }
                       className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     >
                       <option value="">
@@ -775,16 +872,22 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="الملاحظات"
-                      required={settings.required_notes}
+                      required={
+                        settings.required_notes
+                      }
                     />
 
                     <Textarea
                       value={notes}
                       onChange={(event) =>
-                        setNotes(event.target.value)
+                        setNotes(
+                          event.target.value,
+                        )
                       }
                       placeholder="أضف أي ملاحظات..."
-                      required={settings.required_notes}
+                      required={
+                        settings.required_notes
+                      }
                     />
                   </div>
                 )}
@@ -801,7 +904,9 @@ export default function RegisterPage() {
                     <Textarea
                       value={healthNotes}
                       onChange={(event) =>
-                        setHealthNotes(event.target.value)
+                        setHealthNotes(
+                          event.target.value,
+                        )
                       }
                       placeholder="اذكر أي أمراض مزمنة أو ملاحظات صحية..."
                       required={
@@ -819,11 +924,15 @@ export default function RegisterPage() {
                       الدفع
                     </h2>
 
-                    {settings.payment_amount > 0 && (
+                    {settings.payment_amount >
+                      0 && (
                       <p className="mt-1 text-sm text-muted-foreground">
                         مبلغ التسجيل:{' '}
                         <strong>
-                          {settings.payment_amount} د.ب
+                          {
+                            settings.payment_amount
+                          }{' '}
+                          د.ب
                         </strong>
                       </p>
                     )}
@@ -842,7 +951,9 @@ export default function RegisterPage() {
 
                         <div className="mt-4 flex justify-center">
                           <img
-                            src={settings.payment_qr_url}
+                            src={
+                              settings.payment_qr_url
+                            }
                             alt="QR الدفع"
                             className="max-h-64 rounded-lg border object-contain"
                           />
@@ -857,29 +968,35 @@ export default function RegisterPage() {
                     />
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {paymentMethods.map((method) => (
-                        <button
-                          key={method.id}
-                          type="button"
-                          onClick={() =>
-                            setPaymentMethod(method.id)
-                          }
-                          className={`rounded-xl border p-4 text-right transition ${
-                            paymentMethod === method.id
-                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                              : 'hover:bg-muted/50'
-                          }`}
-                        >
-                          <p className="font-medium">
-                            {method.label}
-                          </p>
-                        </button>
-                      ))}
+                      {paymentMethods.map(
+                        (method) => (
+                          <button
+                            key={method.id}
+                            type="button"
+                            onClick={() =>
+                              setPaymentMethod(
+                                method.id,
+                              )
+                            }
+                            className={`rounded-xl border p-4 text-right transition ${
+                              paymentMethod ===
+                              method.id
+                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                : 'hover:bg-muted/50'
+                            }`}
+                          >
+                            <p className="font-medium">
+                              {method.label}
+                            </p>
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
 
                   {settings.payment_link_enabled &&
-                    paymentMethod === 'payment_link' &&
+                    paymentMethod ===
+                      'payment_link' &&
                     settings.payment_link && (
                       <div className="rounded-xl border bg-muted/30 p-4">
                         <p className="text-sm text-muted-foreground">
@@ -887,12 +1004,16 @@ export default function RegisterPage() {
                         </p>
 
                         <a
-                          href={settings.payment_link}
+                          href={
+                            settings.payment_link
+                          }
                           target="_blank"
                           rel="noreferrer"
                           className="mt-2 block break-all text-sm font-medium text-primary underline"
                         >
-                          {settings.payment_link}
+                          {
+                            settings.payment_link
+                          }
                         </a>
                       </div>
                     )}
@@ -926,7 +1047,8 @@ export default function RegisterPage() {
                         accept="image/*,.pdf"
                         onChange={(event) =>
                           setPaymentProof(
-                            event.target.files?.[0] ?? null,
+                            event.target.files?.[0] ??
+                              null,
                           )
                         }
                         required={
