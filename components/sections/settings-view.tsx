@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BookOpen,
   ClipboardCheck,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
   Users,
@@ -14,6 +15,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 const managementOptions = [
+  {
+    title: 'إعدادات التسجيل',
+    description:
+      'التحكم في صفحة التسجيل العامة، وتحديد الحقول الظاهرة والمطلوبة، وإعدادات الدفع وطرق الدفع وإثبات الدفع.',
+    href: '/settings/registration',
+    icon: Settings2,
+    badge: 'التسجيل العام',
+  },
   {
     title: 'المستخدمون والصلاحيات',
     description:
@@ -78,7 +87,7 @@ export function SettingsView() {
     <div className="space-y-6">
       <PageHeader
         title="الإدارة والتحكم"
-        description="إدارة المستخدمين والصلاحيات والدورات والمعلمين والمواد والإشراف والأرشيف والإجراءات الإدارية"
+        description="إدارة المستخدمين والصلاحيات والتسجيل والدورات والمعلمين والمواد والإشراف والأرشيف والإجراءات الإدارية"
       />
 
       <Card>
