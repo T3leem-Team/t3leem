@@ -64,12 +64,31 @@ const attendanceStatusNames: AttendanceStatusName[] = [
 function normalizeStatusName(
   name: string,
 ): AttendanceStatusName | null {
-  const normalized = name.trim()
+  const normalized = name
+    .trim()
+    .replace(/\s+/g, ' ')
 
-  if (normalized === 'حاضر') return 'حاضر'
-  if (normalized === 'غائب') return 'غائب'
-  if (normalized === 'متأخر') return 'متأخر'
-  if (normalized === 'مستأذن') return 'مستأذن'
+  if (normalized === 'حاضر') {
+    return 'حاضر'
+  }
+
+  if (normalized === 'غائب') {
+    return 'غائب'
+  }
+
+  if (
+    normalized === 'متأخر' ||
+    normalized === 'متاخر'
+  ) {
+    return 'متأخر'
+  }
+
+  if (
+    normalized === 'مستأذن' ||
+    normalized === 'مستاذن'
+  ) {
+    return 'مستأذن'
+  }
 
   return null
 }
@@ -84,12 +103,15 @@ function isAttendanceStatusName(
   )
 }
 
-function formatDateForDisplay(dateString: string) {
+function formatDateForDisplay(
+  dateString: string,
+) {
   if (!dateString) {
     return ''
   }
 
-  const [year, month, day] = dateString.split('-')
+  const [year, month, day] =
+    dateString.split('-')
 
   if (!year || !month || !day) {
     return dateString
@@ -150,14 +172,16 @@ function getStatusName(
   }
 
   const status = statuses.find(
-    (status) => status.id === statusId,
+    (item) => item.id === statusId,
   )
 
   if (!status) {
     return null
   }
 
-  return normalizeStatusName(status.name)
+  return normalizeStatusName(
+    status.name,
+  )
 }
 
 function getAttendanceClass(
@@ -200,7 +224,7 @@ function AttendanceStatusButtons({
   onSelect,
 }: AttendanceStatusButtonsProps) {
   return (
-    <div className="relative z-20 flex flex-wrap gap-1.5 pointer-events-auto">
+    <div className="flex flex-wrap gap-2">
       {attendanceStatusNames.map(
         (status) => {
           const selected =
@@ -211,36 +235,29 @@ function AttendanceStatusButtons({
               key={status}
               type="button"
               disabled={saving}
-              onPointerDown={(event) => {
-                if (saving) {
-                  return
-                }
-
-                event.preventDefault()
+              onClick={() => {
+                console.log(
+                  '[Attendance] button clicked:',
+                  status,
+                )
 
                 onSelect(status)
               }}
-              onKeyDown={(event) => {
-                if (saving) {
-                  return
-                }
-
-                if (
-                  event.key === 'Enter' ||
-                  event.key === ' '
-                ) {
-                  event.preventDefault()
-
-                  onSelect(status)
-                }
-              }}
-              className={`relative z-20 inline-flex min-h-9 cursor-pointer touch-manipulation select-none items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
-                currentStatus,
-                status,
-              )}`}
+              className={`inline-flex min-h-10 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition-all ${
+                selected
+                  ? getAttendanceClass(
+                      currentStatus,
+                      status,
+                    )
+                  : 'border-border bg-background text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-primary'
+              } ${
+                saving
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-pointer'
+              }`}
             >
               {selected && (
-                <Check className="ml-1 size-3.5" />
+                <Check className="ml-1 size-4" />
               )}
 
               {status}
@@ -271,21 +288,6 @@ type AttendanceViewProps = {
     SetStateAction<AttendanceNotes>
   >
 
-  /*
-   * هذه موجودة حتى يبقى الملف متوافقًا
-   * مع teachers-view.tsx الحالي.
-   *
-   * AttendanceView لا يعتمد عليها للحضور.
-   */
-  saving?: boolean
-
-  setSaving?: Dispatch<
-    SetStateAction<boolean>
-  >
-
-  /*
-   * رسالة الحالة الحالية.
-   */
   statusMessage: string
 
   setStatusMessage: Dispatch<
@@ -312,25 +314,11 @@ export function AttendanceView({
   selectedAttendanceDate,
   setSelectedAttendanceDate,
 }: AttendanceViewProps) {
-  /*
-   * حالة الحفظ الخاصة بالحضور فقط.
-   *
-   * لا نعتمد على saving الموجود في teachers-view
-   * لأن teachers-view يستخدمه أيضًا لإضافة الطلبة
-   * والنقل.
-   */
   const [
     attendanceSavingKey,
     setAttendanceSavingKey,
   ] = useState<string | null>(null)
 
-  /*
-   * نخزن الاختيار محليًا حتى يظهر مباشرة
-   * بمجرد الضغط، بدون انتظار Supabase.
-   *
-   * المفتاح:
-   * التاريخ + studentId
-   */
   const [
     localSelectedStatuses,
     setLocalSelectedStatuses,
@@ -377,16 +365,11 @@ export function AttendanceView({
   ): AttendanceStatusName | null => {
     const localKey = `${date}:${studentId}`
 
-    /*
-     * الاختيار المحلي له الأولوية.
-     * لذلك الزر يتغير مباشرة.
-     */
-    if (
+    const localStatus =
       localSelectedStatuses[localKey]
-    ) {
-      return localSelectedStatuses[
-        localKey
-      ]
+
+    if (localStatus) {
+      return localStatus
     }
 
     const record =
@@ -410,7 +393,6 @@ export function AttendanceView({
       setStatusMessage(
         'لا توجد دورة حالية.',
       )
-
       return
     }
 
@@ -423,7 +405,6 @@ export function AttendanceView({
       setStatusMessage(
         'تاريخ الحضور خارج فترة الدورة.',
       )
-
       return
     }
 
@@ -435,9 +416,12 @@ export function AttendanceView({
 
     if (!statusId) {
       setStatusMessage(
-        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
+        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات. الحالات المحملة: ${
+          attendanceStatuses
+            .map((item) => item.name)
+            .join('، ') || 'لا توجد حالات'
+        }`,
       )
-
       return
     }
 
@@ -449,14 +433,14 @@ export function AttendanceView({
         date,
       )
 
-    /*
-     * نحفظ الحالة السابقة في حال فشل Supabase.
-     */
     const previousLocalStatus =
       localSelectedStatuses[saveKey]
 
+    const previousRecords =
+      attendanceRecords
+
     /*
-     * تحديث بصري فوري.
+     * تحديث الواجهة فورًا.
      */
     setLocalSelectedStatuses(
       (current) => ({
@@ -466,13 +450,10 @@ export function AttendanceView({
     )
 
     setStatusMessage(
-      `تم الضغط على "${statusName}" للطالب ${student.name}`,
+      `جاري حفظ "${statusName}" للطالب ${student.name}...`,
     )
 
     setAttendanceSavingKey(saveKey)
-
-    const previousRecords =
-      attendanceRecords
 
     const optimisticRecord: AttendanceRecord = {
       id:
@@ -496,9 +477,6 @@ export function AttendanceView({
         '',
     }
 
-    /*
-     * تحديث الجدول مباشرة قبل Supabase.
-     */
     setAttendanceRecords(
       (records) => {
         const existingIndex =
@@ -537,9 +515,6 @@ export function AttendanceView({
 
     try {
       if (existing) {
-        /*
-         * تحديث سجل موجود.
-         */
         const {
           data,
           error,
@@ -547,11 +522,9 @@ export function AttendanceView({
           .from('attendance')
           .update({
             status_id: statusId,
-
             enrollment_id:
               student.enrollmentId ||
               null,
-
             note:
               existing.note ||
               attendanceNotes[saveKey] ||
@@ -571,23 +544,17 @@ export function AttendanceView({
           const savedRecord: AttendanceRecord =
             {
               id: data.id,
-
               studentId:
                 data.student_id,
-
               enrollmentId:
                 data.enrollment_id ??
                 null,
-
               courseId:
                 data.course_id,
-
               attendanceDate:
                 data.attendance_date,
-
               statusId:
                 data.status_id,
-
               note:
                 data.note ?? '',
             }
@@ -604,9 +571,6 @@ export function AttendanceView({
           )
         }
       } else {
-        /*
-         * إنشاء سجل جديد.
-         */
         const {
           data,
           error,
@@ -615,20 +579,15 @@ export function AttendanceView({
           .insert({
             student_id:
               student.id,
-
             enrollment_id:
               student.enrollmentId ||
               null,
-
             attendance_date: date,
-
             status_id: statusId,
-
             note:
               attendanceNotes[
                 saveKey
               ] || null,
-
             course_id:
               currentCourse.id,
           })
@@ -645,23 +604,17 @@ export function AttendanceView({
           const savedRecord: AttendanceRecord =
             {
               id: data.id,
-
               studentId:
                 data.student_id,
-
               enrollmentId:
                 data.enrollment_id ??
                 null,
-
               courseId:
                 data.course_id,
-
               attendanceDate:
                 data.attendance_date,
-
               statusId:
                 data.status_id,
-
               note:
                 data.note ?? '',
             }
@@ -680,13 +633,9 @@ export function AttendanceView({
       }
 
       setStatusMessage(
-        `تم حفظ حضور ${student.name}: ${statusName}`,
+        `تم حفظ حضور ${student.name}: ${statusName} ✅`,
       )
     } catch (error: any) {
-      /*
-       * في حالة فشل الحفظ:
-       * نرجع البيانات السابقة.
-       */
       setAttendanceRecords(
         previousRecords,
       )
@@ -729,15 +678,21 @@ export function AttendanceView({
     const saveKey = `${date}:${student.id}`
 
     if (
-      attendanceSavingKey ===
-      saveKey
+      attendanceSavingKey === saveKey
     ) {
       return
     }
 
-    /*
-     * تظهر فورًا عند الضغط.
-     */
+    console.log(
+      '[Attendance] selecting:',
+      {
+        studentId: student.id,
+        studentName: student.name,
+        date,
+        statusName,
+      },
+    )
+
     setStatusMessage(
       `تم الضغط على "${statusName}" للطالب ${student.name}`,
     )
@@ -762,10 +717,6 @@ export function AttendanceView({
         date,
       )
 
-    /*
-     * لا يوجد سجل حضور:
-     * نخزن الملاحظة محليًا إلى أن يختار المستخدم حالة.
-     */
     if (!existing) {
       setAttendanceNotes(
         (current) => ({
@@ -807,23 +758,17 @@ export function AttendanceView({
         const updatedRecord: AttendanceRecord =
           {
             id: data.id,
-
             studentId:
               data.student_id,
-
             enrollmentId:
               data.enrollment_id ??
               null,
-
             courseId:
               data.course_id,
-
             attendanceDate:
               data.attendance_date,
-
             statusId:
               data.status_id,
-
             note:
               data.note ?? '',
           }
@@ -873,9 +818,7 @@ export function AttendanceView({
 
         if (
           status &&
-          isAttendanceStatusName(
-            status,
-          )
+          isAttendanceStatusName(status)
         ) {
           summary[status] += 1
         }
@@ -894,8 +837,7 @@ export function AttendanceView({
         (record) =>
           record.courseId ===
             currentCourse?.id &&
-          record.attendanceDate ===
-            date,
+          record.attendanceDate === date,
       )
 
     return (
@@ -908,9 +850,7 @@ export function AttendanceView({
 
             <p className="text-sm text-muted-foreground">
               التاريخ:{' '}
-              {formatDateForDisplay(
-                date,
-              )}
+              {formatDateForDisplay(date)}
             </p>
           </div>
 
@@ -950,9 +890,7 @@ export function AttendanceView({
                     colSpan={4}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
-                    لا يوجد طلبة
-                    مسجلون لدى هذا
-                    المعلم.
+                    لا يوجد طلبة مسجلون لدى هذا المعلم.
                   </td>
                 </tr>
               ) : (
@@ -971,14 +909,14 @@ export function AttendanceView({
                         date,
                       )
 
+                    const saveKey = `${date}:${student.id}`
+
                     const note =
                       record?.note ??
                       attendanceNotes[
-                        `${date}:${student.id}`
+                        saveKey
                       ] ??
                       ''
-
-                    const saveKey = `${date}:${student.id}`
 
                     const studentSaving =
                       attendanceSavingKey ===
@@ -992,9 +930,7 @@ export function AttendanceView({
                         <td className="px-4 py-4 align-top">
                           <div>
                             <p className="font-medium">
-                              {
-                                student.name
-                              }
+                              {student.name}
                             </p>
 
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -1009,14 +945,10 @@ export function AttendanceView({
                             '-'}
                         </td>
 
-                        <td className="relative z-10 px-4 py-4 align-top">
+                        <td className="px-4 py-4 align-top">
                           <AttendanceStatusButtons
-                            currentStatus={
-                              status
-                            }
-                            saving={
-                              studentSaving
-                            }
+                            currentStatus={status}
+                            saving={studentSaving}
                             onSelect={(
                               statusName,
                             ) =>
@@ -1037,9 +969,7 @@ export function AttendanceView({
                               event,
                             ) =>
                               setAttendanceNotes(
-                                (
-                                  current,
-                                ) => ({
+                                (current) => ({
                                   ...current,
                                   [saveKey]:
                                     event
@@ -1048,14 +978,11 @@ export function AttendanceView({
                                 }),
                               )
                             }
-                            onBlur={(
-                              event,
-                            ) =>
+                            onBlur={(event) =>
                               updateAttendanceNote(
                                 student,
                                 date,
-                                event
-                                  .target
+                                event.target
                                   .value,
                               )
                             }
@@ -1084,9 +1011,7 @@ export function AttendanceView({
           </h3>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            لم يتم العثور على دورة
-            مرتبطة بالسنة الأكاديمية
-            الحالية.
+            لم يتم العثور على دورة مرتبطة بالسنة الأكاديمية الحالية.
           </p>
         </div>
       </div>
@@ -1098,14 +1023,11 @@ export function AttendanceView({
     currentAttendanceDate
 
   const activeSummary = activeDate
-    ? getAttendanceSummary(
-        activeDate,
-      )
+    ? getAttendanceSummary(activeDate)
     : null
 
   return (
     <div className="space-y-6">
-      {/* معلومات الدورة */}
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1144,14 +1066,12 @@ export function AttendanceView({
         </div>
       </div>
 
-      {/* رسالة الحالة */}
       {statusMessage && (
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           {statusMessage}
         </div>
       )}
 
-      {/* ملخص الحضور */}
       {activeSummary && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-xl border p-4">
@@ -1196,7 +1116,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* حضور اليوم */}
       {currentAttendanceDate ? (
         <div className="rounded-xl border bg-card p-4 shadow-sm">
           {renderAttendanceTable(
@@ -1223,7 +1142,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* أرشيف الحضور */}
       <div className="rounded-xl border bg-card p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1232,8 +1150,7 @@ export function AttendanceView({
             </h3>
 
             <p className="text-sm text-muted-foreground">
-              اختر تاريخًا داخل فترة
-              الدورة لعرض الحضور.
+              اختر تاريخًا داخل فترة الدورة لعرض الحضور.
             </p>
           </div>
 
@@ -1243,18 +1160,12 @@ export function AttendanceView({
               selectedAttendanceDate ??
               ''
             }
-            min={
-              currentCourse.startDate
-            }
-            max={
-              currentCourse.endDate
-            }
+            min={currentCourse.startDate}
+            max={currentCourse.endDate}
             onChange={(event) => {
-              const value =
-                event.target.value
-
               setSelectedAttendanceDate(
-                value || null,
+                event.target.value ||
+                  null,
               )
             }}
             className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -1268,13 +1179,11 @@ export function AttendanceView({
           )
         ) : (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            اختر تاريخًا لعرض سجل
-            الحضور.
+            اختر تاريخًا لعرض سجل الحضور.
           </div>
         )}
       </div>
 
-      {/* الحالات الموجودة في قاعدة البيانات */}
       {attendanceStatuses.length > 0 && (
         <div className="rounded-xl border bg-muted/20 p-4">
           <p className="mb-3 text-sm font-semibold">
@@ -1310,15 +1219,12 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* إلغاء تحديد التاريخ */}
       <div className="flex justify-end">
         <Button
           type="button"
           variant="outline"
           onClick={() =>
-            setSelectedAttendanceDate(
-              null,
-            )
+            setSelectedAttendanceDate(null)
           }
         >
           إلغاء تحديد التاريخ
