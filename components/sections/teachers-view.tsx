@@ -2420,9 +2420,7 @@ export function TeachersView() {
                       onClick={
                         openAddStudents
                       }
-                      disabled={
-                        saving
-                      }
+                     disabled={false}
                     >
                       <Plus className="size-4" />
                       إضافة طلاب
