@@ -525,7 +525,7 @@ export function TeachersView() {
           'id, course_id, teacher_id, student_id',
         )
         .in('course_id', courseIds)
-
+    
       if (error) {
         setStatusMessage(
           `خطأ في تحميل توزيع الطلاب: ${error.message}`,
@@ -533,12 +533,19 @@ export function TeachersView() {
         setLoading(false)
         return
       }
-
+    
       assignmentRows = (
         data ?? []
-      ) as Assignment[]
+      ).map(
+        (row) => ({
+          id: row.id,
+          courseId: row.course_id,
+          teacherId: row.teacher_id,
+          studentId: row.student_id,
+        }),
+      )
     }
-
+    
     setAssignments(assignmentRows)
 
     /*
