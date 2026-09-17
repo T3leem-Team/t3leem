@@ -1,6 +1,13 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import {
+  type FormEvent,
+  type InputHTMLAttributes,
+  type TextareaHTMLAttributes,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import Link from 'next/link'
 import {
   AlertCircle,
@@ -11,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
 
 type RegistrationSettings = {
   registration_open: boolean
@@ -82,9 +90,9 @@ function FieldLabel({
   )
 }
 
-function Input({
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement>) {
+function Input(
+  props: InputHTMLAttributes<HTMLInputElement>,
+) {
   return (
     <input
       {...props}
@@ -93,9 +101,9 @@ function Input({
   )
 }
 
-function Textarea({
-  ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function Textarea(
+  props: TextareaHTMLAttributes<HTMLTextAreaElement>,
+) {
   return (
     <textarea
       {...props}
@@ -135,63 +143,72 @@ export default function RegisterPage() {
     useState<File | null>(null)
 
   useEffect(() => {
-    loadRegistrationData()
+    void loadRegistrationData()
   }, [])
 
   async function loadRegistrationData() {
     setLoading(true)
     setErrorMessage('')
 
-    const settingsResult = await supabase
-      .from('registration_settings')
-      .select('*')
-      .limit(1)
-      .maybeSingle()
+    try {
+      const settingsResult = await supabase
+        .from('registration_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle()
 
-    if (settingsResult.error) {
-      console.error(settingsResult.error)
+      if (settingsResult.error) {
+        console.error(settingsResult.error)
 
-      setErrorMessage(
-        `تعذر تحميل إعدادات التسجيل: ${settingsResult.error.message}`,
+        setErrorMessage(
+          `تعذر تحميل إعدادات التسجيل: ${settingsResult.error.message}`,
+        )
+
+        return
+      }
+
+      if (!settingsResult.data) {
+        setErrorMessage(
+          'لم يتم العثور على إعدادات التسجيل.',
+        )
+
+        return
+      }
+
+      setSettings(
+        settingsResult.data as RegistrationSettings,
       )
 
-      setLoading(false)
-      return
-    }
+      const levelsResult = await supabase
+        .from('levels')
+        .select('id, name, sort_order')
+        .eq('is_active', true)
+        .order('sort_order', {
+          ascending: true,
+        })
 
-    if (!settingsResult.data) {
-      setErrorMessage(
-        'لم يتم العثور على إعدادات التسجيل.',
-      )
+      if (levelsResult.error) {
+        console.error(levelsResult.error)
 
-      setLoading(false)
-      return
-    }
+        setErrorMessage(
+          `تعذر تحميل المستويات: ${levelsResult.error.message}`,
+        )
 
-    setSettings(settingsResult.data)
+        return
+      }
 
-    const levelsResult = await supabase
-      .from('levels')
-      .select('id, name, sort_order')
-      .eq('is_active', true)
-      .order('sort_order', {
-        ascending: true,
-      })
-
-    if (levelsResult.error) {
-      console.error(levelsResult.error)
+      setLevels(levelsResult.data ?? [])
+    } catch (error) {
+      console.error(error)
 
       setErrorMessage(
-        `تعذر تحميل المستويات: ${levelsResult.error.message}`,
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء تحميل صفحة التسجيل.',
       )
-
+    } finally {
       setLoading(false)
-      return
     }
-
-    setLevels(levelsResult.data ?? [])
-
-    setLoading(false)
   }
 
   const paymentMethods = useMemo(() => {
@@ -242,7 +259,7 @@ export default function RegisterPage() {
     const extension =
       file.name.split('.').pop()?.toLowerCase() || 'jpg'
 
-    const filePath = `registration-proofs/${requestId}.${extension}`
+    const filePath = `${requestId}.${extension}`
 
     const uploadResult = await supabase.storage
       .from('registration-proofs')
@@ -272,55 +289,60 @@ export default function RegisterPage() {
       return 'التسجيل مغلق حاليًا.'
     }
 
-    if (settings.show_name && settings.required_name) {
-      if (!name.trim()) {
-        return 'يرجى إدخال الاسم.'
-      }
+    if (
+      settings.show_name &&
+      settings.required_name &&
+      !name.trim()
+    ) {
+      return 'يرجى إدخال الاسم.'
     }
 
     if (
       settings.show_personal_id &&
-      settings.required_personal_id
+      settings.required_personal_id &&
+      !personalId.trim()
     ) {
-      if (!personalId.trim()) {
-        return 'يرجى إدخال الرقم الشخصي.'
-      }
+      return 'يرجى إدخال الرقم الشخصي.'
     }
 
-    if (settings.show_phone && settings.required_phone) {
-      if (!phone.trim()) {
-        return 'يرجى إدخال رقم الاتصال.'
-      }
+    if (
+      settings.show_phone &&
+      settings.required_phone &&
+      !phone.trim()
+    ) {
+      return 'يرجى إدخال رقم الاتصال.'
     }
 
     if (
       settings.show_whatsapp &&
-      settings.required_whatsapp
+      settings.required_whatsapp &&
+      !whatsapp.trim()
     ) {
-      if (!whatsapp.trim()) {
-        return 'يرجى إدخال رقم الواتساب.'
-      }
+      return 'يرجى إدخال رقم الواتساب.'
     }
 
-    if (settings.show_level && settings.required_level) {
-      if (!levelId) {
-        return 'يرجى اختيار الصف / المستوى.'
-      }
+    if (
+      settings.show_level &&
+      settings.required_level &&
+      !levelId
+    ) {
+      return 'يرجى اختيار الصف / المستوى.'
     }
 
-    if (settings.show_notes && settings.required_notes) {
-      if (!notes.trim()) {
-        return 'يرجى إدخال الملاحظات.'
-      }
+    if (
+      settings.show_notes &&
+      settings.required_notes &&
+      !notes.trim()
+    ) {
+      return 'يرجى إدخال الملاحظات.'
     }
 
     if (
       settings.show_health_notes &&
-      settings.required_health_notes
+      settings.required_health_notes &&
+      !healthNotes.trim()
     ) {
-      if (!healthNotes.trim()) {
-        return 'يرجى تعبئة حقل الأمراض المزمنة.'
-      }
+      return 'يرجى تعبئة حقل الأمراض المزمنة.'
     }
 
     if (settings.payment_enabled) {
@@ -344,7 +366,7 @@ export default function RegisterPage() {
     return ''
   }
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     setErrorMessage('')
@@ -368,16 +390,17 @@ export default function RegisterPage() {
     setSubmitting(true)
 
     try {
-      const requestNumber = `REG-${new Date().getFullYear()}-${Date.now()
-        .toString()
-        .slice(-8)}`
+      const generatedRequestNumber =
+        `REG-${new Date().getFullYear()}-${Date.now()
+          .toString()
+          .slice(-8)}`
 
       const trackingToken = crypto.randomUUID()
 
       const insertResult = await supabase
         .from('registration_requests')
         .insert({
-          request_number: requestNumber,
+          request_number: generatedRequestNumber,
           tracking_token: trackingToken,
 
           name: settings.show_name
@@ -412,25 +435,21 @@ export default function RegisterPage() {
 
           processing_mode: 'review',
 
-          payment_method:
-            settings.payment_enabled
-              ? paymentMethod
-              : null,
+          payment_method: settings.payment_enabled
+            ? paymentMethod
+            : null,
 
-          payment_amount:
-            settings.payment_enabled
-              ? settings.payment_amount
-              : null,
+          payment_amount: settings.payment_enabled
+            ? settings.payment_amount
+            : null,
 
-          payment_reference:
-            settings.payment_enabled
-              ? paymentReference.trim() || null
-              : null,
+          payment_reference: settings.payment_enabled
+            ? paymentReference.trim() || null
+            : null,
 
-          payment_status:
-            settings.payment_enabled
-              ? 'pending'
-              : 'not_required',
+          payment_status: settings.payment_enabled
+            ? 'pending'
+            : 'not_required',
         })
         .select('id, request_number')
         .single()
@@ -636,7 +655,6 @@ export default function RegisterPage() {
               onSubmit={handleSubmit}
               className="mt-8 space-y-6"
             >
-              {/* بيانات الطالب */}
               <div className="space-y-5">
                 <div>
                   <h2 className="text-lg font-semibold">
@@ -775,7 +793,9 @@ export default function RegisterPage() {
                   <div>
                     <FieldLabel
                       label="الأمراض المزمنة"
-                      required={settings.required_health_notes}
+                      required={
+                        settings.required_health_notes
+                      }
                     />
 
                     <Textarea
@@ -784,13 +804,14 @@ export default function RegisterPage() {
                         setHealthNotes(event.target.value)
                       }
                       placeholder="اذكر أي أمراض مزمنة أو ملاحظات صحية..."
-                      required={settings.required_health_notes}
+                      required={
+                        settings.required_health_notes
+                      }
                     />
                   </div>
                 )}
               </div>
 
-              {/* الدفع */}
               {settings.payment_enabled && (
                 <div className="space-y-5 border-t pt-6">
                   <div>
@@ -857,7 +878,7 @@ export default function RegisterPage() {
                     </div>
                   </div>
 
-                  {paymentLinkEnabled &&
+                  {settings.payment_link_enabled &&
                     paymentMethod === 'payment_link' &&
                     settings.payment_link && (
                       <div className="rounded-xl border bg-muted/30 p-4">
