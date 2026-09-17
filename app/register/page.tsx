@@ -121,6 +121,10 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  // Popup التحقق من الرقم الشخصي
+  const [checkingPersonalId, setCheckingPersonalId] =
+    useState(false)
+
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [requestNumber, setRequestNumber] = useState('')
@@ -395,52 +399,54 @@ export default function RegisterPage() {
       /*
        * فحص الرقم الشخصي قبل إنشاء طلب التسجيل.
        *
-       * الفحص يتم عن طريق RPC حتى لا نعطي الصفحة
-       * العامة صلاحية قراءة جدول students مباشرة.
-       *
-       * يتم التحقق من وجود الطالب في السنة الدراسية الحالية فقط.
+       * يظهر Popup في منتصف الشاشة أثناء عملية الفحص.
        */
       if (
         settings.show_personal_id &&
         personalId.trim()
       ) {
-        const personalIdCheck =
-          await supabase.rpc(
-            'check_registration_personal_id',
-            {
-              p_personal_id:
-                personalId.trim(),
-            },
-          )
+        setCheckingPersonalId(true)
 
-        if (personalIdCheck.error) {
-          console.error(
-            'check_registration_personal_id RPC error:',
-            personalIdCheck.error,
-          )
+        try {
+          const personalIdCheck =
+            await supabase.rpc(
+              'check_registration_personal_id',
+              {
+                p_personal_id:
+                  personalId.trim(),
+              },
+            )
 
-          throw new Error(
-            `تعذر التحقق من الرقم الشخصي: ${personalIdCheck.error.message}`,
-          )
-        }
+          if (personalIdCheck.error) {
+            console.error(
+              'check_registration_personal_id RPC error:',
+              personalIdCheck.error,
+            )
 
-        const checkResult =
-          Array.isArray(personalIdCheck.data)
-            ? personalIdCheck.data[0]
-            : personalIdCheck.data
+            throw new Error(
+              `تعذر التحقق من الرقم الشخصي: ${personalIdCheck.error.message}`,
+            )
+          }
 
-        if (checkResult?.registered) {
-          const academicYearName =
-            checkResult.academic_year_name
+          const checkResult =
+            Array.isArray(personalIdCheck.data)
+              ? personalIdCheck.data[0]
+              : personalIdCheck.data
 
-          setErrorMessage(
-            academicYearName
-              ? `الطالب مسجل بالفعل لهذه السنة الدراسية: ${academicYearName}`
-              : 'الطالب مسجل بالفعل لهذه السنة الدراسية.',
-          )
+          if (checkResult?.registered) {
+            const academicYearName =
+              checkResult.academic_year_name
 
-          setSubmitting(false)
-          return
+            setErrorMessage(
+              academicYearName
+                ? `الطالب مسجل بالفعل لهذه السنة الدراسية: ${academicYearName}`
+                : 'الطالب مسجل بالفعل لهذه السنة الدراسية.',
+            )
+
+            return
+          }
+        } finally {
+          setCheckingPersonalId(false)
         }
       }
 
@@ -452,8 +458,7 @@ export default function RegisterPage() {
       const trackingToken = crypto.randomUUID()
 
       /*
-       * إنشاء الطلب عن طريق RPC
-       * بدل INSERT مباشر على registration_requests.
+       * إنشاء الطلب عن طريق RPC.
        */
       const rpcResult = await supabase.rpc(
         'create_registration_request',
@@ -633,6 +638,7 @@ export default function RegisterPage() {
           : 'حدث خطأ أثناء إرسال طلب التسجيل.',
       )
     } finally {
+      setCheckingPersonalId(false)
       setSubmitting(false)
     }
   }
@@ -711,6 +717,35 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10">
+      {/* =========================================================
+          Popup التحقق من الرقم الشخصي
+          ========================================================= */}
+      {checkingPersonalId && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 px-4 backdrop-blur-[2px]"
+          dir="rtl"
+        >
+          <div className="w-full max-w-sm rounded-2xl border bg-background p-7 text-center shadow-2xl">
+            <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-primary/10">
+              <Loader2 className="size-8 animate-spin text-primary" />
+            </div>
+
+            <h2 className="mt-5 text-xl font-bold">
+              جاري التحقق
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              جاري التحقق من الرقم الشخصي والتأكد من أن
+              الطالب غير مسجل لهذه السنة الدراسية.
+            </p>
+
+            <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-2xl">
         <div className="rounded-2xl border bg-background p-6 shadow-sm sm:p-8">
           <div>
