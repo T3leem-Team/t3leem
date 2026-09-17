@@ -392,6 +392,58 @@ export default function RegisterPage() {
     setSubmitting(true)
 
     try {
+      /*
+       * فحص الرقم الشخصي قبل إنشاء طلب التسجيل.
+       *
+       * الفحص يتم عن طريق RPC حتى لا نعطي الصفحة
+       * العامة صلاحية قراءة جدول students مباشرة.
+       *
+       * يتم التحقق من وجود الطالب في السنة الدراسية الحالية فقط.
+       */
+      if (
+        settings.show_personal_id &&
+        personalId.trim()
+      ) {
+        const personalIdCheck =
+          await supabase.rpc(
+            'check_registration_personal_id',
+            {
+              p_personal_id:
+                personalId.trim(),
+            },
+          )
+
+        if (personalIdCheck.error) {
+          console.error(
+            'check_registration_personal_id RPC error:',
+            personalIdCheck.error,
+          )
+
+          throw new Error(
+            `تعذر التحقق من الرقم الشخصي: ${personalIdCheck.error.message}`,
+          )
+        }
+
+        const checkResult =
+          Array.isArray(personalIdCheck.data)
+            ? personalIdCheck.data[0]
+            : personalIdCheck.data
+
+        if (checkResult?.registered) {
+          const academicYearName =
+            checkResult.academic_year_name
+
+          setErrorMessage(
+            academicYearName
+              ? `الطالب مسجل بالفعل لهذه السنة الدراسية: ${academicYearName}`
+              : 'الطالب مسجل بالفعل لهذه السنة الدراسية.',
+          )
+
+          setSubmitting(false)
+          return
+        }
+      }
+
       const generatedRequestNumber =
         `REG-${new Date().getFullYear()}-${Date.now()
           .toString()
@@ -518,12 +570,7 @@ export default function RegisterPage() {
           )
 
         /*
-         * تحديث payment_proof_url.
-         *
-         * هذا التحديث لن نستخدم فيه الجدول مباشرة
-         * من الصفحة العامة إذا كان RLS يمنعه.
-         *
-         * لذلك نستخدم RPC منفصل.
+         * تحديث payment_proof_url عن طريق RPC.
          */
         const proofResult =
           await supabase.rpc(
