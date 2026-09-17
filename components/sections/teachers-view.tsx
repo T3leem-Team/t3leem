@@ -1927,85 +1927,60 @@ export function TeachersView() {
     }
 
   const getAttendanceStats = (
-    studentId: string,
-    courseId: string,
-  ) => {
-    const course =
-      courses.find(
-        (item) =>
-          item.id === courseId,
+  studentId: string,
+  courseId: string,
+) => {
+  const courseDates = new Set(
+    attendanceRecords
+      .filter(
+        (record) =>
+          record.courseId === courseId,
       )
-
-    if (!course) {
-      return {
-        present: 0,
-        total: 0,
-        percentage: 0,
-      }
-    }
-
-    const dates = Array.from(
-      new Set(
-        attendanceRecords
-          .filter(
-            (record) =>
-              record.courseId ===
-                courseId &&
-              record.studentId ===
-                studentId &&
-              isDateWithinCourse(
-                record.attendanceDate,
-                course,
-              ),
-          )
-          .map(
-            (record) =>
-              record.attendanceDate,
-          ),
+      .map(
+        (record) =>
+          record.attendanceDate,
       ),
+  )
+
+  const studentRecords =
+    attendanceRecords.filter(
+      (record) =>
+        record.courseId === courseId &&
+        record.studentId === studentId,
     )
 
-    const records =
-      attendanceRecords.filter(
+  const attendedDates = new Set(
+    studentRecords
+      .filter((record) => {
+        const status = getStatusName(
+          attendanceStatuses,
+          record.statusId,
+        )
+
+        return (
+          status === 'حاضر' ||
+          status === 'متأخر' ||
+          status === 'مستأذن'
+        )
+      })
+      .map(
         (record) =>
-          record.courseId ===
-            courseId &&
-          record.studentId ===
-            studentId &&
-          dates.includes(
-            record.attendanceDate,
-          ),
-      )
+          record.attendanceDate,
+      ),
+  )
 
-    const present =
-      records.filter(
-        (record) => {
-          const status =
-            getStatusName(
-              attendanceStatuses,
-              record.statusId,
-            )
+  const total = courseDates.size
+  const present = attendedDates.size
 
-          return (
-            status === 'حاضر' ||
-            status === 'متأخر' ||
-            status === 'مستأذن'
-          )
-        },
-      ).length
-
-    const total =
-      dates.length
-
-    return {
-      present,
-      total,
-      percentage:
-        total > 0
-          ? (present / total) * 100
-          : 0,
-    }
+  return {
+    present,
+    total,
+    percentage:
+      total > 0
+        ? (present / total) * 100
+        : 0,
   }
+}
 
   /*
    * تواريخ الحضور السابقة.
@@ -2068,12 +2043,14 @@ export function TeachersView() {
   /*
    * حفظ الحالة + الملاحظة.
    */
-  const handleAttendanceClick =
+   const handleAttendanceClick =
     async (
       studentId: string,
       statusName: AttendanceStatusName,
       date: string,
     ) => {
+      if (saving) return
+  
       await updateAttendance(
         studentId,
         statusName,
