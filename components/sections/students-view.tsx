@@ -494,192 +494,261 @@ export function StudentsView() {
       Boolean
     ).length + 2
 
-  return (
-    <div className="space-y-6">
-      <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
-        {supabaseStatus}
-      </div>
+ return (
+  <div className="space-y-6">
+    <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+      {supabaseStatus}
+    </div>
 
-      <PageHeader
-        title="الطلاب"
-        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-        action={
-          <Button onClick={openAddStudent}>
-            <UserPlus className="size-4" />
-            إضافة طالب
-          </Button>
-        }
-      />
+    <PageHeader
+      title="الطلاب"
+      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+      action={
+        <Button onClick={openAddStudent}>
+          <UserPlus className="size-4" />
+          إضافة طالب
+        </Button>
+      }
+    />
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-            <input
-              value={search}
-              onChange={(e) =>
-                setSearch(e.target.value)
-              }
-              placeholder="بحث عام في جميع بيانات الطلاب..."
-              className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
-            />
-          </div>
+          <input
+            value={search}
+            onChange={(e) =>
+              setSearch(e.target.value)
+            }
+            placeholder="بحث عام في جميع بيانات الطلاب..."
+            className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
+          />
+        </div>
 
-          <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">
-                  إجمالي الطلاب:
-                </span>{' '}
-                <span className="font-semibold">
-                  {studentList.length}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-muted-foreground">
-                  النتائج الحالية:
-                </span>{' '}
-                <span className="font-semibold">
-                  {filteredStudents.length}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-muted-foreground">
-                  الرسوم السنوية:
-                </span>{' '}
-                <span className="font-semibold">
-                  {currentAnnualFee.toLocaleString(
-                    'ar-BH',
-                    {
-                      minimumFractionDigits: 3,
-                      maximumFractionDigits: 3,
-                    }
-                  )}{' '}
-                  د.ب
-                </span>
-              </div>
+        <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">
+                إجمالي الطلاب:
+              </span>{' '}
+              <span className="font-semibold">
+                {studentList.length}
+              </span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!selectedStudentId}
-                onClick={openEditStudent}
-              >
-                <Pencil className="size-4" />
-                تعديل
-              </Button>
+            <div>
+              <span className="text-muted-foreground">
+                النتائج الحالية:
+              </span>{' '}
+              <span className="font-semibold">
+                {filteredStudents.length}
+              </span>
+            </div>
 
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={!selectedStudentId}
-                onClick={async () => {
-                  const confirmed =
-                    window.confirm(
-                      '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
-                    )
-
-                  if (!confirmed) return
-
-                  const { error } =
-                    await supabase
-                      .from('students')
-                      .delete()
-                      .eq(
-                        'id',
-                        selectedStudentId
-                      )
-
-                  if (error) {
-                    setSupabaseStatus(
-                      `خطأ في حذف الطالب: ${error.message}`
-                    )
-                    return
+            <div>
+              <span className="text-muted-foreground">
+                الرسوم السنوية:
+              </span>{' '}
+              <span className="font-semibold">
+                {currentAnnualFee.toLocaleString(
+                  'ar-BH',
+                  {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
                   }
+                )}{' '}
+                د.ب
+              </span>
+            </div>
+          </div>
 
-                  setStudentList(
-                    (current) =>
-                      current.filter(
-                        (student) =>
-                          student.id !==
-                          selectedStudentId
-                      )
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!selectedStudentId}
+              onClick={openEditStudent}
+            >
+              <Pencil className="size-4" />
+              تعديل
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!selectedStudentId}
+              onClick={async () => {
+                if (!selectedStudentId) return
+
+                const selectedStudent =
+                  studentList.find(
+                    (student) =>
+                      student.id ===
+                      selectedStudentId
                   )
 
-                  setSelectedStudentId('')
+                if (!selectedStudent) return
 
-                  setSupabaseStatus(
-                    'تم حذف الطالب من Supabase ✅'
-                  )
-                }}
-              >
-                <X className="size-4" />
-                مسح
-              </Button>
+                const nextFeeExempt =
+                  !selectedStudent.feeExempt
 
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const menu =
-                    document.getElementById(
-                      'student-columns-menu'
+                const { error } =
+                  await supabase
+                    .from('students')
+                    .update({
+                      fee_exempt:
+                        nextFeeExempt,
+                    })
+                    .eq(
+                      'id',
+                      selectedStudentId
                     )
 
-                  menu?.classList.toggle(
-                    'hidden'
+                if (error) {
+                  setSupabaseStatus(
+                    `خطأ في تحديث حالة الإعفاء: ${error.message}`
                   )
-                }}
-              >
-                تخصيص الأعمدة
-              </Button>
-            </div>
-          </div>
+                  return
+                }
 
-          <div
-            id="student-columns-menu"
-            className="hidden rounded-md border bg-background p-3 shadow-sm"
-          >
-            <div className="mb-2 text-sm font-semibold">
-              تخصيص الأعمدة
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {studentColumns.map(
-                (column) => (
-                  <label
-                    key={column.key}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        visibleColumns[
-                          column.key
-                        ]
-                      }
-                      onChange={() =>
-                        toggleColumn(
-                          column.key
-                        )
-                      }
-                    />
-
-                    {column.label}
-                  </label>
+                setStudentList(
+                  (current) =>
+                    current.map(
+                      (student) =>
+                        student.id ===
+                        selectedStudentId
+                          ? {
+                              ...student,
+                              feeExempt:
+                                nextFeeExempt,
+                            }
+                          : student
+                    )
                 )
-              )}
-            </div>
 
-            <p className="mt-2 text-xs text-muted-foreground">
-              يجب إبقاء عمود واحد على الأقل ظاهرًا.
-            </p>
+                setSupabaseStatus(
+                  nextFeeExempt
+                    ? 'تم إعفاء الطالب من الرسوم ✅'
+                    : 'تم إلغاء إعفاء الطالب ✅'
+                )
+              }}
+            >
+              {studentList.find(
+                (student) =>
+                  student.id ===
+                  selectedStudentId
+              )?.feeExempt
+                ? 'إلغاء الإعفاء'
+                : 'إعفاء'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!selectedStudentId}
+              onClick={async () => {
+                const confirmed =
+                  window.confirm(
+                    '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
+                  )
+
+                if (!confirmed) return
+
+                const { error } =
+                  await supabase
+                    .from('students')
+                    .delete()
+                    .eq(
+                      'id',
+                      selectedStudentId
+                    )
+
+                if (error) {
+                  setSupabaseStatus(
+                    `خطأ في حذف الطالب: ${error.message}`
+                  )
+                  return
+                }
+
+                setStudentList(
+                  (current) =>
+                    current.filter(
+                      (student) =>
+                        student.id !==
+                        selectedStudentId
+                    )
+                )
+
+                setSelectedStudentId('')
+
+                setSupabaseStatus(
+                  'تم حذف الطالب من Supabase ✅'
+                )
+              }}
+            >
+              <X className="size-4" />
+              مسح
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const menu =
+                  document.getElementById(
+                    'student-columns-menu'
+                  )
+
+                menu?.classList.toggle(
+                  'hidden'
+                )
+              }}
+            >
+              تخصيص الأعمدة
+            </Button>
           </div>
+        </div>
+
+        <div
+          id="student-columns-menu"
+          className="hidden rounded-md border bg-background p-3 shadow-sm"
+        >
+          <div className="mb-2 text-sm font-semibold">
+            تخصيص الأعمدة
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {studentColumns.map(
+              (column) => (
+                <label
+                  key={column.key}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                >
+                  <input
+                    type="checkbox"
+                    checked={
+                      visibleColumns[
+                        column.key
+                      ]
+                    }
+                    onChange={() =>
+                      toggleColumn(
+                        column.key
+                      )
+                    }
+                  />
+
+                  {column.label}
+                </label>
+              )
+            )}
+          </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            يجب إبقاء عمود واحد على الأقل ظاهرًا.
+          </p>
+        </div>
 
           <div className="overflow-x-auto">
             <Table>
