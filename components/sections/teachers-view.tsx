@@ -84,76 +84,52 @@ const attendanceStatusNames: AttendanceStatusName[] = [
 
 const normalizeStatusName = (
   value: string | null | undefined,
-) => {
-  return (value ?? '')
+) =>
+  (value ?? '')
     .trim()
     .replace(/\s+/g, ' ')
-}
 
 const isAttendanceStatusName = (
   value: string | null | undefined,
-): value is AttendanceStatusName => {
-  const normalized =
-    normalizeStatusName(value)
-
-  return attendanceStatusNames.includes(
-    normalized as AttendanceStatusName,
+): value is AttendanceStatusName =>
+  attendanceStatusNames.includes(
+    normalizeStatusName(value) as AttendanceStatusName,
   )
-}
 
-const formatDateForDisplay = (
-  date: string,
-) => {
-  const parsed = new Date(
-    `${date}T00:00:00`,
-  )
+const formatDateForDisplay = (date: string) => {
+  const parsed = new Date(`${date}T00:00:00`)
 
   if (Number.isNaN(parsed.getTime())) {
     return date
   }
 
-  return new Intl.DateTimeFormat(
-    'ar-BH',
-    {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    },
-  ).format(parsed)
+  return new Intl.DateTimeFormat('ar-BH', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(parsed)
 }
 
-const formatShortDate = (
-  date: string,
-) => {
-  const parsed = new Date(
-    `${date}T00:00:00`,
-  )
+const formatShortDate = (date: string) => {
+  const parsed = new Date(`${date}T00:00:00`)
 
   if (Number.isNaN(parsed.getTime())) {
     return date
   }
 
-  return new Intl.DateTimeFormat(
-    'ar-BH',
-    {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    },
-  ).format(parsed)
+  return new Intl.DateTimeFormat('ar-BH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(parsed)
 }
 
 const todayString = () => {
   const now = new Date()
-
   const year = now.getFullYear()
-  const month = String(
-    now.getMonth() + 1,
-  ).padStart(2, '0')
-  const day = String(
-    now.getDate(),
-  ).padStart(2, '0')
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -162,32 +138,23 @@ const isDateWithinCourse = (
   date: string,
   course: Course,
 ) => {
-  if (
-    !course.startDate ||
-    !course.endDate
-  ) {
+  if (!course.startDate || !course.endDate) {
     return true
   }
 
-  return (
-    date >= course.startDate &&
-    date <= course.endDate
-  )
+  return date >= course.startDate && date <= course.endDate
 }
 
 const getStatusIdByName = (
   statuses: AttendanceStatus[],
   name: AttendanceStatusName,
 ) => {
-  const target =
-    normalizeStatusName(name)
+  const target = normalizeStatusName(name)
 
   return (
     statuses.find(
       (status) =>
-        normalizeStatusName(
-          status.name,
-        ) === target,
+        normalizeStatusName(status.name) === target,
     )?.id ?? null
   )
 }
@@ -204,50 +171,32 @@ const getStatusName = (
     (item) => item.id === statusId,
   )
 
-  const normalized =
-    normalizeStatusName(
-      status?.name,
-    )
+  const normalized = normalizeStatusName(status?.name)
 
-  if (
-    isAttendanceStatusName(
-      normalized,
-    )
-  ) {
-    return normalized
-  }
-
-  return 'لم يسجل'
+  return isAttendanceStatusName(normalized)
+    ? normalized
+    : 'لم يسجل'
 }
 
 const getAttendanceClass = (
-  currentStatus:
-    | AttendanceStatusName
-    | 'لم يسجل',
+  currentStatus: AttendanceStatusName | 'لم يسجل',
   buttonStatus: AttendanceStatusName,
 ) => {
-  const selected =
-    currentStatus === buttonStatus
+  const selected = currentStatus === buttonStatus
 
-  if (
-    buttonStatus === 'حاضر'
-  ) {
+  if (buttonStatus === 'حاضر') {
     return selected
       ? 'border-green-500 bg-green-50 text-green-700 shadow-sm'
       : 'border-green-200 bg-white text-green-700 hover:border-green-400 hover:bg-green-50'
   }
 
-  if (
-    buttonStatus === 'غائب'
-  ) {
+  if (buttonStatus === 'غائب') {
     return selected
       ? 'border-red-500 bg-red-50 text-red-700 shadow-sm'
       : 'border-red-200 bg-white text-red-700 hover:border-red-400 hover:bg-red-50'
   }
 
-  if (
-    buttonStatus === 'متأخر'
-  ) {
+  if (buttonStatus === 'متأخر') {
     return selected
       ? 'border-amber-500 bg-amber-50 text-amber-700 shadow-sm'
       : 'border-amber-200 bg-white text-amber-700 hover:border-amber-400 hover:bg-amber-50'
@@ -259,13 +208,9 @@ const getAttendanceClass = (
 }
 
 type AttendanceStatusButtonsProps = {
-  currentStatus:
-    | AttendanceStatusName
-    | 'لم يسجل'
+  currentStatus: AttendanceStatusName | 'لم يسجل'
   saving: boolean
-  onSelect: (
-    status: AttendanceStatusName,
-  ) => void
+  onSelect: (status: AttendanceStatusName) => void
 }
 
 function AttendanceStatusButtons({
@@ -275,141 +220,82 @@ function AttendanceStatusButtons({
 }: AttendanceStatusButtonsProps) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {attendanceStatusNames.map(
-        (status) => {
-          const selected =
-            currentStatus === status
+      {attendanceStatusNames.map((status) => {
+        const selected = currentStatus === status
 
-          return (
-            <button
-              key={status}
-              type="button"
-              disabled={saving}
-              onClick={() =>
-                onSelect(status)
-              }
-              className={`inline-flex min-h-9 cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
-                currentStatus,
-                status,
-              )}`}
-            >
-              {selected && (
-                <Check className="ml-1 size-3.5" />
-              )}
-
-              {status}
-            </button>
-          )
-        },
-      )}
+        return (
+          <button
+            key={status}
+            type="button"
+            disabled={saving}
+            onClick={() => onSelect(status)}
+            className={`inline-flex min-h-9 cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
+              currentStatus,
+              status,
+            )}`}
+          >
+            {selected && (
+              <Check className="ml-1 size-3.5" />
+            )}
+            {status}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
 export function TeachersView() {
-  const [teachers, setTeachers] =
-    useState<Teacher[]>([])
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
+  const [students, setStudents] = useState<Student[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [attendanceStatuses, setAttendanceStatuses] = useState<
+    AttendanceStatus[]
+  >([])
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    AttendanceRecord[]
+  >([])
 
-  const [courses, setCourses] =
-    useState<Course[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
+  const [search, setSearch] = useState('')
 
-  const [students, setStudents] =
-    useState<Student[]>([])
-
-  const [assignments, setAssignments] =
-    useState<Assignment[]>([])
-
-  const [
-    attendanceStatuses,
-    setAttendanceStatuses,
-  ] = useState<AttendanceStatus[]>([])
-
-  const [
-    attendanceRecords,
-    setAttendanceRecords,
-  ] = useState<AttendanceRecord[]>([])
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [saving, setSaving] =
-    useState(false)
-
-  const [statusMessage, setStatusMessage] =
-    useState('')
-
-  const [search, setSearch] =
-    useState('')
-
-  const [
-    selectedCourseId,
-    setSelectedCourseId,
-  ] = useState<string | null>(null)
-
-  const [
-    selectedTeacherId,
-    setSelectedTeacherId,
-  ] = useState<string | null>(null)
-
-  const [
-    activePanel,
-    setActivePanel,
-  ] = useState<
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
+    null,
+  )
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
+    null,
+  )
+  const [activePanel, setActivePanel] = useState<
     'students' | 'addStudents' | 'attendance'
   >('students')
 
-  const [
-    selectedGrade,
-    setSelectedGrade,
-  ] = useState('')
+  const [selectedGrade, setSelectedGrade] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
 
-  const [
-    selectedStudentIds,
-    setSelectedStudentIds,
-  ] = useState<string[]>([])
+  const [isTransferOpen, setIsTransferOpen] = useState(false)
+  const [transferStudentId, setTransferStudentId] = useState<string | null>(
+    null,
+  )
+  const [transferTeacherId, setTransferTeacherId] = useState('')
 
-  const [
-    isTransferOpen,
-    setIsTransferOpen,
-  ] = useState(false)
+  const [selectedAttendanceDate, setSelectedAttendanceDate] = useState<
+    string | null
+  >(null)
 
-  const [
-    transferStudentId,
-    setTransferStudentId,
-  ] = useState<string | null>(null)
+  const [attendanceNotes, setAttendanceNotes] =
+    useState<AttendanceNotes>({})
 
-  const [
-    transferTeacherId,
-    setTransferTeacherId,
-  ] = useState('')
-
-  const [
-    selectedAttendanceDate,
-    setSelectedAttendanceDate,
-  ] = useState<string | null>(null)
-
-  const [
-    attendanceNotes,
-    setAttendanceNotes,
-  ] = useState<AttendanceNotes>({})
-
-  const [
-    courseTeacherIds,
-    setCourseTeacherIds,
-  ] = useState<
+  const [courseTeacherIds, setCourseTeacherIds] = useState<
     Record<string, string[]>
   >({})
 
-  /*
-   * تحميل كل بيانات الصفحة من Supabase.
-   */
   const loadData = async () => {
     setLoading(true)
     setStatusMessage('')
 
-    /*
-     * السنة الدراسية الحالية.
-     */
     const {
       data: academicYear,
       error: academicYearError,
@@ -431,16 +317,11 @@ export function TeachersView() {
     }
 
     if (!academicYear) {
-      setStatusMessage(
-        'لا توجد سنة دراسية حالية مفعلة.',
-      )
+      setStatusMessage('لا توجد سنة دراسية حالية مفعلة.')
       setLoading(false)
       return
     }
 
-    /*
-     * الدورات التابعة للسنة الحالية.
-     */
     const {
       data: courseRows,
       error: coursesError,
@@ -449,10 +330,7 @@ export function TeachersView() {
       .select(
         'id, name, start_date, end_date, days, created_at',
       )
-      .eq(
-        'academic_year_id',
-        academicYear.id,
-      )
+      .eq('academic_year_id', academicYear.id)
       .order('created_at', {
         ascending: true,
       })
@@ -465,29 +343,17 @@ export function TeachersView() {
       return
     }
 
-    const mappedCourses: Course[] = (
-      courseRows ?? []
-    ).map((course) => ({
+    const mappedCourses: Course[] = (courseRows ?? []).map((course) => ({
       id: course.id,
       name: course.name,
-      startDate:
-        course.start_date ?? '',
-      endDate:
-        course.end_date ?? '',
-      days: Array.isArray(course.days)
-        ? course.days
-        : [],
+      startDate: course.start_date ?? '',
+      endDate: course.end_date ?? '',
+      days: Array.isArray(course.days) ? course.days : [],
     }))
 
     setCourses(mappedCourses)
 
-    /*
-     * المعلمون المرتبطون بالدورات الحالية.
-     */
-    const courseIds =
-      mappedCourses.map(
-        (course) => course.id,
-      )
+    const courseIds = mappedCourses.map((course) => course.id)
 
     let courseTeacherRows: {
       id: string
@@ -496,18 +362,10 @@ export function TeachersView() {
     }[] = []
 
     if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('course_teachers')
-        .select(
-          'id, course_id, teacher_id',
-        )
-        .in(
-          'course_id',
-          courseIds,
-        )
+        .select('id, course_id, teacher_id')
+        .in('course_id', courseIds)
 
       if (error) {
         setStatusMessage(
@@ -517,23 +375,15 @@ export function TeachersView() {
         return
       }
 
-      courseTeacherRows =
-        data ?? []
+      courseTeacherRows = data ?? []
     }
 
-    const teacherIds =
-      Array.from(
-        new Set(
-          courseTeacherRows.map(
-            (item) =>
-              item.teacher_id,
-          ),
-        ),
-      )
+    const teacherIds = Array.from(
+      new Set(
+        courseTeacherRows.map((item) => item.teacher_id),
+      ),
+    )
 
-    /*
-     * بيانات المعلمين.
-     */
     let teacherRows: {
       id: string
       name: string
@@ -541,14 +391,9 @@ export function TeachersView() {
     }[] = []
 
     if (teacherIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('teachers')
-        .select(
-          'id, name, is_active',
-        )
+        .select('id, name, is_active')
         .in('id', teacherIds)
         .eq('is_active', true)
         .order('name', {
@@ -566,28 +411,16 @@ export function TeachersView() {
       teacherRows = data ?? []
     }
 
-    const mappedTeachers: Teacher[] =
-      teacherRows
-        .map((teacher) => ({
-          id: teacher.id,
-          name: teacher.name,
-          isActive: Boolean(
-            teacher.is_active,
-          ),
-        }))
-        .sort((a, b) =>
-          a.name.localeCompare(
-            b.name,
-            'ar',
-          ),
-        )
+    const mappedTeachers: Teacher[] = teacherRows
+      .map((teacher) => ({
+        id: teacher.id,
+        name: teacher.name,
+        isActive: Boolean(teacher.is_active),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ar'))
 
     setTeachers(mappedTeachers)
 
-    /*
-     * الطلاب المسجلون في السنة الحالية
-     * مع المستوى الأكاديمي.
-     */
     const {
       data: enrollmentRows,
       error: enrollmentsError,
@@ -607,10 +440,7 @@ export function TeachersView() {
           )
         `,
       )
-      .eq(
-        'academic_year_id',
-        academicYear.id,
-      )
+      .eq('academic_year_id', academicYear.id)
       .eq('status', 'نشط')
 
     if (enrollmentsError) {
@@ -621,15 +451,13 @@ export function TeachersView() {
       return
     }
 
-    const studentIds =
-      Array.from(
-        new Set(
-          (enrollmentRows ?? []).map(
-            (row) =>
-              row.student_id,
-          ),
+    const studentIds = Array.from(
+      new Set(
+        (enrollmentRows ?? []).map(
+          (row) => row.student_id,
         ),
-      )
+      ),
+    )
 
     let studentRows: {
       id: string
@@ -641,18 +469,12 @@ export function TeachersView() {
     }[] = []
 
     if (studentIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('students')
         .select(
           'id, student_id, name, personal_id, phone, status',
         )
-        .in(
-          'id',
-          studentIds,
-        )
+        .in('id', studentIds)
 
       if (error) {
         setStatusMessage(
@@ -665,84 +487,54 @@ export function TeachersView() {
       studentRows = data ?? []
     }
 
-    const studentMap =
-      new Map(
-        studentRows.map(
-          (student) => [
-            student.id,
-            student,
-          ],
-        ),
-      )
-
-    const mappedStudents: Student[] =
-      (enrollmentRows ?? [])
-        .map((enrollment) => {
-          const student =
-            studentMap.get(
-              enrollment.student_id,
-            )
-
-          if (!student) {
-            return null
-          }
-
-          const levelData =
-            Array.isArray(
-              enrollment.levels,
-            )
-              ? enrollment.levels[0]
-              : enrollment.levels
-
-          return {
-            id: student.id,
-            studentId:
-              student.student_id ?? '',
-            name: student.name,
-            personalId:
-              student.personal_id ?? '',
-            phone:
-              student.phone ?? '',
-            levelId:
-              enrollment.level_id,
-            levelName:
-              levelData?.name ?? '—',
-            enrollmentId:
-              enrollment.id,
-          }
-        })
-        .filter(
-          (
-            student,
-          ): student is Student =>
-            student !== null,
-        )
-
-    setStudents(
-      mappedStudents,
+    const studentMap = new Map(
+      studentRows.map((student) => [
+        student.id,
+        student,
+      ]),
     )
 
-    /*
-     * توزيع الطلاب على المعلمين.
-     */
-    let assignmentRows: Assignment[] =
-      []
+    const mappedStudents: Student[] = (enrollmentRows ?? [])
+      .map((enrollment) => {
+        const student = studentMap.get(
+          enrollment.student_id,
+        )
+
+        if (!student) {
+          return null
+        }
+
+        const levelData = Array.isArray(enrollment.levels)
+          ? enrollment.levels[0]
+          : enrollment.levels
+
+        return {
+          id: student.id,
+          studentId: student.student_id ?? '',
+          name: student.name,
+          personalId: student.personal_id ?? '',
+          phone: student.phone ?? '',
+          levelId: enrollment.level_id,
+          levelName: levelData?.name ?? '—',
+          enrollmentId: enrollment.id,
+        }
+      })
+      .filter(
+        (student): student is Student =>
+          student !== null,
+      )
+
+    setStudents(mappedStudents)
+
+    let assignmentRows: Assignment[] = []
 
     if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from(
-          'teacher_student_assignments',
-        )
+      const { data, error } = await supabase
+        .from('teacher_student_assignments')
         .select(
           'id, course_id, teacher_id, student_id',
         )
-        .in(
-          'course_id',
-          courseIds,
-        )
+        .in('course_id', courseIds)
 
       if (error) {
         setStatusMessage(
@@ -752,61 +544,30 @@ export function TeachersView() {
         return
       }
 
-      assignmentRows = (
-        data ?? []
-      ).map((row) => ({
+      assignmentRows = (data ?? []).map((row) => ({
         id: row.id,
-        courseId:
-          row.course_id,
-        teacherId:
-          row.teacher_id,
-        studentId:
-          row.student_id,
+        courseId: row.course_id,
+        teacherId: row.teacher_id,
+        studentId: row.student_id,
       }))
     }
 
-    setAssignments(
-      assignmentRows,
-    )
+    setAssignments(assignmentRows)
 
-    /*
-     * حفظ ارتباطات المعلمين بالدورات
-     * من نفس الاستعلام الأول.
-     *
-     * هذا يقلل استعلامًا إضافيًا.
-     */
-    const teacherMap: Record<
-      string,
-      string[]
-    > = {}
+    const teacherMap: Record<string, string[]> = {}
 
     for (const row of courseTeacherRows) {
-      if (
-        !teacherMap[row.course_id]
-      ) {
-        teacherMap[row.course_id] =
-          []
-      }
-
-      teacherMap[
-        row.course_id
-      ].push(row.teacher_id)
+      teacherMap[row.course_id] ??= []
+      teacherMap[row.course_id].push(row.teacher_id)
     }
 
-    setCourseTeacherIds(
-      teacherMap,
-    )
+    setCourseTeacherIds(teacherMap)
 
-    /*
-     * حالات الحضور.
-     */
     const {
       data: statusRows,
       error: statusesError,
     } = await supabase
-      .from(
-        'attendance_statuses',
-      )
+      .from('attendance_statuses')
       .select(
         'id, name, is_active, sort_order',
       )
@@ -823,48 +584,27 @@ export function TeachersView() {
       return
     }
 
-    const mappedStatuses: AttendanceStatus[] =
-      (statusRows ?? []).map(
-        (status) => ({
-          id: status.id,
-          name:
-            normalizeStatusName(
-              status.name,
-            ),
-          isActive:
-            Boolean(
-              status.is_active,
-            ),
-          sortOrder:
-            status.sort_order ?? 0,
-        }),
-      )
+    const mappedStatuses: AttendanceStatus[] = (
+      statusRows ?? []
+    ).map((status) => ({
+      id: status.id,
+      name: normalizeStatusName(status.name),
+      isActive: Boolean(status.is_active),
+      sortOrder: status.sort_order ?? 0,
+    }))
 
-    setAttendanceStatuses(
-      mappedStatuses,
-    )
+    setAttendanceStatuses(mappedStatuses)
 
-    /*
-     * إذا لم توجد حالات حضور في قاعدة البيانات،
-     * نوضح المشكلة بدل أن تبدو الأزرار وكأنها لا تعمل.
-     */
-    if (
-      mappedStatuses.length === 0
-    ) {
+    if (mappedStatuses.length === 0) {
       setStatusMessage(
         'لا توجد حالات حضور مفعلة في attendance_statuses. أضف: حاضر، غائب، متأخر، مستأذن.',
       )
     }
 
-    /*
-     * سجل الحضور للدورات الحالية.
-     */
     let attendanceRows: {
       id: string
       student_id: string
-      enrollment_id:
-        | string
-        | null
+      enrollment_id: string | null
       attendance_date: string
       status_id: string
       note: string | null
@@ -872,18 +612,12 @@ export function TeachersView() {
     }[] = []
 
     if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('attendance')
         .select(
           'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
         )
-        .in(
-          'course_id',
-          courseIds,
-        )
+        .in('course_id', courseIds)
 
       if (error) {
         setStatusMessage(
@@ -893,40 +627,23 @@ export function TeachersView() {
         return
       }
 
-      attendanceRows =
-        data ?? []
+      attendanceRows = data ?? []
     }
 
     setAttendanceRecords(
-      attendanceRows.map(
-        (record) => ({
-          id: record.id,
-          studentId:
-            record.student_id,
-          enrollmentId:
-            record.enrollment_id,
-          courseId:
-            record.course_id,
-          attendanceDate:
-            record.attendance_date,
-          statusId:
-            record.status_id,
-          note:
-            record.note ?? '',
-        }),
-      ),
+      attendanceRows.map((record) => ({
+        id: record.id,
+        studentId: record.student_id,
+        enrollmentId: record.enrollment_id,
+        courseId: record.course_id,
+        attendanceDate: record.attendance_date,
+        statusId: record.status_id,
+        note: record.note ?? '',
+      })),
     )
 
-    /*
-     * اختيار أول دورة محفوظة.
-     */
-    if (
-      mappedCourses.length > 0 &&
-      !selectedCourseId
-    ) {
-      setSelectedCourseId(
-        mappedCourses[0].id,
-      )
+    if (mappedCourses.length > 0 && !selectedCourseId) {
+      setSelectedCourseId(mappedCourses[0].id)
     }
 
     setLoading(false)
@@ -940,280 +657,170 @@ export function TeachersView() {
 
   const currentCourse =
     courses.find(
-      (course) =>
-        course.id ===
-        selectedCourseId,
+      (course) => course.id === selectedCourseId,
     ) ??
     courses[0] ??
     null
 
-  const currentCourseTeacherIds =
-    currentCourse
-      ? new Set(
-          assignments
-            .filter(
-              (assignment) =>
-                assignment.courseId ===
-                currentCourse.id,
-            )
-            .map(
-              (assignment) =>
-                assignment.teacherId,
-            ),
-        )
-      : new Set<string>()
-
-  /*
-   * المعلمون التشغيليون للدورة.
-   */
   const actualCurrentCourseTeacherIds =
     currentCourse
       ? new Set(
-          courseTeacherIds[
-            currentCourse.id
-          ] ?? [],
+          courseTeacherIds[currentCourse.id] ?? [],
         )
       : new Set<string>()
 
-  const operationalTeachers =
-    teachers.filter((teacher) =>
-      actualCurrentCourseTeacherIds.has(
-        teacher.id,
-      ),
+  const operationalTeachers = teachers.filter((teacher) =>
+    actualCurrentCourseTeacherIds.has(teacher.id),
+  )
+
+  const filteredTeachers = useMemo(() => {
+    const query = search.trim().toLowerCase()
+
+    if (!query) {
+      return operationalTeachers
+    }
+
+    return operationalTeachers.filter(
+      (teacher) =>
+        teacher.name.toLowerCase().includes(query) ||
+        teacher.id.toLowerCase().includes(query),
     )
-
-  const filteredTeachers =
-    useMemo(() => {
-      const query =
-        search.trim().toLowerCase()
-
-      if (!query) {
-        return operationalTeachers
-      }
-
-      return operationalTeachers.filter(
-        (teacher) =>
-          teacher.name
-            .toLowerCase()
-            .includes(query) ||
-          teacher.id
-            .toLowerCase()
-            .includes(query),
-      )
-    }, [
-      search,
-      operationalTeachers,
-    ])
+  }, [search, operationalTeachers])
 
   const selectedTeacher =
     operationalTeachers.find(
-      (teacher) =>
-        teacher.id ===
-        selectedTeacherId,
+      (teacher) => teacher.id === selectedTeacherId,
     ) ?? null
 
   const assignedStudentIds =
-    selectedTeacherId &&
-    currentCourse
+    selectedTeacherId && currentCourse
       ? assignments
           .filter(
             (assignment) =>
-              assignment.courseId ===
-                currentCourse.id &&
-              assignment.teacherId ===
-                selectedTeacherId,
+              assignment.courseId === currentCourse.id &&
+              assignment.teacherId === selectedTeacherId,
           )
-          .map(
-            (assignment) =>
-              assignment.studentId,
-          )
+          .map((assignment) => assignment.studentId)
       : []
 
-  const assignedStudents =
-    students.filter((student) =>
-      assignedStudentIds.includes(
-        student.id,
-      ),
-    )
+  const assignedStudents = students.filter((student) =>
+    assignedStudentIds.includes(student.id),
+  )
 
-  const selectedGradeNames =
-    Array.from(
-      new Set(
-        assignedStudents.map(
-          (student) =>
-            student.levelName,
-        ),
-      ),
-    )
+  const availableGrades = Array.from(
+    new Set(
+      students.map((student) => student.levelName),
+    ),
+  ).sort((a, b) => a.localeCompare(b, 'ar'))
 
-  const availableGrades =
-    Array.from(
-      new Set(
-        students.map(
-          (student) =>
-            student.levelName,
-        ),
-      ),
-    ).sort((a, b) =>
-      a.localeCompare(
-        b,
-        'ar',
-      ),
-    )
+  const availableStudents = useMemo(() => {
+    if (!selectedGrade || !currentCourse) {
+      return []
+    }
 
-  /*
-   * الطلاب المتاحون للإضافة.
-   */
-  const availableStudents =
-    useMemo(() => {
-      if (
-        !selectedGrade ||
-        !currentCourse
-      ) {
-        return []
+    return students.filter((student) => {
+      if (student.levelName !== selectedGrade) {
+        return false
       }
 
-      return students.filter(
-        (student) => {
-          if (
-            student.levelName !==
-            selectedGrade
-          ) {
-            return false
-          }
+      const assignedToAnotherTeacher =
+        assignments.some(
+          (assignment) =>
+            assignment.courseId === currentCourse.id &&
+            assignment.studentId === student.id &&
+            assignment.teacherId !== selectedTeacherId,
+        )
 
-          const assignedToAnotherTeacher =
-            assignments.some(
-              (assignment) =>
-                assignment.courseId ===
-                  currentCourse.id &&
-                assignment.studentId ===
-                  student.id &&
-                assignment.teacherId !==
-                  selectedTeacherId,
-            )
+      const assignedToCurrentTeacher =
+        assignments.some(
+          (assignment) =>
+            assignment.courseId === currentCourse.id &&
+            assignment.studentId === student.id &&
+            assignment.teacherId === selectedTeacherId,
+        )
 
-          const assignedToCurrentTeacher =
-            assignments.some(
-              (assignment) =>
-                assignment.courseId ===
-                  currentCourse.id &&
-                assignment.studentId ===
-                  student.id &&
-                assignment.teacherId ===
-                  selectedTeacherId,
-            )
-
-          return (
-            !assignedToAnotherTeacher &&
-            !assignedToCurrentTeacher
-          )
-        },
+      return (
+        !assignedToAnotherTeacher &&
+        !assignedToCurrentTeacher
       )
-    }, [
-      selectedGrade,
-      currentCourse,
-      students,
-      assignments,
-      selectedTeacherId,
-    ])
+    })
+  }, [
+    selectedGrade,
+    currentCourse,
+    students,
+    assignments,
+    selectedTeacherId,
+  ])
 
-  /*
-   * الطلاب المسندون إلى معلم آخر.
-   */
-  const unavailableStudents =
-    useMemo(() => {
-      if (
-        !selectedGrade ||
-        !currentCourse
-      ) {
-        return []
-      }
+  const unavailableStudents = useMemo(() => {
+    if (!selectedGrade || !currentCourse) {
+      return []
+    }
 
-      return students
-        .filter(
-          (student) =>
-            student.levelName ===
-            selectedGrade,
+    return students
+      .filter(
+        (student) =>
+          student.levelName === selectedGrade,
+      )
+      .map((student) => {
+        const assignment = assignments.find(
+          (item) =>
+            item.courseId === currentCourse.id &&
+            item.studentId === student.id &&
+            item.teacherId !== selectedTeacherId,
         )
-        .map((student) => {
-          const assignment =
-            assignments.find(
-              (item) =>
-                item.courseId ===
-                  currentCourse.id &&
-                item.studentId ===
-                  student.id &&
-                item.teacherId !==
-                  selectedTeacherId,
-            )
 
-          if (!assignment) {
-            return null
-          }
+        if (!assignment) {
+          return null
+        }
 
-          const teacher =
-            operationalTeachers.find(
-              (item) =>
-                item.id ===
-                assignment.teacherId,
-            )
-
-          return {
-            student,
-            teacherName:
-              teacher?.name ??
-              'معلم آخر',
-          }
-        })
-        .filter(
-          (
-            item,
-          ): item is {
-            student: Student
-            teacherName: string
-          } => item !== null,
+        const teacher = operationalTeachers.find(
+          (item) => item.id === assignment.teacherId,
         )
-    }, [
-      selectedGrade,
-      currentCourse,
-      students,
-      assignments,
-      selectedTeacherId,
-      operationalTeachers,
-    ])
 
-  const getStudentCount = (
-    teacherId: string,
-  ) => {
+        return {
+          student,
+          teacherName: teacher?.name ?? 'معلم آخر',
+        }
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          student: Student
+          teacherName: string
+        } => item !== null,
+      )
+  }, [
+    selectedGrade,
+    currentCourse,
+    students,
+    assignments,
+    selectedTeacherId,
+    operationalTeachers,
+  ])
+
+  const getStudentCount = (teacherId: string) => {
     if (!currentCourse) {
       return 0
     }
 
     return assignments.filter(
       (assignment) =>
-        assignment.courseId ===
-          currentCourse.id &&
-        assignment.teacherId ===
-          teacherId,
+        assignment.courseId === currentCourse.id &&
+        assignment.teacherId === teacherId,
     ).length
   }
 
-  const openTeacher = (
-    teacherId: string,
-  ) => {
-    setSelectedTeacherId(
-      teacherId,
-    )
+  const openTeacher = (teacherId: string) => {
+    setSelectedTeacherId(teacherId)
     setActivePanel('students')
     setSelectedGrade('')
     setSelectedStudentIds([])
     setIsTransferOpen(false)
     setTransferStudentId(null)
     setTransferTeacherId('')
-    setSelectedAttendanceDate(
-      null,
-    )
+    setSelectedAttendanceDate(null)
   }
 
   const closeTeacher = () => {
@@ -1224,72 +831,45 @@ export function TeachersView() {
     setIsTransferOpen(false)
     setTransferStudentId(null)
     setTransferTeacherId('')
-    setSelectedAttendanceDate(
-      null,
-    )
+    setSelectedAttendanceDate(null)
   }
 
   const openAddStudents = () => {
     setSelectedGrade('')
     setSelectedStudentIds([])
-    setActivePanel(
-      'addStudents',
+    setActivePanel('addStudents')
+  }
+
+  const toggleStudent = (studentId: string) => {
+    setSelectedStudentIds((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId],
     )
   }
 
-  const toggleStudent = (
-    studentId: string,
-  ) => {
-    setSelectedStudentIds(
-      (current) =>
-        current.includes(studentId)
-          ? current.filter(
-              (id) =>
-                id !== studentId,
-            )
-          : [
-              ...current,
-              studentId,
-            ],
-    )
-  }
-
-  /*
-   * إضافة الطلاب إلى المعلم.
-   */
   const saveStudents = async () => {
     if (
       !selectedTeacherId ||
       !currentCourse ||
-      selectedStudentIds.length ===
-        0
+      selectedStudentIds.length === 0
     ) {
       return
     }
 
     setSaving(true)
-    setStatusMessage(
-      'جاري التحقق من الطلاب...',
-    )
+    setStatusMessage('جاري التحقق من الطلاب...')
 
     const {
       data: existingRows,
       error: existingError,
     } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
+      .from('teacher_student_assignments')
       .select(
         'id, course_id, teacher_id, student_id',
       )
-      .eq(
-        'course_id',
-        currentCourse.id,
-      )
-      .in(
-        'student_id',
-        selectedStudentIds,
-      )
+      .eq('course_id', currentCourse.id)
+      .in('student_id', selectedStudentIds)
 
     if (existingError) {
       setStatusMessage(
@@ -1299,48 +879,35 @@ export function TeachersView() {
       return
     }
 
-    const existingAssignments: Assignment[] =
-      (
-        existingRows ?? []
-      ).map((row) => ({
-        id: row.id,
-        courseId:
-          row.course_id,
-        teacherId:
-          row.teacher_id,
-        studentId:
-          row.student_id,
-      }))
+    const existingAssignments: Assignment[] = (
+      existingRows ?? []
+    ).map((row) => ({
+      id: row.id,
+      courseId: row.course_id,
+      teacherId: row.teacher_id,
+      studentId: row.student_id,
+    }))
 
     const alreadyWithCurrentTeacher =
       existingAssignments
         .filter(
           (assignment) =>
-            assignment.teacherId ===
-            selectedTeacherId,
+            assignment.teacherId === selectedTeacherId,
         )
-        .map(
-          (assignment) =>
-            assignment.studentId,
-        )
+        .map((assignment) => assignment.studentId)
 
     const assignedToAnotherTeacher =
       existingAssignments.filter(
         (assignment) =>
-          assignment.teacherId !==
-          selectedTeacherId,
+          assignment.teacherId !== selectedTeacherId,
       )
 
-    if (
-      assignedToAnotherTeacher.length >
-      0
-    ) {
+    if (assignedToAnotherTeacher.length > 0) {
       const anotherTeacher =
         operationalTeachers.find(
           (teacher) =>
             teacher.id ===
-            assignedToAnotherTeacher[0]
-              .teacherId,
+            assignedToAnotherTeacher[0].teacherId,
         )
 
       setStatusMessage(
@@ -1350,17 +917,12 @@ export function TeachersView() {
       return
     }
 
-    const studentsToInsert =
-      selectedStudentIds.filter(
-        (studentId) =>
-          !alreadyWithCurrentTeacher.includes(
-            studentId,
-          ),
-      )
+    const studentsToInsert = selectedStudentIds.filter(
+      (studentId) =>
+        !alreadyWithCurrentTeacher.includes(studentId),
+    )
 
-    if (
-      studentsToInsert.length === 0
-    ) {
+    if (studentsToInsert.length === 0) {
       setSelectedStudentIds([])
       setSelectedGrade('')
       setActivePanel('students')
@@ -1371,25 +933,14 @@ export function TeachersView() {
       return
     }
 
-    const rows =
-      studentsToInsert.map(
-        (studentId) => ({
-          course_id:
-            currentCourse.id,
-          teacher_id:
-            selectedTeacherId,
-          student_id:
-            studentId,
-        }),
-      )
+    const rows = studentsToInsert.map((studentId) => ({
+      course_id: currentCourse.id,
+      teacher_id: selectedTeacherId,
+      student_id: studentId,
+    }))
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
+    const { data, error } = await supabase
+      .from('teacher_student_assignments')
       .insert(rows)
       .select(
         'id, course_id, teacher_id, student_id',
@@ -1403,97 +954,68 @@ export function TeachersView() {
       return
     }
 
-    const newAssignments: Assignment[] =
-      (data ?? []).map(
-        (row) => ({
-          id: row.id,
-          courseId:
-            row.course_id,
-          teacherId:
-            row.teacher_id,
-          studentId:
-            row.student_id,
-        }),
-      )
-
-    setAssignments(
-      (current) => [
-        ...current,
-        ...newAssignments,
-      ],
+    const newAssignments: Assignment[] = (data ?? []).map(
+      (row) => ({
+        id: row.id,
+        courseId: row.course_id,
+        teacherId: row.teacher_id,
+        studentId: row.student_id,
+      }),
     )
+
+    setAssignments((current) => [
+      ...current,
+      ...newAssignments,
+    ])
 
     setSelectedStudentIds([])
     setSelectedGrade('')
     setActivePanel('students')
-    setStatusMessage(
-      'تمت إضافة الطلاب بنجاح ✅',
-    )
+    setStatusMessage('تمت إضافة الطلاب بنجاح ✅')
     setSaving(false)
   }
 
-  const openTransfer = (
-    studentId: string,
-  ) => {
-    setTransferStudentId(
-      studentId,
-    )
+  const openTransfer = (studentId: string) => {
+    setTransferStudentId(studentId)
     setTransferTeacherId('')
     setIsTransferOpen(true)
   }
 
-  /*
-   * نقل الطالب.
-   */
   const saveTransfer = async () => {
     if (
       !selectedTeacherId ||
       !currentCourse ||
       !transferStudentId ||
       !transferTeacherId ||
-      selectedTeacherId ===
-        transferTeacherId
+      selectedTeacherId === transferTeacherId
     ) {
       return
     }
 
-    const assignment =
-      assignments.find(
-        (item) =>
-          item.courseId ===
-            currentCourse.id &&
-          item.teacherId ===
-            selectedTeacherId &&
-          item.studentId ===
-            transferStudentId,
-      )
+    const assignment = assignments.find(
+      (item) =>
+        item.courseId === currentCourse.id &&
+        item.teacherId === selectedTeacherId &&
+        item.studentId === transferStudentId,
+    )
 
     if (!assignment) {
       return
     }
 
     setSaving(true)
-    setStatusMessage(
-      'جاري نقل الطالب...',
-    )
+    setStatusMessage('جاري نقل الطالب...')
 
     const {
       data,
       error,
     } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
+      .from('teacher_student_assignments')
       .update({
-        teacher_id:
-          transferTeacherId,
-        updated_at:
-          new Date().toISOString(),
+        teacher_id: transferTeacherId,
+        updated_at: new Date().toISOString(),
       })
-      .eq(
-        'id',
-        assignment.id,
-      )
+      .eq('id', assignment.id)
       .select(
         'id, course_id, teacher_id, student_id',
       )
@@ -1507,99 +1029,61 @@ export function TeachersView() {
       return
     }
 
-    setAssignments(
-      (current) =>
-        current.map(
-          (item) =>
-            item.id ===
-            assignment.id
-              ? {
-                  id: data.id,
-                  courseId:
-                    data.course_id,
-                  teacherId:
-                    data.teacher_id,
-                  studentId:
-                    data.student_id,
-                }
-              : item,
-        ),
+    setAssignments((current) =>
+      current.map((item) =>
+        item.id === assignment.id
+          ? {
+              id: data.id,
+              courseId: data.course_id,
+              teacherId: data.teacher_id,
+              studentId: data.student_id,
+            }
+          : item,
+      ),
     )
 
     setTransferStudentId(null)
     setTransferTeacherId('')
     setIsTransferOpen(false)
-    setStatusMessage(
-      'تم نقل الطالب بنجاح ✅',
-    )
+    setStatusMessage('تم نقل الطالب بنجاح ✅')
     setSaving(false)
   }
 
-  /*
-   * تاريخ الحضور الحالي.
-   */
   const currentAttendanceDate =
     currentCourse &&
-    isDateWithinCourse(
-      todayString(),
-      currentCourse,
-    )
+    isDateWithinCourse(todayString(), currentCourse)
       ? todayString()
       : null
 
   const displayedAttendanceDate =
-    selectedAttendanceDate ??
-    currentAttendanceDate
+    selectedAttendanceDate ?? currentAttendanceDate
 
-  /*
-   * سجلات الحضور لليوم المعروض.
-   */
-  const displayedAttendanceRecords =
-    displayedAttendanceDate &&
-    currentCourse
-      ? attendanceRecords.filter(
-          (record) =>
-            record.courseId ===
-              currentCourse.id &&
-            record.attendanceDate ===
-              displayedAttendanceDate,
-        )
-      : []
-
-  const getStudentAttendanceRecord =
-    (
-      studentId: string,
-      date: string | null,
-    ) => {
-      if (
-        !date ||
-        !currentCourse
-      ) {
-        return null
-      }
-
-      return (
-        attendanceRecords.find(
-          (record) =>
-            record.courseId ===
-              currentCourse.id &&
-            record.studentId ===
-              studentId &&
-            record.attendanceDate ===
-              date,
-        ) ?? null
-      )
+  const getStudentAttendanceRecord = (
+    studentId: string,
+    date: string | null,
+  ) => {
+    if (!date || !currentCourse) {
+      return null
     }
+
+    return (
+      attendanceRecords.find(
+        (record) =>
+          record.courseId === currentCourse.id &&
+          record.studentId === studentId &&
+          record.attendanceDate === date,
+      ) ?? null
+    )
+  }
 
   const getSessionStatus = (
     studentId: string,
     date: string | null,
   ) => {
-    const record =
-      getStudentAttendanceRecord(
-        studentId,
-        date,
-      )
+    const record = getStudentAttendanceRecord(
+      studentId,
+      date,
+    )
 
     return getStatusName(
       attendanceStatuses,
@@ -1616,109 +1100,143 @@ export function TeachersView() {
     }
 
     return (
-      attendanceNotes[
-        `${date}:${studentId}`
-      ] ?? ''
+      attendanceNotes[`${date}:${studentId}`] ?? ''
     )
   }
 
   /*
+   * تحويل سجل Supabase إلى سجل الواجهة.
+   */
+  const mapAttendanceRecord = (
+    record: {
+      id: string
+      student_id: string
+      enrollment_id: string | null
+      attendance_date: string
+      status_id: string
+      note: string | null
+      course_id: string
+    },
+  ): AttendanceRecord => ({
+    id: record.id,
+    studentId: record.student_id,
+    enrollmentId: record.enrollment_id,
+    courseId: record.course_id,
+    attendanceDate: record.attendance_date,
+    statusId: record.status_id,
+    note: record.note ?? '',
+  })
+
+  /*
    * حفظ الحضور.
    *
-   * ترجع true عند نجاح الحفظ
-   * و false عند الفشل.
+   * التحديث المحلي يتم مباشرة بعد نجاح العملية
+   * حتى ينعكس الاختيار والنسبة فورًا.
    */
   const updateAttendance = async (
     studentId: string,
     statusName: AttendanceStatusName,
     date?: string,
   ) => {
-    if (
-      !currentCourse ||
-      !date
-    ) {
+    if (!currentCourse || !date) {
       return false
     }
 
-    const statusId =
-      getStatusIdByName(
-        attendanceStatuses,
-        statusName,
-      )
+    const statusId = getStatusIdByName(
+      attendanceStatuses,
+      statusName,
+    )
 
     if (!statusId) {
       setStatusMessage(
         `حالة الحضور "${statusName}" غير موجودة في قاعدة البيانات. الحالات المحملة: ${
           attendanceStatuses
-            .map(
-              (status) =>
-                status.name,
-            )
-            .join('، ') ||
-          'لا توجد'
+            .map((status) => status.name)
+            .join('، ') || 'لا توجد'
         }`,
       )
-
       return false
     }
 
-    const student =
-      students.find(
-        (item) =>
-          item.id === studentId,
-      )
-
-    if (!student) {
-      setStatusMessage(
-        'تعذر العثور على الطالب.',
-      )
-
-      return false
-    }
-
-    const pendingNote =
-      getPendingNote(
-        studentId,
-        date,
-      )
-
-    setSaving(true)
-    setStatusMessage(
-      'جاري حفظ الحضور...',
+    const student = students.find(
+      (item) => item.id === studentId,
     )
 
-    const existing =
-      getStudentAttendanceRecord(
-        studentId,
-        date,
-      )
+    if (!student) {
+      setStatusMessage('تعذر العثور على الطالب.')
+      return false
+    }
+
+    const pendingNote = getPendingNote(
+      studentId,
+      date,
+    )
+
+    const existing = getStudentAttendanceRecord(
+      studentId,
+      date,
+    )
+
+    /*
+     * حفظ الحالة السابقة للرجوع إليها إذا فشل الحفظ.
+     */
+    const previousRecords = attendanceRecords
+
+    /*
+     * تحديث الواجهة مباشرة.
+     */
+    const optimisticRecord: AttendanceRecord = existing
+      ? {
+          ...existing,
+          enrollmentId: student.enrollmentId,
+          statusId,
+          note:
+            existing.note ||
+            pendingNote ||
+            '',
+        }
+      : {
+          id: `temp-${studentId}-${date}`,
+          studentId,
+          enrollmentId: student.enrollmentId,
+          courseId: currentCourse.id,
+          attendanceDate: date,
+          statusId,
+          note: pendingNote || '',
+        }
+
+    setAttendanceRecords((current) =>
+      existing
+        ? current.map((record) =>
+            record.id === existing.id
+              ? optimisticRecord
+              : record,
+          )
+        : [...current, optimisticRecord],
+    )
+
+    setSaving(true)
+    setStatusMessage('جاري حفظ الحضور...')
 
     if (existing) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('attendance')
         .update({
-          status_id:
-            statusId,
-          enrollment_id:
-            student.enrollmentId,
+          status_id: statusId,
+          enrollment_id: student.enrollmentId,
           note:
             existing.note ||
             pendingNote ||
             null,
         })
-        .eq(
-          'id',
-          existing.id,
-        )
+        .eq('id', existing.id)
         .select(
           'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
         )
         .single()
 
       if (error) {
+        setAttendanceRecords(previousRecords)
         setStatusMessage(
           `تعذر حفظ الحضور: ${error.message}`,
         )
@@ -1726,52 +1244,25 @@ export function TeachersView() {
         return false
       }
 
-      const mapped: AttendanceRecord =
-        {
-          id: data.id,
-          studentId:
-            data.student_id,
-          enrollmentId:
-            data.enrollment_id,
-          courseId:
-            data.course_id,
-          attendanceDate:
-            data.attendance_date,
-          statusId:
-            data.status_id,
-          note:
-            data.note ?? '',
-        }
+      const mapped = mapAttendanceRecord(data)
 
-      setAttendanceRecords(
-        (current) =>
-          current.map(
-            (record) =>
-              record.id ===
-              existing.id
-                ? mapped
-                : record,
-          ),
+      setAttendanceRecords((current) =>
+        current.map((record) =>
+          record.id === existing.id
+            ? mapped
+            : record,
+        ),
       )
     } else {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('attendance')
         .insert({
-          student_id:
-            studentId,
-          enrollment_id:
-            student.enrollmentId,
-          attendance_date:
-            date,
-          status_id:
-            statusId,
-          note:
-            pendingNote || null,
-          course_id:
-            currentCourse.id,
+          student_id: studentId,
+          enrollment_id: student.enrollmentId,
+          attendance_date: date,
+          status_id: statusId,
+          note: pendingNote || null,
+          course_id: currentCourse.id,
         })
         .select(
           'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
@@ -1779,6 +1270,7 @@ export function TeachersView() {
         .single()
 
       if (error) {
+        setAttendanceRecords(previousRecords)
         setStatusMessage(
           `تعذر حفظ الحضور: ${error.message}`,
         )
@@ -1786,230 +1278,159 @@ export function TeachersView() {
         return false
       }
 
-      const mapped: AttendanceRecord =
-        {
-          id: data.id,
-          studentId:
-            data.student_id,
-          enrollmentId:
-            data.enrollment_id,
-          courseId:
-            data.course_id,
-          attendanceDate:
-            data.attendance_date,
-          statusId:
-            data.status_id,
-          note:
-            data.note ?? '',
-        }
+      const mapped = mapAttendanceRecord(data)
 
-      setAttendanceRecords(
-        (current) => [
-          ...current,
-          mapped,
-        ],
+      setAttendanceRecords((current) =>
+        current.map((record) =>
+          record.id === optimisticRecord.id
+            ? mapped
+            : record,
+        ),
       )
     }
 
-    /*
-     * حذف الملاحظة المؤقتة بعد نجاح الحفظ.
-     */
     if (pendingNote) {
-      setAttendanceNotes(
-        (current) => {
-          const next = {
-            ...current,
-          }
-
-          delete next[
-            `${date}:${studentId}`
-          ]
-
-          return next
-        },
-      )
+      setAttendanceNotes((current) => {
+        const next = { ...current }
+        delete next[`${date}:${studentId}`]
+        return next
+      })
     }
 
-    setStatusMessage(
-      'تم حفظ الحضور ✅',
-    )
+    setStatusMessage('تم حفظ الحضور ✅')
     setSaving(false)
-
     return true
   }
 
-  /*
-   * حفظ ملاحظة الحضور.
-   */
-  const updateAttendanceNote =
-    async (
-      studentId: string,
-      value: string,
-      date?: string,
-    ) => {
-      if (
-        !currentCourse ||
-        !date
-      ) {
-        return
-      }
-
-      const existing =
-        getStudentAttendanceRecord(
-          studentId,
-          date,
-        )
-
-      if (!existing) {
-        const key = `${date}:${studentId}`
-
-        setAttendanceNotes(
-          (current) => ({
-            ...current,
-            [key]: value,
-          }),
-        )
-
-        return
-      }
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('attendance')
-        .update({
-          note: value || null,
-        })
-        .eq(
-          'id',
-          existing.id,
-        )
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .single()
-
-      if (error) {
-        setStatusMessage(
-          `تعذر حفظ الملاحظة: ${error.message}`,
-        )
-        return
-      }
-
-      const mapped: AttendanceRecord =
-        {
-          id: data.id,
-          studentId:
-            data.student_id,
-          enrollmentId:
-            data.enrollment_id,
-          courseId:
-            data.course_id,
-          attendanceDate:
-            data.attendance_date,
-          statusId:
-            data.status_id,
-          note:
-            data.note ?? '',
-        }
-
-      setAttendanceRecords(
-        (current) =>
-          current.map(
-            (record) =>
-              record.id ===
-              existing.id
-                ? mapped
-                : record,
-          ),
-      )
+  const updateAttendanceNote = async (
+    studentId: string,
+    value: string,
+    date?: string,
+  ) => {
+    if (!currentCourse || !date) {
+      return
     }
 
-  const getAttendanceStats = (
-  studentId: string,
-  courseId: string,
-) => {
-  const courseDates = new Set(
-    attendanceRecords
-      .filter(
-        (record) =>
-          record.courseId === courseId,
-      )
-      .map(
-        (record) =>
-          record.attendanceDate,
-      ),
-  )
-
-  const studentRecords =
-    attendanceRecords.filter(
-      (record) =>
-        record.courseId === courseId &&
-        record.studentId === studentId,
+    const existing = getStudentAttendanceRecord(
+      studentId,
+      date,
     )
 
-  const attendedDates = new Set(
-    studentRecords
-      .filter((record) => {
-        const status = getStatusName(
-          attendanceStatuses,
-          record.statusId,
-        )
+    if (!existing) {
+      const key = `${date}:${studentId}`
 
-        return (
-          status === 'حاضر' ||
-          status === 'متأخر' ||
-          status === 'مستأذن'
-        )
+      setAttendanceNotes((current) => ({
+        ...current,
+        [key]: value,
+      }))
+
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('attendance')
+      .update({
+        note: value || null,
       })
-      .map(
-        (record) =>
-          record.attendanceDate,
+      .eq('id', existing.id)
+      .select(
+        'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+      )
+      .single()
+
+    if (error) {
+      setStatusMessage(
+        `تعذر حفظ الملاحظة: ${error.message}`,
+      )
+      return
+    }
+
+    const mapped = mapAttendanceRecord(data)
+
+    setAttendanceRecords((current) =>
+      current.map((record) =>
+        record.id === existing.id
+          ? mapped
+          : record,
       ),
-  )
-
-  const total = courseDates.size
-  const present = attendedDates.size
-
-  return {
-    present,
-    total,
-    percentage:
-      total > 0
-        ? (present / total) * 100
-        : 0,
+    )
   }
-}
 
   /*
-   * تواريخ الحضور السابقة.
+   * نسبة الحضور للدورة.
+   *
+   * المقام = عدد أيام الحضور المسجلة للدورة.
+   * البسط = أيام الطالب التي حالتها:
+   * حاضر أو متأخر أو مستأذن.
    */
-  const attendanceArchive =
-    currentCourse
-      ? Array.from(
-          new Set(
-            attendanceRecords
-              .filter(
-                (record) =>
-                  record.courseId ===
-                  currentCourse.id,
-              )
-              .map(
-                (record) =>
-                  record.attendanceDate,
-              ),
-          ),
+  const getAttendanceStats = (
+    studentId: string,
+    courseId: string,
+  ) => {
+    const courseDates = new Set(
+      attendanceRecords
+        .filter(
+          (record) =>
+            record.courseId === courseId,
         )
-          .filter(
-            (date) =>
-              date !==
-              currentAttendanceDate,
-          )
-          .sort((a, b) =>
-            b.localeCompare(a),
-          )
-      : []
+        .map(
+          (record) =>
+            record.attendanceDate,
+        ),
+    )
+
+    const attendedDates = new Set(
+      attendanceRecords
+        .filter(
+          (record) =>
+            record.courseId === courseId &&
+            record.studentId === studentId &&
+            ['حاضر', 'متأخر', 'مستأذن'].includes(
+              getStatusName(
+                attendanceStatuses,
+                record.statusId,
+              ),
+            ),
+        )
+        .map(
+          (record) =>
+            record.attendanceDate,
+        ),
+    )
+
+    const total = courseDates.size
+    const present = attendedDates.size
+
+    return {
+      present,
+      total,
+      percentage:
+        total > 0
+          ? (present / total) * 100
+          : 0,
+    }
+  }
+
+  const attendanceArchive = currentCourse
+    ? Array.from(
+        new Set(
+          attendanceRecords
+            .filter(
+              (record) =>
+                record.courseId === currentCourse.id,
+            )
+            .map(
+              (record) =>
+                record.attendanceDate,
+            ),
+        ),
+      )
+        .filter(
+          (date) =>
+            date !== currentAttendanceDate,
+        )
+        .sort((a, b) => b.localeCompare(a))
+    : []
 
   const openAttendanceArchive = (
     date: string,
@@ -2024,47 +1445,33 @@ export function TeachersView() {
       return
     }
 
-    setSelectedAttendanceDate(
+    setSelectedAttendanceDate(date)
+  }
+
+  const closeAttendanceArchive = () => {
+    setSelectedAttendanceDate(null)
+  }
+
+  const formatPercentage = (value: number) =>
+    `${value.toFixed(1)}%`
+
+  const handleAttendanceClick = async (
+    studentId: string,
+    statusName: AttendanceStatusName,
+    date: string,
+  ) => {
+    if (saving) {
+      return
+    }
+
+    await updateAttendance(
+      studentId,
+      statusName,
       date,
     )
   }
 
-  const closeAttendanceArchive = () => {
-    setSelectedAttendanceDate(
-      null,
-    )
-  }
-
-  const formatPercentage = (
-    value: number,
-  ) =>
-    `${value.toFixed(1)}%`
-
-  /*
-   * حفظ الحالة + الملاحظة.
-   */
-   const handleAttendanceClick =
-    async (
-      studentId: string,
-      statusName: AttendanceStatusName,
-      date: string,
-    ) => {
-      if (saving) return
-  
-      await updateAttendance(
-        studentId,
-        statusName,
-        date,
-      )
-    }
-
-  /*
-   * إذا كانت الصفحة لا تحتوي على سنة أو دورة.
-   */
-  if (
-    !loading &&
-    !currentCourse
-  ) {
+  if (!loading && !currentCourse) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -2106,7 +1513,6 @@ export function TeachersView() {
         </div>
       )}
 
-      {/* اختيار الدورة */}
       <Card>
         <CardContent className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -2116,43 +1522,29 @@ export function TeachersView() {
               </p>
 
               <h2 className="mt-1 text-lg font-semibold">
-                {currentCourse?.name ??
-                  '—'}
+                {currentCourse?.name ?? '—'}
               </h2>
             </div>
 
             {courses.length > 1 && (
               <select
-                value={
-                  currentCourse?.id ??
-                  ''
-                }
+                value={currentCourse?.id ?? ''}
                 onChange={(event) => {
-                  setSelectedCourseId(
-                    event.target.value,
-                  )
-                  setSelectedTeacherId(
-                    null,
-                  )
-                  setActivePanel(
-                    'students',
-                  )
-                  setSelectedAttendanceDate(
-                    null,
-                  )
+                  setSelectedCourseId(event.target.value)
+                  setSelectedTeacherId(null)
+                  setActivePanel('students')
+                  setSelectedAttendanceDate(null)
                 }}
                 className="h-10 min-w-[220px] rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
               >
-                {courses.map(
-                  (course) => (
-                    <option
-                      key={course.id}
-                      value={course.id}
-                    >
-                      {course.name}
-                    </option>
-                  ),
-                )}
+                {courses.map((course) => (
+                  <option
+                    key={course.id}
+                    value={course.id}
+                  >
+                    {course.name}
+                  </option>
+                ))}
               </select>
             )}
           </div>
@@ -2174,9 +1566,7 @@ export function TeachersView() {
               </span>
 
               <span className="rounded-full bg-muted px-3 py-1.5">
-                {currentCourse.days.join(
-                  ' • ',
-                ) || '—'}
+                {currentCourse.days.join(' • ') || '—'}
               </span>
             </div>
           )}
@@ -2189,24 +1579,20 @@ export function TeachersView() {
         <input
           value={search}
           onChange={(event) =>
-            setSearch(
-              event.target.value,
-            )
+            setSearch(event.target.value)
           }
           placeholder="البحث عن معلم..."
           className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
 
-      {/* قائمة المعلمين */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
             <div className="p-10 text-center text-sm text-muted-foreground">
               جاري تحميل بيانات المعلمين...
             </div>
-          ) : filteredTeachers.length ===
-            0 ? (
+          ) : filteredTeachers.length === 0 ? (
             <div className="p-10 text-center">
               <p className="font-medium">
                 لا يوجد معلمون مرتبطون بهذه الدورة.
@@ -2224,11 +1610,9 @@ export function TeachersView() {
                     <th className="px-4 py-3 text-right font-medium">
                       المعلم
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       المستوى
                     </th>
-
                     <th className="px-4 py-3 text-right font-medium">
                       طلاب المعلم
                     </th>
@@ -2236,107 +1620,86 @@ export function TeachersView() {
                 </thead>
 
                 <tbody>
-                  {filteredTeachers.map(
-                    (teacher) => {
-                      const teacherStudentIds =
-                        assignments
-                          .filter(
-                            (assignment) =>
-                              assignment.courseId ===
-                                currentCourse?.id &&
-                              assignment.teacherId ===
-                                teacher.id,
-                          )
-                          .map(
-                            (assignment) =>
-                              assignment.studentId,
-                          )
-
-                      const teacherGrades =
-                        Array.from(
-                          new Set(
-                            students
-                              .filter(
-                                (student) =>
-                                  teacherStudentIds.includes(
-                                    student.id,
-                                  ),
-                              )
-                              .map(
-                                (student) =>
-                                  student.levelName,
-                              ),
-                          ),
+                  {filteredTeachers.map((teacher) => {
+                    const teacherStudentIds =
+                      assignments
+                        .filter(
+                          (assignment) =>
+                            assignment.courseId ===
+                              currentCourse?.id &&
+                            assignment.teacherId ===
+                              teacher.id,
+                        )
+                        .map(
+                          (assignment) =>
+                            assignment.studentId,
                         )
 
-                      return (
-                        <tr
-                          key={
-                            teacher.id
-                          }
-                          onClick={() =>
-                            openTeacher(
-                              teacher.id,
-                            )
-                          }
-                          className="cursor-pointer border-t hover:bg-muted/40"
-                        >
-                          <td className="px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={(
-                                event,
-                              ) => {
-                                event.stopPropagation()
-                                openTeacher(
-                                  teacher.id,
-                                )
-                              }}
-                              className="font-medium text-primary hover:underline"
-                            >
-                              {
-                                teacher.name
-                              }
-                            </button>
-                          </td>
+                    const teacherGrades = Array.from(
+                      new Set(
+                        students
+                          .filter((student) =>
+                            teacherStudentIds.includes(
+                              student.id,
+                            ),
+                          )
+                          .map(
+                            (student) =>
+                              student.levelName,
+                          ),
+                      ),
+                    )
 
-                          <td className="px-4 py-4">
-                            {teacherGrades.length >
-                            0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {teacherGrades.map(
-                                  (
-                                    grade,
-                                  ) => (
-                                    <span
-                                      key={
-                                        grade
-                                      }
-                                      className="rounded-full bg-muted px-2.5 py-1 text-xs"
-                                    >
-                                      {
-                                        grade
-                                      }
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                —
-                              </span>
-                            )}
-                          </td>
+                    return (
+                      <tr
+                        key={teacher.id}
+                        onClick={() =>
+                          openTeacher(teacher.id)
+                        }
+                        className="cursor-pointer border-t hover:bg-muted/40"
+                      >
+                        <td className="px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openTeacher(teacher.id)
+                            }}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {teacher.name}
+                          </button>
+                        </td>
 
-                          <td className="px-4 py-4 font-medium tabular-nums">
-                            {getStudentCount(
-                              teacher.id,
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )}
+                        <td className="px-4 py-4">
+                          {teacherGrades.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {teacherGrades.map(
+                                (grade) => (
+                                  <span
+                                    key={grade}
+                                    className="rounded-full bg-muted px-2.5 py-1 text-xs"
+                                  >
+                                    {grade}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4 font-medium tabular-nums">
+                          {getStudentCount(
+                            teacher.id,
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2344,16 +1707,13 @@ export function TeachersView() {
         </CardContent>
       </Card>
 
-      {/* صفحة المعلم */}
       {selectedTeacher && (
         <div className="fixed inset-0 z-50 bg-background">
           <div className="mx-auto flex h-full max-w-6xl flex-col">
             <div className="flex items-center justify-between border-b px-4 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {
-                    selectedTeacher.name
-                  }
+                  {selectedTeacher.name}
                 </h2>
 
                 <p className="text-sm text-muted-foreground">
@@ -2367,16 +1727,13 @@ export function TeachersView() {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={
-                  closeTeacher
-                }
+                onClick={closeTeacher}
                 disabled={saving}
               >
                 <X className="size-4" />
               </Button>
             </div>
 
-            {/* الدورة */}
             <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
               <div className="flex flex-wrap items-center gap-3">
                 <div>
@@ -2385,8 +1742,7 @@ export function TeachersView() {
                   </p>
 
                   <p className="font-semibold">
-                    {currentCourse?.name ??
-                      '—'}
+                    {currentCourse?.name ?? '—'}
                   </p>
                 </div>
 
@@ -2407,32 +1763,25 @@ export function TeachersView() {
                     </span>
 
                     <span className="rounded-full bg-background px-3 py-1.5 text-sm">
-                      {currentCourse.days.join(
-                        ' • ',
-                      ) || '—'}
+                      {currentCourse.days.join(' • ') ||
+                        '—'}
                     </span>
                   </>
                 )}
               </div>
             </div>
 
-            {/* التبويبات */}
             <div className="border-b px-4 py-3 sm:px-6">
               <div className="flex gap-2">
                 <Button
                   variant={
-                    activePanel ===
-                    'students'
+                    activePanel === 'students'
                       ? 'default'
                       : 'outline'
                   }
                   onClick={() => {
-                    setActivePanel(
-                      'students',
-                    )
-                    setSelectedAttendanceDate(
-                      null,
-                    )
+                    setActivePanel('students')
+                    setSelectedAttendanceDate(null)
                   }}
                 >
                   الطلاب
@@ -2440,18 +1789,13 @@ export function TeachersView() {
 
                 <Button
                   variant={
-                    activePanel ===
-                    'attendance'
+                    activePanel === 'attendance'
                       ? 'default'
                       : 'outline'
                   }
                   onClick={() => {
-                    setActivePanel(
-                      'attendance',
-                    )
-                    setSelectedAttendanceDate(
-                      null,
-                    )
+                    setActivePanel('attendance')
+                    setSelectedAttendanceDate(null)
                   }}
                 >
                   الحضور والغياب
@@ -2460,9 +1804,7 @@ export function TeachersView() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              {/* الطلاب */}
-              {activePanel ===
-                'students' && (
+              {activePanel === 'students' && (
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -2475,19 +1817,13 @@ export function TeachersView() {
                       </p>
                     </div>
 
-                    <Button
-                      onClick={
-                        openAddStudents
-                      }
-                      disabled={false}
-                    >
+                    <Button onClick={openAddStudents}>
                       <Plus className="size-4" />
                       إضافة طلاب
                     </Button>
                   </div>
 
-                  {assignedStudents.length ===
-                  0 ? (
+                  {assignedStudents.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-10 text-center">
                       <p className="font-medium">
                         لا يوجد طلاب حاليًا
@@ -2505,15 +1841,12 @@ export function TeachersView() {
                             <th className="px-4 py-3 text-right font-medium">
                               الطالب
                             </th>
-
                             <th className="px-4 py-3 text-right font-medium">
                               الرقم الشخصي
                             </th>
-
                             <th className="px-4 py-3 text-right font-medium">
                               المستوى
                             </th>
-
                             <th className="px-4 py-3 text-right font-medium">
                               إجراء
                             </th>
@@ -2524,15 +1857,11 @@ export function TeachersView() {
                           {assignedStudents.map(
                             (student) => (
                               <tr
-                                key={
-                                  student.id
-                                }
+                                key={student.id}
                                 className="border-t"
                               >
                                 <td className="px-4 py-3 font-medium">
-                                  {
-                                    student.name
-                                  }
+                                  {student.name}
                                 </td>
 
                                 <td className="px-4 py-3">
@@ -2541,9 +1870,7 @@ export function TeachersView() {
                                 </td>
 
                                 <td className="px-4 py-3">
-                                  {
-                                    student.levelName
-                                  }
+                                  {student.levelName}
                                 </td>
 
                                 <td className="px-4 py-3">
@@ -2555,7 +1882,6 @@ export function TeachersView() {
                                         student.id,
                                       )
                                     }
-                                    disabled={false}
                                   >
                                     <ArrowLeftRight className="size-4" />
                                     نقل
@@ -2571,9 +1897,7 @@ export function TeachersView() {
                 </div>
               )}
 
-              {/* إضافة طلاب */}
-              {activePanel ===
-                'addStudents' && (
+              {activePanel === 'addStudents' && (
                 <div className="mx-auto max-w-3xl space-y-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -2590,9 +1914,7 @@ export function TeachersView() {
                       variant="ghost"
                       size="icon"
                       onClick={() =>
-                        setActivePanel(
-                          'students',
-                        )
+                        setActivePanel('students')
                       }
                     >
                       <X className="size-4" />
@@ -2605,19 +1927,12 @@ export function TeachersView() {
                     </label>
 
                     <select
-                      value={
-                        selectedGrade
-                      }
-                      onChange={(
-                        event,
-                      ) => {
+                      value={selectedGrade}
+                      onChange={(event) => {
                         setSelectedGrade(
-                          event.target
-                            .value,
+                          event.target.value,
                         )
-                        setSelectedStudentIds(
-                          [],
-                        )
+                        setSelectedStudentIds([])
                       }}
                       className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
                     >
@@ -2628,12 +1943,8 @@ export function TeachersView() {
                       {availableGrades.map(
                         (grade) => (
                           <option
-                            key={
-                              grade
-                            }
-                            value={
-                              grade
-                            }
+                            key={grade}
+                            value={grade}
                           >
                             {grade}
                           </option>
@@ -2651,25 +1962,19 @@ export function TeachersView() {
 
                         <span className="text-xs text-muted-foreground">
                           تم تحديد{' '}
-                          {
-                            selectedStudentIds.length
-                          }
+                          {selectedStudentIds.length}
                         </span>
                       </div>
 
-                      {availableStudents.length ===
-                        0 &&
-                      unavailableStudents.length ===
-                        0 ? (
+                      {availableStudents.length === 0 &&
+                      unavailableStudents.length === 0 ? (
                         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
                           لا يوجد طلاب لهذا المستوى.
                         </div>
                       ) : (
                         <div className="overflow-hidden rounded-lg border">
                           {availableStudents.map(
-                            (
-                              student,
-                            ) => {
+                            (student) => {
                               const selected =
                                 selectedStudentIds.includes(
                                   student.id,
@@ -2677,16 +1982,12 @@ export function TeachersView() {
 
                               return (
                                 <label
-                                  key={
-                                    student.id
-                                  }
+                                  key={student.id}
                                   className="flex cursor-pointer items-center gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
                                 >
                                   <input
                                     type="checkbox"
-                                    checked={
-                                      selected
-                                    }
+                                    checked={selected}
                                     onChange={() =>
                                       toggleStudent(
                                         student.id,
@@ -2697,9 +1998,7 @@ export function TeachersView() {
 
                                   <div>
                                     <p className="font-medium">
-                                      {
-                                        student.name
-                                      }
+                                      {student.name}
                                     </p>
 
                                     <p className="text-xs text-muted-foreground">
@@ -2718,9 +2017,7 @@ export function TeachersView() {
                               teacherName,
                             }) => (
                               <div
-                                key={
-                                  student.id
-                                }
+                                key={student.id}
                                 className="flex items-center gap-3 border-b bg-muted/20 p-4 last:border-b-0"
                               >
                                 <input
@@ -2731,16 +2028,12 @@ export function TeachersView() {
 
                                 <div>
                                   <p className="font-medium text-muted-foreground">
-                                    {
-                                      student.name
-                                    }
+                                    {student.name}
                                   </p>
 
                                   <p className="text-xs text-muted-foreground">
                                     عند الأستاذ{' '}
-                                    {
-                                      teacherName
-                                    }
+                                    {teacherName}
                                   </p>
                                 </div>
                               </div>
@@ -2755,25 +2048,18 @@ export function TeachersView() {
                     <Button
                       variant="outline"
                       onClick={() =>
-                        setActivePanel(
-                          'students',
-                        )
+                        setActivePanel('students')
                       }
-                      disabled={
-                        saving
-                      }
+                      disabled={saving}
                     >
                       إلغاء
                     </Button>
 
                     <Button
-                      onClick={
-                        saveStudents
-                      }
+                      onClick={saveStudents}
                       disabled={
                         saving ||
-                        selectedStudentIds.length ===
-                          0
+                        selectedStudentIds.length === 0
                       }
                     >
                       {saving
@@ -2784,11 +2070,8 @@ export function TeachersView() {
                 </div>
               )}
 
-              {/* الحضور */}
-              {activePanel ===
-                'attendance' && (
+              {activePanel === 'attendance' && (
                 <div className="space-y-6">
-                  {/* تعديل يوم سابق */}
                   {selectedAttendanceDate ? (
                     <>
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2804,9 +2087,7 @@ export function TeachersView() {
                           </h3>
 
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {
-                              currentCourse?.name
-                            }
+                            {currentCourse?.name}
                           </p>
                         </div>
 
@@ -2820,8 +2101,7 @@ export function TeachersView() {
                         </Button>
                       </div>
 
-                      {assignedStudents.length ===
-                      0 ? (
+                      {assignedStudents.length === 0 ? (
                         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
                           لا يوجد طلاب لتعديل الحضور.
                         </div>
@@ -2844,18 +2124,14 @@ export function TeachersView() {
 
                                 <th className="px-4 py-3 text-right font-medium">
                                   نسبة الحضور —{' '}
-                                  {
-                                    currentCourse?.name
-                                  }
+                                  {currentCourse?.name}
                                 </th>
                               </tr>
                             </thead>
 
                             <tbody>
                               {assignedStudents.map(
-                                (
-                                  student,
-                                ) => {
+                                (student) => {
                                   const currentStatus =
                                     getSessionStatus(
                                       student.id,
@@ -2886,22 +2162,16 @@ export function TeachersView() {
 
                                   return (
                                     <tr
-                                      key={
-                                        student.id
-                                      }
+                                      key={student.id}
                                       className="border-t"
                                     >
                                       <td className="px-4 py-4">
                                         <p className="font-medium">
-                                          {
-                                            student.name
-                                          }
+                                          {student.name}
                                         </p>
 
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                          {
-                                            student.levelName
-                                          }
+                                          {student.levelName}
                                         </p>
                                       </td>
 
@@ -2910,12 +2180,8 @@ export function TeachersView() {
                                           currentStatus={
                                             currentStatus
                                           }
-                                          saving={
-                                            saving
-                                          }
-                                          onSelect={(
-                                            status,
-                                          ) =>
+                                          saving={saving}
+                                          onSelect={(status) =>
                                             handleAttendanceClick(
                                               student.id,
                                               status,
@@ -2927,17 +2193,11 @@ export function TeachersView() {
 
                                       <td className="px-4 py-4">
                                         <input
-                                          value={
-                                            noteValue
-                                          }
-                                          onChange={(
-                                            event,
-                                          ) =>
+                                          value={noteValue}
+                                          onChange={(event) =>
                                             updateAttendanceNote(
                                               student.id,
-                                              event
-                                                .target
-                                                .value,
+                                              event.target.value,
                                               selectedAttendanceDate,
                                             )
                                           }
@@ -2948,14 +2208,8 @@ export function TeachersView() {
 
                                       <td className="px-4 py-4">
                                         <div className="font-semibold tabular-nums">
-                                          {
-                                            stats.present
-                                          }{' '}
-                                          /{' '}
-                                          {
-                                            stats.total
-                                          }{' '}
-                                          —{' '}
+                                          {stats.present} /{' '}
+                                          {stats.total} —{' '}
                                           {formatPercentage(
                                             stats.percentage,
                                           )}
@@ -2982,16 +2236,13 @@ export function TeachersView() {
                     </>
                   ) : (
                     <>
-                      {/* الحضور الحالي */}
                       <div>
                         <h3 className="text-lg font-semibold">
                           الحضور والغياب
                         </h3>
 
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {
-                            currentCourse?.name
-                          }
+                          {currentCourse?.name}
                           {currentAttendanceDate
                             ? ` · ${formatDateForDisplay(
                                 currentAttendanceDate,
@@ -3000,8 +2251,7 @@ export function TeachersView() {
                         </p>
                       </div>
 
-                      {assignedStudents.length ===
-                      0 ? (
+                      {assignedStudents.length === 0 ? (
                         <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
                           لا يوجد طلاب لتسجيل الحضور.
                         </div>
@@ -3024,18 +2274,14 @@ export function TeachersView() {
 
                                 <th className="px-4 py-3 text-right font-medium">
                                   نسبة الحضور —{' '}
-                                  {
-                                    currentCourse?.name
-                                  }
+                                  {currentCourse?.name}
                                 </th>
                               </tr>
                             </thead>
 
                             <tbody>
                               {assignedStudents.map(
-                                (
-                                  student,
-                                ) => {
+                                (student) => {
                                   const currentStatus =
                                     getSessionStatus(
                                       student.id,
@@ -3066,22 +2312,16 @@ export function TeachersView() {
 
                                   return (
                                     <tr
-                                      key={
-                                        student.id
-                                      }
+                                      key={student.id}
                                       className="border-t"
                                     >
                                       <td className="px-4 py-4">
                                         <p className="font-medium">
-                                          {
-                                            student.name
-                                          }
+                                          {student.name}
                                         </p>
 
                                         <p className="mt-1 text-xs text-muted-foreground">
-                                          {
-                                            student.levelName
-                                          }
+                                          {student.levelName}
                                         </p>
                                       </td>
 
@@ -3090,12 +2330,8 @@ export function TeachersView() {
                                           currentStatus={
                                             currentStatus
                                           }
-                                          saving={
-                                            saving
-                                          }
-                                          onSelect={(
-                                            status,
-                                          ) =>
+                                          saving={saving}
+                                          onSelect={(status) =>
                                             handleAttendanceClick(
                                               student.id,
                                               status,
@@ -3107,17 +2343,11 @@ export function TeachersView() {
 
                                       <td className="px-4 py-4">
                                         <input
-                                          value={
-                                            noteValue
-                                          }
-                                          onChange={(
-                                            event,
-                                          ) =>
+                                          value={noteValue}
+                                          onChange={(event) =>
                                             updateAttendanceNote(
                                               student.id,
-                                              event
-                                                .target
-                                                .value,
+                                              event.target.value,
                                               currentAttendanceDate,
                                             )
                                           }
@@ -3128,14 +2358,8 @@ export function TeachersView() {
 
                                       <td className="px-4 py-4">
                                         <div className="font-semibold tabular-nums">
-                                          {
-                                            stats.present
-                                          }{' '}
-                                          /{' '}
-                                          {
-                                            stats.total
-                                          }{' '}
-                                          —{' '}
+                                          {stats.present} /{' '}
+                                          {stats.total} —{' '}
                                           {formatPercentage(
                                             stats.percentage,
                                           )}
@@ -3154,7 +2378,6 @@ export function TeachersView() {
                         </div>
                       )}
 
-                      {/* أرشيف الحضور */}
                       <div className="space-y-3 border-t pt-6">
                         <div>
                           <h3 className="font-semibold">
@@ -3163,14 +2386,11 @@ export function TeachersView() {
 
                           <p className="mt-1 text-sm text-muted-foreground">
                             أيام الحضور السابقة في{' '}
-                            {
-                              currentCourse?.name
-                            }.
+                            {currentCourse?.name}.
                           </p>
                         </div>
 
-                        {attendanceArchive.length ===
-                        0 ? (
+                        {attendanceArchive.length === 0 ? (
                           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
                             لا يوجد أرشيف حضور حتى الآن.
                           </div>
@@ -3195,13 +2415,9 @@ export function TeachersView() {
 
                               <tbody>
                                 {attendanceArchive.map(
-                                  (
-                                    date,
-                                  ) => (
+                                  (date) => (
                                     <tr
-                                      key={
-                                        date
-                                      }
+                                      key={date}
                                       className="border-t"
                                     >
                                       <td className="px-4 py-4 font-medium">
@@ -3246,7 +2462,6 @@ export function TeachersView() {
         </div>
       )}
 
-      {/* نقل طالب */}
       {isTransferOpen &&
         transferStudentId &&
         selectedTeacher &&
@@ -3263,9 +2478,7 @@ export function TeachersView() {
                     variant="ghost"
                     size="icon"
                     onClick={() =>
-                      setIsTransferOpen(
-                        false,
-                      )
+                      setIsTransferOpen(false)
                     }
                   >
                     <X className="size-4" />
@@ -3275,9 +2488,7 @@ export function TeachersView() {
                 <p className="text-sm text-muted-foreground">
                   سيتم نقل الطالب من{' '}
                   <span className="font-medium text-foreground">
-                    {
-                      selectedTeacher.name
-                    }
+                    {selectedTeacher.name}
                   </span>{' '}
                   إلى المعلم الجديد.
                 </p>
@@ -3300,15 +2511,10 @@ export function TeachersView() {
                   </label>
 
                   <select
-                    value={
-                      transferTeacherId
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={transferTeacherId}
+                    onChange={(event) =>
                       setTransferTeacherId(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -3323,22 +2529,14 @@ export function TeachersView() {
                           teacher.id !==
                           selectedTeacher.id,
                       )
-                      .map(
-                        (teacher) => (
-                          <option
-                            key={
-                              teacher.id
-                            }
-                            value={
-                              teacher.id
-                            }
-                          >
-                            {
-                              teacher.name
-                            }
-                          </option>
-                        ),
-                      )}
+                      .map((teacher) => (
+                        <option
+                          key={teacher.id}
+                          value={teacher.id}
+                        >
+                          {teacher.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -3346,21 +2544,15 @@ export function TeachersView() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      setIsTransferOpen(
-                        false,
-                      )
+                      setIsTransferOpen(false)
                     }
-                    disabled={
-                      saving
-                    }
+                    disabled={saving}
                   >
                     إلغاء
                   </Button>
 
                   <Button
-                    onClick={
-                      saveTransfer
-                    }
+                    onClick={saveTransfer}
                     disabled={
                       saving ||
                       !transferTeacherId
