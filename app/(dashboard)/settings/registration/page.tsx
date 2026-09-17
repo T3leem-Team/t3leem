@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
+import { useState } from 'react'
 import {
   ArrowRight,
   CreditCard,
@@ -14,9 +14,6 @@ import {
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 
 type SettingRowProps = {
@@ -42,10 +39,21 @@ function SettingRow({
         </p>
       </div>
 
-      <Switch
-        checked={checked}
-        onCheckedChange={onChange}
-      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-primary' : 'bg-muted-foreground/30'
+        }`}
+      >
+        <span
+          className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'right-1' : 'right-6'
+          }`}
+        />
+      </button>
     </div>
   )
 }
@@ -98,14 +106,14 @@ export default function RegistrationSettingsPage() {
 
       <div>
         <Button variant="outline" asChild>
-          <Link href="/dashboard/settings">
+          <Link href="/settings">
             <ArrowRight className="ml-2 size-4" />
             العودة للإعدادات
           </Link>
         </Button>
       </div>
 
-      {/* حالة التسجيل */}
+      {/* التسجيل العام */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -258,7 +266,7 @@ export default function RegistrationSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="size-5" />
-            الدفع
+            إعدادات الدفع
           </CardTitle>
         </CardHeader>
 
@@ -273,11 +281,14 @@ export default function RegistrationSettingsPage() {
           {paymentEnabled && (
             <>
               <div className="rounded-xl border p-4">
-                <Label htmlFor="paymentAmount">
+                <label
+                  htmlFor="paymentAmount"
+                  className="text-sm font-medium"
+                >
                   مبلغ التسجيل
-                </Label>
+                </label>
 
-                <Input
+                <input
                   id="paymentAmount"
                   type="number"
                   min="0"
@@ -287,7 +298,7 @@ export default function RegistrationSettingsPage() {
                   onChange={(event) =>
                     setPaymentAmount(event.target.value)
                   }
-                  className="mt-2 max-w-sm"
+                  className="mt-2 flex h-10 w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
@@ -328,12 +339,15 @@ export default function RegistrationSettingsPage() {
                   <div className="flex items-center gap-2">
                     <Link2 className="size-4" />
 
-                    <Label htmlFor="paymentLink">
+                    <label
+                      htmlFor="paymentLink"
+                      className="text-sm font-medium"
+                    >
                       رابط الدفع
-                    </Label>
+                    </label>
                   </div>
 
-                  <Input
+                  <input
                     id="paymentLink"
                     type="url"
                     placeholder="https://..."
@@ -341,7 +355,7 @@ export default function RegistrationSettingsPage() {
                     onChange={(event) =>
                       setPaymentLink(event.target.value)
                     }
-                    className="mt-2"
+                    className="mt-2 flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </div>
               )}
@@ -364,7 +378,7 @@ export default function RegistrationSettingsPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-muted-foreground">
-                        سنربط رفع الصورة بـ Supabase Storage.
+                        سنضيف رفع الصورة وربطها بـ Supabase Storage.
                       </p>
                     </div>
                   </div>
@@ -390,6 +404,51 @@ export default function RegistrationSettingsPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ملخص */}
+      <Card>
+        <CardHeader>
+          <CardTitle>ملخص الإعدادات</CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <div className="rounded-xl bg-muted/50 p-4 text-sm leading-7">
+            <p>
+              التسجيل:{' '}
+              <strong>
+                {registrationOpen ? 'مفتوح' : 'مغلق'}
+              </strong>
+            </p>
+
+            <p>
+              الدفع:{' '}
+              <strong>
+                {paymentEnabled ? 'مفعل' : 'غير مفعل'}
+              </strong>
+            </p>
+
+            {paymentEnabled && paymentAmount && (
+              <p>
+                المبلغ:{' '}
+                <strong>{paymentAmount}</strong>
+              </p>
+            )}
+
+            <p>
+              إثبات الدفع:{' '}
+              <strong>
+                {!paymentEnabled
+                  ? 'غير متاح'
+                  : !paymentProofEnabled
+                    ? 'غير متاح'
+                    : paymentProofRequired
+                      ? 'إجباري'
+                      : 'اختياري'}
+              </strong>
+            </p>
+          </div>
         </CardContent>
       </Card>
 
