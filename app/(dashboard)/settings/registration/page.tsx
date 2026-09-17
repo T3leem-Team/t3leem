@@ -1,18 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowRight,
   CreditCard,
   FileImage,
   Link2,
+  Loader2,
   Save,
   Settings2,
 } from 'lucide-react'
 
+import { supabase } from '@/lib/supabase'
+
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -21,6 +29,7 @@ type SettingRowProps = {
   description: string
   checked: boolean
   onChange: (value: boolean) => void
+  disabled?: boolean
 }
 
 function SettingRow({
@@ -28,9 +37,14 @@ function SettingRow({
   description,
   checked,
   onChange,
+  disabled = false,
 }: SettingRowProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+    <div
+      className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
+        disabled ? 'opacity-60' : ''
+      }`}
+    >
       <div className="min-w-0">
         <p className="font-medium">{title}</p>
 
@@ -43,8 +57,9 @@ function SettingRow({
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${
           checked ? 'bg-primary' : 'bg-muted-foreground/30'
         }`}
       >
@@ -59,6 +74,12 @@ function SettingRow({
 }
 
 export default function RegistrationSettingsPage() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const [successMessage, setSuccessMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+
   const [registrationOpen, setRegistrationOpen] = useState(true)
 
   const [showName, setShowName] = useState(true)
@@ -97,12 +118,226 @@ export default function RegistrationSettingsPage() {
 
   const [showPaymentQr, setShowPaymentQr] = useState(false)
 
+  const [settingsId, setSettingsId] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadSettings()
+  }, [])
+
+  async function loadSettings() {
+    setLoading(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const { data, error } = await supabase
+      .from('registration_settings')
+      .select('*')
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Error loading registration settings:', error)
+
+      setErrorMessage(
+        `تعذر تحميل إعدادات التسجيل من قاعدة البيانات: ${error.message}`,
+      )
+
+      setLoading(false)
+      return
+    }
+
+    if (!data) {
+      setErrorMessage(
+        'لم يتم العثور على إعدادات التسجيل في قاعدة البيانات.',
+      )
+
+      setLoading(false)
+      return
+    }
+
+    setSettingsId(data.id)
+
+    setRegistrationOpen(data.registration_open ?? true)
+
+    setShowName(data.show_name ?? true)
+    setRequiredName(data.required_name ?? true)
+
+    setShowPersonalId(data.show_personal_id ?? true)
+    setRequiredPersonalId(data.required_personal_id ?? true)
+
+    setShowPhone(data.show_phone ?? true)
+    setRequiredPhone(data.required_phone ?? true)
+
+    setShowWhatsapp(data.show_whatsapp ?? false)
+    setRequiredWhatsapp(data.required_whatsapp ?? false)
+
+    setShowLevel(data.show_level ?? true)
+    setRequiredLevel(data.required_level ?? true)
+
+    setShowNotes(data.show_notes ?? false)
+    setRequiredNotes(data.required_notes ?? false)
+
+    setShowHealthNotes(data.show_health_notes ?? false)
+    setRequiredHealthNotes(data.required_health_notes ?? false)
+
+    setPaymentEnabled(data.payment_enabled ?? false)
+
+    setBenefitEnabled(data.benefit_enabled ?? false)
+    setBankTransferEnabled(data.bank_transfer_enabled ?? false)
+    setCashEnabled(data.cash_enabled ?? false)
+    setPaymentLinkEnabled(data.payment_link_enabled ?? false)
+
+    setPaymentProofEnabled(data.payment_proof_enabled ?? false)
+    setPaymentProofRequired(data.payment_proof_required ?? false)
+
+    setPaymentAmount(
+      data.payment_amount !== null &&
+        data.payment_amount !== undefined
+        ? String(data.payment_amount)
+        : '',
+    )
+
+    setPaymentLink(data.payment_link ?? '')
+
+    setShowPaymentQr(data.show_payment_qr ?? false)
+
+    setSuccessMessage(
+      'تم ربط إعدادات التسجيل بقاعدة البيانات بنجاح.',
+    )
+
+    setLoading(false)
+  }
+
+  async function saveSettings() {
+    setSaving(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const payload = {
+      registration_open: registrationOpen,
+
+      show_name: showName,
+      required_name: requiredName,
+
+      show_personal_id: showPersonalId,
+      required_personal_id: requiredPersonalId,
+
+      show_phone: showPhone,
+      required_phone: requiredPhone,
+
+      show_whatsapp: showWhatsapp,
+      required_whatsapp: requiredWhatsapp,
+
+      show_level: showLevel,
+      required_level: requiredLevel,
+
+      show_notes: showNotes,
+      required_notes: requiredNotes,
+
+      show_health_notes: showHealthNotes,
+      required_health_notes: requiredHealthNotes,
+
+      payment_enabled: paymentEnabled,
+
+      benefit_enabled: benefitEnabled,
+      bank_transfer_enabled: bankTransferEnabled,
+      cash_enabled: cashEnabled,
+      payment_link_enabled: paymentLinkEnabled,
+
+      payment_proof_enabled: paymentProofEnabled,
+      payment_proof_required:
+        paymentProofEnabled && paymentProofRequired,
+
+      payment_amount:
+        paymentAmount.trim() === ''
+          ? 0
+          : Number(paymentAmount),
+
+      payment_link:
+        paymentLink.trim() === ''
+          ? null
+          : paymentLink.trim(),
+
+      show_payment_qr: showPaymentQr,
+    }
+
+    if (
+      Number.isNaN(payload.payment_amount) ||
+      payload.payment_amount < 0
+    ) {
+      setErrorMessage('يرجى إدخال مبلغ دفع صحيح.')
+      setSaving(false)
+      return
+    }
+
+    let error
+
+    if (settingsId) {
+      const result = await supabase
+        .from('registration_settings')
+        .update(payload)
+        .eq('id', settingsId)
+
+      error = result.error
+    } else {
+      const result = await supabase
+        .from('registration_settings')
+        .insert(payload)
+        .select('id')
+        .single()
+
+      error = result.error
+
+      if (!error && result.data) {
+        setSettingsId(result.data.id)
+      }
+    }
+
+    if (error) {
+      console.error('Error saving registration settings:', error)
+
+      setErrorMessage(
+        `تعذر حفظ إعدادات التسجيل: ${error.message}`,
+      )
+
+      setSaving(false)
+      return
+    }
+
+    setSuccessMessage(
+      'تم حفظ إعدادات التسجيل وربطها بقاعدة البيانات بنجاح.',
+    )
+
+    setSaving(false)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="إعدادات التسجيل"
         description="التحكم في صفحة التسجيل العامة والبيانات وطرق الدفع"
       />
+
+      {/* حالة الربط */}
+      {loading ? (
+        <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4 text-sm">
+          <Loader2 className="size-4 animate-spin" />
+          جاري تحميل إعدادات التسجيل من قاعدة البيانات...
+        </div>
+      ) : successMessage ? (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-700 dark:text-green-400">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-green-500" />
+            <strong>{successMessage}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {errorMessage && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {errorMessage}
+        </div>
+      )}
 
       <div>
         <Button variant="outline" asChild>
@@ -128,6 +363,7 @@ export default function RegistrationSettingsPage() {
             description="السماح للطلاب بالدخول إلى رابط التسجيل العام وإرسال طلبات جديدة."
             checked={registrationOpen}
             onChange={setRegistrationOpen}
+            disabled={loading}
           />
 
           <div className="mt-4">
@@ -152,6 +388,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار اسم الطالب في نموذج التسجيل."
             checked={showName}
             onChange={setShowName}
+            disabled={loading}
           />
 
           {showName && (
@@ -160,6 +397,7 @@ export default function RegistrationSettingsPage() {
               description="لا يمكن إرسال الطلب بدون الاسم."
               checked={requiredName}
               onChange={setRequiredName}
+              disabled={loading}
             />
           )}
 
@@ -168,6 +406,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار الرقم الشخصي في نموذج التسجيل."
             checked={showPersonalId}
             onChange={setShowPersonalId}
+            disabled={loading}
           />
 
           {showPersonalId && (
@@ -176,6 +415,7 @@ export default function RegistrationSettingsPage() {
               description="لا يمكن إرسال الطلب بدون الرقم الشخصي."
               checked={requiredPersonalId}
               onChange={setRequiredPersonalId}
+              disabled={loading}
             />
           )}
 
@@ -184,6 +424,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار رقم الاتصال في نموذج التسجيل."
             checked={showPhone}
             onChange={setShowPhone}
+            disabled={loading}
           />
 
           {showPhone && (
@@ -192,6 +433,7 @@ export default function RegistrationSettingsPage() {
               description="لا يمكن إرسال الطلب بدون رقم الاتصال."
               checked={requiredPhone}
               onChange={setRequiredPhone}
+              disabled={loading}
             />
           )}
 
@@ -200,6 +442,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار رقم الواتساب في نموذج التسجيل."
             checked={showWhatsapp}
             onChange={setShowWhatsapp}
+            disabled={loading}
           />
 
           {showWhatsapp && (
@@ -208,6 +451,7 @@ export default function RegistrationSettingsPage() {
               description="إجبار الطالب على إدخال رقم الواتساب."
               checked={requiredWhatsapp}
               onChange={setRequiredWhatsapp}
+              disabled={loading}
             />
           )}
 
@@ -216,6 +460,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار اختيار الصف أو المستوى في نموذج التسجيل."
             checked={showLevel}
             onChange={setShowLevel}
+            disabled={loading}
           />
 
           {showLevel && (
@@ -224,6 +469,7 @@ export default function RegistrationSettingsPage() {
               description="يجب على الطالب اختيار المستوى."
               checked={requiredLevel}
               onChange={setRequiredLevel}
+              disabled={loading}
             />
           )}
 
@@ -232,6 +478,7 @@ export default function RegistrationSettingsPage() {
             description="السماح للطالب بإضافة ملاحظات."
             checked={showNotes}
             onChange={setShowNotes}
+            disabled={loading}
           />
 
           {showNotes && (
@@ -240,6 +487,7 @@ export default function RegistrationSettingsPage() {
               description="إجبار الطالب على كتابة الملاحظات."
               checked={requiredNotes}
               onChange={setRequiredNotes}
+              disabled={loading}
             />
           )}
 
@@ -248,6 +496,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار حقل الأمراض المزمنة."
             checked={showHealthNotes}
             onChange={setShowHealthNotes}
+            disabled={loading}
           />
 
           {showHealthNotes && (
@@ -256,6 +505,7 @@ export default function RegistrationSettingsPage() {
               description="إجبار الطالب على تعبئة هذا الحقل."
               checked={requiredHealthNotes}
               onChange={setRequiredHealthNotes}
+              disabled={loading}
             />
           )}
         </CardContent>
@@ -276,6 +526,7 @@ export default function RegistrationSettingsPage() {
             description="إظهار قسم الدفع في صفحة التسجيل العامة."
             checked={paymentEnabled}
             onChange={setPaymentEnabled}
+            disabled={loading}
           />
 
           {paymentEnabled && (
@@ -299,6 +550,7 @@ export default function RegistrationSettingsPage() {
                     setPaymentAmount(event.target.value)
                   }
                   className="mt-2 flex h-10 w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  disabled={loading}
                 />
               </div>
 
@@ -310,6 +562,7 @@ export default function RegistrationSettingsPage() {
                   description="السماح للطالب باستخدام BenefitPay."
                   checked={benefitEnabled}
                   onChange={setBenefitEnabled}
+                  disabled={loading}
                 />
 
                 <SettingRow
@@ -317,6 +570,7 @@ export default function RegistrationSettingsPage() {
                   description="السماح للطالب بالدفع عن طريق التحويل البنكي."
                   checked={bankTransferEnabled}
                   onChange={setBankTransferEnabled}
+                  disabled={loading}
                 />
 
                 <SettingRow
@@ -324,6 +578,7 @@ export default function RegistrationSettingsPage() {
                   description="السماح باختيار الدفع النقدي."
                   checked={cashEnabled}
                   onChange={setCashEnabled}
+                  disabled={loading}
                 />
 
                 <SettingRow
@@ -331,6 +586,7 @@ export default function RegistrationSettingsPage() {
                   description="إظهار رابط دفع خارجي للطالب."
                   checked={paymentLinkEnabled}
                   onChange={setPaymentLinkEnabled}
+                  disabled={loading}
                 />
               </div>
 
@@ -356,6 +612,7 @@ export default function RegistrationSettingsPage() {
                       setPaymentLink(event.target.value)
                     }
                     className="mt-2 flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    disabled={loading}
                   />
                 </div>
               )}
@@ -365,6 +622,7 @@ export default function RegistrationSettingsPage() {
                 description="إظهار صورة QR أو باركود الدفع في صفحة التسجيل."
                 checked={showPaymentQr}
                 onChange={setShowPaymentQr}
+                disabled={loading}
               />
 
               {showPaymentQr && (
@@ -391,6 +649,7 @@ export default function RegistrationSettingsPage() {
                   description="السماح للطالب برفع صورة إثبات الدفع."
                   checked={paymentProofEnabled}
                   onChange={setPaymentProofEnabled}
+                  disabled={loading}
                 />
 
                 {paymentProofEnabled && (
@@ -399,6 +658,7 @@ export default function RegistrationSettingsPage() {
                     description="لا يمكن إرسال طلب التسجيل بدون إثبات الدفع."
                     checked={paymentProofRequired}
                     onChange={setPaymentProofRequired}
+                    disabled={loading}
                   />
                 )}
               </div>
@@ -454,9 +714,22 @@ export default function RegistrationSettingsPage() {
 
       {/* حفظ */}
       <div className="flex justify-end">
-        <Button size="lg">
-          <Save className="ml-2 size-4" />
-          حفظ إعدادات التسجيل
+        <Button
+          size="lg"
+          onClick={saveSettings}
+          disabled={loading || saving}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="ml-2 size-4 animate-spin" />
+              جاري الحفظ...
+            </>
+          ) : (
+            <>
+              <Save className="ml-2 size-4" />
+              حفظ إعدادات التسجيل
+            </>
+          )}
         </Button>
       </div>
     </div>
