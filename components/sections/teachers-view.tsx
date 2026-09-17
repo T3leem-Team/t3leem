@@ -82,41 +82,78 @@ const attendanceStatusNames: AttendanceStatusName[] = [
   'مستأذن',
 ]
 
-const formatDateForDisplay = (date: string) => {
-  const parsed = new Date(`${date}T00:00:00`)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date
-  }
-
-  return new Intl.DateTimeFormat('ar-BH', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(parsed)
+const normalizeStatusName = (
+  value: string | null | undefined,
+) => {
+  return (value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
-const formatShortDate = (date: string) => {
-  const parsed = new Date(`${date}T00:00:00`)
+const isAttendanceStatusName = (
+  value: string | null | undefined,
+): value is AttendanceStatusName => {
+  const normalized =
+    normalizeStatusName(value)
+
+  return attendanceStatusNames.includes(
+    normalized as AttendanceStatusName,
+  )
+}
+
+const formatDateForDisplay = (
+  date: string,
+) => {
+  const parsed = new Date(
+    `${date}T00:00:00`,
+  )
 
   if (Number.isNaN(parsed.getTime())) {
     return date
   }
 
-  return new Intl.DateTimeFormat('ar-BH', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(parsed)
+  return new Intl.DateTimeFormat(
+    'ar-BH',
+    {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    },
+  ).format(parsed)
+}
+
+const formatShortDate = (
+  date: string,
+) => {
+  const parsed = new Date(
+    `${date}T00:00:00`,
+  )
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
+  return new Intl.DateTimeFormat(
+    'ar-BH',
+    {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    },
+  ).format(parsed)
 }
 
 const todayString = () => {
   const now = new Date()
 
   const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
+  const month = String(
+    now.getMonth() + 1,
+  ).padStart(2, '0')
+  const day = String(
+    now.getDate(),
+  ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -125,7 +162,10 @@ const isDateWithinCourse = (
   date: string,
   course: Course,
 ) => {
-  if (!course.startDate || !course.endDate) {
+  if (
+    !course.startDate ||
+    !course.endDate
+  ) {
     return true
   }
 
@@ -138,9 +178,19 @@ const isDateWithinCourse = (
 const getStatusIdByName = (
   statuses: AttendanceStatus[],
   name: AttendanceStatusName,
-) =>
-  statuses.find((status) => status.name === name)?.id ??
-  null
+) => {
+  const target =
+    normalizeStatusName(name)
+
+  return (
+    statuses.find(
+      (status) =>
+        normalizeStatusName(
+          status.name,
+        ) === target,
+    )?.id ?? null
+  )
+}
 
 const getStatusName = (
   statuses: AttendanceStatus[],
@@ -154,65 +204,201 @@ const getStatusName = (
     (item) => item.id === statusId,
   )
 
+  const normalized =
+    normalizeStatusName(
+      status?.name,
+    )
+
   if (
-    status?.name === 'حاضر' ||
-    status?.name === 'غائب' ||
-    status?.name === 'متأخر' ||
-    status?.name === 'مستأذن'
+    isAttendanceStatusName(
+      normalized,
+    )
   ) {
-    return status.name
+    return normalized
   }
 
   return 'لم يسجل'
 }
 
+const getAttendanceClass = (
+  currentStatus:
+    | AttendanceStatusName
+    | 'لم يسجل',
+  buttonStatus: AttendanceStatusName,
+) => {
+  const selected =
+    currentStatus === buttonStatus
+
+  if (
+    buttonStatus === 'حاضر'
+  ) {
+    return selected
+      ? 'border-green-500 bg-green-50 text-green-700 shadow-sm'
+      : 'border-green-200 bg-white text-green-700 hover:border-green-400 hover:bg-green-50'
+  }
+
+  if (
+    buttonStatus === 'غائب'
+  ) {
+    return selected
+      ? 'border-red-500 bg-red-50 text-red-700 shadow-sm'
+      : 'border-red-200 bg-white text-red-700 hover:border-red-400 hover:bg-red-50'
+  }
+
+  if (
+    buttonStatus === 'متأخر'
+  ) {
+    return selected
+      ? 'border-amber-500 bg-amber-50 text-amber-700 shadow-sm'
+      : 'border-amber-200 bg-white text-amber-700 hover:border-amber-400 hover:bg-amber-50'
+  }
+
+  return selected
+    ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+    : 'border-blue-200 bg-white text-blue-700 hover:border-blue-400 hover:bg-blue-50'
+}
+
+type AttendanceStatusButtonsProps = {
+  currentStatus:
+    | AttendanceStatusName
+    | 'لم يسجل'
+  saving: boolean
+  onSelect: (
+    status: AttendanceStatusName,
+  ) => void
+}
+
+function AttendanceStatusButtons({
+  currentStatus,
+  saving,
+  onSelect,
+}: AttendanceStatusButtonsProps) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {attendanceStatusNames.map(
+        (status) => {
+          const selected =
+            currentStatus === status
+
+          return (
+            <button
+              key={status}
+              type="button"
+              disabled={saving}
+              onClick={() =>
+                onSelect(status)
+              }
+              className={`inline-flex min-h-9 cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
+                currentStatus,
+                status,
+              )}`}
+            >
+              {selected && (
+                <Check className="ml-1 size-3.5" />
+              )}
+
+              {status}
+            </button>
+          )
+        },
+      )}
+    </div>
+  )
+}
+
 export function TeachersView() {
-  const [teachers, setTeachers] = useState<Teacher[]>([])
-  const [courses, setCourses] = useState<Course[]>([])
-  const [students, setStudents] = useState<Student[]>([])
-  const [assignments, setAssignments] = useState<
-    Assignment[]
-  >([])
-  const [attendanceStatuses, setAttendanceStatuses] =
-    useState<AttendanceStatus[]>([])
-  const [attendanceRecords, setAttendanceRecords] =
-    useState<AttendanceRecord[]>([])
+  const [teachers, setTeachers] =
+    useState<Teacher[]>([])
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
+  const [courses, setCourses] =
+    useState<Course[]>([])
 
-  const [search, setSearch] = useState('')
-  const [selectedCourseId, setSelectedCourseId] =
-    useState<string | null>(null)
+  const [students, setStudents] =
+    useState<Student[]>([])
 
-  const [selectedTeacherId, setSelectedTeacherId] =
-    useState<string | null>(null)
+  const [assignments, setAssignments] =
+    useState<Assignment[]>([])
 
-  const [activePanel, setActivePanel] = useState<
+  const [
+    attendanceStatuses,
+    setAttendanceStatuses,
+  ] = useState<AttendanceStatus[]>([])
+
+  const [
+    attendanceRecords,
+    setAttendanceRecords,
+  ] = useState<AttendanceRecord[]>([])
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [saving, setSaving] =
+    useState(false)
+
+  const [statusMessage, setStatusMessage] =
+    useState('')
+
+  const [search, setSearch] =
+    useState('')
+
+  const [
+    selectedCourseId,
+    setSelectedCourseId,
+  ] = useState<string | null>(null)
+
+  const [
+    selectedTeacherId,
+    setSelectedTeacherId,
+  ] = useState<string | null>(null)
+
+  const [
+    activePanel,
+    setActivePanel,
+  ] = useState<
     'students' | 'addStudents' | 'attendance'
   >('students')
 
-  const [selectedGrade, setSelectedGrade] =
-    useState('')
+  const [
+    selectedGrade,
+    setSelectedGrade,
+  ] = useState('')
 
-  const [selectedStudentIds, setSelectedStudentIds] =
-    useState<string[]>([])
+  const [
+    selectedStudentIds,
+    setSelectedStudentIds,
+  ] = useState<string[]>([])
 
-  const [isTransferOpen, setIsTransferOpen] =
-    useState(false)
+  const [
+    isTransferOpen,
+    setIsTransferOpen,
+  ] = useState(false)
 
-  const [transferStudentId, setTransferStudentId] =
-    useState<string | null>(null)
+  const [
+    transferStudentId,
+    setTransferStudentId,
+  ] = useState<string | null>(null)
 
-  const [transferTeacherId, setTransferTeacherId] =
-    useState('')
+  const [
+    transferTeacherId,
+    setTransferTeacherId,
+  ] = useState('')
 
-  const [selectedAttendanceDate, setSelectedAttendanceDate] =
-    useState<string | null>(null)
+  const [
+    selectedAttendanceDate,
+    setSelectedAttendanceDate,
+  ] = useState<string | null>(null)
 
-  const [attendanceNotes, setAttendanceNotes] =
-    useState<AttendanceNotes>({})
+  const [
+    attendanceNotes,
+    setAttendanceNotes,
+  ] = useState<AttendanceNotes>({})
+
+  const [
+    courseTeacherIds,
+    setCourseTeacherIds,
+  ] = useState<
+    Record<string, string[]>
+  >({})
 
   /*
    * تحميل كل بيانات الصفحة من Supabase.
@@ -263,7 +449,10 @@ export function TeachersView() {
       .select(
         'id, name, start_date, end_date, days, created_at',
       )
-      .eq('academic_year_id', academicYear.id)
+      .eq(
+        'academic_year_id',
+        academicYear.id,
+      )
       .order('created_at', {
         ascending: true,
       })
@@ -281,8 +470,10 @@ export function TeachersView() {
     ).map((course) => ({
       id: course.id,
       name: course.name,
-      startDate: course.start_date ?? '',
-      endDate: course.end_date ?? '',
+      startDate:
+        course.start_date ?? '',
+      endDate:
+        course.end_date ?? '',
       days: Array.isArray(course.days)
         ? course.days
         : [],
@@ -293,9 +484,10 @@ export function TeachersView() {
     /*
      * المعلمون المرتبطون بالدورات الحالية.
      */
-    const courseIds = mappedCourses.map(
-      (course) => course.id,
-    )
+    const courseIds =
+      mappedCourses.map(
+        (course) => course.id,
+      )
 
     let courseTeacherRows: {
       id: string
@@ -312,7 +504,10 @@ export function TeachersView() {
         .select(
           'id, course_id, teacher_id',
         )
-        .in('course_id', courseIds)
+        .in(
+          'course_id',
+          courseIds,
+        )
 
       if (error) {
         setStatusMessage(
@@ -322,21 +517,22 @@ export function TeachersView() {
         return
       }
 
-      courseTeacherRows = data ?? []
+      courseTeacherRows =
+        data ?? []
     }
 
-    const teacherIds = Array.from(
-      new Set(
-        courseTeacherRows.map(
-          (item) => item.teacher_id,
+    const teacherIds =
+      Array.from(
+        new Set(
+          courseTeacherRows.map(
+            (item) =>
+              item.teacher_id,
+          ),
         ),
-      ),
-    )
+      )
 
     /*
      * بيانات المعلمين.
-     *
-     * نعرض فقط المعلمين النشطين في التشغيل.
      */
     let teacherRows: {
       id: string
@@ -350,7 +546,9 @@ export function TeachersView() {
         error,
       } = await supabase
         .from('teachers')
-        .select('id, name, is_active')
+        .select(
+          'id, name, is_active',
+        )
         .in('id', teacherIds)
         .eq('is_active', true)
         .order('name', {
@@ -423,13 +621,15 @@ export function TeachersView() {
       return
     }
 
-    const studentIds = Array.from(
-      new Set(
-        (enrollmentRows ?? []).map(
-          (row) => row.student_id,
+    const studentIds =
+      Array.from(
+        new Set(
+          (enrollmentRows ?? []).map(
+            (row) =>
+              row.student_id,
+          ),
         ),
-      ),
-    )
+      )
 
     let studentRows: {
       id: string
@@ -449,7 +649,10 @@ export function TeachersView() {
         .select(
           'id, student_id, name, personal_id, phone, status',
         )
-        .in('id', studentIds)
+        .in(
+          'id',
+          studentIds,
+        )
 
       if (error) {
         setStatusMessage(
@@ -462,56 +665,68 @@ export function TeachersView() {
       studentRows = data ?? []
     }
 
-    const studentMap = new Map(
-      studentRows.map((student) => [
-        student.id,
-        student,
-      ]),
-    )
-
-    const mappedStudents: Student[] = (
-      enrollmentRows ?? []
-    )
-      .map((enrollment) => {
-        const student =
-          studentMap.get(
-            enrollment.student_id,
-          )
-
-        if (!student) {
-          return null
-        }
-
-        const levelData =
-          Array.isArray(enrollment.levels)
-            ? enrollment.levels[0]
-            : enrollment.levels
-
-        return {
-          id: student.id,
-          studentId:
-            student.student_id ?? '',
-          name: student.name,
-          personalId:
-            student.personal_id ?? '',
-          phone: student.phone ?? '',
-          levelId: enrollment.level_id,
-          levelName:
-            levelData?.name ?? '—',
-          enrollmentId: enrollment.id,
-        }
-      })
-      .filter(
-        (student): student is Student =>
-          student !== null,
+    const studentMap =
+      new Map(
+        studentRows.map(
+          (student) => [
+            student.id,
+            student,
+          ],
+        ),
       )
 
-    setStudents(mappedStudents)
+    const mappedStudents: Student[] =
+      (enrollmentRows ?? [])
+        .map((enrollment) => {
+          const student =
+            studentMap.get(
+              enrollment.student_id,
+            )
+
+          if (!student) {
+            return null
+          }
+
+          const levelData =
+            Array.isArray(
+              enrollment.levels,
+            )
+              ? enrollment.levels[0]
+              : enrollment.levels
+
+          return {
+            id: student.id,
+            studentId:
+              student.student_id ?? '',
+            name: student.name,
+            personalId:
+              student.personal_id ?? '',
+            phone:
+              student.phone ?? '',
+            levelId:
+              enrollment.level_id,
+            levelName:
+              levelData?.name ?? '—',
+            enrollmentId:
+              enrollment.id,
+          }
+        })
+        .filter(
+          (
+            student,
+          ): student is Student =>
+            student !== null,
+        )
+
+    setStudents(
+      mappedStudents,
+    )
 
     /*
      * توزيع الطلاب على المعلمين.
      */
-    let assignmentRows: Assignment[] = []
+    let assignmentRows: Assignment[] =
+      []
 
     if (courseIds.length > 0) {
       const {
@@ -524,8 +739,11 @@ export function TeachersView() {
         .select(
           'id, course_id, teacher_id, student_id',
         )
-        .in('course_id', courseIds)
-    
+        .in(
+          'course_id',
+          courseIds,
+        )
+
       if (error) {
         setStatusMessage(
           `خطأ في تحميل توزيع الطلاب: ${error.message}`,
@@ -533,20 +751,51 @@ export function TeachersView() {
         setLoading(false)
         return
       }
-    
+
       assignmentRows = (
         data ?? []
-      ).map(
-        (row) => ({
-          id: row.id,
-          courseId: row.course_id,
-          teacherId: row.teacher_id,
-          studentId: row.student_id,
-        }),
-      )
+      ).map((row) => ({
+        id: row.id,
+        courseId:
+          row.course_id,
+        teacherId:
+          row.teacher_id,
+        studentId:
+          row.student_id,
+      }))
     }
-    
-    setAssignments(assignmentRows)
+
+    setAssignments(
+      assignmentRows,
+    )
+
+    /*
+     * حفظ ارتباطات المعلمين بالدورات
+     * من نفس الاستعلام الأول.
+     *
+     * هذا يقلل استعلامًا إضافيًا.
+     */
+    const teacherMap: Record<
+      string,
+      string[]
+    > = {}
+
+    for (const row of courseTeacherRows) {
+      if (
+        !teacherMap[row.course_id]
+      ) {
+        teacherMap[row.course_id] =
+          []
+      }
+
+      teacherMap[
+        row.course_id
+      ].push(row.teacher_id)
+    }
+
+    setCourseTeacherIds(
+      teacherMap,
+    )
 
     /*
      * حالات الحضور.
@@ -555,7 +804,9 @@ export function TeachersView() {
       data: statusRows,
       error: statusesError,
     } = await supabase
-      .from('attendance_statuses')
+      .from(
+        'attendance_statuses',
+      )
       .select(
         'id, name, is_active, sort_order',
       )
@@ -572,19 +823,38 @@ export function TeachersView() {
       return
     }
 
-    setAttendanceStatuses(
+    const mappedStatuses: AttendanceStatus[] =
       (statusRows ?? []).map(
         (status) => ({
           id: status.id,
-          name: status.name,
-          isActive: Boolean(
-            status.is_active,
-          ),
+          name:
+            normalizeStatusName(
+              status.name,
+            ),
+          isActive:
+            Boolean(
+              status.is_active,
+            ),
           sortOrder:
             status.sort_order ?? 0,
         }),
-      ),
+      )
+
+    setAttendanceStatuses(
+      mappedStatuses,
     )
+
+    /*
+     * إذا لم توجد حالات حضور في قاعدة البيانات،
+     * نوضح المشكلة بدل أن تبدو الأزرار وكأنها لا تعمل.
+     */
+    if (
+      mappedStatuses.length === 0
+    ) {
+      setStatusMessage(
+        'لا توجد حالات حضور مفعلة في attendance_statuses. أضف: حاضر، غائب، متأخر، مستأذن.',
+      )
+    }
 
     /*
      * سجل الحضور للدورات الحالية.
@@ -592,7 +862,9 @@ export function TeachersView() {
     let attendanceRows: {
       id: string
       student_id: string
-      enrollment_id: string | null
+      enrollment_id:
+        | string
+        | null
       attendance_date: string
       status_id: string
       note: string | null
@@ -662,6 +934,7 @@ export function TeachersView() {
 
   useEffect(() => {
     loadData()
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -690,86 +963,9 @@ export function TeachersView() {
         )
       : new Set<string>()
 
-  const currentCourseTeachers =
-    teachers.filter((teacher) => {
-      if (!currentCourse) {
-        return false
-      }
-
-      return (
-        currentCourseTeacherIds.has(
-          teacher.id,
-        ) ||
-        /*
-         * teacherIds من course_teachers
-         * يتم تحميلها ضمن القائمة.
-         */
-        false
-      )
-    })
-
   /*
-   * ملاحظة:
-   * assignments لا تحتوي بالضرورة على كل
-   * المعلمين المرتبطين بالدورة، لذلك نحتاج
-   * بيانات course_teachers من جديد لهذا الجزء.
-   *
-   * نحافظ على قائمة IDs في state بشكل مستقل.
+   * المعلمون التشغيليون للدورة.
    */
-  const [courseTeacherIds, setCourseTeacherIds] =
-    useState<
-      Record<string, string[]>
-    >({})
-
-  useEffect(() => {
-    const loadCourseTeachers = async () => {
-      if (courses.length === 0) {
-        setCourseTeacherIds({})
-        return
-      }
-
-      const ids = courses.map(
-        (course) => course.id,
-      )
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('course_teachers')
-        .select(
-          'course_id, teacher_id',
-        )
-        .in('course_id', ids)
-
-      if (error) {
-        setStatusMessage(
-          `خطأ في تحميل معلمي الدورات: ${error.message}`,
-        )
-        return
-      }
-
-      const next: Record<
-        string,
-        string[]
-      > = {}
-
-      for (const row of data ?? []) {
-        if (!next[row.course_id]) {
-          next[row.course_id] = []
-        }
-
-        next[row.course_id].push(
-          row.teacher_id,
-        )
-      }
-
-      setCourseTeacherIds(next)
-    }
-
-    loadCourseTeachers()
-  }, [courses])
-
   const actualCurrentCourseTeacherIds =
     currentCourse
       ? new Set(
@@ -866,12 +1062,7 @@ export function TeachersView() {
     )
 
   /*
-   * الطلاب المتاحون للإضافة:
-   *
-   * - من الطلاب المسجلين في السنة الحالية.
-   * - المستوى المختار.
-   * - الطالب غير مسند إلى معلم آخر
-   *   في نفس الدورة.
+   * الطلاب المتاحون للإضافة.
    */
   const availableStudents =
     useMemo(() => {
@@ -929,9 +1120,6 @@ export function TeachersView() {
 
   /*
    * الطلاب المسندون إلى معلم آخر.
-   *
-   * نعرضهم في قائمة الإضافة ولكنهم معطلون
-   * مع اسم المعلم الحالي.
    */
   const unavailableStudents =
     useMemo(() => {
@@ -1023,7 +1211,9 @@ export function TeachersView() {
     setIsTransferOpen(false)
     setTransferStudentId(null)
     setTransferTeacherId('')
-    setSelectedAttendanceDate(null)
+    setSelectedAttendanceDate(
+      null,
+    )
   }
 
   const closeTeacher = () => {
@@ -1034,13 +1224,17 @@ export function TeachersView() {
     setIsTransferOpen(false)
     setTransferStudentId(null)
     setTransferTeacherId('')
-    setSelectedAttendanceDate(null)
+    setSelectedAttendanceDate(
+      null,
+    )
   }
 
   const openAddStudents = () => {
     setSelectedGrade('')
     setSelectedStudentIds([])
-    setActivePanel('addStudents')
+    setActivePanel(
+      'addStudents',
+    )
   }
 
   const toggleStudent = (
@@ -1062,188 +1256,182 @@ export function TeachersView() {
 
   /*
    * إضافة الطلاب إلى المعلم.
-   *
-   * unique(course_id, student_id)
-   * يمنع ازدواجية الطالب داخل الدورة.
    */
   const saveStudents = async () => {
-  if (
-    !selectedTeacherId ||
-    !currentCourse ||
-    selectedStudentIds.length === 0
-  ) {
-    return
-  }
+    if (
+      !selectedTeacherId ||
+      !currentCourse ||
+      selectedStudentIds.length ===
+        0
+    ) {
+      return
+    }
 
-  setSaving(true)
-  setStatusMessage(
-    'جاري التحقق من الطلاب...',
-  )
-
-  const {
-    data: existingRows,
-    error: existingError,
-  } = await supabase
-    .from('teacher_student_assignments')
-    .select(
-      'id, course_id, teacher_id, student_id',
-    )
-    .eq(
-      'course_id',
-      currentCourse.id,
-    )
-    .in(
-      'student_id',
-      selectedStudentIds,
-    )
-
-  if (existingError) {
+    setSaving(true)
     setStatusMessage(
-      `تعذر التحقق من توزيع الطلاب: ${existingError.message}`,
+      'جاري التحقق من الطلاب...',
     )
-    setSaving(false)
-    return
-  }
 
-  /*
-   * نحول بيانات Supabase من snake_case
-   * إلى نفس الشكل المستخدم داخل الواجهة.
-   */
-  const existingAssignments: Assignment[] =
-    (existingRows ?? []).map(
-      (row) => ({
+    const {
+      data: existingRows,
+      error: existingError,
+    } = await supabase
+      .from(
+        'teacher_student_assignments',
+      )
+      .select(
+        'id, course_id, teacher_id, student_id',
+      )
+      .eq(
+        'course_id',
+        currentCourse.id,
+      )
+      .in(
+        'student_id',
+        selectedStudentIds,
+      )
+
+    if (existingError) {
+      setStatusMessage(
+        `تعذر التحقق من توزيع الطلاب: ${existingError.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const existingAssignments: Assignment[] =
+      (
+        existingRows ?? []
+      ).map((row) => ({
         id: row.id,
-        courseId: row.course_id,
-        teacherId: row.teacher_id,
-        studentId: row.student_id,
-      }),
-    )
+        courseId:
+          row.course_id,
+        teacherId:
+          row.teacher_id,
+        studentId:
+          row.student_id,
+      }))
 
-  /*
-   * الطلاب المسندون أصلًا لنفس المعلم.
-   */
-  const alreadyWithCurrentTeacher =
-    existingAssignments
-      .filter(
+    const alreadyWithCurrentTeacher =
+      existingAssignments
+        .filter(
+          (assignment) =>
+            assignment.teacherId ===
+            selectedTeacherId,
+        )
+        .map(
+          (assignment) =>
+            assignment.studentId,
+        )
+
+    const assignedToAnotherTeacher =
+      existingAssignments.filter(
         (assignment) =>
-          assignment.teacherId ===
+          assignment.teacherId !==
           selectedTeacherId,
       )
-      .map(
-        (assignment) =>
-          assignment.studentId,
+
+    if (
+      assignedToAnotherTeacher.length >
+      0
+    ) {
+      const anotherTeacher =
+        operationalTeachers.find(
+          (teacher) =>
+            teacher.id ===
+            assignedToAnotherTeacher[0]
+              .teacherId,
+        )
+
+      setStatusMessage(
+        `لا يمكن إضافة الطالب لأنه مسند بالفعل إلى ${anotherTeacher?.name ?? 'معلم آخر'} في هذه الدورة.`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const studentsToInsert =
+      selectedStudentIds.filter(
+        (studentId) =>
+          !alreadyWithCurrentTeacher.includes(
+            studentId,
+          ),
       )
 
-  /*
-   * الطلاب المسندون إلى معلم آخر.
-   */
-  const assignedToAnotherTeacher =
-    existingAssignments.filter(
-      (assignment) =>
-        assignment.teacherId !==
-        selectedTeacherId,
-    )
+    if (
+      studentsToInsert.length === 0
+    ) {
+      setSelectedStudentIds([])
+      setSelectedGrade('')
+      setActivePanel('students')
+      setStatusMessage(
+        'الطلاب المحددون مضافون بالفعل لهذا المعلم.',
+      )
+      setSaving(false)
+      return
+    }
 
-  if (
-    assignedToAnotherTeacher.length > 0
-  ) {
-    const anotherTeacher =
-      operationalTeachers.find(
-        (teacher) =>
-          teacher.id ===
-          assignedToAnotherTeacher[0]
-            .teacherId,
+    const rows =
+      studentsToInsert.map(
+        (studentId) => ({
+          course_id:
+            currentCourse.id,
+          teacher_id:
+            selectedTeacherId,
+          student_id:
+            studentId,
+        }),
       )
 
-    setStatusMessage(
-      `لا يمكن إضافة الطالب لأنه مسند بالفعل إلى ${anotherTeacher?.name ?? 'معلم آخر'} في هذه الدورة.`,
-    )
-    setSaving(false)
-    return
-  }
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        'teacher_student_assignments',
+      )
+      .insert(rows)
+      .select(
+        'id, course_id, teacher_id, student_id',
+      )
 
-  /*
-   * نستبعد الطلاب الموجودين مسبقًا
-   * عند نفس المعلم.
-   */
-  const studentsToInsert =
-    selectedStudentIds.filter(
-      (studentId) =>
-        !alreadyWithCurrentTeacher.includes(
-          studentId,
-        ),
+    if (error) {
+      setStatusMessage(
+        `تعذر إضافة الطلاب: ${error.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const newAssignments: Assignment[] =
+      (data ?? []).map(
+        (row) => ({
+          id: row.id,
+          courseId:
+            row.course_id,
+          teacherId:
+            row.teacher_id,
+          studentId:
+            row.student_id,
+        }),
+      )
+
+    setAssignments(
+      (current) => [
+        ...current,
+        ...newAssignments,
+      ],
     )
 
-  if (
-    studentsToInsert.length === 0
-  ) {
     setSelectedStudentIds([])
     setSelectedGrade('')
     setActivePanel('students')
     setStatusMessage(
-      'الطلاب المحددون مضافون بالفعل لهذا المعلم.',
+      'تمت إضافة الطلاب بنجاح ✅',
     )
     setSaving(false)
-    return
   }
 
-  const rows =
-    studentsToInsert.map(
-      (studentId) => ({
-        course_id:
-          currentCourse.id,
-        teacher_id:
-          selectedTeacherId,
-        student_id:
-          studentId,
-      }),
-    )
-
-  const {
-    data,
-    error,
-  } = await supabase
-    .from(
-      'teacher_student_assignments',
-    )
-    .insert(rows)
-    .select(
-      'id, course_id, teacher_id, student_id',
-    )
-
-  if (error) {
-    setStatusMessage(
-      `تعذر إضافة الطلاب: ${error.message}`,
-    )
-    setSaving(false)
-    return
-  }
-
-  const newAssignments: Assignment[] =
-    (data ?? []).map(
-      (row) => ({
-        id: row.id,
-        courseId: row.course_id,
-        teacherId: row.teacher_id,
-        studentId: row.student_id,
-      }),
-    )
-
-  setAssignments(
-    (current) => [
-      ...current,
-      ...newAssignments,
-    ],
-  )
-
-  setSelectedStudentIds([])
-  setSelectedGrade('')
-  setActivePanel('students')
-  setStatusMessage(
-    'تمت إضافة الطلاب بنجاح ✅',
-  )
-  setSaving(false)
-}
   const openTransfer = (
     studentId: string,
   ) => {
@@ -1255,8 +1443,7 @@ export function TeachersView() {
   }
 
   /*
-   * نقل الطالب:
-   * نحدث teacher_id في نفس سجل التوزيع.
+   * نقل الطالب.
    */
   const saveTransfer = async () => {
     if (
@@ -1303,7 +1490,10 @@ export function TeachersView() {
         updated_at:
           new Date().toISOString(),
       })
-      .eq('id', assignment.id)
+      .eq(
+        'id',
+        assignment.id,
+      )
       .select(
         'id, course_id, teacher_id, student_id',
       )
@@ -1323,7 +1513,15 @@ export function TeachersView() {
           (item) =>
             item.id ===
             assignment.id
-              ? (data as Assignment)
+              ? {
+                  id: data.id,
+                  courseId:
+                    data.course_id,
+                  teacherId:
+                    data.teacher_id,
+                  studentId:
+                    data.student_id,
+                }
               : item,
         ),
     )
@@ -1339,9 +1537,6 @@ export function TeachersView() {
 
   /*
    * تاريخ الحضور الحالي.
-   *
-   * نستخدم تاريخ اليوم إذا كان داخل
-   * نطاق الدورة.
    */
   const currentAttendanceDate =
     currentCourse &&
@@ -1376,7 +1571,10 @@ export function TeachersView() {
       studentId: string,
       date: string | null,
     ) => {
-      if (!date || !currentCourse) {
+      if (
+        !date ||
+        !currentCourse
+      ) {
         return null
       }
 
@@ -1409,6 +1607,27 @@ export function TeachersView() {
     )
   }
 
+  const getPendingNote = (
+    studentId: string,
+    date: string | null,
+  ) => {
+    if (!date) {
+      return ''
+    }
+
+    return (
+      attendanceNotes[
+        `${date}:${studentId}`
+      ] ?? ''
+    )
+  }
+
+  /*
+   * حفظ الحضور.
+   *
+   * ترجع true عند نجاح الحفظ
+   * و false عند الفشل.
+   */
   const updateAttendance = async (
     studentId: string,
     statusName: AttendanceStatusName,
@@ -1418,7 +1637,7 @@ export function TeachersView() {
       !currentCourse ||
       !date
     ) {
-      return
+      return false
     }
 
     const statusId =
@@ -1429,9 +1648,18 @@ export function TeachersView() {
 
     if (!statusId) {
       setStatusMessage(
-        `حالة الحضور "${statusName}" غير موجودة.`,
+        `حالة الحضور "${statusName}" غير موجودة في قاعدة البيانات. الحالات المحملة: ${
+          attendanceStatuses
+            .map(
+              (status) =>
+                status.name,
+            )
+            .join('، ') ||
+          'لا توجد'
+        }`,
       )
-      return
+
+      return false
     }
 
     const student =
@@ -1441,8 +1669,18 @@ export function TeachersView() {
       )
 
     if (!student) {
-      return
+      setStatusMessage(
+        'تعذر العثور على الطالب.',
+      )
+
+      return false
     }
+
+    const pendingNote =
+      getPendingNote(
+        studentId,
+        date,
+      )
 
     setSaving(true)
     setStatusMessage(
@@ -1467,7 +1705,9 @@ export function TeachersView() {
           enrollment_id:
             student.enrollmentId,
           note:
-            existing.note || null,
+            existing.note ||
+            pendingNote ||
+            null,
         })
         .eq(
           'id',
@@ -1483,7 +1723,7 @@ export function TeachersView() {
           `تعذر حفظ الحضور: ${error.message}`,
         )
         setSaving(false)
-        return
+        return false
       }
 
       const mapped: AttendanceRecord =
@@ -1528,7 +1768,8 @@ export function TeachersView() {
             date,
           status_id:
             statusId,
-          note: null,
+          note:
+            pendingNote || null,
           course_id:
             currentCourse.id,
         })
@@ -1542,7 +1783,7 @@ export function TeachersView() {
           `تعذر حفظ الحضور: ${error.message}`,
         )
         setSaving(false)
-        return
+        return false
       }
 
       const mapped: AttendanceRecord =
@@ -1558,8 +1799,6 @@ export function TeachersView() {
             data.attendance_date,
           statusId:
             data.status_id,
-          attendanceDate:
-            data.attendance_date,
           note:
             data.note ?? '',
         }
@@ -1572,10 +1811,31 @@ export function TeachersView() {
       )
     }
 
+    /*
+     * حذف الملاحظة المؤقتة بعد نجاح الحفظ.
+     */
+    if (pendingNote) {
+      setAttendanceNotes(
+        (current) => {
+          const next = {
+            ...current,
+          }
+
+          delete next[
+            `${date}:${studentId}`
+          ]
+
+          return next
+        },
+      )
+    }
+
     setStatusMessage(
       'تم حفظ الحضور ✅',
     )
     setSaving(false)
+
+    return true
   }
 
   /*
@@ -1601,11 +1861,6 @@ export function TeachersView() {
         )
 
       if (!existing) {
-        /*
-         * إذا لم يسجل المعلم حالة بعد،
-         * نخزن الملاحظة محليًا مؤقتًا.
-         * عند تسجيل الحالة تُحفظ معها.
-         */
         const key = `${date}:${studentId}`
 
         setAttendanceNotes(
@@ -1670,24 +1925,6 @@ export function TeachersView() {
           ),
       )
     }
-
-  /*
-   * حفظ الملاحظة المحلية مع أول تسجيل للحالة.
-   */
-  const getPendingNote = (
-    studentId: string,
-    date: string | null,
-  ) => {
-    if (!date) {
-      return ''
-    }
-
-    return (
-      attendanceNotes[
-        `${date}:${studentId}`
-      ] ?? ''
-    )
-  }
 
   const getAttendanceStats = (
     studentId: string,
@@ -1765,8 +2002,7 @@ export function TeachersView() {
       total,
       percentage:
         total > 0
-          ? (present / total) *
-            100
+          ? (present / total) * 100
           : 0,
     }
   }
@@ -1824,59 +2060,13 @@ export function TeachersView() {
     )
   }
 
-  const getAttendanceClass = (
-    currentStatus:
-      | AttendanceStatusName
-      | 'لم يسجل',
-    buttonStatus:
-      AttendanceStatusName,
-  ) => {
-    if (
-      currentStatus !==
-      buttonStatus
-    ) {
-      return 'border-border bg-background text-muted-foreground'
-    }
-
-    if (
-      buttonStatus ===
-      'حاضر'
-    ) {
-      return 'border-green-500 bg-green-50 text-green-700'
-    }
-
-    if (
-      buttonStatus ===
-      'غائب'
-    ) {
-      return 'border-red-500 bg-red-50 text-red-700'
-    }
-
-    if (
-      buttonStatus ===
-      'متأخر'
-    ) {
-      return 'border-amber-500 bg-amber-50 text-amber-700'
-    }
-
-    if (
-      buttonStatus ===
-      'مستأذن'
-    ) {
-      return 'border-blue-500 bg-blue-50 text-blue-700'
-    }
-
-    return 'border-border bg-background'
-  }
-
   const formatPercentage = (
     value: number,
   ) =>
     `${value.toFixed(1)}%`
 
   /*
-   * حفظ الحالة + الملاحظة إذا كانت الملاحظة
-   * موجودة قبل تسجيل الحالة.
+   * حفظ الحالة + الملاحظة.
    */
   const handleAttendanceClick =
     async (
@@ -1884,129 +2074,11 @@ export function TeachersView() {
       statusName: AttendanceStatusName,
       date: string,
     ) => {
-      const pendingNote =
-        getPendingNote(
-          studentId,
-          date,
-        )
-
-      const existing =
-        getStudentAttendanceRecord(
-          studentId,
-          date,
-        )
-
       await updateAttendance(
         studentId,
         statusName,
         date,
       )
-
-      if (
-        pendingNote &&
-        !existing
-      ) {
-        /*
-         * نحتاج انتظار state المحلي لاستخدام
-         * سجل الحضور الجديد، لذلك نعيد القراءة
-         * من قاعدة البيانات بعد الحفظ.
-         */
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse?.id ?? '',
-          )
-          .eq(
-            'student_id',
-            studentId,
-          )
-          .eq(
-            'attendance_date',
-            date,
-          )
-          .maybeSingle()
-
-        if (
-          !error &&
-          data
-        ) {
-          const {
-            data: updatedData,
-            error:
-              updateError,
-          } = await supabase
-            .from('attendance')
-            .update({
-              note:
-                pendingNote ||
-                null,
-            })
-            .eq(
-              'id',
-              data.id,
-            )
-            .select(
-              'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-            )
-            .single()
-
-          if (
-            !updateError &&
-            updatedData
-          ) {
-            const mapped: AttendanceRecord =
-              {
-                id:
-                  updatedData.id,
-                studentId:
-                  updatedData.student_id,
-                enrollmentId:
-                  updatedData.enrollment_id,
-                courseId:
-                  updatedData.course_id,
-                attendanceDate:
-                  updatedData.attendance_date,
-                statusId:
-                  updatedData.status_id,
-                note:
-                  updatedData.note ??
-                  '',
-              }
-
-            setAttendanceRecords(
-              (current) => [
-                ...current.filter(
-                  (record) =>
-                    record.id !==
-                    mapped.id,
-                ),
-                mapped,
-              ],
-            )
-          }
-        }
-
-        setAttendanceNotes(
-          (current) => {
-            const next = {
-              ...current,
-            }
-
-            delete next[
-              `${date}:${studentId}`
-            ]
-
-            return next
-          },
-        )
-      }
     }
 
   /*
@@ -2222,7 +2294,9 @@ export function TeachersView() {
 
                       return (
                         <tr
-                          key={teacher.id}
+                          key={
+                            teacher.id
+                          }
                           onClick={() =>
                             openTeacher(
                               teacher.id,
@@ -2243,7 +2317,9 @@ export function TeachersView() {
                               }}
                               className="font-medium text-primary hover:underline"
                             >
-                              {teacher.name}
+                              {
+                                teacher.name
+                              }
                             </button>
                           </td>
 
@@ -2252,14 +2328,18 @@ export function TeachersView() {
                             0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {teacherGrades.map(
-                                  (grade) => (
+                                  (
+                                    grade,
+                                  ) => (
                                     <span
                                       key={
                                         grade
                                       }
                                       className="rounded-full bg-muted px-2.5 py-1 text-xs"
                                     >
-                                      {grade}
+                                      {
+                                        grade
+                                      }
                                     </span>
                                   ),
                                 )}
@@ -2294,7 +2374,9 @@ export function TeachersView() {
             <div className="flex items-center justify-between border-b px-4 py-4 sm:px-6">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {selectedTeacher.name}
+                  {
+                    selectedTeacher.name
+                  }
                 </h2>
 
                 <p className="text-sm text-muted-foreground">
@@ -2420,7 +2502,7 @@ export function TeachersView() {
                       onClick={
                         openAddStudents
                       }
-                     disabled={false}
+                      disabled={false}
                     >
                       <Plus className="size-4" />
                       إضافة طلاب
@@ -2847,43 +2929,23 @@ export function TeachersView() {
                                       </td>
 
                                       <td className="px-4 py-4">
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {attendanceStatusNames.map(
-                                            (
+                                        <AttendanceStatusButtons
+                                          currentStatus={
+                                            currentStatus
+                                          }
+                                          saving={
+                                            saving
+                                          }
+                                          onSelect={(
+                                            status,
+                                          ) =>
+                                            handleAttendanceClick(
+                                              student.id,
                                               status,
-                                            ) => (
-                                              <button
-                                                key={
-                                                  status
-                                                }
-                                                type="button"
-                                                onClick={() =>
-                                                  handleAttendanceClick(
-                                                    student.id,
-                                                    status,
-                                                    selectedAttendanceDate,
-                                                  )
-                                                }
-                                                disabled={
-                                                  saving
-                                                }
-                                                className={`rounded-md border px-3 py-2 text-xs font-medium transition ${getAttendanceClass(
-                                                  currentStatus,
-                                                  status,
-                                                )}`}
-                                              >
-                                                {currentStatus ===
-                                                  status && (
-                                                  <Check className="ml-1 inline-block size-3.5" />
-                                                )}
-
-                                                {
-                                                  status
-                                                }
-                                              </button>
-                                            ),
-                                          )}
-                                        </div>
+                                              selectedAttendanceDate,
+                                            )
+                                          }
+                                        />
                                       </td>
 
                                       <td className="px-4 py-4">
@@ -3047,43 +3109,23 @@ export function TeachersView() {
                                       </td>
 
                                       <td className="px-4 py-4">
-                                        <div className="flex flex-wrap gap-1.5">
-                                          {attendanceStatusNames.map(
-                                            (
+                                        <AttendanceStatusButtons
+                                          currentStatus={
+                                            currentStatus
+                                          }
+                                          saving={
+                                            saving
+                                          }
+                                          onSelect={(
+                                            status,
+                                          ) =>
+                                            handleAttendanceClick(
+                                              student.id,
                                               status,
-                                            ) => (
-                                              <button
-                                                key={
-                                                  status
-                                                }
-                                                type="button"
-                                                onClick={() =>
-                                                  handleAttendanceClick(
-                                                    student.id,
-                                                    status,
-                                                    currentAttendanceDate,
-                                                  )
-                                                }
-                                                disabled={
-                                                  saving
-                                                }
-                                                className={`rounded-md border px-3 py-2 text-xs font-medium transition ${getAttendanceClass(
-                                                  currentStatus,
-                                                  status,
-                                                )}`}
-                                              >
-                                                {currentStatus ===
-                                                  status && (
-                                                  <Check className="ml-1 inline-block size-3.5" />
-                                                )}
-
-                                                {
-                                                  status
-                                                }
-                                              </button>
-                                            ),
-                                          )}
-                                        </div>
+                                              currentAttendanceDate,
+                                            )
+                                          }
+                                        />
                                       </td>
 
                                       <td className="px-4 py-4">
