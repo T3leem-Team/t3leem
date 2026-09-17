@@ -25,49 +25,36 @@ type RegistrationRequest = {
   id: string
   requestNumber: string
   trackingToken: string
-
   name: string
   personalId: string
   gender: string
   age: number | null
-
   phone: string
   whatsapp: string
-
   levelId: string | null
   classId: string | null
-
   notes: string
   healthNotes: string
-
   status:
     | 'pending'
     | 'under_review'
     | 'approved'
     | 'rejected'
     | 'cancelled'
-
   processingMode: 'review' | 'direct'
-
   studentId: string | null
-
   rejectionReason: string
-
   paymentMethod: string
   paymentAmount: number | null
   paymentReference: string
   paymentProofUrl: string
-
   paymentStatus:
     | 'not_required'
     | 'pending'
     | 'verified'
     | 'rejected'
-
   verifiedPaymentAmount: number | null
-
   paymentRejectionReason: string
-
   createdAt: string
 }
 
@@ -98,81 +85,49 @@ function mapRequest(row: any): RegistrationRequest {
     id: row.id ?? '',
     requestNumber: row.request_number ?? '',
     trackingToken: row.tracking_token ?? '',
-
     name: row.name ?? '',
     personalId: row.personal_id ?? '',
     gender: row.gender ?? '',
-    age:
-      typeof row.age === 'number'
-        ? row.age
-        : null,
-
+    age: typeof row.age === 'number' ? row.age : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
-
     levelId: row.level_id ?? null,
     classId: row.class_id ?? null,
-
     notes: row.notes ?? '',
     healthNotes: row.health_notes ?? '',
-
     status: row.status ?? 'pending',
-
-    processingMode:
-      row.processing_mode ?? 'review',
-
+    processingMode: row.processing_mode ?? 'review',
     studentId: row.student_id ?? null,
-
-    rejectionReason:
-      row.rejection_reason ?? '',
-
-    paymentMethod:
-      row.payment_method ?? '',
-
+    rejectionReason: row.rejection_reason ?? '',
+    paymentMethod: row.payment_method ?? '',
     paymentAmount:
       row.payment_amount !== null &&
       row.payment_amount !== undefined
         ? Number(row.payment_amount)
         : null,
-
-    paymentReference:
-      row.payment_reference ?? '',
-
-    paymentProofUrl:
-      row.payment_proof_url ?? '',
-
-    paymentStatus:
-      row.payment_status ?? 'not_required',
-
+    paymentReference: row.payment_reference ?? '',
+    paymentProofUrl: row.payment_proof_url ?? '',
+    paymentStatus: row.payment_status ?? 'not_required',
     verifiedPaymentAmount:
       row.verified_payment_amount !== null &&
       row.verified_payment_amount !== undefined
         ? Number(row.verified_payment_amount)
         : null,
-
     paymentRejectionReason:
       row.payment_rejection_reason ?? '',
-
-    createdAt:
-      row.created_at ?? '',
+    createdAt: row.created_at ?? '',
   }
 }
 
-function hasHealthNotes(
-  request: RegistrationRequest,
-) {
+function hasHealthNotes(request: RegistrationRequest) {
   return request.healthNotes.trim() !== ''
 }
 
-function hasNotes(
-  request: RegistrationRequest,
-) {
+function hasNotes(request: RegistrationRequest) {
   return request.notes.trim() !== ''
 }
 
-function hasSpecialInformation(
-  request: RegistrationRequest,
-) {
+function hasSpecialInformation(request: RegistrationRequest) {
   return (
     hasHealthNotes(request) ||
     hasNotes(request)
@@ -185,19 +140,14 @@ function getStatusLabel(
   switch (status) {
     case 'pending':
       return 'قيد المراجعة'
-
     case 'under_review':
       return 'تحت المراجعة'
-
     case 'approved':
       return 'مقبول'
-
     case 'rejected':
       return 'مرفوض'
-
     case 'cancelled':
       return 'ملغي'
-
     default:
       return status
   }
@@ -212,25 +162,17 @@ function formatDate(value: string) {
     return value
   }
 
-  return new Intl.DateTimeFormat(
-    'ar-BH',
-    {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    },
-  ).format(date)
+  return new Intl.DateTimeFormat('ar-BH', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
-function formatAmount(
-  value: number | null,
-) {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+function formatAmount(value: number | null) {
+  if (value === null || value === undefined) {
     return '—'
   }
 
@@ -336,28 +278,20 @@ export function EnrollmentView() {
         !filters.id ||
         request.requestNumber
           .toLowerCase()
-          .includes(
-            filters.id.toLowerCase(),
-          ) ||
+          .includes(filters.id.toLowerCase()) ||
         request.id
           .toLowerCase()
-          .includes(
-            filters.id.toLowerCase(),
-          )
+          .includes(filters.id.toLowerCase())
 
       const matchesName =
         !filters.name ||
         request.name
           .toLowerCase()
-          .includes(
-            filters.name.toLowerCase(),
-          )
+          .includes(filters.name.toLowerCase())
 
       const matchesPhone =
         !filters.phone ||
-        request.phone.includes(
-          filters.phone,
-        )
+        request.phone.includes(filters.phone)
 
       const matchesDate =
         !filters.submittedAt ||
@@ -379,20 +313,18 @@ export function EnrollmentView() {
     })
   }, [requests, filters])
 
-  const pendingCount =
-    requests.filter(
-      (request) =>
-        request.status === 'pending' ||
-        request.status === 'under_review',
-    ).length
+  const pendingCount = requests.filter(
+    (request) =>
+      request.status === 'pending' ||
+      request.status === 'under_review',
+  ).length
 
-  const specialCount =
-    requests.filter(
-      (request) =>
-        request.status !== 'rejected' &&
-        request.status !== 'cancelled' &&
-        hasSpecialInformation(request),
-    ).length
+  const specialCount = requests.filter(
+    (request) =>
+      request.status !== 'rejected' &&
+      request.status !== 'cancelled' &&
+      hasSpecialInformation(request),
+  ).length
 
   const openReview = (
     request: RegistrationRequest,
@@ -411,119 +343,132 @@ export function EnrollmentView() {
   const approveRequest = async (
     request: RegistrationRequest,
   ) => {
-    if (request.status !== 'pending' &&
-        request.status !== 'under_review') {
+    if (
+      request.status !== 'pending' &&
+      request.status !== 'under_review'
+    ) {
       return
     }
 
-    const confirmed =
-      window.confirm(
-        `هل أنت متأكد من قبول طلب ${request.requestNumber || request.name}؟`,
+    if (!request.levelId) {
+      setStatusMessage(
+        'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
       )
+      return
+    }
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من قبول طلب ${
+        request.requestNumber || request.name
+      }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
+    )
 
     if (!confirmed) return
 
     setSaving(true)
-    setStatusMessage('جاري قبول الطلب...')
-
-    const { data, error } = await supabase.rpc(
-      'approve_registration_request',
-      {
-        p_request_id: request.id,
-      },
+    setStatusMessage(
+      'جاري قبول الطلب وترحيله إلى الطلاب...',
     )
-    
-    if (error) {
-      setStatusMessage(
-        `تعذر قبول الطلب: ${error.message}`,
+
+    try {
+      const { data, error } =
+        await supabase.rpc(
+          'approve_registration_request',
+          {
+            p_request_id: request.id,
+          },
+        )
+
+      if (error) {
+        console.error(
+          'approve_registration_request error:',
+          error,
+        )
+
+        setStatusMessage(
+          `تعذر ترحيل الطلب: ${error.message}`,
+        )
+
+        return
+      }
+
+      console.log(
+        'approve_registration_request result:',
+        data,
       )
-      setSaving(false)
-      return
-    }
-    
-    setRequests((current) =>
-      current.map((item) =>
-        item.id === request.id
+
+      const studentId =
+        data?.student_id ?? null
+
+      const alreadyProcessed =
+        data?.already_processed === true
+
+      setRequests((current) =>
+        current.map((item) =>
+          item.id === request.id
+            ? {
+                ...item,
+                status: 'approved',
+                processingMode: 'direct',
+                studentId:
+                  studentId ?? item.studentId,
+              }
+            : item,
+        ),
+      )
+
+      setSelectedRequest((current) =>
+        current?.id === request.id
           ? {
-              ...item,
+              ...current,
               status: 'approved',
               processingMode: 'direct',
               studentId:
-                data?.student_id ??
-                item.studentId,
+                studentId ?? current.studentId,
             }
-          : item,
-      ),
-    )
-    
-    setSelectedRequest((current) =>
-      current?.id === request.id
-        ? {
-            ...current,
-            status: 'approved',
-            processingMode: 'direct',
-            studentId:
-              data?.student_id ??
-              current.studentId,
-          }
-        : current,
-    )
-    
-    setStatusMessage(
-      'تم قبول الطلب وإنشاء الطالب وربطه بالصف بنجاح ✅',
-    )
-    
-    setSaving(false)
-
-    if (error) {
-      setStatusMessage(
-        `تعذر قبول الطلب: ${error.message}`,
+          : current,
       )
+
+      setStatusMessage(
+        alreadyProcessed
+          ? 'الطلب كان مرحّل مسبقاً إلى الطلاب ✅'
+          : 'تم قبول الطلب وإنشاء الطالب وربطه بالمستوى بنجاح ✅',
+      )
+
+      await loadRequests()
+    } catch (error) {
+      console.error(
+        'Unexpected approval error:',
+        error,
+      )
+
+      setStatusMessage(
+        `حدث خطأ غير متوقع أثناء الترحيل: ${
+          error instanceof Error
+            ? error.message
+            : 'خطأ غير معروف'
+        }`,
+      )
+    } finally {
       setSaving(false)
-      return
     }
-
-    setRequests((current) =>
-      current.map((item) =>
-        item.id === request.id
-          ? {
-              ...item,
-              status: 'approved',
-              processingMode: 'direct',
-            }
-          : item,
-      ),
-    )
-
-    setSelectedRequest((current) =>
-      current?.id === request.id
-        ? {
-            ...current,
-            status: 'approved',
-            processingMode: 'direct',
-          }
-        : current,
-    )
-
-    setStatusMessage(
-      'تم قبول الطلب بنجاح ✅',
-    )
-
-    setSaving(false)
   }
 
   const rejectRequest = async (
     request: RegistrationRequest,
   ) => {
-    if (request.status !== 'pending' &&
-        request.status !== 'under_review') {
+    if (
+      request.status !== 'pending' &&
+      request.status !== 'under_review'
+    ) {
       return
     }
 
-    const confirmed =
-      window.confirm(
-        `هل أنت متأكد من رفض طلب ${request.requestNumber || request.name}؟`,
-      )
+    const confirmed = window.confirm(
+      `هل أنت متأكد من رفض طلب ${
+        request.requestNumber || request.name
+      }؟`,
+    )
 
     if (!confirmed) return
 
@@ -534,8 +479,7 @@ export function EnrollmentView() {
       .from('registration_requests')
       .update({
         status: 'rejected',
-        updated_at:
-          new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq('id', request.id)
 
@@ -567,10 +511,7 @@ export function EnrollmentView() {
         : current,
     )
 
-    setStatusMessage(
-      'تم رفض الطلب.',
-    )
-
+    setStatusMessage('تم رفض الطلب.')
     setSaving(false)
   }
 
@@ -630,7 +571,6 @@ export function EnrollmentView() {
               loading ? 'animate-spin' : ''
             }`}
           />
-
           تحديث الطلبات
         </Button>
       </div>
@@ -644,7 +584,6 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>رقم الطلب</div>
-
                       <input
                         value={filters.id}
                         onChange={(event) =>
@@ -662,7 +601,6 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>اسم الطالب</div>
-
                       <input
                         value={filters.name}
                         onChange={(event) =>
@@ -680,7 +618,6 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>رقم الجوال</div>
-
                       <input
                         value={filters.phone}
                         onChange={(event) =>
@@ -698,11 +635,8 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>تاريخ التقديم</div>
-
                       <input
-                        value={
-                          filters.submittedAt
-                        }
+                        value={filters.submittedAt}
                         onChange={(event) =>
                           updateFilter(
                             'submittedAt',
@@ -718,7 +652,6 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>الحالة</div>
-
                       <select
                         value={filters.status}
                         onChange={(event) =>
@@ -732,23 +665,18 @@ export function EnrollmentView() {
                         <option value="">
                           جميع الحالات
                         </option>
-
                         <option value="pending">
                           قيد المراجعة
                         </option>
-
                         <option value="under_review">
                           تحت المراجعة
                         </option>
-
                         <option value="approved">
                           مقبول
                         </option>
-
                         <option value="rejected">
                           مرفوض
                         </option>
-
                         <option value="cancelled">
                           ملغي
                         </option>
@@ -771,7 +699,6 @@ export function EnrollmentView() {
                     >
                       <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="size-5 animate-spin" />
-
                         جاري تحميل طلبات التسجيل...
                       </div>
                     </td>
@@ -858,14 +785,11 @@ export function EnrollmentView() {
                               variant="ghost"
                               size="sm"
                               onClick={() =>
-                                openReview(
-                                  request,
-                                )
+                                openReview(request)
                               }
                               className="gap-2"
                             >
                               <Eye className="size-4" />
-
                               مراجعة
                             </Button>
                           </td>
@@ -882,7 +806,6 @@ export function EnrollmentView() {
             <div className="flex items-center justify-between border-t px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Filter className="size-4" />
-
                 عرض {filteredRequests.length} من{' '}
                 {requests.length} طلب
               </div>
@@ -899,357 +822,346 @@ export function EnrollmentView() {
         </CardContent>
       </Card>
 
-      {showReview &&
-        selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
-              <div className="flex items-center justify-between border-b p-5">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    مراجعة طلب التسجيل
-                  </h2>
+      {showReview && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  مراجعة طلب التسجيل
+                </h2>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {selectedRequest.requestNumber ||
-                      selectedRequest.id}
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {selectedRequest.requestNumber ||
+                    selectedRequest.id}
+                </p>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={closeReview}
+                disabled={saving}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              {hasSpecialInformation(
+                selectedRequest,
+              ) && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+
+                    <div>
+                      <p className="font-semibold">
+                        تنبيه: توجد معلومات تحتاج الانتباه
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {hasHealthNotes(
+                          selectedRequest,
+                        ) && (
+                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
+                            🩺 يحتوي على معلومات صحية
+                          </span>
+                        )}
+
+                        {hasNotes(
+                          selectedRequest,
+                        ) && (
+                          <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                            📝 يحتوي على ملاحظات
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    اسم الطالب
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.name ||
+                      'غير مضاف'}
                   </p>
                 </div>
 
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الرقم الشخصي
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.personalId ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    العمر
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.age ??
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الجنس
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.gender ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    رقم الجوال
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.phone ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الواتساب
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.whatsapp ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    المستوى
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.levelId ||
+                      'غير محدد'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    تاريخ التقديم
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {formatDate(
+                      selectedRequest.createdAt,
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  المعلومات الصحية
+                </p>
+
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasHealthNotes(
+                      selectedRequest,
+                    )
+                      ? 'font-medium text-rose-700'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {selectedRequest.healthNotes ||
+                    'لا توجد معلومات صحية'}
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  الملاحظات
+                </p>
+
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasNotes(selectedRequest)
+                      ? 'font-medium text-amber-800'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {selectedRequest.notes ||
+                    'لا توجد ملاحظات'}
+                </p>
+              </div>
+
+              {selectedRequest.paymentMethod && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    بيانات الدفع
+                  </p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        طريقة الدفع
+                      </p>
+
+                      <p className="mt-1 font-medium">
+                        {
+                          selectedRequest.paymentMethod
+                        }
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المبلغ المدخل
+                      </p>
+
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatAmount(
+                          selectedRequest.paymentAmount,
+                        )}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المرجع
+                      </p>
+
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentReference ||
+                          '—'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        حالة الدفع
+                      </p>
+
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentStatus ===
+                        'verified'
+                          ? 'تم التحقق'
+                          : selectedRequest.paymentStatus ===
+                              'rejected'
+                            ? 'مرفوض'
+                            : selectedRequest.paymentStatus ===
+                                'pending'
+                              ? 'بانتظار التحقق'
+                              : 'غير مطلوب'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedRequest.paymentProofUrl && (
+                    <a
+                      href={
+                        selectedRequest.paymentProofUrl
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex text-sm font-medium text-primary underline"
+                    >
+                      عرض إثبات الدفع
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {selectedRequest.rejectionReason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+                  <p className="text-sm font-medium">
+                    سبب الرفض
+                  </p>
+
+                  <p className="mt-2 text-sm">
+                    {
+                      selectedRequest.rejectionReason
+                    }
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={closeReview}
                   disabled={saving}
                 >
-                  <X className="size-4" />
+                  إغلاق
                 </Button>
-              </div>
 
-              <div className="space-y-5 p-5">
-                {hasSpecialInformation(
-                  selectedRequest,
+                {(
+                  selectedRequest.status ===
+                    'pending' ||
+                  selectedRequest.status ===
+                    'under_review'
                 ) && (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-
-                      <div>
-                        <p className="font-semibold">
-                          تنبيه: توجد معلومات تحتاج الانتباه
-                        </p>
-
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {hasHealthNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                              🩺 يحتوي على معلومات صحية
-                            </span>
-                          )}
-
-                          {hasNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                              📝 يحتوي على ملاحظات
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      اسم الطالب
-                    </p>
-
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.name ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الرقم الشخصي
-                    </p>
-
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.personalId ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      العمر
-                    </p>
-
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.age ??
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الجنس
-                    </p>
-
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.gender ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      رقم الجوال
-                    </p>
-
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.phone ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الواتساب
-                    </p>
-
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.whatsapp ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      المستوى
-                    </p>
-
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.levelId ||
-                        'غير محدد'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      تاريخ التقديم
-                    </p>
-
-                    <p className="mt-1 font-medium">
-                      {formatDate(
-                        selectedRequest.createdAt,
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    المعلومات الصحية
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasHealthNotes(
-                        selectedRequest,
-                      )
-                        ? 'font-medium text-rose-700'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {selectedRequest.healthNotes ||
-                      'لا توجد معلومات صحية'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    الملاحظات
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasNotes(
-                        selectedRequest,
-                      )
-                        ? 'font-medium text-amber-800'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {selectedRequest.notes ||
-                      'لا توجد ملاحظات'}
-                  </p>
-                </div>
-
-                {selectedRequest.paymentMethod && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm font-medium">
-                      بيانات الدفع
-                    </p>
-
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          طريقة الدفع
-                        </p>
-
-                        <p className="mt-1 font-medium">
-                          {
-                            selectedRequest.paymentMethod
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المبلغ المدخل
-                        </p>
-
-                        <p className="mt-1 font-medium tabular-nums">
-                          {formatAmount(
-                            selectedRequest.paymentAmount,
-                          )}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المرجع
-                        </p>
-
-                        <p className="mt-1 font-medium">
-                          {
-                            selectedRequest.paymentReference ||
-                            '—'
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          حالة الدفع
-                        </p>
-
-                        <p className="mt-1 font-medium">
-                          {selectedRequest.paymentStatus ===
-                          'verified'
-                            ? 'تم التحقق'
-                            : selectedRequest.paymentStatus ===
-                                'rejected'
-                              ? 'مرفوض'
-                              : selectedRequest.paymentStatus ===
-                                  'pending'
-                                ? 'بانتظار التحقق'
-                                : 'غير مطلوب'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedRequest.paymentProofUrl && (
-                      <a
-                        href={
-                          selectedRequest.paymentProofUrl
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 inline-flex text-sm font-medium text-primary underline"
-                      >
-                        عرض إثبات الدفع
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {selectedRequest.rejectionReason && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
-                    <p className="text-sm font-medium">
-                      سبب الرفض
-                    </p>
-
-                    <p className="mt-2 text-sm">
-                      {
-                        selectedRequest.rejectionReason
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        rejectRequest(
+                          selectedRequest,
+                        )
                       }
-                    </p>
-                  </div>
+                      disabled={saving}
+                      className="gap-2"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <X className="size-4" />
+                      )}
+
+                      رفض الطلب
+                    </Button>
+
+                    <Button
+                      onClick={() =>
+                        approveRequest(
+                          selectedRequest,
+                        )
+                      }
+                      disabled={saving}
+                      className="gap-2"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Check className="size-4" />
+                      )}
+
+                      قبول وترحيل للطلاب
+                    </Button>
+                  </>
                 )}
 
-                <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-                  <Button
-                    variant="ghost"
-                    onClick={closeReview}
-                    disabled={saving}
-                  >
-                    إغلاق
-                  </Button>
+                {selectedRequest.status ===
+                  'approved' && (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                    <Check className="size-4" />
 
-                  {(
-                    selectedRequest.status ===
-                      'pending' ||
-                    selectedRequest.status ===
-                      'under_review'
-                  ) && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          rejectRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={saving}
-                        className="gap-2"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <X className="size-4" />
-                        )}
-
-                        رفض الطلب
-                      </Button>
-
-                      <Button
-                        onClick={() =>
-                          approveRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={saving}
-                        className="gap-2"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Check className="size-4" />
-                        )}
-
-                        قبول الطلب
-                      </Button>
-                    </>
-                  )}
-
-                  {selectedRequest.status ===
-                    'approved' && (
-                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                      <Check className="size-4" />
-
-                      تم قبول الطلب
-                    </div>
-                  )}
-                </div>
+                    {selectedRequest.studentId
+                      ? 'تم قبول الطلب وترحيله للطلاب'
+                      : 'تم قبول الطلب'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   )
 }
