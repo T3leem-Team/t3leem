@@ -1827,3 +1827,4 @@ function getToday() {
 
   return `${year}-${month}-${day}`
 }
+}
