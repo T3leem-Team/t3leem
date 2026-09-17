@@ -625,20 +625,27 @@ export function AttendanceView({
     `${value.toFixed(1)}%`
 
   const handleAttendanceClick = async (
-    studentId: string,
-    statusName: AttendanceStatusName,
-    date: string,
-  ) => {
-    if (saving) {
-      return
-    }
+  studentId: string,
+  statusName: AttendanceStatusName,
+  date: string,
+) => {
+  setStatusMessage(
+    `تم الضغط على "${statusName}" للطالب — جاري المعالجة...`,
+  )
 
-    await updateAttendance(
-      studentId,
-      statusName,
-      date,
+  if (saving) {
+    setStatusMessage(
+      `تم الضغط، لكن الحفظ مشغول حاليًا.`,
     )
+    return
   }
+
+  await updateAttendance(
+    studentId,
+    statusName,
+    date,
+  )
+}
 
   if (!currentCourse) {
     return null
