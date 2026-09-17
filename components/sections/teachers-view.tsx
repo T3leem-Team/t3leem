@@ -418,18 +418,35 @@ export function TeachersView() {
       return
     }
 
-    const mappedStatuses: AttendanceStatus[] =
-      (statusRows ?? []).map((status) => ({
-        id: status.id,
-        name: normalizeStatusName(
-          status.name,
-        ),
-        isActive: Boolean(
-          status.is_active,
-        ),
-        sortOrder:
-          status.sort_order ?? 0,
-      }))
+    const mappedStatuses: AttendanceStatus[] = (
+      statusRows ?? []
+    )
+      .map((status) => {
+        const normalizedName =
+          normalizeStatusName(
+            status.name,
+          )
+
+        if (!normalizedName) {
+          return null
+        }
+
+        return {
+          id: status.id,
+          name: normalizedName,
+          isActive: Boolean(
+            status.is_active,
+          ),
+          sortOrder:
+            status.sort_order ?? 0,
+        }
+      })
+      .filter(
+        (
+          status,
+        ): status is AttendanceStatus =>
+          status !== null,
+      )
 
     setAttendanceStatuses(
       mappedStatuses,
@@ -503,13 +520,6 @@ export function TeachersView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /*
-   * الدورة هنا للعرض فقط.
-   *
-   * اختيار وإدارة الدورة تتم من قسم الإدارة.
-   * صفحة المعلمين تستخدم الدورة الحالية
-   * التي تأتي أولًا من بيانات الإدارة.
-   */
   const currentCourse =
     courses[0] ?? null
 
@@ -1793,8 +1803,9 @@ export function TeachersView() {
                   setAttendanceNotes={
                     setAttendanceNotes
                   }
-                  saving={saving}
-                  setSaving={setSaving}
+                  statusMessage={
+                    statusMessage
+                  }
                   setStatusMessage={
                     setStatusMessage
                   }
