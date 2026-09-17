@@ -104,17 +104,17 @@ const [savingPayment, setSavingPayment] = useState(false)
 useEffect(() => {
 const params = new URLSearchParams(window.location.search)
 
-```
+
 setReturnPath(params.get('return') || '')
 setStudentIdFromUrl(params.get('student'))
-```
+
 
 }, [])
 
 const loadPayments = async (): Promise<StudentRow[]> => {
 setLoading(true)
 
-```
+
 try {
   const {
     data: currentYear,
@@ -315,7 +315,7 @@ try {
 } finally {
   setLoading(false)
 }
-```
+
 
 }
 
@@ -333,7 +333,7 @@ autoOpenedStudentRef.current === studentIdFromUrl
 return
 }
 
-```
+
 const student = studentList.find(
   (item) => item.id === studentIdFromUrl,
 )
@@ -345,7 +345,7 @@ if (!student) {
 autoOpenedStudentRef.current = studentIdFromUrl
 
 void openDetailsDialog(student)
-```
+
 
 }, [
 loading,
@@ -359,7 +359,7 @@ key: keyof Filters,
 value: string,
 ) => {
 setFilters((current) => ({
-...current,
+current,
 [key]: value,
 }))
 }
@@ -395,7 +395,7 @@ student.amountDue - student.amountPaid,
 0,
 )
 
-```
+
   const matchesName =
     !filters.name ||
     student.name
@@ -442,7 +442,7 @@ student.amountDue - student.amountPaid,
     matchesStatus
   )
 })
-```
+
 
 }, [studentList, filters])
 
@@ -528,7 +528,7 @@ if (!currentAcademicYearId) {
 return
 }
 
-```
+
 setDetailsStudent(student)
 setDetailsDialogOpen(true)
 setLoadingHistory(true)
@@ -572,7 +572,7 @@ try {
 } finally {
   setLoadingHistory(false)
 }
-```
+
 
 }
 
@@ -581,7 +581,7 @@ if (loadingHistory || savingPayment) {
 return
 }
 
-```
+
 setDetailsDialogOpen(false)
 setDetailsStudent(null)
 setPaymentHistory([])
@@ -589,7 +589,7 @@ setPaymentHistory([])
 if (returnPath) {
   router.push(returnPath)
 }
-```
+
 
 }
 
@@ -598,7 +598,7 @@ event: React.FormEvent<HTMLFormElement>,
 ) => {
 event.preventDefault()
 
-```
+
 if (
   !detailsStudent ||
   !currentAcademicYearId
@@ -698,7 +698,7 @@ try {
 } finally {
   setSavingPayment(false)
 }
-```
+
 
 }
 
@@ -707,7 +707,7 @@ return ( <div className="space-y-6"> <PageHeader
      description="متابعة الرسوم الدراسية والدفعات المسجلة للطلاب"
    />
 
-```
+
   {currentAcademicYearName && (
     <Card>
       <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
