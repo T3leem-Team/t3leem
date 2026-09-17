@@ -1,4 +1,3 @@
-tsx
 import Link from 'next/link'
 import {
   Archive,
