@@ -397,47 +397,45 @@ export function TeachersView() {
 
     setCourseTeacherIds(teacherMap)
 
-    const mappedStatuses: AttendanceStatus[] = (
-  statusRows ?? []
-)
-  .filter((status) => {
-    const name = String(
-      status.name ?? '',
-    ).trim()
+    const { data: statusRows, error: statusError } = await supabase
+      .from('attendance_statuses')
+      .select('id, name, is_active, sort_order')
+      .order('sort_order', { ascending: true })
 
-    return (
-      name === 'حاضر' ||
-      name === 'غائب' ||
-      name === 'متأخر' ||
-      name === 'مستأذن'
-    )
-  })
-  .map((status) => ({
-    id: status.id,
-    name: String(
-      status.name,
-    ).trim() as AttendanceStatus['name'],
-    isActive: Boolean(
-      status.is_active,
-    ),
-    sortOrder:
-      status.sort_order ?? 0,
-  }))
-
-setAttendanceStatuses(
-  mappedStatuses,
-)
-
-if (mappedStatuses.length === 0) {
-  setStatusMessage(
-    'لم يتم تحميل حالات الحضور من قاعدة البيانات.',
-  )
-}  .filter(
-        (
-          status,
-        ): status is AttendanceStatus =>
-          status !== null,
+    if (statusError) {
+      setStatusMessage(
+        `خطأ في تحميل حالات الحضور: ${statusError.message}`,
       )
+      setLoading(false)
+      return
+    }
+
+    const mappedStatuses: AttendanceStatus[] = (
+      statusRows ?? []
+    )
+      .filter((status) => {
+        const name = String(
+          status.name ?? '',
+        ).trim()
+
+        return (
+          name === 'حاضر' ||
+          name === 'غائب' ||
+          name === 'متأخر' ||
+          name === 'مستأذن'
+        )
+      })
+      .map((status) => ({
+        id: status.id,
+        name: String(
+          status.name,
+        ).trim() as AttendanceStatus['name'],
+        isActive: Boolean(
+          status.is_active,
+        ),
+        sortOrder:
+          status.sort_order ?? 0,
+      }))
 
     setAttendanceStatuses(
       mappedStatuses,
@@ -507,7 +505,6 @@ if (mappedStatuses.length === 0) {
 
   useEffect(() => {
     loadData()
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
