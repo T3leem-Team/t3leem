@@ -7,7 +7,6 @@ import {
   Filter,
   X,
   Pencil,
-  Plus,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -32,10 +31,8 @@ type Filters = {
   phone: string
   whatsapp: string
   paymentStatus: string
-  amountPaid: string
-  amountRemaining: string
-  chronicDiseases: string
   notes: string
+  attendance: string
 }
 
 type AcademicLevel = {
@@ -51,23 +48,18 @@ const emptyFilters: Filters = {
   phone: '',
   whatsapp: '',
   paymentStatus: '',
-  amountPaid: '',
-  amountRemaining: '',
-  chronicDiseases: '',
   notes: '',
+  attendance: '',
 }
 
 const studentColumns = [
   { key: 'name', label: 'اسم الطالب' },
   { key: 'personalId', label: 'الرقم الشخصي' },
   { key: 'grade', label: 'الصف الأكاديمي' },
-  { key: 'phone', label: 'رقم الهاتف' },
-  { key: 'whatsapp', label: 'رقم واتساب' },
+  { key: 'contact', label: 'التواصل' },
   { key: 'paymentStatus', label: 'الدفع' },
-  { key: 'amountPaid', label: 'المبلغ المدفوع' },
-  { key: 'amountRemaining', label: 'المبلغ المتبقي' },
-  { key: 'chronicDiseases', label: 'الأمراض المزمنة' },
   { key: 'notes', label: 'ملاحظات' },
+  { key: 'attendance', label: 'الحضور' },
 ] as const
 
 export function StudentsView() {
@@ -91,6 +83,7 @@ export function StudentsView() {
     useState(0)
 
   const [search, setSearch] = useState('')
+
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
@@ -100,13 +93,10 @@ export function StudentsView() {
     name: true,
     personalId: true,
     grade: true,
-    phone: true,
-    whatsapp: true,
+    contact: true,
     paymentStatus: true,
-    amountPaid: true,
-    amountRemaining: true,
-    chronicDiseases: true,
     notes: true,
+    attendance: true,
   })
 
   const [studentList, setStudentList] = useState<any[]>([])
@@ -119,6 +109,9 @@ export function StudentsView() {
 
   const [editingStudentId, setEditingStudentId] =
     useState<string | null>(null)
+
+  const [notesStudent, setNotesStudent] =
+    useState<any | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -193,7 +186,7 @@ export function StudentsView() {
         await supabase
           .from('students')
           .select(
-            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
           )
           .order('created_at', {
             ascending: false,
@@ -265,10 +258,14 @@ export function StudentsView() {
         const amountPaid =
           paidMap.get(student.id) ?? 0
 
+        const feeExempt =
+          Boolean(student.fee_exempt)
+
         const paymentStatus =
-          annualFee === 0
+          feeExempt
             ? ('معفي' as const)
-            : amountPaid >= annualFee
+            : amountPaid >= annualFee &&
+                annualFee > 0
               ? ('مدفوع بالكامل' as const)
               : amountPaid > 0
                 ? ('مدفوع جزئيًا' as const)
@@ -287,10 +284,13 @@ export function StudentsView() {
           paymentStatus,
           amountDue: annualFee,
           amountPaid,
+          feeExempt,
           chronicDiseases:
             student.health_notes ??
-            'لا يوجد',
-          notes: student.notes ?? '',
+            '',
+          notes:
+            student.notes ?? '',
+          attendance: '—',
         }
       })
 
@@ -319,7 +319,7 @@ export function StudentsView() {
 
     return studentList.filter((student) => {
       const remaining =
-        student.paymentStatus === 'معفي'
+        student.feeExempt
           ? 0
           : Math.max(
               student.amountDue -
@@ -327,15 +327,36 @@ export function StudentsView() {
               0
             )
 
+      const contactText = [
+        student.phone,
+        student.whatsapp,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      const notesText = [
+        student.notes,
+        student.chronicDiseases,
+      ]
+        .filter(Boolean)
+        .join(' ')
+
       const matchesSearch =
         !query ||
-        Object.values(student).some(
-          (value) =>
-            String(value)
-              .toLowerCase()
-              .includes(query)
-        ) ||
-        String(remaining).includes(query)
+        [
+          student.name,
+          student.personalId,
+          student.grade,
+          contactText,
+          student.paymentStatus,
+          notesText,
+          student.attendance,
+          remaining,
+        ].some((value) =>
+          String(value)
+            .toLowerCase()
+            .includes(query)
+        )
 
       const matches = {
         name:
@@ -373,35 +394,18 @@ export function StudentsView() {
           student.paymentStatus ===
             filters.paymentStatus,
 
-        amountPaid:
-          !filters.amountPaid ||
-          String(
-            student.amountPaid
-          ).includes(
-            filters.amountPaid
-          ),
-
-        amountRemaining:
-          !filters.amountRemaining ||
-          String(remaining).includes(
-            filters.amountRemaining
-          ),
-
-        chronicDiseases:
-          !filters.chronicDiseases ||
-          student.chronicDiseases
-            .toLowerCase()
-            .includes(
-              filters.chronicDiseases.toLowerCase()
-            ),
-
         notes:
           !filters.notes ||
-          student.notes
+          notesText
             .toLowerCase()
             .includes(
               filters.notes.toLowerCase()
             ),
+
+        attendance:
+          !filters.attendance ||
+          student.attendance ===
+            filters.attendance,
       }
 
       return (
@@ -416,6 +420,11 @@ export function StudentsView() {
   const editingStudent = studentList.find(
     (student) =>
       student.id === editingStudentId
+  )
+
+  const selectedStudent = studentList.find(
+    (student) =>
+      student.id === selectedStudentId
   )
 
   const openAddStudent = () => {
@@ -494,261 +503,269 @@ export function StudentsView() {
       Boolean
     ).length + 2
 
- return (
-  <div className="space-y-6">
-    <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
-      {supabaseStatus}
-    </div>
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
+        {supabaseStatus}
+      </div>
 
-    <PageHeader
-      title="الطلاب"
-      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-      action={
-        <Button onClick={openAddStudent}>
-          <UserPlus className="size-4" />
-          إضافة طالب
-        </Button>
-      }
-    />
+      <PageHeader
+        title="الطلاب"
+        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+        action={
+          <Button onClick={openAddStudent}>
+            <UserPlus className="size-4" />
+            إضافة طالب
+          </Button>
+        }
+      />
 
-    <Card>
-      <CardContent className="space-y-4 p-4">
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Card>
+        <CardContent className="space-y-4 p-4">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-          <input
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
-            placeholder="بحث عام في جميع بيانات الطلاب..."
-            className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
-          />
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">
-                إجمالي الطلاب:
-              </span>{' '}
-              <span className="font-semibold">
-                {studentList.length}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-muted-foreground">
-                النتائج الحالية:
-              </span>{' '}
-              <span className="font-semibold">
-                {filteredStudents.length}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-muted-foreground">
-                الرسوم السنوية:
-              </span>{' '}
-              <span className="font-semibold">
-                {currentAnnualFee.toLocaleString(
-                  'ar-BH',
-                  {
-                    minimumFractionDigits: 3,
-                    maximumFractionDigits: 3,
-                  }
-                )}{' '}
-                د.ب
-              </span>
-            </div>
+            <input
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              placeholder="بحث عام في جميع بيانات الطلاب..."
+              className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
+            />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!selectedStudentId}
-              onClick={openEditStudent}
-            >
-              <Pencil className="size-4" />
-              تعديل
-            </Button>
+          <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">
+                  إجمالي الطلاب:
+                </span>{' '}
+                <span className="font-semibold">
+                  {studentList.length}
+                </span>
+              </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!selectedStudentId}
-              onClick={async () => {
-                if (!selectedStudentId) return
+              <div>
+                <span className="text-muted-foreground">
+                  النتائج الحالية:
+                </span>{' '}
+                <span className="font-semibold">
+                  {filteredStudents.length}
+                </span>
+              </div>
 
-                const selectedStudent =
-                  studentList.find(
-                    (student) =>
-                      student.id ===
-                      selectedStudentId
-                  )
+              <div>
+                <span className="text-muted-foreground">
+                  الرسوم السنوية:
+                </span>{' '}
+                <span className="font-semibold">
+                  {currentAnnualFee.toLocaleString(
+                    'ar-BH',
+                    {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    }
+                  )}{' '}
+                  د.ب
+                </span>
+              </div>
+            </div>
 
-                if (!selectedStudent) return
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedStudentId}
+                onClick={openEditStudent}
+              >
+                <Pencil className="size-4" />
+                تعديل
+              </Button>
 
-                const nextFeeExempt =
-                  !selectedStudent.feeExempt
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedStudentId}
+                onClick={async () => {
+                  if (!selectedStudentId) return
 
-                const { error } =
-                  await supabase
-                    .from('students')
-                    .update({
-                      fee_exempt:
-                        nextFeeExempt,
-                    })
-                    .eq(
-                      'id',
-                      selectedStudentId
-                    )
-
-                if (error) {
-                  setSupabaseStatus(
-                    `خطأ في تحديث حالة الإعفاء: ${error.message}`
-                  )
-                  return
-                }
-
-                setStudentList(
-                  (current) =>
-                    current.map(
+                  const selectedStudent =
+                    studentList.find(
                       (student) =>
                         student.id ===
                         selectedStudentId
-                          ? {
-                              ...student,
-                              feeExempt:
-                                nextFeeExempt,
-                            }
-                          : student
-                    )
-                )
-
-                setSupabaseStatus(
-                  nextFeeExempt
-                    ? 'تم إعفاء الطالب من الرسوم ✅'
-                    : 'تم إلغاء إعفاء الطالب ✅'
-                )
-              }}
-            >
-              {studentList.find(
-                (student) =>
-                  student.id ===
-                  selectedStudentId
-              )?.feeExempt
-                ? 'إلغاء الإعفاء'
-                : 'إعفاء'}
-            </Button>
-
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!selectedStudentId}
-              onClick={async () => {
-                const confirmed =
-                  window.confirm(
-                    '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
-                  )
-
-                if (!confirmed) return
-
-                const { error } =
-                  await supabase
-                    .from('students')
-                    .delete()
-                    .eq(
-                      'id',
-                      selectedStudentId
                     )
 
-                if (error) {
-                  setSupabaseStatus(
-                    `خطأ في حذف الطالب: ${error.message}`
-                  )
-                  return
-                }
+                  if (!selectedStudent) return
 
-                setStudentList(
-                  (current) =>
-                    current.filter(
-                      (student) =>
-                        student.id !==
+                  const nextFeeExempt =
+                    !selectedStudent.feeExempt
+
+                  const { error } =
+                    await supabase
+                      .from('students')
+                      .update({
+                        fee_exempt:
+                          nextFeeExempt,
+                      })
+                      .eq(
+                        'id',
                         selectedStudentId
+                      )
+
+                  if (error) {
+                    setSupabaseStatus(
+                      `خطأ في تحديث حالة الإعفاء: ${error.message}`
                     )
-                )
+                    return
+                  }
 
-                setSelectedStudentId('')
-
-                setSupabaseStatus(
-                  'تم حذف الطالب من Supabase ✅'
-                )
-              }}
-            >
-              <X className="size-4" />
-              مسح
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                const menu =
-                  document.getElementById(
-                    'student-columns-menu'
+                  setStudentList(
+                    (current) =>
+                      current.map(
+                        (student) =>
+                          student.id ===
+                          selectedStudentId
+                            ? {
+                                ...student,
+                                feeExempt:
+                                  nextFeeExempt,
+                                paymentStatus:
+                                  nextFeeExempt
+                                    ? 'معفي'
+                                    : student.amountPaid >=
+                                          student.amountDue &&
+                                        student.amountDue >
+                                          0
+                                      ? 'مدفوع بالكامل'
+                                      : student.amountPaid >
+                                          0
+                                        ? 'مدفوع جزئيًا'
+                                        : 'غير مدفوع',
+                              }
+                            : student
+                      )
                   )
 
-                menu?.classList.toggle(
-                  'hidden'
-                )
-              }}
-            >
-              تخصيص الأعمدة
-            </Button>
-          </div>
-        </div>
+                  setSupabaseStatus(
+                    nextFeeExempt
+                      ? 'تم إعفاء الطالب من الرسوم ✅'
+                      : 'تم إلغاء إعفاء الطالب ✅'
+                  )
+                }}
+              >
+                {selectedStudent?.feeExempt
+                  ? 'إلغاء الإعفاء'
+                  : 'إعفاء'}
+              </Button>
 
-        <div
-          id="student-columns-menu"
-          className="hidden rounded-md border bg-background p-3 shadow-sm"
-        >
-          <div className="mb-2 text-sm font-semibold">
-            تخصيص الأعمدة
-          </div>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!selectedStudentId}
+                onClick={async () => {
+                  const confirmed =
+                    window.confirm(
+                      '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
+                    )
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {studentColumns.map(
-              (column) => (
-                <label
-                  key={column.key}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      visibleColumns[
-                        column.key
-                      ]
-                    }
-                    onChange={() =>
-                      toggleColumn(
-                        column.key
+                  if (!confirmed) return
+
+                  const { error } =
+                    await supabase
+                      .from('students')
+                      .delete()
+                      .eq(
+                        'id',
+                        selectedStudentId
                       )
-                    }
-                  />
 
-                  {column.label}
-                </label>
-              )
-            )}
+                  if (error) {
+                    setSupabaseStatus(
+                      `خطأ في حذف الطالب: ${error.message}`
+                    )
+                    return
+                  }
+
+                  setStudentList(
+                    (current) =>
+                      current.filter(
+                        (student) =>
+                          student.id !==
+                          selectedStudentId
+                      )
+                  )
+
+                  setSelectedStudentId('')
+
+                  setSupabaseStatus(
+                    'تم حذف الطالب من Supabase ✅'
+                  )
+                }}
+              >
+                <X className="size-4" />
+                مسح
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const menu =
+                    document.getElementById(
+                      'student-columns-menu'
+                    )
+
+                  menu?.classList.toggle(
+                    'hidden'
+                  )
+                }}
+              >
+                تخصيص الأعمدة
+              </Button>
+            </div>
           </div>
 
-          <p className="mt-2 text-xs text-muted-foreground">
-            يجب إبقاء عمود واحد على الأقل ظاهرًا.
-          </p>
-        </div>
+          <div
+            id="student-columns-menu"
+            className="hidden rounded-md border bg-background p-3 shadow-sm"
+          >
+            <div className="mb-2 text-sm font-semibold">
+              تخصيص الأعمدة
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {studentColumns.map(
+                (column) => (
+                  <label
+                    key={column.key}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        visibleColumns[
+                          column.key
+                        ]
+                      }
+                      onChange={() =>
+                        toggleColumn(
+                          column.key
+                        )
+                      }
+                    />
+
+                    {column.label}
+                  </label>
+                )
+              )}
+            </div>
+
+            <p className="mt-2 text-xs text-muted-foreground">
+              يجب إبقاء عمود واحد على الأقل ظاهرًا.
+            </p>
+          </div>
 
           <div className="overflow-x-auto">
             <Table>
@@ -814,21 +831,11 @@ export function StudentsView() {
                     </TableHead>
                   )}
 
-                  {visibleColumns.phone && (
+                  {visibleColumns.contact && (
                     <TableHead>
-                      رقم الهاتف
+                      التواصل
                       {textFilter(
                         'phone',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.whatsapp && (
-                    <TableHead>
-                      رقم واتساب
-                      {textFilter(
-                        'whatsapp',
                         'بحث'
                       )}
                     </TableHead>
@@ -853,49 +860,23 @@ export function StudentsView() {
                         <option value="">
                           الكل
                         </option>
+
                         <option value="مدفوع بالكامل">
                           مدفوع بالكامل
                         </option>
+
                         <option value="مدفوع جزئيًا">
                           مدفوع جزئيًا
                         </option>
+
                         <option value="غير مدفوع">
                           غير مدفوع
                         </option>
+
                         <option value="معفي">
                           معفي
                         </option>
                       </select>
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.amountPaid && (
-                    <TableHead>
-                      المبلغ المدفوع
-                      {textFilter(
-                        'amountPaid',
-                        'رقم'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.amountRemaining && (
-                    <TableHead>
-                      المبلغ المتبقي
-                      {textFilter(
-                        'amountRemaining',
-                        'رقم'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.chronicDiseases && (
-                    <TableHead>
-                      الأمراض المزمنة
-                      {textFilter(
-                        'chronicDiseases',
-                        'بحث'
-                      )}
                     </TableHead>
                   )}
 
@@ -909,9 +890,15 @@ export function StudentsView() {
                     </TableHead>
                   )}
 
-                  <TableHead className="min-w-[130px]">
-                    الإجراءات
-                  </TableHead>
+                  {visibleColumns.attendance && (
+                    <TableHead>
+                      الحضور
+                      {textFilter(
+                        'attendance',
+                        'بحث'
+                      )}
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
 
@@ -919,8 +906,7 @@ export function StudentsView() {
                 {filteredStudents.map(
                   (student, index) => {
                     const remaining =
-                      student.paymentStatus ===
-                      'معفي'
+                      student.feeExempt
                         ? 0
                         : Math.max(
                             student.amountDue -
@@ -968,93 +954,143 @@ export function StudentsView() {
                           </TableCell>
                         )}
 
-                        {visibleColumns.phone && (
-                          <TableCell dir="ltr">
-                            {student.phone}
-                          </TableCell>
-                        )}
+                        {visibleColumns.contact && (
+                          <TableCell
+                            dir="ltr"
+                            className="text-right"
+                          >
+                            <div className="space-y-1">
+                              <div>
+                                {student.phone ||
+                                  '—'}
+                              </div>
 
-                        {visibleColumns.whatsapp && (
-                          <TableCell dir="ltr">
-                            {student.whatsapp}
+                              <div className="text-muted-foreground">
+                                {student.whatsapp
+                                  ? `واتساب: ${student.whatsapp}`
+                                  : 'واتساب: —'}
+                              </div>
+                            </div>
                           </TableCell>
                         )}
 
                         {visibleColumns.paymentStatus && (
                           <TableCell>
-                            <StatusBadge
-                              status={
-                                student.paymentStatus
-                              }
-                            />
-                          </TableCell>
-                        )}
+                            <button
+                              type="button"
+                              className="rounded-md px-2 py-1 transition hover:bg-muted"
+                              onClick={(event) => {
+                                event.stopPropagation()
 
-                        {visibleColumns.amountPaid && (
-                          <TableCell>
-                            {student.amountPaid.toLocaleString(
-                              'ar-BH',
-                              {
-                                minimumFractionDigits: 3,
-                                maximumFractionDigits: 3,
-                              }
-                            )}{' '}
-                            د.ب
-                          </TableCell>
-                        )}
+                                if (
+                                  student.paymentStatus ===
+                                  'معفي'
+                                ) {
+                                  router.push(
+                                    `/payments?student=${encodeURIComponent(
+                                      student.id
+                                    )}&return=/students`
+                                  )
+                                  return
+                                }
 
-                        {visibleColumns.amountRemaining && (
-                          <TableCell>
-                            {student.paymentStatus ===
-                            'معفي'
-                              ? '—'
-                              : `${remaining.toLocaleString(
-                                  'ar-BH',
-                                  {
-                                    minimumFractionDigits: 3,
-                                    maximumFractionDigits: 3,
-                                  }
-                                )} د.ب`}
-                          </TableCell>
-                        )}
+                                if (
+                                  student.paymentStatus ===
+                                  'مدفوع بالكامل'
+                                ) {
+                                  router.push(
+                                    `/payments?student=${encodeURIComponent(
+                                      student.id
+                                    )}&return=/students`
+                                  )
+                                  return
+                                }
 
-                        {visibleColumns.chronicDiseases && (
-                          <TableCell>
-                            {
-                              student.chronicDiseases
-                            }
+                                openPaymentForStudent(
+                                  student.id
+                                )
+                              }}
+                            >
+                              {student.paymentStatus ===
+                              'مدفوع بالكامل' ? (
+                                <span className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-xs font-medium">
+                                    تفاصيل
+                                  </span>
+
+                                  <StatusBadge
+                                    status="مدفوع بالكامل"
+                                  />
+                                </span>
+                              ) : student.paymentStatus ===
+                                'مدفوع جزئيًا' ? (
+                                <span className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-xs font-medium">
+                                    متبقي
+                                  </span>
+
+                                  <StatusBadge
+                                    status="مدفوع جزئيًا"
+                                  />
+                                </span>
+                              ) : student.paymentStatus ===
+                                'غير مدفوع' ? (
+                                <span className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-xs font-medium">
+                                    غير مدفوع
+                                  </span>
+
+                                  <StatusBadge
+                                    status="غير مدفوع"
+                                  />
+                                </span>
+                              ) : (
+                                <span className="inline-flex flex-col items-center gap-1">
+                                  <span className="text-xs font-medium">
+                                    معفي
+                                  </span>
+
+                                  <StatusBadge
+                                    status="معفي"
+                                  />
+                                </span>
+                              )}
+                            </button>
                           </TableCell>
                         )}
 
                         {visibleColumns.notes && (
                           <TableCell>
-                            {student.notes ||
-                              '—'}
+                            <button
+                              type="button"
+                              className="max-w-[220px] truncate text-right text-sm hover:underline"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setNotesStudent(
+                                  student
+                                )
+                              }}
+                            >
+                              {student.notes ||
+                              student.chronicDiseases
+                                ? [
+                                    student.notes,
+                                    student.chronicDiseases,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' • ')
+                                : '—'}
+                            </button>
                           </TableCell>
                         )}
 
-                        <TableCell>
-                          {student.paymentStatus !==
-                            'معفي' &&
-                            remaining > 0 && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={(
-                                  event
-                                ) => {
-                                  event.stopPropagation()
-
-                                  openPaymentForStudent(
-                                    student.id
-                                  )
-                                }}
-                              >
-                                <Plus className="ml-1 size-4" />
-                                إضافة دفعة
-                              </Button>
-                            )}
-                        </TableCell>
+                        {visibleColumns.attendance && (
+                          <TableCell>
+                            <span className="text-muted-foreground">
+                              —
+                            </span>
+                          </TableCell>
+                        )}
                       </TableRow>
                     )
                   }
@@ -1078,6 +1114,81 @@ export function StudentsView() {
           </div>
         </CardContent>
       </Card>
+
+      {notesStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="إغلاق"
+            className="absolute inset-0 bg-black/40"
+            onClick={() =>
+              setNotesStudent(null)
+            }
+          />
+
+          <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  ملاحظات الطالب
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {notesStudent.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setNotesStudent(null)
+                }
+                className="rounded-md p-2 hover:bg-muted"
+                aria-label="إغلاق"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">
+                  الملاحظات العامة
+                </h3>
+
+                <div className="rounded-md border bg-muted/30 p-4 text-sm">
+                  {notesStudent.notes ||
+                    'لا توجد ملاحظات عامة'}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">
+                  المعلومات الصحية
+                </h3>
+
+                <div className="rounded-md border bg-muted/30 p-4 text-sm">
+                  {notesStudent.chronicDiseases ||
+                    'لا توجد معلومات صحية'}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t p-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() =>
+                  setNotesStudent(null)
+                }
+              >
+                إغلاق
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isAddStudentOpen && (
         <div className="fixed inset-0 z-50">
@@ -1158,7 +1269,7 @@ export function StudentsView() {
                     data.get(
                       'chronicDiseases'
                     ) || ''
-                  ).trim() || 'لا يوجد'
+                  ).trim()
 
                 const amountPaid =
                   Number(
@@ -1216,19 +1327,9 @@ export function StudentsView() {
 
                 if (
                   !editingStudent &&
-                  currentAnnualFee === 0 &&
-                  amountPaid > 0
-                ) {
-                  setSupabaseStatus(
-                    'خطأ: الطالب معفي لأن الرسوم السنوية الحالية تساوي 0 د.ب، لذلك لا يمكن تسجيل دفعة.'
-                  )
-                  return
-                }
-
-                if (
-                  !editingStudent &&
                   amountPaid >
-                    currentAnnualFee
+                    currentAnnualFee &&
+                  currentAnnualFee > 0
                 ) {
                   setSupabaseStatus(
                     `خطأ: المبلغ المدفوع لا يمكن أن يتجاوز الرسوم السنوية (${currentAnnualFee.toFixed(
@@ -1259,7 +1360,7 @@ export function StudentsView() {
                       editingStudent.id
                     )
                     .select(
-                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
                     )
                     .single()
 
@@ -1371,11 +1472,15 @@ export function StudentsView() {
                                   '',
                                 chronicDiseases:
                                   updatedStudent.health_notes ??
-                                  'لا يوجد',
+                                  '',
                                 notes:
                                   updatedStudent.notes ??
                                   '',
                                 grade,
+                                feeExempt:
+                                  Boolean(
+                                    updatedStudent.fee_exempt
+                                  ),
                               }
                             : student
                       )
@@ -1400,9 +1505,10 @@ export function StudentsView() {
                       health_notes:
                         chronicDiseases,
                       status: 'نشط',
+                      fee_exempt: false,
                     })
                     .select(
-                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status'
+                      'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
                     )
                     .single()
 
@@ -1497,15 +1603,13 @@ export function StudentsView() {
                   }
 
                   const paymentStatus =
-                    currentAnnualFee ===
-                    0
-                      ? 'معفي'
-                      : amountPaid >=
-                          currentAnnualFee
-                        ? 'مدفوع بالكامل'
-                        : amountPaid > 0
-                          ? 'مدفوع جزئيًا'
-                          : 'غير مدفوع'
+                    amountPaid >=
+                      currentAnnualFee &&
+                    currentAnnualFee > 0
+                      ? 'مدفوع بالكامل'
+                      : amountPaid > 0
+                        ? 'مدفوع جزئيًا'
+                        : 'غير مدفوع'
 
                   const mappedStudent =
                     {
@@ -1526,12 +1630,17 @@ export function StudentsView() {
                       amountDue:
                         currentAnnualFee,
                       amountPaid,
+                      feeExempt:
+                        Boolean(
+                          newStudent.fee_exempt
+                        ),
                       chronicDiseases:
                         newStudent.health_notes ??
-                        'لا يوجد',
+                        '',
                       notes:
                         newStudent.notes ??
                         '',
+                      attendance: '—',
                     }
 
                   setStudentList(
@@ -1726,7 +1835,10 @@ export function StudentsView() {
                           type="number"
                           min="0"
                           max={
-                            currentAnnualFee
+                            currentAnnualFee >
+                            0
+                              ? currentAnnualFee
+                              : undefined
                           }
                           step="0.001"
                           defaultValue="0"
@@ -1751,8 +1863,8 @@ export function StudentsView() {
                           </p>
 
                           <p className="mt-1 text-xs text-muted-foreground">
-                            لتسجيل دفعة جديدة استخدم زر
-                            «إضافة دفعة» من قائمة الطلاب.
+                            لتسجيل دفعة جديدة استخدم حالة
+                            الدفع من قائمة الطلاب.
                           </p>
                         </div>
 
