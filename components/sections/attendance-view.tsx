@@ -10,14 +10,9 @@ import {
   Check,
   ChevronDown,
   ClipboardCheck,
-  Clock3,
-  Search,
-  UserCheck,
-  UserX,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
 
 export type Course = {
   id: string
@@ -104,72 +99,17 @@ function normalizeStatusName(
 
 export { normalizeStatusName }
 
-function isAttendanceStatusName(
-  name: string,
-): name is AttendanceStatusName {
-  return attendanceStatusNames.includes(
-    name as AttendanceStatusName,
-  )
-}
-
-function formatDateForDisplay(
-  dateString: string,
-) {
-  if (!dateString) {
-    return ''
-  }
-
-  const [year, month, day] =
-    dateString.split('-')
-
-  if (!year || !month || !day) {
-    return dateString
-  }
-
-  return `${day}/${month}/${year}`
-}
-
-function todayString() {
-  const date = new Date()
-
-  const year = date.getFullYear()
-
-  const month = String(
-    date.getMonth() + 1,
-  ).padStart(2, '0')
-
-  const day = String(
-    date.getDate(),
-  ).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
-function isDateWithinCourse(
-  dateString: string,
-  course: Course | null,
-) {
-  if (!course || !dateString) {
-    return false
-  }
-
-  return (
-    dateString >= course.startDate &&
-    dateString <= course.endDate
-  )
-}
-
 function getStatusIdByName(
   statuses: AttendanceStatus[],
   statusName: AttendanceStatusName,
 ) {
-  const target = statuses.find(
-    (status) =>
-      normalizeStatusName(status.name) ===
+  const status = statuses.find(
+    (item) =>
+      normalizeStatusName(item.name) ===
       statusName,
   )
 
-  return target?.id ?? null
+  return status?.id ?? null
 }
 
 function getStatusName(
@@ -188,110 +128,107 @@ function getStatusName(
     return null
   }
 
-  return normalizeStatusName(
-    status.name,
-  )
+  return normalizeStatusName(status.name)
 }
 
 function getStatusStyles(
   status: AttendanceStatusName,
 ) {
-  if (status === 'حاضر') {
-    return {
-      button:
-        'border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
-      dot: 'bg-green-500',
-    }
-  }
+  switch (status) {
+    case 'حاضر':
+      return {
+        wrapper:
+          'border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
+        dot: 'bg-green-500',
+      }
 
-  if (status === 'غائب') {
-    return {
-      button:
-        'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-      dot: 'bg-red-500',
-    }
-  }
+    case 'غائب':
+      return {
+        wrapper:
+          'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400',
+        dot: 'bg-red-500',
+      }
 
-  if (status === 'متأخر') {
-    return {
-      button:
-        'border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400',
-      dot: 'bg-yellow-500',
-    }
-  }
+    case 'متأخر':
+      return {
+        wrapper:
+          'border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400',
+        dot: 'bg-yellow-500',
+      }
 
-  return {
-    button:
-      'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-    dot: 'bg-blue-500',
+    case 'مستأذن':
+      return {
+        wrapper:
+          'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
+        dot: 'bg-blue-500',
+      }
   }
 }
 
-function getStatusLabel(
-  status: AttendanceStatusName,
+function formatDateForDisplay(
+  date: string,
 ) {
-  if (status === 'حاضر') {
-    return 'حاضر'
+  if (!date) {
+    return ''
   }
 
-  if (status === 'غائب') {
-    return 'غائب'
+  const [year, month, day] =
+    date.split('-')
+
+  if (!year || !month || !day) {
+    return date
   }
 
-  if (status === 'متأخر') {
-    return 'متأخر'
-  }
-
-  return 'مستأذن'
+  return `${day}/${month}/${year}`
 }
 
-function getAttendancePercentage(
+/*
+ * نسبة حضور الطالب في الدورة كاملة.
+ *
+ * حاضر + متأخر = حضور
+ * غائب = غياب
+ * مستأذن = لا يدخل في الحساب
+ */
+function getStudentAttendancePercentage(
   studentId: string,
+  courseId: string,
   records: AttendanceRecord[],
   statuses: AttendanceStatus[],
-  courseId: string,
 ) {
-  const studentRecords = records.filter(
-    (record) =>
-      record.studentId === studentId &&
-      record.courseId === courseId,
-  )
-
-  if (studentRecords.length === 0) {
-    return 0
-  }
+  const studentRecords =
+    records.filter(
+      (record) =>
+        record.studentId ===
+          studentId &&
+        record.courseId === courseId,
+    )
 
   let attended = 0
   let counted = 0
 
-  studentRecords.forEach((record) => {
+  for (const record of studentRecords) {
     const status = getStatusName(
       statuses,
       record.statusId,
     )
 
     if (!status) {
-      return
+      continue
     }
 
-    /*
-     * الحضور والمتأخر يعتبران حضورًا.
-     * الغياب يدخل في النسبة.
-     * المستأذن لا يدخل في المقام.
-     */
     if (
       status === 'حاضر' ||
       status === 'متأخر'
     ) {
       attended += 1
       counted += 1
-      return
+      continue
     }
 
     if (status === 'غائب') {
       counted += 1
     }
-  })
+  }
 
   if (counted === 0) {
     return 0
@@ -316,61 +253,51 @@ function getPercentageClass(
   return 'text-red-600 dark:text-red-400'
 }
 
-type AttendanceStatusButtonsProps = {
-  currentStatus: AttendanceStatusName | null
-  saving: boolean
-  onSelect: (
+type AttendanceStatusSelectorProps = {
+  value: AttendanceStatusName | null
+  disabled?: boolean
+  onChange: (
     status: AttendanceStatusName,
   ) => void
 }
 
-function AttendanceStatusButtons({
-  currentStatus,
-  saving,
-  onSelect,
-}: AttendanceStatusButtonsProps) {
-  const [
-    open,
-    setOpen,
-  ] = useState(false)
+function AttendanceStatusSelector({
+  value,
+  disabled,
+  onChange,
+}: AttendanceStatusSelectorProps) {
+  const [open, setOpen] =
+    useState(false)
 
-  const currentStyles =
-    currentStatus
-      ? getStatusStyles(
-          currentStatus,
-        )
-      : null
+  const styles = value
+    ? getStatusStyles(value)
+    : null
 
   return (
     <div className="relative">
       <button
         type="button"
-        disabled={saving}
+        disabled={disabled}
         onClick={() =>
-          setOpen((value) => !value)
+          setOpen((current) => !current)
         }
-        className={`flex min-h-10 min-w-[125px] items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
-          currentStatus
-            ? currentStyles?.button
-            : 'border-border bg-background text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-primary'
+        className={`flex h-10 min-w-[145px] items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium transition ${
+          value
+            ? styles?.wrapper
+            : 'border-input bg-background text-muted-foreground hover:border-primary'
         } ${
-          saving
+          disabled
             ? 'cursor-not-allowed opacity-50'
-            : 'cursor-pointer'
+            : ''
         }`}
       >
         <span className="flex items-center gap-2">
-          {currentStatus ? (
+          {value ? (
             <>
               <span
-                className={`size-2 rounded-full ${currentStyles?.dot}`}
+                className={`size-2 rounded-full ${styles?.dot}`}
               />
-
-              <span>
-                {getStatusLabel(
-                  currentStatus,
-                )}
-              </span>
+              {value}
             </>
           ) : (
             'تحديد الحالة'
@@ -386,25 +313,24 @@ function AttendanceStatusButtons({
         />
       </button>
 
-      {open && !saving && (
+      {open && !disabled && (
         <>
           <button
             type="button"
-            aria-label="إغلاق"
+            aria-label="إغلاق القائمة"
             className="fixed inset-0 z-40 cursor-default"
             onClick={() =>
               setOpen(false)
             }
           />
 
-          <div className="absolute right-0 top-[calc(100%+6px)] z-50 min-w-[170px] overflow-hidden rounded-xl border bg-popover p-1.5 shadow-lg">
+          <div className="absolute right-0 top-11 z-50 w-[170px] rounded-xl border bg-popover p-1.5 shadow-xl">
             {attendanceStatusNames.map(
               (status) => {
                 const selected =
-                  currentStatus ===
-                  status
+                  value === status
 
-                const styles =
+                const statusStyles =
                   getStatusStyles(
                     status,
                   )
@@ -415,22 +341,20 @@ function AttendanceStatusButtons({
                     type="button"
                     onClick={() => {
                       setOpen(false)
-                      onSelect(status)
+                      onChange(status)
                     }}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
                       selected
-                        ? styles.button
-                        : 'text-foreground hover:bg-muted'
+                        ? statusStyles.wrapper
+                        : 'hover:bg-muted'
                     }`}
                   >
                     <span className="flex items-center gap-2">
                       <span
-                        className={`size-2 rounded-full ${styles.dot}`}
+                        className={`size-2 rounded-full ${statusStyles.dot}`}
                       />
 
-                      {getStatusLabel(
-                        status,
-                      )}
+                      {status}
                     </span>
 
                     {selected && (
@@ -493,80 +417,68 @@ export function AttendanceView({
   setSelectedAttendanceDate,
 }: AttendanceViewProps) {
   const [
-    attendanceSavingKey,
-    setAttendanceSavingKey,
+    savingKey,
+    setSavingKey,
   ] = useState<string | null>(null)
 
   const [
-    localSelectedStatuses,
-    setLocalSelectedStatuses,
+    selectedStatuses,
+    setSelectedStatuses,
   ] = useState<
     Record<string, AttendanceStatusName>
   >({})
 
   const [
-    searchTerm,
-    setSearchTerm,
+    search,
+    setSearch,
   ] = useState('')
 
   const [
-    statusFilter,
-    setStatusFilter,
-  ] = useState<
-    AttendanceStatusName | 'الكل'
-  >('الكل')
+    selectedDate,
+    setSelectedDate,
+  ] = useState(
+    selectedAttendanceDate || '',
+  )
 
-  const currentDate = todayString()
+  const activeDate =
+    selectedDate ||
+    selectedAttendanceDate ||
+    currentCourse?.startDate ||
+    ''
 
-  const currentAttendanceDate =
-    currentCourse &&
-    isDateWithinCourse(
-      currentDate,
-      currentCourse,
-    )
-      ? currentDate
-      : null
-
-  const archiveAttendanceDate =
-    selectedAttendanceDate &&
-    isDateWithinCourse(
-      selectedAttendanceDate,
-      currentCourse,
-    )
-      ? selectedAttendanceDate
-      : null
-
-  const getRecordForStudent = (
+  const getRecord = (
     studentId: string,
     date: string,
   ) => {
+    if (!currentCourse) {
+      return undefined
+    }
+
     return attendanceRecords.find(
       (record) =>
-        record.studentId === studentId &&
+        record.studentId ===
+          studentId &&
         record.courseId ===
-          currentCourse?.id &&
-        record.attendanceDate === date,
+          currentCourse.id &&
+        record.attendanceDate ===
+          date,
     )
   }
 
   const getStudentStatus = (
     studentId: string,
     date: string,
-  ): AttendanceStatusName | null => {
-    const localKey = `${date}:${studentId}`
+  ) => {
+    const key = `${date}:${studentId}`
 
-    const localStatus =
-      localSelectedStatuses[localKey]
-
-    if (localStatus) {
-      return localStatus
+    if (selectedStatuses[key]) {
+      return selectedStatuses[key]
     }
 
-    const record =
-      getRecordForStudent(
-        studentId,
-        date,
-      )
+    const record = getRecord(
+      studentId,
+      date,
+    )
 
     return getStatusName(
       attendanceStatuses,
@@ -574,80 +486,67 @@ export function AttendanceView({
     )
   }
 
-  const studentPercentages = useMemo(() => {
-    if (!currentCourse) {
-      return {}
-    }
-
-    return Object.fromEntries(
-      assignedStudents.map(
-        (student) => [
-          student.id,
-          getAttendancePercentage(
-            student.id,
-            attendanceRecords,
-            attendanceStatuses,
-            currentCourse.id,
-          ),
-        ],
-      ),
-    ) as Record<string, number>
-  }, [
-    assignedStudents,
-    attendanceRecords,
-    attendanceStatuses,
-    currentCourse,
-  ])
-
-  const groupAttendancePercentage =
+  const attendancePercentages =
     useMemo(() => {
-      if (
-        assignedStudents.length === 0
-      ) {
-        return 0
+      if (!currentCourse) {
+        return {}
       }
 
-      const percentages =
-        assignedStudents.map(
-          (student) =>
-            studentPercentages[
-              student.id
-            ] ?? 0,
-        )
+      const result: Record<
+        string,
+        number
+      > = {}
 
-      return Math.round(
-        percentages.reduce(
-          (sum, value) =>
-            sum + value,
-          0,
-        ) / percentages.length,
-      )
+      for (const student of assignedStudents) {
+        result[student.id] =
+          getStudentAttendancePercentage(
+            student.id,
+            currentCourse.id,
+            attendanceRecords,
+            attendanceStatuses,
+          )
+      }
+
+      return result
     }, [
       assignedStudents,
-      studentPercentages,
+      attendanceRecords,
+      attendanceStatuses,
+      currentCourse,
     ])
 
-  const updateAttendance = async (
+  const filteredStudents =
+    assignedStudents.filter(
+      (student) => {
+        if (!search.trim()) {
+          return true
+        }
+
+        const value =
+          search
+            .trim()
+            .toLowerCase()
+
+        return (
+          student.name
+            .toLowerCase()
+            .includes(value) ||
+          student.studentId
+            .toLowerCase()
+            .includes(value) ||
+          student.personalId
+            .toLowerCase()
+            .includes(value)
+        )
+      },
+    )
+
+  const saveAttendance = async (
     student: Student,
     date: string,
     statusName: AttendanceStatusName,
   ) => {
     if (!currentCourse) {
-      setStatusMessage(
-        'لا توجد دورة حالية.',
-      )
-      return
-    }
-
-    if (
-      !isDateWithinCourse(
-        date,
-        currentCourse,
-      )
-    ) {
-      setStatusMessage(
-        'تاريخ الحضور خارج فترة الدورة.',
-      )
       return
     }
 
@@ -659,73 +558,58 @@ export function AttendanceView({
 
     if (!statusId) {
       setStatusMessage(
-        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات. الحالات المحملة: ${
-          attendanceStatuses
-            .map((item) => item.name)
-            .join('، ') ||
-          'لا توجد حالات'
-        }`,
+        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
       )
       return
     }
 
-    const saveKey = `${date}:${student.id}`
+    const key = `${date}:${student.id}`
 
-    const existing =
-      getRecordForStudent(
-        student.id,
-        date,
-      )
+    if (savingKey === key) {
+      return
+    }
 
-    const previousLocalStatus =
-      localSelectedStatuses[saveKey]
+    const existing = getRecord(
+      student.id,
+      date,
+    )
 
     const previousRecords =
       attendanceRecords
 
-    setLocalSelectedStatuses(
-      (current) => ({
-        ...current,
-        [saveKey]: statusName,
-      }),
-    )
-
-    setStatusMessage(
-      `جاري حفظ "${statusName}" للطالب ${student.name}...`,
-    )
-
-    setAttendanceSavingKey(
-      saveKey,
-    )
+    const previousStatus =
+      selectedStatuses[key]
 
     const optimisticRecord: AttendanceRecord =
       {
         id:
           existing?.id ??
           `temp-${Date.now()}`,
-
         studentId: student.id,
-
         enrollmentId:
           student.enrollmentId ||
           null,
-
-        courseId:
-          currentCourse.id,
-
+        courseId: currentCourse.id,
         attendanceDate: date,
-
         statusId,
-
         note:
           existing?.note ??
-          attendanceNotes[saveKey] ??
+          attendanceNotes[key] ??
           '',
       }
 
+    setSavingKey(key)
+
+    setSelectedStatuses(
+      (current) => ({
+        ...current,
+        [key]: statusName,
+      }),
+    )
+
     setAttendanceRecords(
       (records) => {
-        const existingIndex =
+        const index =
           records.findIndex(
             (record) =>
               record.studentId ===
@@ -736,7 +620,7 @@ export function AttendanceView({
                 date,
           )
 
-        if (existingIndex === -1) {
+        if (index === -1) {
           return [
             ...records,
             optimisticRecord,
@@ -744,8 +628,8 @@ export function AttendanceView({
         }
 
         return records.map(
-          (record, index) =>
-            index === existingIndex
+          (record, recordIndex) =>
+            recordIndex === index
               ? {
                   ...record,
                   statusId,
@@ -773,7 +657,7 @@ export function AttendanceView({
               null,
             note:
               existing.note ||
-              attendanceNotes[saveKey] ||
+              attendanceNotes[key] ||
               null,
           })
           .eq('id', existing.id)
@@ -787,7 +671,7 @@ export function AttendanceView({
         }
 
         if (data) {
-          const savedRecord: AttendanceRecord =
+          const saved: AttendanceRecord =
             {
               id: data.id,
               studentId:
@@ -811,7 +695,7 @@ export function AttendanceView({
                 (record) =>
                   record.id ===
                   existing.id
-                    ? savedRecord
+                    ? saved
                     : record,
               ),
           )
@@ -831,9 +715,8 @@ export function AttendanceView({
             attendance_date: date,
             status_id: statusId,
             note:
-              attendanceNotes[
-                saveKey
-              ] || null,
+              attendanceNotes[key] ||
+              null,
             course_id:
               currentCourse.id,
           })
@@ -847,7 +730,7 @@ export function AttendanceView({
         }
 
         if (data) {
-          const savedRecord: AttendanceRecord =
+          const saved: AttendanceRecord =
             {
               id: data.id,
               studentId:
@@ -871,7 +754,7 @@ export function AttendanceView({
                 (record) =>
                   record.id ===
                   optimisticRecord.id
-                    ? savedRecord
+                    ? saved
                     : record,
               ),
           )
@@ -879,96 +762,63 @@ export function AttendanceView({
       }
 
       setStatusMessage(
-        `تم حفظ حضور ${student.name}: ${statusName} ✅`,
+        `تم حفظ حالة ${student.name}: ${statusName} ✅`,
       )
     } catch (error: any) {
       setAttendanceRecords(
         previousRecords,
       )
 
-      setLocalSelectedStatuses(
+      setSelectedStatuses(
         (current) => {
           const next = {
             ...current,
           }
 
-          if (previousLocalStatus) {
-            next[saveKey] =
-              previousLocalStatus
+          if (previousStatus) {
+            next[key] =
+              previousStatus
           } else {
-            delete next[saveKey]
+            delete next[key]
           }
 
           return next
         },
       )
 
-      const message =
-        error?.message ||
-        error?.details ||
-        'خطأ غير معروف'
-
       setStatusMessage(
-        `تعذر حفظ الحضور: ${message}`,
+        `تعذر حفظ الحضور: ${
+          error?.message ||
+          'خطأ غير معروف'
+        }`,
       )
     } finally {
-      setAttendanceSavingKey(
-        null,
-      )
+      setSavingKey(null)
     }
   }
 
-  const handleAttendanceClick = async (
+  const saveNote = async (
     student: Student,
     date: string,
-    statusName: AttendanceStatusName,
-  ) => {
-    const saveKey = `${date}:${student.id}`
-
-    if (
-      attendanceSavingKey ===
-      saveKey
-    ) {
-      return
-    }
-
-    await updateAttendance(
-      student,
-      date,
-      statusName,
-    )
-  }
-
-  const updateAttendanceNote = async (
-    student: Student,
-    date: string,
-    value: string,
+    note: string,
   ) => {
     const key = `${date}:${student.id}`
-
-    const existing =
-      getRecordForStudent(
-        student.id,
-        date,
-      )
-
-    if (!existing) {
-      setAttendanceNotes(
-        (current) => ({
-          ...current,
-          [key]: value,
-        }),
-      )
-
-      return
-    }
 
     setAttendanceNotes(
       (current) => ({
         ...current,
-        [key]: value,
+        [key]: note,
       }),
     )
+
+    const existing = getRecord(
+      student.id,
+      date,
+    )
+
+    if (!existing) {
+      return
+    }
 
     try {
       const {
@@ -977,7 +827,7 @@ export function AttendanceView({
       } = await supabase
         .from('attendance')
         .update({
-          note: value || null,
+          note: note || null,
         })
         .eq('id', existing.id)
         .select(
@@ -990,7 +840,7 @@ export function AttendanceView({
       }
 
       if (data) {
-        const updatedRecord: AttendanceRecord =
+        const updated: AttendanceRecord =
           {
             id: data.id,
             studentId:
@@ -1014,15 +864,11 @@ export function AttendanceView({
               (record) =>
                 record.id ===
                 existing.id
-                  ? updatedRecord
+                  ? updated
                   : record,
             ),
         )
       }
-
-      setStatusMessage(
-        'تم حفظ الملاحظة.',
-      )
     } catch (error: any) {
       setStatusMessage(
         `تعذر حفظ الملاحظة: ${
@@ -1033,624 +879,260 @@ export function AttendanceView({
     }
   }
 
-  const getAttendanceSummary = (
-    date: string,
-  ) => {
-    const summary = {
-      حاضر: 0,
-      غائب: 0,
-      متأخر: 0,
-      مستأذن: 0,
-    }
-
-    assignedStudents.forEach(
-      (student) => {
-        const status =
-          getStudentStatus(
-            student.id,
-            date,
-          )
-
-        if (
-          status &&
-          isAttendanceStatusName(status)
-        ) {
-          summary[status] += 1
-        }
-      },
-    )
-
-    return summary
-  }
-
-  const renderAttendanceTable = (
-    date: string,
-    title: string,
-  ) => {
-    const dateRecords =
-      attendanceRecords.filter(
-        (record) =>
-          record.courseId ===
-            currentCourse?.id &&
-          record.attendanceDate === date,
-      )
-
-    const summary =
-      getAttendanceSummary(date)
-
-    const filteredStudents =
-      assignedStudents.filter(
-        (student) => {
-          const matchesSearch =
-            !searchTerm.trim() ||
-            student.name
-              .toLowerCase()
-              .includes(
-                searchTerm
-                  .trim()
-                  .toLowerCase(),
-              ) ||
-            student.studentId
-              .toLowerCase()
-              .includes(
-                searchTerm
-                  .trim()
-                  .toLowerCase(),
-              ) ||
-            student.personalId
-              .toLowerCase()
-              .includes(
-                searchTerm
-                  .trim()
-                  .toLowerCase(),
-              )
-
-          const studentStatus =
-            getStudentStatus(
-              student.id,
-              date,
-            )
-
-          const matchesStatus =
-            statusFilter === 'الكل' ||
-            studentStatus ===
-              statusFilter
-
-          return (
-            matchesSearch &&
-            matchesStatus
-          )
-        },
-      )
-
-    return (
-      <div className="space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">
-              {title}
-            </h3>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatDateForDisplay(
-                date,
-              )}{' '}
-              · {assignedStudents.length}{' '}
-              طالب
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 text-xs">
-            <span className="rounded-full bg-green-50 px-3 py-1.5 font-medium text-green-700 dark:bg-green-950/30 dark:text-green-400">
-              حاضر {summary.حاضر}
-            </span>
-
-            <span className="rounded-full bg-red-50 px-3 py-1.5 font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400">
-              غائب {summary.غائب}
-            </span>
-
-            <span className="rounded-full bg-yellow-50 px-3 py-1.5 font-medium text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400">
-              متأخر {summary.متأخر}
-            </span>
-
-            <span className="rounded-full bg-blue-50 px-3 py-1.5 font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
-              مستأذن {summary.مستأذن}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 md:flex-row">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) =>
-                setSearchTerm(
-                  event.target.value,
-                )
-              }
-              placeholder="البحث عن طالب..."
-              className="h-10 w-full rounded-lg border bg-background pr-9 pl-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(
-                event.target
-                  .value as
-                  | AttendanceStatusName
-                  | 'الكل',
-              )
-            }
-            className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="الكل">
-              كل الحالات
-            </option>
-
-            {attendanceStatusNames.map(
-              (status) => (
-                <option
-                  key={status}
-                  value={status}
-                >
-                  {status}
-                </option>
-              ),
-            )}
-          </select>
-        </div>
-
-        <div className="overflow-visible rounded-xl border">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40">
-                  <th className="px-4 py-3 text-right font-semibold">
-                    الطالب
-                  </th>
-
-                  <th className="px-4 py-3 text-right font-semibold">
-                    المستوى
-                  </th>
-
-                  <th className="px-4 py-3 text-right font-semibold">
-                    نسبة الحضور
-                  </th>
-
-                  <th className="px-4 py-3 text-right font-semibold">
-                    حالة اليوم
-                  </th>
-
-                  <th className="px-4 py-3 text-right font-semibold">
-                    الملاحظات
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredStudents.length ===
-                0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-muted-foreground"
-                    >
-                      لا يوجد طلبة مطابقون للبحث أو الفلتر.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStudents.map(
-                    (student) => {
-                      const record =
-                        dateRecords.find(
-                          (item) =>
-                            item.studentId ===
-                            student.id,
-                        )
-
-                      const status =
-                        getStudentStatus(
-                          student.id,
-                          date,
-                        )
-
-                      const saveKey = `${date}:${student.id}`
-
-                      const note =
-                        record?.note ??
-                        attendanceNotes[
-                          saveKey
-                        ] ??
-                        ''
-
-                      const studentSaving =
-                        attendanceSavingKey ===
-                        saveKey
-
-                      const percentage =
-                        studentPercentages[
-                          student.id
-                        ] ?? 0
-
-                      return (
-                        <tr
-                          key={`${date}-${student.id}`}
-                          className="border-b last:border-b-0 hover:bg-muted/20"
-                        >
-                          <td className="px-4 py-4 align-middle">
-                            <div className="flex items-center gap-3">
-                              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold">
-                                {student.name
-                                  .trim()
-                                  .charAt(0)}
-                              </div>
-
-                              <div>
-                                <p className="font-medium">
-                                  {student.name}
-                                </p>
-
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {student.personalId ||
-                                    student.studentId}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4 align-middle">
-                            <span className="text-sm text-muted-foreground">
-                              {student.levelName ||
-                                '-'}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-4 align-middle">
-                            <div className="w-[145px]">
-                              <div className="mb-1.5 flex items-center justify-between">
-                                <span
-                                  className={`text-sm font-bold ${getPercentageClass(
-                                    percentage,
-                                  )}`}
-                                >
-                                  {percentage}%
-                                </span>
-
-                                <span className="text-[11px] text-muted-foreground">
-                                  حضور
-                                </span>
-                              </div>
-
-                              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    percentage >=
-                                    90
-                                      ? 'bg-green-500'
-                                      : percentage >=
-                                          75
-                                        ? 'bg-yellow-500'
-                                        : 'bg-red-500'
-                                  }`}
-                                  style={{
-                                    width: `${percentage}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="relative px-4 py-4 align-middle">
-                            <AttendanceStatusButtons
-                              currentStatus={
-                                status
-                              }
-                              saving={
-                                studentSaving
-                              }
-                              onSelect={(
-                                statusName,
-                              ) =>
-                                handleAttendanceClick(
-                                  student,
-                                  date,
-                                  statusName,
-                                )
-                              }
-                            />
-                          </td>
-
-                          <td className="px-4 py-4 align-middle">
-                            <input
-                              type="text"
-                              value={note}
-                              onChange={(
-                                event,
-                              ) =>
-                                setAttendanceNotes(
-                                  (current) => ({
-                                    ...current,
-                                    [saveKey]:
-                                      event
-                                        .target
-                                        .value,
-                                  }),
-                                )
-                              }
-                              onBlur={(event) =>
-                                updateAttendanceNote(
-                                  student,
-                                  date,
-                                  event
-                                    .target
-                                    .value,
-                                )
-                              }
-                              placeholder="ملاحظة..."
-                              className="w-full min-w-[180px] rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            />
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   if (!currentCourse) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-xl border border-dashed p-10 text-center">
-          <h3 className="text-lg font-semibold">
-            لا توجد دورة حالية
-          </h3>
+      <div className="rounded-xl border border-dashed p-10 text-center">
+        <ClipboardCheck className="mx-auto size-10 text-muted-foreground" />
 
-          <p className="mt-2 text-sm text-muted-foreground">
-            لم يتم العثور على دورة مرتبطة بالسنة الأكاديمية الحالية.
-          </p>
-        </div>
+        <h3 className="mt-4 text-lg font-semibold">
+          لا توجد دورة حالية
+        </h3>
+
+        <p className="mt-2 text-sm text-muted-foreground">
+          لم يتم اختيار دورة للحضور.
+        </p>
       </div>
     )
   }
 
-  const activeDate =
-    archiveAttendanceDate ||
-    currentAttendanceDate
-
-  const activeSummary = activeDate
-    ? getAttendanceSummary(activeDate)
-    : null
-
   return (
-    <div className="space-y-6">
-      {/* Course header */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              الحضور والغياب
-            </p>
+    <div
+      dir="rtl"
+      className="space-y-5"
+    >
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold">
+            الحضور والغياب
+          </h2>
 
-            <h2 className="mt-1 text-xl font-bold">
-              {currentCourse.name}
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatDateForDisplay(
-                currentCourse.startDate,
-              )}{' '}
-              —{' '}
-              {formatDateForDisplay(
-                currentCourse.endDate,
-              )}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-3">
-            <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <ClipboardCheck className="size-5" />
-            </div>
-
-            <div>
-              <p className="text-xs text-muted-foreground">
-                متوسط حضور المجموعة
-              </p>
-
-              <p
-                className={`text-xl font-bold ${getPercentageClass(
-                  groupAttendancePercentage,
-                )}`}
-              >
-                {groupAttendancePercentage}%
-              </p>
-            </div>
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {currentCourse.name}
+          </p>
         </div>
+
+        <input
+          type="date"
+          value={activeDate}
+          min={currentCourse.startDate}
+          max={currentCourse.endDate}
+          onChange={(event) => {
+            const date =
+              event.target.value
+
+            setSelectedDate(date)
+            setSelectedAttendanceDate(
+              date || null,
+            )
+          }}
+          className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
       </div>
 
+      {/* Status message */}
       {statusMessage && (
-        <div className="rounded-xl border bg-muted/40 px-4 py-3 text-sm">
+        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           {statusMessage}
         </div>
       )}
 
-      {/* Statistics */}
-      {activeSummary && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  حاضر
-                </p>
-
-                <p className="mt-1 text-2xl font-bold text-green-600 dark:text-green-400">
-                  {activeSummary.حاضر}
-                </p>
-              </div>
-
-              <div className="flex size-10 items-center justify-center rounded-full bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400">
-                <UserCheck className="size-5" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  غائب
-                </p>
-
-                <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-400">
-                  {activeSummary.غائب}
-                </p>
-              </div>
-
-              <div className="flex size-10 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400">
-                <UserX className="size-5" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  متأخر
-                </p>
-
-                <p className="mt-1 text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                  {activeSummary.متأخر}
-                </p>
-              </div>
-
-              <div className="flex size-10 items-center justify-center rounded-full bg-yellow-50 text-yellow-600 dark:bg-yellow-950/30 dark:text-yellow-400">
-                <Clock3 className="size-5" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  مستأذن
-                </p>
-
-                <p className="mt-1 text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {activeSummary.مستأذن}
-                </p>
-              </div>
-
-              <div className="flex size-10 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400">
-                <ClipboardCheck className="size-5" />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Today's attendance */}
-      {currentAttendanceDate ? (
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
-          {renderAttendanceTable(
-            currentAttendanceDate,
-            'حضور اليوم',
-          )}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed p-8 text-center">
-          <h3 className="font-semibold">
-            اليوم خارج فترة الدورة
-          </h3>
-
-          <p className="mt-2 text-sm text-muted-foreground">
-            فترة الدورة من{' '}
-            {formatDateForDisplay(
-              currentCourse.startDate,
-            )}{' '}
-            إلى{' '}
-            {formatDateForDisplay(
-              currentCourse.endDate,
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Archive */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">
-              أرشيف الحضور
-            </h3>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              اختر تاريخًا داخل فترة الدورة لعرض السجل.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              type="date"
-              value={
-                selectedAttendanceDate ??
-                ''
-              }
-              min={
-                currentCourse.startDate
-              }
-              max={
-                currentCourse.endDate
-              }
-              onChange={(event) => {
-                setSelectedAttendanceDate(
-                  event.target.value ||
-                    null,
-                )
-              }}
-              className="rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-
-            {selectedAttendanceDate && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setSelectedAttendanceDate(
-                    null,
-                  )
-                }
-              >
-                مسح
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {archiveAttendanceDate ? (
-          renderAttendanceTable(
-            archiveAttendanceDate,
-            'سجل الحضور',
-          )
-        ) : (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-            اختر تاريخًا لعرض سجل الحضور.
-          </div>
-        )}
+      {/* Search */}
+      <div>
+        <input
+          type="text"
+          value={search}
+          onChange={(event) =>
+            setSearch(
+              event.target.value,
+            )
+          }
+          placeholder="بحث عن طالب..."
+          className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
       </div>
+
+      {/* Attendance table */}
+      <div className="overflow-x-auto rounded-xl border">
+        <table className="w-full min-w-[850px]">
+          <thead>
+            <tr className="border-b bg-muted/40">
+              <th className="px-5 py-4 text-right text-sm font-semibold">
+                الطالب
+              </th>
+
+              <th className="px-5 py-4 text-right text-sm font-semibold">
+                الحالة
+              </th>
+
+              <th className="px-5 py-4 text-right text-sm font-semibold">
+                الملاحظات
+              </th>
+
+              <th className="px-5 py-4 text-right text-sm font-semibold">
+                نسبة حضور الدورة
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filteredStudents.length ===
+            0 ? (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="px-5 py-12 text-center text-sm text-muted-foreground"
+                >
+                  لا يوجد طلبة.
+                </td>
+              </tr>
+            ) : (
+              filteredStudents.map(
+                (student) => {
+                  const record =
+                    getRecord(
+                      student.id,
+                      activeDate,
+                    )
+
+                  const status =
+                    getStudentStatus(
+                      student.id,
+                      activeDate,
+                    )
+
+                  const key = `${activeDate}:${student.id}`
+
+                  const note =
+                    record?.note ??
+                    attendanceNotes[key] ??
+                    ''
+
+                  const percentage =
+                    attendancePercentages[
+                      student.id
+                    ] ?? 0
+
+                  const saving =
+                    savingKey === key
+
+                  return (
+                    <tr
+                      key={student.id}
+                      className="border-b last:border-0 hover:bg-muted/20"
+                    >
+                      {/* Student */}
+                      <td className="px-5 py-4">
+                        <div>
+                          <div className="font-medium">
+                            {student.name}
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {student.levelName ||
+                              student.studentId}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-5 py-4">
+                        <AttendanceStatusSelector
+                          value={status}
+                          disabled={saving}
+                          onChange={(
+                            statusName,
+                          ) =>
+                            saveAttendance(
+                              student,
+                              activeDate,
+                              statusName,
+                            )
+                          }
+                        />
+                      </td>
+
+                      {/* Note */}
+                      <td className="px-5 py-4">
+                        <input
+                          type="text"
+                          value={note}
+                          onChange={(
+                            event,
+                          ) =>
+                            setAttendanceNotes(
+                              (current) => ({
+                                ...current,
+                                [key]:
+                                  event
+                                    .target
+                                    .value,
+                              }),
+                            )
+                          }
+                          onBlur={(event) =>
+                            saveNote(
+                              student,
+                              activeDate,
+                              event
+                                .target
+                                .value,
+                            )
+                          }
+                          placeholder="ملاحظة..."
+                          className="h-10 w-full min-w-[220px] rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+                      </td>
+
+                      {/* Percentage */}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-lg font-bold ${getPercentageClass(
+                              percentage,
+                            )}`}
+                          >
+                            {percentage}%
+                          </span>
+
+                          <div className="h-2 w-20 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className={`h-full rounded-full ${
+                                percentage >=
+                                90
+                                  ? 'bg-green-500'
+                                  : percentage >=
+                                      75
+                                    ? 'bg-yellow-500'
+                                    : 'bg-red-500'
+                              }`}
+                              style={{
+                                width: `${percentage}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                },
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Course period */}
+      <p className="text-xs text-muted-foreground">
+        فترة الدورة:{' '}
+        {formatDateForDisplay(
+          currentCourse.startDate,
+        )}{' '}
+        —{' '}
+        {formatDateForDisplay(
+          currentCourse.endDate,
+        )}
+      </p>
     </div>
   )
 }
