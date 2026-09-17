@@ -1073,11 +1073,6 @@ export function TeachersView() {
     'جاري التحقق من الطلاب...',
   )
 
-  /*
-   * نتأكد من قاعدة البيانات مباشرة
-   * أن الطلاب المختارين غير مسندين مسبقًا
-   * في نفس الدورة.
-   */
   const {
     data: existingRows,
     error: existingError,
@@ -1103,12 +1098,22 @@ export function TeachersView() {
     return
   }
 
-  const existingAssignments =
-    (existingRows ?? []) as Assignment[]
+  /*
+   * نحول بيانات Supabase من snake_case
+   * إلى نفس الشكل المستخدم داخل الواجهة.
+   */
+  const existingAssignments: Assignment[] =
+    (existingRows ?? []).map(
+      (row) => ({
+        id: row.id,
+        courseId: row.course_id,
+        teacherId: row.teacher_id,
+        studentId: row.student_id,
+      }),
+    )
 
   /*
    * الطلاب المسندون أصلًا لنفس المعلم.
-   * نتجاهلهم بدل محاولة إدخالهم مرة ثانية.
    */
   const alreadyWithCurrentTeacher =
     existingAssignments
@@ -1124,9 +1129,6 @@ export function TeachersView() {
 
   /*
    * الطلاب المسندون إلى معلم آخر.
-   *
-   * هذا يعني أن الطالب موزع بالفعل في هذه الدورة
-   * ولا يجوز إضافته لمعلم ثانٍ.
    */
   const assignedToAnotherTeacher =
     existingAssignments.filter(
@@ -1154,7 +1156,7 @@ export function TeachersView() {
   }
 
   /*
-   * نستبعد أي طالب موجود مسبقًا
+   * نستبعد الطلاب الموجودين مسبقًا
    * عند نفس المعلم.
    */
   const studentsToInsert =
@@ -1210,11 +1212,20 @@ export function TeachersView() {
     return
   }
 
+  const newAssignments: Assignment[] =
+    (data ?? []).map(
+      (row) => ({
+        id: row.id,
+        courseId: row.course_id,
+        teacherId: row.teacher_id,
+        studentId: row.student_id,
+      }),
+    )
+
   setAssignments(
     (current) => [
       ...current,
-      ...((data ??
-        []) as Assignment[]),
+      ...newAssignments,
     ],
   )
 
@@ -1226,7 +1237,6 @@ export function TeachersView() {
   )
   setSaving(false)
 }
-
   const openTransfer = (
     studentId: string,
   ) => {
