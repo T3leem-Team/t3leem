@@ -1060,67 +1060,172 @@ export function TeachersView() {
    * يمنع ازدواجية الطالب داخل الدورة.
    */
   const saveStudents = async () => {
-    if (
-      !selectedTeacherId ||
-      !currentCourse ||
-      selectedStudentIds.length === 0
-    ) {
-      return
-    }
+  if (
+    !selectedTeacherId ||
+    !currentCourse ||
+    selectedStudentIds.length === 0
+  ) {
+    return
+  }
 
-    setSaving(true)
+  setSaving(true)
+  setStatusMessage(
+    'جاري التحقق من الطلاب...',
+  )
+
+  /*
+   * نتأكد من قاعدة البيانات مباشرة
+   * أن الطلاب المختارين غير مسندين مسبقًا
+   * في نفس الدورة.
+   */
+  const {
+    data: existingRows,
+    error: existingError,
+  } = await supabase
+    .from('teacher_student_assignments')
+    .select(
+      'id, course_id, teacher_id, student_id',
+    )
+    .eq(
+      'course_id',
+      currentCourse.id,
+    )
+    .in(
+      'student_id',
+      selectedStudentIds,
+    )
+
+  if (existingError) {
     setStatusMessage(
-      'جاري إضافة الطلاب...',
+      `تعذر التحقق من توزيع الطلاب: ${existingError.message}`,
+    )
+    setSaving(false)
+    return
+  }
+
+  const existingAssignments =
+    (existingRows ?? []) as Assignment[]
+
+  /*
+   * الطلاب المسندون أصلًا لنفس المعلم.
+   * نتجاهلهم بدل محاولة إدخالهم مرة ثانية.
+   */
+  const alreadyWithCurrentTeacher =
+    existingAssignments
+      .filter(
+        (assignment) =>
+          assignment.teacherId ===
+          selectedTeacherId,
+      )
+      .map(
+        (assignment) =>
+          assignment.studentId,
+      )
+
+  /*
+   * الطلاب المسندون إلى معلم آخر.
+   *
+   * هذا يعني أن الطالب موزع بالفعل في هذه الدورة
+   * ولا يجوز إضافته لمعلم ثانٍ.
+   */
+  const assignedToAnotherTeacher =
+    existingAssignments.filter(
+      (assignment) =>
+        assignment.teacherId !==
+        selectedTeacherId,
     )
 
-    const rows =
-      selectedStudentIds.map(
-        (studentId) => ({
-          course_id:
-            currentCourse.id,
-          teacher_id:
-            selectedTeacherId,
-          student_id:
-            studentId,
-        }),
+  if (
+    assignedToAnotherTeacher.length > 0
+  ) {
+    const anotherTeacher =
+      operationalTeachers.find(
+        (teacher) =>
+          teacher.id ===
+          assignedToAnotherTeacher[0]
+            .teacherId,
       )
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
-      .insert(rows)
-      .select(
-        'id, course_id, teacher_id, student_id',
-      )
+    setStatusMessage(
+      `لا يمكن إضافة الطالب لأنه مسند بالفعل إلى ${anotherTeacher?.name ?? 'معلم آخر'} في هذه الدورة.`,
+    )
+    setSaving(false)
+    return
+  }
 
-    if (error) {
-      setStatusMessage(
-        `تعذر إضافة الطلاب: ${error.message}`,
-      )
-      setSaving(false)
-      return
-    }
-
-    setAssignments(
-      (current) => [
-        ...current,
-        ...((data ??
-          []) as Assignment[]),
-      ],
+  /*
+   * نستبعد أي طالب موجود مسبقًا
+   * عند نفس المعلم.
+   */
+  const studentsToInsert =
+    selectedStudentIds.filter(
+      (studentId) =>
+        !alreadyWithCurrentTeacher.includes(
+          studentId,
+        ),
     )
 
+  if (
+    studentsToInsert.length === 0
+  ) {
     setSelectedStudentIds([])
     setSelectedGrade('')
     setActivePanel('students')
     setStatusMessage(
-      'تمت إضافة الطلاب بنجاح ✅',
+      'الطلاب المحددون مضافون بالفعل لهذا المعلم.',
     )
     setSaving(false)
+    return
   }
+
+  const rows =
+    studentsToInsert.map(
+      (studentId) => ({
+        course_id:
+          currentCourse.id,
+        teacher_id:
+          selectedTeacherId,
+        student_id:
+          studentId,
+      }),
+    )
+
+  const {
+    data,
+    error,
+  } = await supabase
+    .from(
+      'teacher_student_assignments',
+    )
+    .insert(rows)
+    .select(
+      'id, course_id, teacher_id, student_id',
+    )
+
+  if (error) {
+    setStatusMessage(
+      `تعذر إضافة الطلاب: ${error.message}`,
+    )
+    setSaving(false)
+    return
+  }
+
+  setAssignments(
+    (current) => [
+      ...current,
+      ...((data ??
+        []) as Assignment[]),
+    ],
+  )
+
+  setSelectedStudentIds([])
+  setSelectedGrade('')
+  setActivePanel('students')
+  setStatusMessage(
+    'تمت إضافة الطلاب بنجاح ✅',
+  )
+  setSaving(false)
+}
 
   const openTransfer = (
     studentId: string,
