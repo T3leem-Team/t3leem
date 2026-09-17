@@ -32,6 +32,12 @@ paymentStatus: string
 
 type PaymentMethod = 'نقدي' | 'تحويل' | 'بطاقة'
 
+type PaymentStatus =
+| 'مدفوع بالكامل'
+| 'مدفوع جزئياً'
+| 'غير مدفوع'
+| 'معفي'
+
 type StudentRow = {
 id: string
 name: string
@@ -40,11 +46,7 @@ grade: string
 amountDue: number
 amountPaid: number
 feeExempt: boolean
-paymentStatus:
-| 'مدفوع بالكامل'
-| 'مدفوع جزئياً'
-| 'غير مدفوع'
-| 'معفي'
+paymentStatus: PaymentStatus
 }
 
 type PaymentRecord = {
@@ -55,6 +57,12 @@ payment_date: string
 reference_number: string | null
 notes: string | null
 created_at: string
+}
+
+type AcademicYear = {
+id: string
+name: string
+annual_fee: number | null
 }
 
 const emptyFilters: Filters = {
@@ -71,63 +79,39 @@ export function PaymentsView() {
 const router = useRouter()
 
 const [returnPath, setReturnPath] = useState('')
-const [studentIdFromUrl, setStudentIdFromUrl] =
-useState<string | null>(null)
+const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null)
 
-const autoOpenedStudentRef =
-useRef<string | null>(null)
+const autoOpenedStudentRef = useRef<string | null>(null)
 
-const [filters, setFilters] =
-useState<Filters>(emptyFilters)
+const [filters, setFilters] = useState<Filters>(emptyFilters)
 
-const [studentList, setStudentList] =
-useState<StudentRow[]>([])
-
-const [loading, setLoading] =
-useState(true)
+const [studentList, setStudentList] = useState<StudentRow[]>([])
+const [loading, setLoading] = useState(true)
 
 const [currentAcademicYearId, setCurrentAcademicYearId] =
 useState<string | null>(null)
 
-const [currentAcademicYearName, setCurrentAcademicYearName] =
-useState('')
+const [currentAcademicYearName, setCurrentAcademicYearName] = useState('')
+const [currentAnnualFee, setCurrentAnnualFee] = useState(0)
 
-const [currentAnnualFee, setCurrentAnnualFee] =
-useState(0)
+const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+const [detailsStudent, setDetailsStudent] = useState<StudentRow | null>(null)
 
-const [detailsDialogOpen, setDetailsDialogOpen] =
-useState(false)
-
-const [detailsStudent, setDetailsStudent] =
-useState<StudentRow | null>(null)
-
-const [paymentHistory, setPaymentHistory] =
-useState<PaymentRecord[]>([])
-
-const [loadingHistory, setLoadingHistory] =
-useState(false)
-
-const [savingPayment, setSavingPayment] =
-useState(false)
+const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([])
+const [loadingHistory, setLoadingHistory] = useState(false)
+const [savingPayment, setSavingPayment] = useState(false)
 
 useEffect(() => {
-const params = new URLSearchParams(
-window.location.search,
-)
+const params = new URLSearchParams(window.location.search)
 
 ```
-setReturnPath(
-  params.get('return') || '',
-)
-
-setStudentIdFromUrl(
-  params.get('student'),
-)
+setReturnPath(params.get('return') || '')
+setStudentIdFromUrl(params.get('student'))
 ```
 
 }, [])
 
-const loadPayments = async () => {
+const loadPayments = async (): Promise<StudentRow[]> => {
 setLoading(true)
 
 ```
@@ -151,37 +135,28 @@ try {
     setCurrentAcademicYearId(null)
     setCurrentAcademicYearName('')
     setCurrentAnnualFee(0)
-    return
+
+    return []
   }
 
-  const annualFee = Number(
-    currentYear.annual_fee ?? 0,
-  )
+  const academicYear: AcademicYear = {
+    id: currentYear.id,
+    name: currentYear.name,
+    annual_fee: currentYear.annual_fee,
+  }
 
-  setCurrentAcademicYearId(
-    currentYear.id,
-  )
+  const annualFee = Number(academicYear.annual_fee ?? 0)
 
-  setCurrentAcademicYearName(
-    currentYear.name,
-  )
+  setCurrentAcademicYearId(academicYear.id)
+  setCurrentAcademicYearName(academicYear.name)
+  setCurrentAnnualFee(annualFee)
 
-  setCurrentAnnualFee(
-    annualFee,
-  )
-
-  /*
-   * نجيب الطلاب بنفس ترتيب صفحة الطلاب:
-   * الأحدث إضافة يظهر أولاً.
-   */
   const {
     data: students,
     error: studentsError,
   } = await supabase
     .from('students')
-    .select(
-      'id, name, personal_id, fee_exempt, created_at',
-    )
+    .select('id, name, personal_id, fee_exempt, created_at')
     .order('created_at', {
       ascending: false,
     })
@@ -190,68 +165,43 @@ try {
     throw studentsError
   }
 
-  /*
-   * نحتاج فقط الطلاب المرتبطين بالسنة الدراسية الحالية
-   * والحالة النشطة.
-   */
   const {
     data: enrollments,
     error: enrollmentError,
   } = await supabase
     .from('enrollments')
-    .select(
-      'student_id, level_id',
-    )
-    .eq(
-      'academic_year_id',
-      currentYear.id,
-    )
-    .eq(
-      'status',
-      'نشط',
-    )
+    .select('student_id, level_id')
+    .eq('academic_year_id', academicYear.id)
+    .eq('status', 'نشط')
 
   if (enrollmentError) {
     throw enrollmentError
   }
 
-  const studentIds = (
-    enrollments ?? []
-  )
-    .map(
-      (item: any) =>
-        item.student_id,
-    )
+  const studentIds = (enrollments ?? [])
+    .map((item) => item.student_id)
     .filter(Boolean)
 
-  let payments: any[] = []
+  let payments: Array<{
+    student_id: string
+    amount: number | null
+  }> = []
 
-  if (
-    studentIds.length > 0
-  ) {
+  if (studentIds.length > 0) {
     const {
       data: paymentData,
       error: paymentError,
     } = await supabase
       .from('payments')
-      .select(
-        'student_id, amount',
-      )
-      .eq(
-        'academic_year_id',
-        currentYear.id,
-      )
-      .in(
-        'student_id',
-        studentIds,
-      )
+      .select('student_id, amount')
+      .eq('academic_year_id', academicYear.id)
+      .in('student_id', studentIds)
 
     if (paymentError) {
       throw paymentError
     }
 
-    payments =
-      paymentData ?? []
+    payments = paymentData ?? []
   }
 
   const {
@@ -259,175 +209,109 @@ try {
     error: levelsError,
   } = await supabase
     .from('levels')
-    .select(
-      'id, name',
-    )
-    .eq(
-      'is_active',
-      true,
-    )
+    .select('id, name')
+    .eq('is_active', true)
 
   if (levelsError) {
     throw levelsError
   }
 
-  const levelMap =
-    new Map(
-      (levels ?? []).map(
-        (level: any) => [
-          level.id,
-          level.name,
-        ],
-      ),
+  const levelMap = new Map<string, string>(
+    (levels ?? []).map((level) => [
+      level.id,
+      level.name,
+    ]),
+  )
+
+  const enrollmentMap = new Map<string, string>(
+    (enrollments ?? []).map((enrollment) => [
+      enrollment.student_id,
+      levelMap.get(enrollment.level_id) ?? 'غير محدد',
+    ]),
+  )
+
+  const paidByStudent = new Map<string, number>()
+
+  payments.forEach((payment) => {
+    const current = paidByStudent.get(payment.student_id) ?? 0
+
+    paidByStudent.set(
+      payment.student_id,
+      current + Number(payment.amount ?? 0),
     )
+  })
 
-  const enrollmentMap =
-    new Map(
-      (
-        enrollments ?? []
-      ).map(
-        (enrollment: any) => [
-          enrollment.student_id,
-          levelMap.get(
-            enrollment.level_id,
-          ) ?? 'غير محدد',
-        ],
-      ),
-    )
+  const mappedStudents: StudentRow[] = (students ?? [])
+    .filter((student) => enrollmentMap.has(student.id))
+    .map((student) => {
+      const amountPaid = paidByStudent.get(student.id) ?? 0
+      const feeExempt = Boolean(student.fee_exempt)
 
-  const paidByStudent =
-    new Map<
-      string,
-      number
-    >()
+      let paymentStatus: PaymentStatus
 
-  payments.forEach(
-    (payment) => {
-      const current =
-        paidByStudent.get(
-          payment.student_id,
-        ) ?? 0
+      if (feeExempt) {
+        paymentStatus = 'معفي'
+      } else if (annualFee > 0 && amountPaid >= annualFee) {
+        paymentStatus = 'مدفوع بالكامل'
+      } else if (amountPaid > 0) {
+        paymentStatus = 'مدفوع جزئياً'
+      } else {
+        paymentStatus = 'غير مدفوع'
+      }
 
-      paidByStudent.set(
-        payment.student_id,
-        current +
-          Number(
-            payment.amount ?? 0,
-          ),
-      )
-    },
-  )
-
-  /*
-   * الطلاب يتم المرور عليهم حسب ترتيب students
-   * وليس حسب ترتيب enrollments.
-   *
-   * بالتالي # في المدفوعات يطابق ترتيب الطلاب.
-   */
-  const mappedStudents: StudentRow[] =
-    (students ?? [])
-      .filter(
-        (student: any) =>
-          enrollmentMap.has(
-            student.id,
-          ),
-      )
-      .map(
-        (student: any) => {
-          const amountPaid =
-            paidByStudent.get(
-              student.id,
-            ) ?? 0
-
-          const feeExempt =
-            Boolean(
-              student.fee_exempt,
-            )
-
-          const paymentStatus =
-            feeExempt
-              ? 'معفي'
-              : amountPaid >=
-                  annualFee &&
-                annualFee > 0
-                ? 'مدفوع بالكامل'
-                : amountPaid > 0
-                  ? 'مدفوع جزئياً'
-                  : 'غير مدفوع'
-
-          return {
-            id: student.id,
-            name:
-              student.name,
-            personalId:
-              student.personal_id ??
-              '',
-            grade:
-              enrollmentMap.get(
-                student.id,
-              ) ??
-              'غير محدد',
-            amountDue:
-              annualFee,
-            amountPaid,
-            feeExempt,
-            paymentStatus,
-          }
-        },
-      )
-
-  setStudentList(
-    mappedStudents,
-  )
-
-  if (detailsStudent) {
-    const updatedStudent =
-      mappedStudents.find(
-        (student) =>
-          student.id ===
-          detailsStudent.id,
-      )
-
-    if (updatedStudent) {
-      setDetailsStudent(
-        updatedStudent,
-      )
-    }
-  }
-} catch (error) {
-  console.error(
-    'Failed to load payments:',
-    error,
-  )
-
-  /*
-   * fallback فقط في حال تعذر Supabase.
-   */
-  const fallback =
-    fallbackStudents.map(
-      (student: any) => ({
+      return {
         id: student.id,
         name: student.name,
-        personalId:
-          student.personalId ??
-          '',
-        grade:
-          student.grade,
-        amountDue:
-          student.amountDue,
-        amountPaid:
-          student.amountPaid,
-        feeExempt:
-          student.paymentStatus ===
-          'معفي',
-        paymentStatus:
-          student.paymentStatus,
-      }),
+        personalId: student.personal_id ?? '',
+        grade: enrollmentMap.get(student.id) ?? 'غير محدد',
+        amountDue: annualFee,
+        amountPaid,
+        feeExempt,
+        paymentStatus,
+      }
+    })
+
+  setStudentList(mappedStudents)
+
+  if (detailsStudent) {
+    const updatedStudent = mappedStudents.find(
+      (student) => student.id === detailsStudent.id,
     )
 
-  setStudentList(
-    fallback,
-  )
+    if (updatedStudent) {
+      setDetailsStudent(updatedStudent)
+    }
+  }
+
+  return mappedStudents
+} catch (error) {
+  console.error('Failed to load payments:', error)
+
+  const fallback: StudentRow[] = fallbackStudents.map((student: any) => {
+    const paymentStatus: PaymentStatus =
+      student.paymentStatus === 'معفي'
+        ? 'معفي'
+        : student.paymentStatus === 'مدفوع بالكامل'
+          ? 'مدفوع بالكامل'
+          : student.paymentStatus === 'مدفوع جزئياً'
+            ? 'مدفوع جزئياً'
+            : 'غير مدفوع'
+
+    return {
+      id: String(student.id),
+      name: String(student.name ?? ''),
+      personalId: String(student.personalId ?? ''),
+      grade: String(student.grade ?? 'غير محدد'),
+      amountDue: Number(student.amountDue ?? 0),
+      amountPaid: Number(student.amountPaid ?? 0),
+      feeExempt: paymentStatus === 'معفي',
+      paymentStatus,
+    }
+  })
+
+  setStudentList(fallback)
+
+  return fallback
 } finally {
   setLoading(false)
 }
@@ -436,49 +320,31 @@ try {
 }
 
 useEffect(() => {
-loadPayments()
+void loadPayments()
 }, [])
 
-/*
-
-* إذا وصلنا من صفحة الطلاب:
-*
-* /payments?student=STUDENT_ID&return=/students
-*
-* نفتح نفس نافذة التفاصيل.
-  */
-  useEffect(() => {
-  if (
-  loading ||
-  !studentIdFromUrl ||
-  detailsDialogOpen ||
-  autoOpenedStudentRef.current ===
-  studentIdFromUrl
-  ) {
-  return
-  }
+useEffect(() => {
+if (
+loading ||
+!studentIdFromUrl ||
+detailsDialogOpen ||
+autoOpenedStudentRef.current === studentIdFromUrl
+) {
+return
+}
 
 ```
-const student =
-```
-
-```
-  studentList.find(
-    (item) =>
-      item.id ===
-      studentIdFromUrl,
-  )
+const student = studentList.find(
+  (item) => item.id === studentIdFromUrl,
+)
 
 if (!student) {
   return
 }
 
-autoOpenedStudentRef.current =
-  studentIdFromUrl
+autoOpenedStudentRef.current = studentIdFromUrl
 
-openDetailsDialog(
-  student,
-)
+void openDetailsDialog(student)
 ```
 
 }, [
@@ -492,185 +358,135 @@ const updateFilter = (
 key: keyof Filters,
 value: string,
 ) => {
-setFilters(
-(current) => ({
-current,
+setFilters((current) => ({
+...current,
 [key]: value,
-}),
-)
+}))
 }
 
 const grades = useMemo(
 () =>
 Array.from(
 new Set(
-studentList.map(
-(student) =>
-student.grade,
-),
+studentList.map((student) => student.grade),
 ),
 ).sort(),
 [studentList],
 )
 
-const paymentStatuses =
-useMemo(
+const paymentStatuses = useMemo(
 () =>
 Array.from(
 new Set(
 studentList.map(
-(student) =>
-student.paymentStatus,
+(student) => student.paymentStatus,
 ),
 ),
 ),
 [studentList],
 )
 
-const filteredStudents =
-useMemo(() => {
-return studentList.filter(
-(student) => {
-const remaining =
-student.feeExempt
+const filteredStudents = useMemo(() => {
+return studentList.filter((student) => {
+const remaining = student.feeExempt
 ? 0
 : Math.max(
-student.amountDue -
-student.amountPaid,
+student.amountDue - student.amountPaid,
 0,
 )
 
 ```
-      const matchesName =
-        !filters.name ||
-        student.name
-          .toLowerCase()
-          .includes(
-            filters.name.toLowerCase(),
-          )
+  const matchesName =
+    !filters.name ||
+    student.name
+      .toLowerCase()
+      .includes(filters.name.toLowerCase())
 
-      const matchesPersonalId =
-        !filters.personalId ||
-        student.personalId.includes(
-          filters.personalId,
-        )
+  const matchesPersonalId =
+    !filters.personalId ||
+    student.personalId.includes(filters.personalId)
 
-      const matchesGrade =
-        !filters.grade ||
-        student.grade ===
-          filters.grade
+  const matchesGrade =
+    !filters.grade ||
+    student.grade === filters.grade
 
-      const matchesDue =
-        !filters.amountDue ||
-        String(
-          student.amountDue,
-        ).includes(
-          filters.amountDue,
-        )
+  const matchesDue =
+    !filters.amountDue ||
+    String(student.amountDue).includes(
+      filters.amountDue,
+    )
 
-      const matchesPaid =
-        !filters.amountPaid ||
-        String(
-          student.amountPaid,
-        ).includes(
-          filters.amountPaid,
-        )
+  const matchesPaid =
+    !filters.amountPaid ||
+    String(student.amountPaid).includes(
+      filters.amountPaid,
+    )
 
-      const matchesRemaining =
-        !filters.amountRemaining ||
-        String(
-          remaining,
-        ).includes(
-          filters.amountRemaining,
-        )
+  const matchesRemaining =
+    !filters.amountRemaining ||
+    String(remaining).includes(
+      filters.amountRemaining,
+    )
 
-      const matchesStatus =
-        !filters.paymentStatus ||
-        student.paymentStatus ===
-          filters.paymentStatus
+  const matchesStatus =
+    !filters.paymentStatus ||
+    student.paymentStatus === filters.paymentStatus
 
-      return (
-        matchesName &&
-        matchesPersonalId &&
-        matchesGrade &&
-        matchesDue &&
-        matchesPaid &&
-        matchesRemaining &&
-        matchesStatus
-      )
-    },
+  return (
+    matchesName &&
+    matchesPersonalId &&
+    matchesGrade &&
+    matchesDue &&
+    matchesPaid &&
+    matchesRemaining &&
+    matchesStatus
   )
-}, [
-  studentList,
-  filters,
-])
+})
 ```
 
-const totalDue =
-filteredStudents.reduce(
+}, [studentList, filters])
+
+const totalDue = filteredStudents.reduce(
 (total, student) =>
 total +
-(
-student.feeExempt
-? 0
-: student.amountDue
-),
+(student.feeExempt ? 0 : student.amountDue),
 0,
 )
 
-const totalPaid =
-filteredStudents.reduce(
+const totalPaid = filteredStudents.reduce(
 (total, student) =>
 total +
-(
-student.feeExempt
-? 0
-: student.amountPaid
-),
+(student.feeExempt ? 0 : student.amountPaid),
 0,
 )
 
-const totalExempt =
-filteredStudents.filter(
-(student) =>
-student.feeExempt,
+const totalExempt = filteredStudents.filter(
+(student) => student.feeExempt,
 ).length
 
 const collectionPercentage =
 totalDue > 0
-? Math.round(
-(totalPaid /
-totalDue) *
-100,
-)
+? Math.round((totalPaid / totalDue) * 100)
 : 0
 
 const exemptionPercentage =
 filteredStudents.length > 0
 ? Math.round(
-(totalExempt /
-filteredStudents.length) *
-100,
+(totalExempt / filteredStudents.length) * 100,
 )
 : 0
 
 const paymentStats = [
 {
 label: 'إجمالي المستحق',
-value:
-formatCurrency(
-totalDue,
-),
+value: formatCurrency(totalDue),
 change: `${filteredStudents.length} طالب`,
 trend: 'up' as const,
 hint: 'إجمالي الرسوم',
 },
 {
 label: 'إجمالي المدفوع',
-value:
-formatCurrency(
-totalPaid,
-),
+value: formatCurrency(totalPaid),
 change: `${collectionPercentage}٪`,
 trend: 'up' as const,
 hint: 'نسبة التحصيل',
@@ -678,13 +494,8 @@ hint: 'نسبة التحصيل',
 {
 label: 'نسبة التحصيل',
 value: `${collectionPercentage}٪`,
-change:
-formatCurrency(
-Math.max(
-totalDue -
-totalPaid,
-0,
-),
+change: formatCurrency(
+Math.max(totalDue - totalPaid, 0),
 ),
 trend: 'down' as const,
 hint: 'المتبقي للتحصيل',
@@ -698,311 +509,198 @@ hint: 'من إجمالي الطلاب',
 },
 ]
 
-const hasFilters =
-Object.values(
-filters,
-).some(
-(value) =>
-value !== '',
+const hasFilters = Object.values(filters).some(
+(value) => value !== '',
 )
 
-const clearFilters =
-() => {
-setFilters(
-emptyFilters,
-)
+const clearFilters = () => {
+setFilters(emptyFilters)
 }
 
-const openPaymentDialog = (
-student: StudentRow,
-) => {
-openDetailsDialog(
-student,
-)
+const openPaymentDialog = (student: StudentRow) => {
+void openDetailsDialog(student)
 }
 
-const openDetailsDialog =
-async (
+const openDetailsDialog = async (
 student: StudentRow,
 ) => {
-if (
-!currentAcademicYearId
-) {
+if (!currentAcademicYearId) {
 return
 }
 
 ```
-  setDetailsStudent(
-    student,
-  )
+setDetailsStudent(student)
+setDetailsDialogOpen(true)
+setLoadingHistory(true)
+setPaymentHistory([])
 
-  setDetailsDialogOpen(
-    true,
-  )
-
-  setLoadingHistory(
-    true,
-  )
-
-  setPaymentHistory([])
-
-  try {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('payments')
-      .select(
-        'id, amount, payment_method, payment_date, reference_number, notes, created_at',
-      )
-      .eq(
-        'student_id',
-        student.id,
-      )
-      .eq(
-        'academic_year_id',
-        currentAcademicYearId,
-      )
-      .order(
-        'payment_date',
-        {
-          ascending:
-            false,
-        },
-      )
-      .order(
-        'created_at',
-        {
-          ascending:
-            false,
-        },
-      )
-
-    if (error) {
-      throw error
-    }
-
-    setPaymentHistory(
-      (data ??
-        []) as PaymentRecord[],
+try {
+  const {
+    data,
+    error,
+  } = await supabase
+    .from('payments')
+    .select(
+      'id, amount, payment_method, payment_date, reference_number, notes, created_at',
     )
-  } catch (error) {
-    console.error(
-      'Failed to load payment history:',
-      error,
+    .eq('student_id', student.id)
+    .eq(
+      'academic_year_id',
+      currentAcademicYearId,
     )
+    .order('payment_date', {
+      ascending: false,
+    })
+    .order('created_at', {
+      ascending: false,
+    })
 
-    alert(
-      'تعذر تحميل سجل الدفعات.',
-    )
-  } finally {
-    setLoadingHistory(
-      false,
-    )
+  if (error) {
+    throw error
   }
+
+  setPaymentHistory(
+    (data ?? []) as PaymentRecord[],
+  )
+} catch (error) {
+  console.error(
+    'Failed to load payment history:',
+    error,
+  )
+
+  alert('تعذر تحميل سجل الدفعات.')
+} finally {
+  setLoadingHistory(false)
 }
 ```
 
-const closeDetailsDialog =
-() => {
-if (
-loadingHistory ||
-savingPayment
-) {
+}
+
+const closeDetailsDialog = () => {
+if (loadingHistory || savingPayment) {
 return
 }
 
 ```
-  setDetailsDialogOpen(
-    false,
-  )
+setDetailsDialogOpen(false)
+setDetailsStudent(null)
+setPaymentHistory([])
 
-  setDetailsStudent(
-    null,
-  )
-
-  setPaymentHistory([])
-
-  if (returnPath) {
-    router.push(
-      returnPath,
-    )
-  }
+if (returnPath) {
+  router.push(returnPath)
 }
 ```
 
-const handleAddPayment =
-async (
+}
+
+const handleAddPayment = async (
 event: React.FormEvent<HTMLFormElement>,
 ) => {
 event.preventDefault()
 
 ```
-  if (
-    !detailsStudent ||
-    !currentAcademicYearId
-  ) {
-    return
-  }
+if (
+  !detailsStudent ||
+  !currentAcademicYearId
+) {
+  return
+}
 
-  const studentBeingPaid =
-    detailsStudent
+const studentBeingPaid = detailsStudent
+const studentBeingPaidId = detailsStudent.id
 
-  const studentBeingPaidId =
-    detailsStudent.id
+const formData = new FormData(
+  event.currentTarget,
+)
 
-  const formData =
-    new FormData(
-      event.currentTarget,
-    )
+const amount = Number(
+  formData.get('amount') || 0,
+)
 
-  const amount =
-    Number(
-      formData.get(
-        'amount',
-      ) || 0,
-    )
+const paymentMethod = String(
+  formData.get('paymentMethod') || 'نقدي',
+) as PaymentMethod
 
-  const paymentMethod =
-    String(
-      formData.get(
-        'paymentMethod',
-      ) || 'نقدي',
-    ) as PaymentMethod
+const paymentDate = String(
+  formData.get('paymentDate') || '',
+)
 
-  const paymentDate =
-    String(
-      formData.get(
-        'paymentDate',
-      ) || '',
-    )
+const referenceNumber = String(
+  formData.get('referenceNumber') || '',
+).trim()
 
-  const referenceNumber =
-    String(
-      formData.get(
-        'referenceNumber',
-      ) || '',
-    ).trim()
+const notes = String(
+  formData.get('notes') || '',
+).trim()
 
-  const notes =
-    String(
-      formData.get(
-        'notes',
-      ) || '',
-    ).trim()
+if (!amount || amount <= 0) {
+  alert('أدخل مبلغاً صحيحاً.')
+  return
+}
 
-  if (
-    !amount ||
-    amount <= 0
-  ) {
-    alert(
-      'أدخل مبلغاً صحيحاً.',
-    )
-    return
-  }
+const remaining = Math.max(
+  selectedRemaining(studentBeingPaid),
+  0,
+)
 
-  const remaining =
-    Math.max(
-      selectedRemaining(
-        studentBeingPaid,
-      ),
-      0,
-    )
-
-  if (
-    amount >
-    remaining
-  ) {
-    alert(
-      'المبلغ أكبر من المبلغ المتبقي على الطالب.',
-    )
-    return
-  }
-
-  setSavingPayment(
-    true,
+if (amount > remaining) {
+  alert(
+    'المبلغ أكبر من المبلغ المتبقي على الطالب.',
   )
+  return
+}
 
-  try {
-    const { error } =
-      await supabase
-        .from('payments')
-        .insert({
-          student_id:
-            studentBeingPaidId,
-          academic_year_id:
-            currentAcademicYearId,
-          amount,
-          payment_method:
-            paymentMethod,
-          payment_date:
-            paymentDate ||
-            undefined,
-          reference_number:
-            referenceNumber ||
-            null,
-          notes:
-            notes || null,
-        })
+setSavingPayment(true)
 
-    if (error) {
-      throw error
-    }
+try {
+  const { error } = await supabase
+    .from('payments')
+    .insert({
+      student_id: studentBeingPaidId,
+      academic_year_id: currentAcademicYearId,
+      amount,
+      payment_method: paymentMethod,
+      payment_date: paymentDate || undefined,
+      reference_number:
+        referenceNumber || null,
+      notes: notes || null,
+    })
 
-    /*
-     * إعادة تحميل البيانات من Supabase
-     * حتى تكون كل الأرقام محدثة.
-     */
+  if (error) {
+    throw error
+  }
+
+  const refreshedStudents =
     await loadPayments()
 
-    const refreshedStudent =
-      studentList.find(
-        (student) =>
-          student.id ===
-          studentBeingPaidId,
-      )
-
-    if (
-      refreshedStudent
-    ) {
-      await openDetailsDialog(
-        refreshedStudent,
-      )
-    } else {
-      const localStudent =
-        {
-          studentBeingPaid,
-          amountPaid:
-            studentBeingPaid.amountPaid +
-            amount,
-        }
-
-      setDetailsStudent(
-        localStudent,
-      )
-
-      await openDetailsDialog(
-        localStudent,
-      )
-    }
-
-    event.currentTarget.reset()
-  } catch (error) {
-    console.error(
-      'Failed to add payment:',
-      error,
+  const refreshedStudent =
+    refreshedStudents.find(
+      (student) =>
+        student.id === studentBeingPaidId,
     )
 
-    alert(
-      'تعذر حفظ الدفعة. حاول مرة أخرى.',
-    )
-  } finally {
-    setSavingPayment(
-      false,
+  if (refreshedStudent) {
+    await openDetailsDialog(
+      refreshedStudent,
     )
   }
+
+  event.currentTarget.reset()
+} catch (error) {
+  console.error(
+    'Failed to add payment:',
+    error,
+  )
+
+  alert(
+    'تعذر حفظ الدفعة. حاول مرة أخرى.',
+  )
+} finally {
+  setSavingPayment(false)
 }
 ```
+
+}
 
 return ( <div className="space-y-6"> <PageHeader
      title="المدفوعات"
@@ -1019,9 +717,7 @@ return ( <div className="space-y-6"> <PageHeader
           </p>
 
           <p className="text-lg font-semibold">
-            {
-              currentAcademicYearName
-            }
+            {currentAcademicYearName}
           </p>
         </div>
 
@@ -1031,9 +727,7 @@ return ( <div className="space-y-6"> <PageHeader
           </p>
 
           <p className="text-lg font-semibold tabular-nums">
-            {formatCurrency(
-              currentAnnualFee,
-            )}
+            {formatCurrency(currentAnnualFee)}
           </p>
         </div>
       </CardContent>
@@ -1041,16 +735,12 @@ return ( <div className="space-y-6"> <PageHeader
   )}
 
   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    {paymentStats.map(
-      (stat) => (
-        <StatCard
-          key={
-            stat.label
-          }
-          stat={stat}
-        />
-      ),
-    )}
+    {paymentStats.map((stat) => (
+      <StatCard
+        key={stat.label}
+        stat={stat}
+      />
+    ))}
   </div>
 
   <Card>
@@ -1071,16 +761,11 @@ return ( <div className="space-y-6"> <PageHeader
 
                   <input
                     type="text"
-                    value={
-                      filters.name
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.name}
+                    onChange={(event) =>
                       updateFilter(
                         'name',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="بحث"
@@ -1097,16 +782,11 @@ return ( <div className="space-y-6"> <PageHeader
 
                   <input
                     type="text"
-                    value={
-                      filters.personalId
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.personalId}
+                    onChange={(event) =>
                       updateFilter(
                         'personalId',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="بحث"
@@ -1122,16 +802,11 @@ return ( <div className="space-y-6"> <PageHeader
                   </div>
 
                   <select
-                    value={
-                      filters.grade
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.grade}
+                    onChange={(event) =>
                       updateFilter(
                         'grade',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
@@ -1140,24 +815,14 @@ return ( <div className="space-y-6"> <PageHeader
                       الكل
                     </option>
 
-                    {grades.map(
-                      (
-                        grade,
-                      ) => (
-                        <option
-                          key={
-                            grade
-                          }
-                          value={
-                            grade
-                          }
-                        >
-                          {
-                            grade
-                          }
-                        </option>
-                      ),
-                    )}
+                    {grades.map((grade) => (
+                      <option
+                        key={grade}
+                        value={grade}
+                      >
+                        {grade}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </TableHead>
@@ -1171,16 +836,11 @@ return ( <div className="space-y-6"> <PageHeader
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={
-                      filters.amountPaid
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.amountPaid}
+                    onChange={(event) =>
                       updateFilter(
                         'amountPaid',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="بحث"
@@ -1198,16 +858,11 @@ return ( <div className="space-y-6"> <PageHeader
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={
-                      filters.amountRemaining
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.amountRemaining}
+                    onChange={(event) =>
                       updateFilter(
                         'amountRemaining',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="بحث"
@@ -1223,16 +878,11 @@ return ( <div className="space-y-6"> <PageHeader
                   </div>
 
                   <select
-                    value={
-                      filters.paymentStatus
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={filters.paymentStatus}
+                    onChange={(event) =>
                       updateFilter(
                         'paymentStatus',
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
@@ -1242,20 +892,12 @@ return ( <div className="space-y-6"> <PageHeader
                     </option>
 
                     {paymentStatuses.map(
-                      (
-                        status,
-                      ) => (
+                      (status) => (
                         <option
-                          key={
-                            status
-                          }
-                          value={
-                            status
-                          }
+                          key={status}
+                          value={status}
                         >
-                          {
-                            status
-                          }
+                          {status}
                         </option>
                       ),
                     )}
@@ -1279,8 +921,7 @@ return ( <div className="space-y-6"> <PageHeader
                   جاري تحميل بيانات المدفوعات
                 </TableCell>
               </TableRow>
-            ) : filteredStudents.length ===
-              0 ? (
+            ) : filteredStudents.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={8}
@@ -1291,10 +932,7 @@ return ( <div className="space-y-6"> <PageHeader
               </TableRow>
             ) : (
               filteredStudents.map(
-                (
-                  student,
-                  index,
-                ) => {
+                (student, index) => {
                   const remaining =
                     student.feeExempt
                       ? 0
@@ -1310,34 +948,22 @@ return ( <div className="space-y-6"> <PageHeader
 
                   return (
                     <TableRow
-                      key={
-                        student.id
-                      }
+                      key={student.id}
                     >
                       <TableCell className="text-center text-muted-foreground">
-                        {
-                          index +
-                          1
-                        }
+                        {index + 1}
                       </TableCell>
 
                       <TableCell className="font-medium">
-                        {
-                          student.name
-                        }
+                        {student.name}
                       </TableCell>
 
                       <TableCell>
-                        {
-                          student.personalId ||
-                          '—'
-                        }
+                        {student.personalId || '—'}
                       </TableCell>
 
                       <TableCell>
-                        {
-                          student.grade
-                        }
+                        {student.grade}
                       </TableCell>
 
                       <TableCell className="font-medium tabular-nums">
@@ -1407,9 +1033,7 @@ return ( <div className="space-y-6"> <PageHeader
         <div className="flex justify-end border-t px-5 py-3">
           <button
             type="button"
-            onClick={
-              clearFilters
-            }
+            onClick={clearFilters}
             className="text-sm font-medium text-primary hover:underline"
           >
             مسح جميع الفلاتر
@@ -1431,24 +1055,18 @@ return ( <div className="space-y-6"> <PageHeader
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {
-                    detailsStudent.name
-                  }
+                  {detailsStudent.name}
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
                   السنة الدراسية:{' '}
-                  {
-                    currentAcademicYearName
-                  }
+                  {currentAcademicYearName}
                 </p>
               </div>
 
               <button
                 type="button"
-                onClick={
-                  closeDetailsDialog
-                }
+                onClick={closeDetailsDialog}
                 disabled={
                   loadingHistory ||
                   savingPayment
@@ -1516,10 +1134,7 @@ return ( <div className="space-y-6"> <PageHeader
                     </h3>
 
                     <p className="text-xs text-muted-foreground">
-                      {
-                        paymentHistory.length
-                      }{' '}
-                      دفعة
+                      {paymentHistory.length} دفعة
                     </p>
                   </div>
                 </div>
@@ -1529,21 +1144,16 @@ return ( <div className="space-y-6"> <PageHeader
                     <div className="py-10 text-center text-sm text-muted-foreground">
                       جاري تحميل سجل الدفعات
                     </div>
-                  ) : paymentHistory.length ===
-                    0 ? (
+                  ) : paymentHistory.length === 0 ? (
                     <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
                       لا توجد دفعات مسجلة لهذا الطالب في السنة الحالية.
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {paymentHistory.map(
-                        (
-                          payment,
-                        ) => (
+                        (payment) => (
                           <div
-                            key={
-                              payment.id
-                            }
+                            key={payment.id}
                             className="rounded-lg border p-4"
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1608,9 +1218,7 @@ return ( <div className="space-y-6"> <PageHeader
                                   </p>
 
                                   <p className="mt-1 whitespace-pre-wrap text-sm">
-                                    {
-                                      payment.notes
-                                    }
+                                    {payment.notes}
                                   </p>
                                 </div>
                               )}
@@ -1640,9 +1248,7 @@ return ( <div className="space-y-6"> <PageHeader
                       </div>
 
                       <form
-                        onSubmit={
-                          handleAddPayment
-                        }
+                        onSubmit={handleAddPayment}
                         className="space-y-4"
                       >
                         <div>
@@ -1697,9 +1303,7 @@ return ( <div className="space-y-6"> <PageHeader
                           <input
                             name="paymentDate"
                             type="date"
-                            defaultValue={
-                              getToday()
-                            }
+                            defaultValue={getToday()}
                             required
                             className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
                           />
@@ -1735,96 +1339,77 @@ return ( <div className="space-y-6"> <PageHeader
                           />
                         </div>
 
-                                              <div className="flex justify-end gap-2 pt-2">
-                        <Button
-                          type="submit"
-                          disabled={savingPayment}
-                        >
-                          {savingPayment
-                            ? 'جاري الحفظ'
-                            : 'حفظ الدفعة'}
-                        </Button>
-                      </div>
-                    </form>
-                  </div>
-                )}
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button
+                            type="submit"
+                            disabled={savingPayment}
+                          >
+                            {savingPayment
+                              ? 'جاري الحفظ'
+                              : 'حفظ الدفعة'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
     )}
-  </div>
-  )
+</div>
+```
+
+)
 }
 
 function selectedRemaining(
-  student: StudentRow,
+student: StudentRow,
 ) {
-  if (student.feeExempt) {
-    return 0
-  }
-
-  return Math.max(
-    student.amountDue -
-      student.amountPaid,
-    0,
-  )
+if (student.feeExempt) {
+return 0
 }
 
-function formatCurrency(
-  value: number,
-) {
-  return `${value.toLocaleString(
-    'ar-BH',
-    {
-      minimumFractionDigits: 3,
-      maximumFractionDigits: 3,
-    },
-  )} د.ب`
+return Math.max(
+student.amountDue - student.amountPaid,
+0,
+)
 }
 
-function formatPaymentDate(
-  value: string,
-) {
-  if (!value) {
-    return '—'
-  }
+function formatCurrency(value: number) {
+return `${value.toLocaleString('ar-BH', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  })} د.ب`
+}
 
-  const [
-    year,
-    month,
-    day,
-  ] = value.split('-')
+function formatPaymentDate(value: string) {
+if (!value) {
+return '—'
+}
 
-  if (
-    !year ||
-    !month ||
-    !day
-  ) {
-    return value
-  }
+const [year, month, day] = value.split('-')
 
-  return `${day}/${month}/${year}`
+if (!year || !month || !day) {
+return value
+}
+
+return `${day}/${month}/${year}`
 }
 
 function getToday() {
-  const today =
-    new Date()
+const today = new Date()
 
-  const year =
-    today.getFullYear()
+const year = today.getFullYear()
 
-  const month =
-    String(
-      today.getMonth() + 1,
-    ).padStart(2, '0')
+const month = String(
+today.getMonth() + 1,
+).padStart(2, '0')
 
-  const day =
-    String(
-      today.getDate(),
-    ).padStart(2, '0')
+const day = String(
+today.getDate(),
+).padStart(2, '0')
 
-  return `${year}-${month}-${day}`
-}
+return `${year}-${month}-${day}`
 }
