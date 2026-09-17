@@ -188,7 +188,7 @@ function AttendanceStatusButtons({
           <button
             key={status}
             type="button"
-            disabled={saving}
+            disabled={false}
             onClick={() => onSelect(status)}
             className={`inline-flex min-h-9 cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
               currentStatus,
