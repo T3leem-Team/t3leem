@@ -396,20 +396,7 @@ export function TeachersView() {
     }
 
     setCourseTeacherIds(teacherMap)
-    const {
-  data: {
-    user,
-  },
-} = await supabase.auth.getUser()
-
-if (!user) {
-  setStatusMessage(
-    'خطأ: لا يوجد مستخدم مسجل دخول في Supabase Auth.',
-  )
-  setLoading(false)
-  return
-}
-
+    
 const {
   data: statusRows,
   error: statusError,
