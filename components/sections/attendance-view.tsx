@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  useMemo,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -103,11 +102,14 @@ function todayString() {
   const date = new Date()
 
   const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(
-    2,
-    '0',
-  )
-  const day = String(date.getDate()).padStart(2, '0')
+
+  const month = String(
+    date.getMonth() + 1,
+  ).padStart(2, '0')
+
+  const day = String(
+    date.getDate(),
+  ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -132,7 +134,8 @@ function getStatusIdByName(
 ) {
   const target = statuses.find(
     (status) =>
-      normalizeStatusName(status.name) === statusName,
+      normalizeStatusName(status.name) ===
+      statusName,
   )
 
   return target?.id ?? null
@@ -161,7 +164,8 @@ function getAttendanceClass(
   currentStatus: AttendanceStatusName | null,
   buttonStatus: AttendanceStatusName,
 ) {
-  const selected = currentStatus === buttonStatus
+  const selected =
+    currentStatus === buttonStatus
 
   if (!selected) {
     return 'border-border bg-background text-muted-foreground hover:border-primary hover:bg-primary/5 hover:text-primary'
@@ -197,62 +201,72 @@ function AttendanceStatusButtons({
 }: AttendanceStatusButtonsProps) {
   return (
     <div className="relative z-20 flex flex-wrap gap-1.5 pointer-events-auto">
-      {attendanceStatusNames.map((status) => {
-        const selected =
-          currentStatus === status
+      {attendanceStatusNames.map(
+        (status) => {
+          const selected =
+            currentStatus === status
 
-        return (
-          <button
-            key={status}
-            type="button"
-            disabled={saving}
-            onPointerDown={(event) => {
-              if (saving) {
-                return
-              }
+          return (
+            <button
+              key={status}
+              type="button"
+              disabled={saving}
+              onPointerDown={(event) => {
+                if (saving) {
+                  return
+                }
 
-              event.preventDefault()
-              onSelect(status)
-            }}
-            onKeyDown={(event) => {
-              if (saving) {
-                return
-              }
-
-              if (
-                event.key === 'Enter' ||
-                event.key === ' '
-              ) {
                 event.preventDefault()
-                onSelect(status)
-              }
-            }}
-            className={`relative z-20 inline-flex min-h-9 cursor-pointer touch-manipulation select-none items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
-              currentStatus,
-              status,
-            )}`}
-          >
-            {selected && (
-              <Check className="ml-1 size-3.5" />
-            )}
 
-            {status}
-          </button>
-        )
-      })}
+                onSelect(status)
+              }}
+              onKeyDown={(event) => {
+                if (saving) {
+                  return
+                }
+
+                if (
+                  event.key === 'Enter' ||
+                  event.key === ' '
+                ) {
+                  event.preventDefault()
+
+                  onSelect(status)
+                }
+              }}
+              className={`relative z-20 inline-flex min-h-9 cursor-pointer touch-manipulation select-none items-center justify-center rounded-md border px-3 py-2 text-xs font-medium transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 ${getAttendanceClass(
+                currentStatus,
+                status,
+              )}`}
+            >
+              {selected && (
+                <Check className="ml-1 size-3.5" />
+              )}
+
+              {status}
+            </button>
+          )
+        },
+      )}
     </div>
   )
 }
 
 type AttendanceViewProps = {
   currentCourse: Course | null
+
   assignedStudents: Student[]
+
   attendanceStatuses: AttendanceStatus[]
+
   attendanceRecords: AttendanceRecord[]
+
   setAttendanceRecords: Dispatch<
     SetStateAction<AttendanceRecord[]>
   >
+
   attendanceNotes: AttendanceNotes
+
   setAttendanceNotes: Dispatch<
     SetStateAction<AttendanceNotes>
   >
@@ -264,14 +278,22 @@ type AttendanceViewProps = {
    * AttendanceView لا يعتمد عليها للحضور.
    */
   saving?: boolean
+
   setSaving?: Dispatch<
     SetStateAction<boolean>
   >
 
+  /*
+   * رسالة الحالة الحالية.
+   */
+  statusMessage: string
+
   setStatusMessage: Dispatch<
     SetStateAction<string>
   >
+
   selectedAttendanceDate: string | null
+
   setSelectedAttendanceDate: Dispatch<
     SetStateAction<string | null>
   >
@@ -285,6 +307,7 @@ export function AttendanceView({
   setAttendanceRecords,
   attendanceNotes,
   setAttendanceNotes,
+  statusMessage,
   setStatusMessage,
   selectedAttendanceDate,
   setSelectedAttendanceDate,
@@ -296,8 +319,10 @@ export function AttendanceView({
    * لأن teachers-view يستخدمه أيضًا لإضافة الطلبة
    * والنقل.
    */
-  const [attendanceSavingKey, setAttendanceSavingKey] =
-    useState<string | null>(null)
+  const [
+    attendanceSavingKey,
+    setAttendanceSavingKey,
+  ] = useState<string | null>(null)
 
   /*
    * نخزن الاختيار محليًا حتى يظهر مباشرة
@@ -306,10 +331,12 @@ export function AttendanceView({
    * المفتاح:
    * التاريخ + studentId
    */
-  const [localSelectedStatuses, setLocalSelectedStatuses] =
-    useState<
-      Record<string, AttendanceStatusName>
-    >({})
+  const [
+    localSelectedStatuses,
+    setLocalSelectedStatuses,
+  ] = useState<
+    Record<string, AttendanceStatusName>
+  >({})
 
   const currentDate = todayString()
 
@@ -331,19 +358,6 @@ export function AttendanceView({
       ? selectedAttendanceDate
       : null
 
-  useMemo(() => {
-    return attendanceRecords.filter(
-      (record) =>
-        record.courseId === currentCourse?.id &&
-        record.attendanceDate ===
-          archiveAttendanceDate,
-    )
-  }, [
-    attendanceRecords,
-    currentCourse,
-    archiveAttendanceDate,
-  ])
-
   const getRecordForStudent = (
     studentId: string,
     date: string,
@@ -351,7 +365,8 @@ export function AttendanceView({
     return attendanceRecords.find(
       (record) =>
         record.studentId === studentId &&
-        record.courseId === currentCourse?.id &&
+        record.courseId ===
+          currentCourse?.id &&
         record.attendanceDate === date,
     )
   }
@@ -366,14 +381,19 @@ export function AttendanceView({
      * الاختيار المحلي له الأولوية.
      * لذلك الزر يتغير مباشرة.
      */
-    if (localSelectedStatuses[localKey]) {
-      return localSelectedStatuses[localKey]
+    if (
+      localSelectedStatuses[localKey]
+    ) {
+      return localSelectedStatuses[
+        localKey
+      ]
     }
 
-    const record = getRecordForStudent(
-      studentId,
-      date,
-    )
+    const record =
+      getRecordForStudent(
+        studentId,
+        date,
+      )
 
     return getStatusName(
       attendanceStatuses,
@@ -390,6 +410,7 @@ export function AttendanceView({
       setStatusMessage(
         'لا توجد دورة حالية.',
       )
+
       return
     }
 
@@ -402,6 +423,7 @@ export function AttendanceView({
       setStatusMessage(
         'تاريخ الحضور خارج فترة الدورة.',
       )
+
       return
     }
 
@@ -415,6 +437,7 @@ export function AttendanceView({
       setStatusMessage(
         `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
       )
+
       return
     }
 
@@ -455,12 +478,18 @@ export function AttendanceView({
       id:
         existing?.id ??
         `temp-${Date.now()}`,
+
       studentId: student.id,
+
       enrollmentId:
         student.enrollmentId || null,
+
       courseId: currentCourse.id,
+
       attendanceDate: date,
+
       statusId,
+
       note:
         existing?.note ??
         attendanceNotes[saveKey] ??
@@ -518,9 +547,11 @@ export function AttendanceView({
           .from('attendance')
           .update({
             status_id: statusId,
+
             enrollment_id:
               student.enrollmentId ||
               null,
+
             note:
               existing.note ||
               attendanceNotes[saveKey] ||
@@ -540,17 +571,23 @@ export function AttendanceView({
           const savedRecord: AttendanceRecord =
             {
               id: data.id,
+
               studentId:
                 data.student_id,
+
               enrollmentId:
                 data.enrollment_id ??
                 null,
+
               courseId:
                 data.course_id,
+
               attendanceDate:
                 data.attendance_date,
+
               statusId:
                 data.status_id,
+
               note:
                 data.note ?? '',
             }
@@ -578,15 +615,20 @@ export function AttendanceView({
           .insert({
             student_id:
               student.id,
+
             enrollment_id:
               student.enrollmentId ||
               null,
+
             attendance_date: date,
+
             status_id: statusId,
+
             note:
               attendanceNotes[
                 saveKey
               ] || null,
+
             course_id:
               currentCourse.id,
           })
@@ -603,17 +645,23 @@ export function AttendanceView({
           const savedRecord: AttendanceRecord =
             {
               id: data.id,
+
               studentId:
                 data.student_id,
+
               enrollmentId:
                 data.enrollment_id ??
                 null,
+
               courseId:
                 data.course_id,
+
               attendanceDate:
                 data.attendance_date,
+
               statusId:
                 data.status_id,
+
               note:
                 data.note ?? '',
             }
@@ -759,17 +807,23 @@ export function AttendanceView({
         const updatedRecord: AttendanceRecord =
           {
             id: data.id,
+
             studentId:
               data.student_id,
+
             enrollmentId:
               data.enrollment_id ??
               null,
+
             courseId:
               data.course_id,
+
             attendanceDate:
               data.attendance_date,
+
             statusId:
               data.status_id,
+
             note:
               data.note ?? '',
           }
