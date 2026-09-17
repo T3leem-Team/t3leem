@@ -397,56 +397,79 @@ export function TeachersView() {
 
     setCourseTeacherIds(teacherMap)
 
-    const { data: statusRows, error: statusError } = await supabase
-      .from('attendance_statuses')
-      .select('id, name, is_active, sort_order')
-      .order('sort_order', { ascending: true })
+    const {
+  data: statusRows,
+  error: statusError,
+} = await supabase
+  .from('attendance_statuses')
+  .select(
+    'id, name, is_active, sort_order',
+  )
+  .order('sort_order', {
+    ascending: true,
+  })
 
-    if (statusError) {
-      setStatusMessage(
-        `خطأ في تحميل حالات الحضور: ${statusError.message}`,
-      )
-      setLoading(false)
-      return
-    }
+console.log(
+  'ATTENDANCE STATUS ROWS:',
+  statusRows,
+)
 
-    const mappedStatuses: AttendanceStatus[] = (
-      statusRows ?? []
+console.log(
+  'ATTENDANCE STATUS ERROR:',
+  statusError,
+)
+
+if (statusError) {
+  setStatusMessage(
+    `خطأ في تحميل حالات الحضور: ${statusError.message}`,
+  )
+  setLoading(false)
+  return
+}
+
+const mappedStatuses: AttendanceStatus[] = (
+  statusRows ?? []
+)
+  .filter((status) => {
+    const name = String(
+      status.name ?? '',
+    ).trim()
+
+    return (
+      name === 'حاضر' ||
+      name === 'غائب' ||
+      name === 'متأخر' ||
+      name === 'مستأذن'
     )
-      .filter((status) => {
-        const name = String(
-          status.name ?? '',
-        ).trim()
+  })
+  .map((status) => ({
+    id: status.id,
+    name: String(
+      status.name,
+    ).trim() as AttendanceStatus['name'],
+    isActive: Boolean(
+      status.is_active,
+    ),
+    sortOrder:
+      status.sort_order ?? 0,
+  }))
 
-        return (
-          name === 'حاضر' ||
-          name === 'غائب' ||
-          name === 'متأخر' ||
-          name === 'مستأذن'
-        )
-      })
-      .map((status) => ({
-        id: status.id,
-        name: String(
-          status.name,
-        ).trim() as AttendanceStatus['name'],
-        isActive: Boolean(
-          status.is_active,
-        ),
-        sortOrder:
-          status.sort_order ?? 0,
-      }))
+console.log(
+  'MAPPED ATTENDANCE STATUSES:',
+  mappedStatuses,
+)
 
-    setAttendanceStatuses(
-      mappedStatuses,
-    )
+setAttendanceStatuses(
+  mappedStatuses,
+)
 
-    if (mappedStatuses.length === 0) {
-      setStatusMessage(
-        'لا توجد حالات حضور مفعلة في attendance_statuses. أضف: حاضر، غائب، متأخر، مستأذن.',
-      )
-    }
-
+if (mappedStatuses.length === 0) {
+  setStatusMessage(
+    `لم يتم تحميل حالات الحضور. عدد السجلات من Supabase: ${
+      statusRows?.length ?? 0
+    }`,
+  )
+}
     let attendanceRows: {
       id: string
       student_id: string
