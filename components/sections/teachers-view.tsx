@@ -397,51 +397,42 @@ export function TeachersView() {
 
     setCourseTeacherIds(teacherMap)
 
-    const {
-      data: statusRows,
-      error: statusesError,
-    } = await supabase
-      .from('attendance_statuses')
-      .select(
-        'id, name, is_active, sort_order',
-      )
-      .eq('is_active', true)
-      .order('sort_order', {
-        ascending: true,
-      })
-
-    if (statusesError) {
-      setStatusMessage(
-        `خطأ في تحميل حالات الحضور: ${statusesError.message}`,
-      )
-      setLoading(false)
-      return
-    }
-
     const mappedStatuses: AttendanceStatus[] = (
-      statusRows ?? []
+  statusRows ?? []
+)
+  .filter((status) => {
+    const name = String(
+      status.name ?? '',
+    ).trim()
+
+    return (
+      name === 'حاضر' ||
+      name === 'غائب' ||
+      name === 'متأخر' ||
+      name === 'مستأذن'
     )
-      .map((status) => {
-        const normalizedName =
-          normalizeStatusName(
-            status.name,
-          )
+  })
+  .map((status) => ({
+    id: status.id,
+    name: String(
+      status.name,
+    ).trim() as AttendanceStatus['name'],
+    isActive: Boolean(
+      status.is_active,
+    ),
+    sortOrder:
+      status.sort_order ?? 0,
+  }))
 
-        if (!normalizedName) {
-          return null
-        }
+setAttendanceStatuses(
+  mappedStatuses,
+)
 
-        return {
-          id: status.id,
-          name: normalizedName,
-          isActive: Boolean(
-            status.is_active,
-          ),
-          sortOrder:
-            status.sort_order ?? 0,
-        }
-      })
-      .filter(
+if (mappedStatuses.length === 0) {
+  setStatusMessage(
+    'لم يتم تحميل حالات الحضور من قاعدة البيانات.',
+  )
+}  .filter(
         (
           status,
         ): status is AttendanceStatus =>
