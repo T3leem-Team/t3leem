@@ -397,16 +397,20 @@ export function TeachersView() {
 
     setCourseTeacherIds(teacherMap)
     const {
-      data: {
-        user,
-      },
-    } = await supabase.auth.getUser()
-    
-    console.log(
-      'CURRENT SUPABASE USER:',
-      user,
-    )
-    const {
+  data: {
+    user,
+  },
+} = await supabase.auth.getUser()
+
+if (!user) {
+  setStatusMessage(
+    'خطأ: لا يوجد مستخدم مسجل دخول في Supabase Auth.',
+  )
+  setLoading(false)
+  return
+}
+
+const {
   data: statusRows,
   error: statusError,
 } = await supabase
@@ -417,16 +421,6 @@ export function TeachersView() {
   .order('sort_order', {
     ascending: true,
   })
-
-console.log(
-  'ATTENDANCE STATUS ROWS:',
-  statusRows,
-)
-
-console.log(
-  'ATTENDANCE STATUS ERROR:',
-  statusError,
-)
 
 if (statusError) {
   setStatusMessage(
@@ -463,18 +457,13 @@ const mappedStatuses: AttendanceStatus[] = (
       status.sort_order ?? 0,
   }))
 
-console.log(
-  'MAPPED ATTENDANCE STATUSES:',
-  mappedStatuses,
-)
-
 setAttendanceStatuses(
   mappedStatuses,
 )
 
 if (mappedStatuses.length === 0) {
   setStatusMessage(
-    `لم يتم تحميل حالات الحضور. عدد السجلات من Supabase: ${
+    `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
       statusRows?.length ?? 0
     }`,
   )
