@@ -1735,53 +1735,47 @@ return ( <div className="space-y-6"> <PageHeader
                           />
                         </div>
 
-                        <div className="flex justify-end gap-2 pt-2">
-                          <Button
-                            type="submit"
-                            disabled={
-                              savingPayment
-                            }
-                          >
-                            {savingPayment
-                              ? 'جاري الحفظ'
-                              : 'حفظ الدفعة'}
-                          </Button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
+                                              <div className="flex justify-end gap-2 pt-2">
+                        <Button
+                          type="submit"
+                          disabled={savingPayment}
+                        >
+                          {savingPayment
+                            ? 'جاري الحفظ'
+                            : 'حفظ الدفعة'}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
     )}
-</div>
-
-
-)
+  </div>
+  )
 }
 
 function selectedRemaining(
-student: StudentRow,
+  student: StudentRow,
 ) {
-if (
-student.feeExempt
-) {
-return 0
-}
+  if (student.feeExempt) {
+    return 0
+  }
 
-return Math.max(
-student.amountDue -
-student.amountPaid,
-0,
-)
+  return Math.max(
+    student.amountDue -
+      student.amountPaid,
+    0,
+  )
 }
 
 function formatCurrency(
-value: number,
+  value: number,
 ) {
-return `${value.toLocaleString(
+  return `${value.toLocaleString(
     'ar-BH',
     {
       minimumFractionDigits: 3,
@@ -1791,45 +1785,45 @@ return `${value.toLocaleString(
 }
 
 function formatPaymentDate(
-value: string,
+  value: string,
 ) {
-if (!value) {
-return '—'
-}
+  if (!value) {
+    return '—'
+  }
 
-const [
-year,
-month,
-day,
-] = value.split('-')
+  const [
+    year,
+    month,
+    day,
+  ] = value.split('-')
 
-if (
-!year ||
-!month ||
-!day
-) {
-return value
-}
+  if (
+    !year ||
+    !month ||
+    !day
+  ) {
+    return value
+  }
 
-return `${day}/${month}/${year}`
+  return `${day}/${month}/${year}`
 }
 
 function getToday() {
-const today =
-new Date()
+  const today =
+    new Date()
 
-const year =
-today.getFullYear()
+  const year =
+    today.getFullYear()
 
-const month =
-String(
-today.getMonth() + 1,
-).padStart(2, '0')
+  const month =
+    String(
+      today.getMonth() + 1,
+    ).padStart(2, '0')
 
-const day =
-String(
-today.getDate(),
-).padStart(2, '0')
+  const day =
+    String(
+      today.getDate(),
+    ).padStart(2, '0')
 
-return `${year}-${month}-${day}`
+  return `${year}-${month}-${day}`
 }
