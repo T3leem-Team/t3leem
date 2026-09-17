@@ -11,238 +11,345 @@ import { StatCard } from '@/components/dashboard/stat-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
 } from '@/components/ui/table'
 import { students as fallbackStudents } from '@/lib/data'
 
 type Filters = {
-  name: string
-  grade: string
-  amountDue: string
-  amountPaid: string
-  amountRemaining: string
-  paymentStatus: string
+name: string
+personalId: string
+grade: string
+amountDue: string
+amountPaid: string
+amountRemaining: string
+paymentStatus: string
 }
 
 type PaymentMethod = 'نقدي' | 'تحويل' | 'بطاقة'
 
 type StudentRow = {
-  id: string
-  name: string
-  grade: string
-  amountDue: number
-  amountPaid: number
-  paymentStatus:
-    | 'مدفوع بالكامل'
-    | 'مدفوع جزئياً'
-    | 'غير مدفوع'
-    | 'معفي'
+id: string
+name: string
+personalId: string
+grade: string
+amountDue: number
+amountPaid: number
+feeExempt: boolean
+paymentStatus:
+| 'مدفوع بالكامل'
+| 'مدفوع جزئياً'
+| 'غير مدفوع'
+| 'معفي'
 }
 
 type PaymentRecord = {
-  id: string
-  amount: number
-  payment_method: string
-  payment_date: string
-  reference_number: string | null
-  notes: string | null
-  created_at: string
+id: string
+amount: number
+payment_method: string
+payment_date: string
+reference_number: string | null
+notes: string | null
+created_at: string
 }
 
 const emptyFilters: Filters = {
-  name: '',
-  grade: '',
-  amountDue: '',
-  amountPaid: '',
-  amountRemaining: '',
-  paymentStatus: '',
+name: '',
+personalId: '',
+grade: '',
+amountDue: '',
+amountPaid: '',
+amountRemaining: '',
+paymentStatus: '',
 }
 
 export function PaymentsView() {
-  const router = useRouter()
+const router = useRouter()
 
-  const [returnPath, setReturnPath] = useState('')
-  const [studentIdFromUrl, setStudentIdFromUrl] =
-    useState<string | null>(null)
+const [returnPath, setReturnPath] = useState('')
+const [studentIdFromUrl, setStudentIdFromUrl] =
+useState<string | null>(null)
 
-  const autoOpenedStudentRef =
-    useRef<string | null>(null)
+const autoOpenedStudentRef =
+useRef<string | null>(null)
 
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+const [filters, setFilters] =
+useState<Filters>(emptyFilters)
 
-  const [studentList, setStudentList] =
-    useState<StudentRow[]>([])
+const [studentList, setStudentList] =
+useState<StudentRow[]>([])
 
-  const [loading, setLoading] = useState(true)
+const [loading, setLoading] =
+useState(true)
 
-  const [currentAcademicYearId, setCurrentAcademicYearId] =
-    useState<string | null>(null)
+const [currentAcademicYearId, setCurrentAcademicYearId] =
+useState<string | null>(null)
 
-  const [currentAcademicYearName, setCurrentAcademicYearName] =
-    useState('')
+const [currentAcademicYearName, setCurrentAcademicYearName] =
+useState('')
 
-  const [currentAnnualFee, setCurrentAnnualFee] =
-    useState(0)
+const [currentAnnualFee, setCurrentAnnualFee] =
+useState(0)
 
-  const [detailsDialogOpen, setDetailsDialogOpen] =
-    useState(false)
+const [detailsDialogOpen, setDetailsDialogOpen] =
+useState(false)
 
-  const [detailsStudent, setDetailsStudent] =
-    useState<StudentRow | null>(null)
+const [detailsStudent, setDetailsStudent] =
+useState<StudentRow | null>(null)
 
-  const [paymentHistory, setPaymentHistory] =
-    useState<PaymentRecord[]>([])
+const [paymentHistory, setPaymentHistory] =
+useState<PaymentRecord[]>([])
 
-  const [loadingHistory, setLoadingHistory] =
-    useState(false)
+const [loadingHistory, setLoadingHistory] =
+useState(false)
 
-  const [savingPayment, setSavingPayment] =
-    useState(false)
+const [savingPayment, setSavingPayment] =
+useState(false)
 
-  useEffect(() => {
-    const params = new URLSearchParams(
-      window.location.search,
+useEffect(() => {
+const params = new URLSearchParams(
+window.location.search,
+)
+
+```
+setReturnPath(
+  params.get('return') || '',
+)
+
+setStudentIdFromUrl(
+  params.get('student'),
+)
+```
+
+}, [])
+
+const loadPayments = async () => {
+setLoading(true)
+
+```
+try {
+  const {
+    data: currentYear,
+    error: yearError,
+  } = await supabase
+    .from('academic_years')
+    .select('id, name, annual_fee')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (yearError) {
+    throw yearError
+  }
+
+  if (!currentYear) {
+    setStudentList([])
+    setCurrentAcademicYearId(null)
+    setCurrentAcademicYearName('')
+    setCurrentAnnualFee(0)
+    return
+  }
+
+  const annualFee = Number(
+    currentYear.annual_fee ?? 0,
+  )
+
+  setCurrentAcademicYearId(
+    currentYear.id,
+  )
+
+  setCurrentAcademicYearName(
+    currentYear.name,
+  )
+
+  setCurrentAnnualFee(
+    annualFee,
+  )
+
+  /*
+   * نجيب الطلاب بنفس ترتيب صفحة الطلاب:
+   * الأحدث إضافة يظهر أولاً.
+   */
+  const {
+    data: students,
+    error: studentsError,
+  } = await supabase
+    .from('students')
+    .select(
+      'id, name, personal_id, fee_exempt, created_at',
+    )
+    .order('created_at', {
+      ascending: false,
+    })
+
+  if (studentsError) {
+    throw studentsError
+  }
+
+  /*
+   * نحتاج فقط الطلاب المرتبطين بالسنة الدراسية الحالية
+   * والحالة النشطة.
+   */
+  const {
+    data: enrollments,
+    error: enrollmentError,
+  } = await supabase
+    .from('enrollments')
+    .select(
+      'student_id, level_id',
+    )
+    .eq(
+      'academic_year_id',
+      currentYear.id,
+    )
+    .eq(
+      'status',
+      'نشط',
     )
 
-    setReturnPath(
-      params.get('return') || '',
+  if (enrollmentError) {
+    throw enrollmentError
+  }
+
+  const studentIds = (
+    enrollments ?? []
+  )
+    .map(
+      (item: any) =>
+        item.student_id,
     )
+    .filter(Boolean)
 
-    setStudentIdFromUrl(
-      params.get('student'),
-    )
-  }, [])
+  let payments: any[] = []
 
-  const loadPayments = async () => {
-    setLoading(true)
-
-    try {
-      const { data: currentYear, error: yearError } =
-        await supabase
-          .from('academic_years')
-          .select('id, name, annual_fee')
-          .eq('is_current', true)
-          .eq('is_active', true)
-          .maybeSingle()
-
-      if (yearError) {
-        throw yearError
-      }
-
-      if (!currentYear) {
-        setStudentList([])
-        setCurrentAcademicYearId(null)
-        setCurrentAcademicYearName('')
-        setCurrentAnnualFee(0)
-        return
-      }
-
-      const annualFee = Number(
-        currentYear.annual_fee ?? 0,
+  if (
+    studentIds.length > 0
+  ) {
+    const {
+      data: paymentData,
+      error: paymentError,
+    } = await supabase
+      .from('payments')
+      .select(
+        'student_id, amount',
+      )
+      .eq(
+        'academic_year_id',
+        currentYear.id,
+      )
+      .in(
+        'student_id',
+        studentIds,
       )
 
-      setCurrentAcademicYearId(currentYear.id)
-      setCurrentAcademicYearName(currentYear.name)
-      setCurrentAnnualFee(annualFee)
+    if (paymentError) {
+      throw paymentError
+    }
 
-      const {
-        data: enrollments,
-        error: enrollmentError,
-      } = await supabase
-        .from('enrollments')
-        .select(`
-          student_id,
-          level_id,
-          students (
-            id,
-            name,
-            status
-          ),
-          levels (
-            id,
-            name
-          )
-        `)
-        .eq('academic_year_id', currentYear.id)
-        .eq('status', 'نشط')
+    payments =
+      paymentData ?? []
+  }
 
-      if (enrollmentError) {
-        throw enrollmentError
-      }
+  const {
+    data: levels,
+    error: levelsError,
+  } = await supabase
+    .from('levels')
+    .select(
+      'id, name',
+    )
+    .eq(
+      'is_active',
+      true,
+    )
 
-      const studentIds = (enrollments ?? [])
-        .map((item: any) => item.student_id)
-        .filter(Boolean)
+  if (levelsError) {
+    throw levelsError
+  }
 
-      let payments: any[] = []
+  const levelMap =
+    new Map(
+      (levels ?? []).map(
+        (level: any) => [
+          level.id,
+          level.name,
+        ],
+      ),
+    )
 
-      if (studentIds.length > 0) {
-        const {
-          data: paymentData,
-          error: paymentError,
-        } = await supabase
-          .from('payments')
-          .select('student_id, amount')
-          .eq('academic_year_id', currentYear.id)
-          .in('student_id', studentIds)
-
-        if (paymentError) {
-          throw paymentError
-        }
-
-        payments = paymentData ?? []
-      }
-
-      const paidByStudent = new Map<
-        string,
-        number
-      >()
-
-      payments.forEach((payment) => {
-        const current =
-          paidByStudent.get(payment.student_id) ?? 0
-
-        paidByStudent.set(
-          payment.student_id,
-          current +
-            Number(payment.amount ?? 0),
-        )
-      })
-
-      const mappedStudents: StudentRow[] = (
+  const enrollmentMap =
+    new Map(
+      (
         enrollments ?? []
+      ).map(
+        (enrollment: any) => [
+          enrollment.student_id,
+          levelMap.get(
+            enrollment.level_id,
+          ) ?? 'غير محدد',
+        ],
+      ),
+    )
+
+  const paidByStudent =
+    new Map<
+      string,
+      number
+    >()
+
+  payments.forEach(
+    (payment) => {
+      const current =
+        paidByStudent.get(
+          payment.student_id,
+        ) ?? 0
+
+      paidByStudent.set(
+        payment.student_id,
+        current +
+          Number(
+            payment.amount ?? 0,
+          ),
       )
-        .map((item: any) => {
-          const student = Array.isArray(item.students)
-            ? item.students[0]
-            : item.students
+    },
+  )
 
-          const level = Array.isArray(item.levels)
-            ? item.levels[0]
-            : item.levels
-
-          if (!student) {
-            return null
-          }
-
+  /*
+   * الطلاب يتم المرور عليهم حسب ترتيب students
+   * وليس حسب ترتيب enrollments.
+   *
+   * بالتالي # في المدفوعات يطابق ترتيب الطلاب.
+   */
+  const mappedStudents: StudentRow[] =
+    (students ?? [])
+      .filter(
+        (student: any) =>
+          enrollmentMap.has(
+            student.id,
+          ),
+      )
+      .map(
+        (student: any) => {
           const amountPaid =
-            paidByStudent.get(student.id) ?? 0
+            paidByStudent.get(
+              student.id,
+            ) ?? 0
 
-          /*
-           * ملاحظة:
-           * هنا ما زلنا نحافظ على نفس منطق صفحة المدفوعات
-           * الحالي. الإعفاء في صفحة الطلاب هو حالة مستقلة
-           * وسيتم التعامل معه هناك عند ربط بيانات الطالب.
-           */
+          const feeExempt =
+            Boolean(
+              student.fee_exempt,
+            )
+
           const paymentStatus =
-            annualFee <= 0
+            feeExempt
               ? 'معفي'
-              : amountPaid >= annualFee
+              : amountPaid >=
+                  annualFee &&
+                annualFee > 0
                 ? 'مدفوع بالكامل'
                 : amountPaid > 0
                   ? 'مدفوع جزئياً'
@@ -250,143 +357,190 @@ export function PaymentsView() {
 
           return {
             id: student.id,
-            name: student.name,
-            grade: level?.name ?? 'غير محدد',
-            amountDue: annualFee,
+            name:
+              student.name,
+            personalId:
+              student.personal_id ??
+              '',
+            grade:
+              enrollmentMap.get(
+                student.id,
+              ) ??
+              'غير محدد',
+            amountDue:
+              annualFee,
             amountPaid,
+            feeExempt,
             paymentStatus,
           }
-        })
-        .filter(Boolean) as StudentRow[]
-
-      setStudentList(mappedStudents)
-
-      if (detailsStudent) {
-        const updatedStudent =
-          mappedStudents.find(
-            (student) =>
-              student.id === detailsStudent.id,
-          )
-
-        if (updatedStudent) {
-          setDetailsStudent(updatedStudent)
-        }
-      }
-    } catch (error) {
-      console.error(
-        'Failed to load payments:',
-        error,
+        },
       )
 
-      const fallback =
-        fallbackStudents.map((student) => ({
-          id: student.id,
-          name: student.name,
-          grade: student.grade,
-          amountDue: student.amountDue,
-          amountPaid: student.amountPaid,
-          paymentStatus:
-            student.paymentStatus,
-        }))
+  setStudentList(
+    mappedStudents,
+  )
 
-      setStudentList(fallback)
-    } finally {
-      setLoading(false)
+  if (detailsStudent) {
+    const updatedStudent =
+      mappedStudents.find(
+        (student) =>
+          student.id ===
+          detailsStudent.id,
+      )
+
+    if (updatedStudent) {
+      setDetailsStudent(
+        updatedStudent,
+      )
     }
   }
-
-  useEffect(() => {
-    loadPayments()
-  }, [])
+} catch (error) {
+  console.error(
+    'Failed to load payments:',
+    error,
+  )
 
   /*
-   * إذا وصلنا من صفحة الطلاب:
-   *
-   * /payments?student=STUDENT_ID&return=/students
-   *
-   * نفتح نفس نافذة التفاصيل لجميع الحالات:
-   * - معفي
-   * - مدفوع بالكامل
-   * - مدفوع جزئياً
-   * - غير مدفوع
+   * fallback فقط في حال تعذر Supabase.
    */
-  useEffect(() => {
-    if (
-      loading ||
-      !studentIdFromUrl ||
-      detailsDialogOpen ||
-      autoOpenedStudentRef.current ===
-        studentIdFromUrl
-    ) {
-      return
-    }
-
-    const student = studentList.find(
-      (item) =>
-        item.id === studentIdFromUrl,
+  const fallback =
+    fallbackStudents.map(
+      (student: any) => ({
+        id: student.id,
+        name: student.name,
+        personalId:
+          student.personalId ??
+          '',
+        grade:
+          student.grade,
+        amountDue:
+          student.amountDue,
+        amountPaid:
+          student.amountPaid,
+        feeExempt:
+          student.paymentStatus ===
+          'معفي',
+        paymentStatus:
+          student.paymentStatus,
+      }),
     )
 
-    if (!student) {
-      return
-    }
+  setStudentList(
+    fallback,
+  )
+} finally {
+  setLoading(false)
+}
+```
 
-    autoOpenedStudentRef.current =
-      studentIdFromUrl
+}
 
-    openDetailsDialog(student)
-  }, [
-    loading,
-    studentIdFromUrl,
-    studentList,
-    detailsDialogOpen,
-  ])
+useEffect(() => {
+loadPayments()
+}, [])
 
-  const updateFilter = (
-    key: keyof Filters,
-    value: string,
-  ) => {
-    setFilters((current) => ({
-      ...current,
-      [key]: value,
-    }))
+/*
+
+* إذا وصلنا من صفحة الطلاب:
+*
+* /payments?student=STUDENT_ID&return=/students
+*
+* نفتح نفس نافذة التفاصيل.
+  */
+  useEffect(() => {
+  if (
+  loading ||
+  !studentIdFromUrl ||
+  detailsDialogOpen ||
+  autoOpenedStudentRef.current ===
+  studentIdFromUrl
+  ) {
+  return
   }
 
-  const grades = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          studentList.map(
-            (student) => student.grade,
-          ),
-        ),
-      ).sort(),
-    [studentList],
+```
+const student =
+```
+
+```
+  studentList.find(
+    (item) =>
+      item.id ===
+      studentIdFromUrl,
   )
 
-  const paymentStatuses = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          studentList.map(
-            (student) =>
-              student.paymentStatus,
-          ),
-        ),
-      ),
-    [studentList],
-  )
+if (!student) {
+  return
+}
 
-  const filteredStudents = useMemo(() => {
-    return studentList.filter((student) => {
-      const remaining =
-        student.paymentStatus === 'معفي'
-          ? 0
-          : Math.max(
-              student.amountDue -
-                student.amountPaid,
-              0,
-            )
+autoOpenedStudentRef.current =
+  studentIdFromUrl
 
+openDetailsDialog(
+  student,
+)
+```
+
+}, [
+loading,
+studentIdFromUrl,
+studentList,
+detailsDialogOpen,
+])
+
+const updateFilter = (
+key: keyof Filters,
+value: string,
+) => {
+setFilters(
+(current) => ({
+current,
+[key]: value,
+}),
+)
+}
+
+const grades = useMemo(
+() =>
+Array.from(
+new Set(
+studentList.map(
+(student) =>
+student.grade,
+),
+),
+).sort(),
+[studentList],
+)
+
+const paymentStatuses =
+useMemo(
+() =>
+Array.from(
+new Set(
+studentList.map(
+(student) =>
+student.paymentStatus,
+),
+),
+),
+[studentList],
+)
+
+const filteredStudents =
+useMemo(() => {
+return studentList.filter(
+(student) => {
+const remaining =
+student.feeExempt
+? 0
+: Math.max(
+student.amountDue -
+student.amountPaid,
+0,
+)
+
+```
       const matchesName =
         !filters.name ||
         student.name
@@ -395,9 +549,16 @@ export function PaymentsView() {
             filters.name.toLowerCase(),
           )
 
+      const matchesPersonalId =
+        !filters.personalId ||
+        student.personalId.includes(
+          filters.personalId,
+        )
+
       const matchesGrade =
         !filters.grade ||
-        student.grade === filters.grade
+        student.grade ===
+          filters.grade
 
       const matchesDue =
         !filters.amountDue ||
@@ -417,7 +578,9 @@ export function PaymentsView() {
 
       const matchesRemaining =
         !filters.amountRemaining ||
-        String(remaining).includes(
+        String(
+          remaining,
+        ).includes(
           filters.amountRemaining,
         )
 
@@ -428,1063 +591,1197 @@ export function PaymentsView() {
 
       return (
         matchesName &&
+        matchesPersonalId &&
         matchesGrade &&
         matchesDue &&
         matchesPaid &&
         matchesRemaining &&
         matchesStatus
       )
-    })
-  }, [studentList, filters])
-
-  const totalDue =
-    filteredStudents.reduce(
-      (total, student) =>
-        total + student.amountDue,
-      0,
-    )
-
-  const totalPaid =
-    filteredStudents.reduce(
-      (total, student) =>
-        total + student.amountPaid,
-      0,
-    )
-
-  const totalExempt =
-    filteredStudents.filter(
-      (student) =>
-        student.paymentStatus === 'معفي',
-    ).length
-
-  const collectionPercentage =
-    totalDue > 0
-      ? Math.round(
-          (totalPaid / totalDue) *
-            100,
-        )
-      : 0
-
-  const exemptionPercentage =
-    filteredStudents.length > 0
-      ? Math.round(
-          (totalExempt /
-            filteredStudents.length) *
-            100,
-        )
-      : 0
-
-  const paymentStats = [
-    {
-      label: 'إجمالي المستحق',
-      value: formatCurrency(totalDue),
-      change: `${filteredStudents.length} طالب`,
-      trend: 'up' as const,
-      hint: 'إجمالي الرسوم',
     },
-    {
-      label: 'إجمالي المدفوع',
-      value: formatCurrency(totalPaid),
-      change: `${collectionPercentage}٪`,
-      trend: 'up' as const,
-      hint: 'نسبة التحصيل',
-    },
-    {
-      label: 'نسبة التحصيل',
-      value: `${collectionPercentage}٪`,
-      change: `${formatCurrency(
-        Math.max(
-          totalDue - totalPaid,
-          0,
-        ),
-      )}`,
-      trend: 'down' as const,
-      hint: 'المتبقي للتحصيل',
-    },
-    {
-      label: 'نسبة المعفين',
-      value: `${exemptionPercentage}٪`,
-      change: `${totalExempt} طالب`,
-      trend: 'down' as const,
-      hint: 'من إجمالي الطلاب',
-    },
-  ]
+  )
+}, [
+  studentList,
+  filters,
+])
+```
 
-  const hasFilters =
-    Object.values(filters).some(
-      (value) => value !== '',
-    )
+const totalDue =
+filteredStudents.reduce(
+(total, student) =>
+total +
+(
+student.feeExempt
+? 0
+: student.amountDue
+),
+0,
+)
 
-  const clearFilters = () => {
-    setFilters(emptyFilters)
-  }
+const totalPaid =
+filteredStudents.reduce(
+(total, student) =>
+total +
+(
+student.feeExempt
+? 0
+: student.amountPaid
+),
+0,
+)
 
-  /*
-   * أي حالة دفع تفتح نفس نافذة التفاصيل.
-   */
-  const openPaymentDialog = (
-    student: StudentRow,
-  ) => {
-    openDetailsDialog(student)
-  }
+const totalExempt =
+filteredStudents.filter(
+(student) =>
+student.feeExempt,
+).length
 
-  const openDetailsDialog = async (
-    student: StudentRow,
-  ) => {
-    if (!currentAcademicYearId) {
-      return
+const collectionPercentage =
+totalDue > 0
+? Math.round(
+(totalPaid /
+totalDue) *
+100,
+)
+: 0
+
+const exemptionPercentage =
+filteredStudents.length > 0
+? Math.round(
+(totalExempt /
+filteredStudents.length) *
+100,
+)
+: 0
+
+const paymentStats = [
+{
+label: 'إجمالي المستحق',
+value:
+formatCurrency(
+totalDue,
+),
+change: `${filteredStudents.length} طالب`,
+trend: 'up' as const,
+hint: 'إجمالي الرسوم',
+},
+{
+label: 'إجمالي المدفوع',
+value:
+formatCurrency(
+totalPaid,
+),
+change: `${collectionPercentage}٪`,
+trend: 'up' as const,
+hint: 'نسبة التحصيل',
+},
+{
+label: 'نسبة التحصيل',
+value: `${collectionPercentage}٪`,
+change:
+formatCurrency(
+Math.max(
+totalDue -
+totalPaid,
+0,
+),
+),
+trend: 'down' as const,
+hint: 'المتبقي للتحصيل',
+},
+{
+label: 'نسبة المعفين',
+value: `${exemptionPercentage}٪`,
+change: `${totalExempt} طالب`,
+trend: 'down' as const,
+hint: 'من إجمالي الطلاب',
+},
+]
+
+const hasFilters =
+Object.values(
+filters,
+).some(
+(value) =>
+value !== '',
+)
+
+const clearFilters =
+() => {
+setFilters(
+emptyFilters,
+)
+}
+
+const openPaymentDialog = (
+student: StudentRow,
+) => {
+openDetailsDialog(
+student,
+)
+}
+
+const openDetailsDialog =
+async (
+student: StudentRow,
+) => {
+if (
+!currentAcademicYearId
+) {
+return
+}
+
+```
+  setDetailsStudent(
+    student,
+  )
+
+  setDetailsDialogOpen(
+    true,
+  )
+
+  setLoadingHistory(
+    true,
+  )
+
+  setPaymentHistory([])
+
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('payments')
+      .select(
+        'id, amount, payment_method, payment_date, reference_number, notes, created_at',
+      )
+      .eq(
+        'student_id',
+        student.id,
+      )
+      .eq(
+        'academic_year_id',
+        currentAcademicYearId,
+      )
+      .order(
+        'payment_date',
+        {
+          ascending:
+            false,
+        },
+      )
+      .order(
+        'created_at',
+        {
+          ascending:
+            false,
+        },
+      )
+
+    if (error) {
+      throw error
     }
 
-    setDetailsStudent(student)
-    setDetailsDialogOpen(true)
-    setLoadingHistory(true)
-    setPaymentHistory([])
+    setPaymentHistory(
+      (data ??
+        []) as PaymentRecord[],
+    )
+  } catch (error) {
+    console.error(
+      'Failed to load payment history:',
+      error,
+    )
 
-    try {
-      const {
-        data,
-        error,
-      } = await supabase
+    alert(
+      'تعذر تحميل سجل الدفعات.',
+    )
+  } finally {
+    setLoadingHistory(
+      false,
+    )
+  }
+}
+```
+
+const closeDetailsDialog =
+() => {
+if (
+loadingHistory ||
+savingPayment
+) {
+return
+}
+
+```
+  setDetailsDialogOpen(
+    false,
+  )
+
+  setDetailsStudent(
+    null,
+  )
+
+  setPaymentHistory([])
+
+  if (returnPath) {
+    router.push(
+      returnPath,
+    )
+  }
+}
+```
+
+const handleAddPayment =
+async (
+event: React.FormEvent<HTMLFormElement>,
+) => {
+event.preventDefault()
+
+```
+  if (
+    !detailsStudent ||
+    !currentAcademicYearId
+  ) {
+    return
+  }
+
+  const studentBeingPaid =
+    detailsStudent
+
+  const studentBeingPaidId =
+    detailsStudent.id
+
+  const formData =
+    new FormData(
+      event.currentTarget,
+    )
+
+  const amount =
+    Number(
+      formData.get(
+        'amount',
+      ) || 0,
+    )
+
+  const paymentMethod =
+    String(
+      formData.get(
+        'paymentMethod',
+      ) || 'نقدي',
+    ) as PaymentMethod
+
+  const paymentDate =
+    String(
+      formData.get(
+        'paymentDate',
+      ) || '',
+    )
+
+  const referenceNumber =
+    String(
+      formData.get(
+        'referenceNumber',
+      ) || '',
+    ).trim()
+
+  const notes =
+    String(
+      formData.get(
+        'notes',
+      ) || '',
+    ).trim()
+
+  if (
+    !amount ||
+    amount <= 0
+  ) {
+    alert(
+      'أدخل مبلغاً صحيحاً.',
+    )
+    return
+  }
+
+  const remaining =
+    Math.max(
+      selectedRemaining(
+        studentBeingPaid,
+      ),
+      0,
+    )
+
+  if (
+    amount >
+    remaining
+  ) {
+    alert(
+      'المبلغ أكبر من المبلغ المتبقي على الطالب.',
+    )
+    return
+  }
+
+  setSavingPayment(
+    true,
+  )
+
+  try {
+    const { error } =
+      await supabase
         .from('payments')
-        .select(
-          'id, amount, payment_method, payment_date, reference_number, notes, created_at',
-        )
-        .eq(
-          'student_id',
-          student.id,
-        )
-        .eq(
-          'academic_year_id',
-          currentAcademicYearId,
-        )
-        .order(
-          'payment_date',
-          {
-            ascending: false,
-          },
-        )
-        .order(
-          'created_at',
-          {
-            ascending: false,
-          },
-        )
+        .insert({
+          student_id:
+            studentBeingPaidId,
+          academic_year_id:
+            currentAcademicYearId,
+          amount,
+          payment_method:
+            paymentMethod,
+          payment_date:
+            paymentDate ||
+            undefined,
+          reference_number:
+            referenceNumber ||
+            null,
+          notes:
+            notes || null,
+        })
 
-      if (error) {
-        throw error
-      }
-
-      setPaymentHistory(
-        (data ?? []) as PaymentRecord[],
-      )
-    } catch (error) {
-      console.error(
-        'Failed to load payment history:',
-        error,
-      )
-
-      alert(
-        'تعذر تحميل سجل الدفعات.',
-      )
-    } finally {
-      setLoadingHistory(false)
+    if (error) {
+      throw error
     }
-  }
-
-  const closeDetailsDialog = () => {
-    if (loadingHistory || savingPayment) {
-      return
-    }
-
-    setDetailsDialogOpen(false)
-    setDetailsStudent(null)
-    setPaymentHistory([])
 
     /*
-     * إذا فتحنا النافذة من صفحة الطلاب،
-     * نرجع لها عند الإغلاق.
+     * إعادة تحميل البيانات من Supabase
+     * حتى تكون كل الأرقام محدثة.
      */
-    if (returnPath) {
-      router.push(returnPath)
-    }
-  }
+    await loadPayments()
 
-  const handleAddPayment = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault()
+    const refreshedStudent =
+      studentList.find(
+        (student) =>
+          student.id ===
+          studentBeingPaidId,
+      )
 
     if (
-      !detailsStudent ||
-      !currentAcademicYearId
+      refreshedStudent
     ) {
-      return
-    }
-
-    const studentBeingPaid =
-      detailsStudent
-
-    const studentBeingPaidId =
-      detailsStudent.id
-
-    const formData =
-      new FormData(
-        event.currentTarget,
-      )
-
-    const amount = Number(
-      formData.get('amount') || 0,
-    )
-
-    const paymentMethod =
-      String(
-        formData.get(
-          'paymentMethod',
-        ) || 'نقدي',
-      ) as PaymentMethod
-
-    const paymentDate =
-      String(
-        formData.get(
-          'paymentDate',
-        ) || '',
-      )
-
-    const referenceNumber =
-      String(
-        formData.get(
-          'referenceNumber',
-        ) || '',
-      ).trim()
-
-    const notes =
-      String(
-        formData.get('notes') || '',
-      ).trim()
-
-    if (!amount || amount <= 0) {
-      alert(
-        'أدخل مبلغاً صحيحاً.',
-      )
-      return
-    }
-
-    const remaining =
-      Math.max(
-        selectedRemaining(
-          studentBeingPaid,
-        ),
-        0,
-      )
-
-    if (amount > remaining) {
-      alert(
-        'المبلغ أكبر من المبلغ المتبقي على الطالب.',
-      )
-      return
-    }
-
-    setSavingPayment(true)
-
-    try {
-      const { error } =
-        await supabase
-          .from('payments')
-          .insert({
-            student_id:
-              studentBeingPaidId,
-            academic_year_id:
-              currentAcademicYearId,
-            amount,
-            payment_method:
-              paymentMethod,
-            payment_date:
-              paymentDate ||
-              undefined,
-            reference_number:
-              referenceNumber ||
-              null,
-            notes:
-              notes || null,
-          })
-
-      if (error) {
-        throw error
-      }
-
-      /*
-       * نعيد تحميل القائمة والحسابات،
-       * لكن لا نغلق نافذة التفاصيل.
-       */
-      await loadPayments()
-
-      const updatedStudent =
-        studentList.find(
-          (student) =>
-            student.id ===
-            studentBeingPaidId,
-        )
-
-      const refreshedStudent =
-        updatedStudent
-          ? {
-              ...updatedStudent,
-              amountPaid:
-                updatedStudent.amountPaid +
-                amount,
-            }
-          : {
-              ...studentBeingPaid,
-              amountPaid:
-                studentBeingPaid.amountPaid +
-                amount,
-            }
-
-      setDetailsStudent(
-        refreshedStudent,
-      )
-
-      /*
-       * إعادة تحميل سجل الدفعات
-       * داخل نفس النافذة.
-       */
       await openDetailsDialog(
         refreshedStudent,
       )
+    } else {
+      const localStudent =
+        {
+          studentBeingPaid,
+          amountPaid:
+            studentBeingPaid.amountPaid +
+            amount,
+        }
 
-      event.currentTarget.reset()
-    } catch (error) {
-      console.error(
-        'Failed to add payment:',
-        error,
+      setDetailsStudent(
+        localStudent,
       )
 
-      alert(
-        'تعذر حفظ الدفعة. حاول مرة أخرى.',
+      await openDetailsDialog(
+        localStudent,
       )
-    } finally {
-      setSavingPayment(false)
     }
+
+    event.currentTarget.reset()
+  } catch (error) {
+    console.error(
+      'Failed to add payment:',
+      error,
+    )
+
+    alert(
+      'تعذر حفظ الدفعة. حاول مرة أخرى.',
+    )
+  } finally {
+    setSavingPayment(
+      false,
+    )
   }
+}
+```
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="المدفوعات"
-        description="متابعة الرسوم الدراسية وحالة السداد للطلاب"
-      />
+return ( <div className="space-y-6"> <PageHeader
+     title="المدفوعات"
+     description="متابعة الرسوم الدراسية والدفعات المسجلة للطلاب"
+   />
 
-      {currentAcademicYearName && (
-        <Card>
-          <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                السنة الدراسية الحالية
-              </p>
+```
+  {currentAcademicYearName && (
+    <Card>
+      <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            السنة الدراسية الحالية
+          </p>
 
-              <p className="text-lg font-semibold">
-                {currentAcademicYearName}
-              </p>
-            </div>
+          <p className="text-lg font-semibold">
+            {
+              currentAcademicYearName
+            }
+          </p>
+        </div>
 
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">
-                الرسوم السنوية
-              </p>
+        <div className="text-right">
+          <p className="text-sm text-muted-foreground">
+            الرسوم السنوية
+          </p>
 
-              <p className="text-lg font-semibold tabular-nums">
-                {formatCurrency(
-                  currentAnnualFee,
-                )}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          <p className="text-lg font-semibold tabular-nums">
+            {formatCurrency(
+              currentAnnualFee,
+            )}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {paymentStats.map((stat) => (
-          <StatCard
-            key={stat.label}
-            stat={stat}
-          />
-        ))}
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {paymentStats.map(
+      (stat) => (
+        <StatCard
+          key={
+            stat.label
+          }
+          stat={stat}
+        />
+      ),
+    )}
+  </div>
+
+  <Card>
+    <CardContent className="p-0">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12 text-center">
+                #
+              </TableHead>
+
+              <TableHead className="min-w-[190px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    اسم الطالب
+                  </div>
+
+                  <input
+                    type="text"
+                    value={
+                      filters.name
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'name',
+                        event.target
+                          .value,
+                      )
+                    }
+                    placeholder="بحث"
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[150px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    الرقم الشخصي
+                  </div>
+
+                  <input
+                    type="text"
+                    value={
+                      filters.personalId
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'personalId',
+                        event.target
+                          .value,
+                      )
+                    }
+                    placeholder="بحث"
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[150px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    الصف الأكاديمي
+                  </div>
+
+                  <select
+                    value={
+                      filters.grade
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'grade',
+                        event.target
+                          .value,
+                      )
+                    }
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">
+                      الكل
+                    </option>
+
+                    {grades.map(
+                      (
+                        grade,
+                      ) => (
+                        <option
+                          key={
+                            grade
+                          }
+                          value={
+                            grade
+                          }
+                        >
+                          {
+                            grade
+                          }
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[140px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    المدفوع
+                  </div>
+
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={
+                      filters.amountPaid
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'amountPaid',
+                        event.target
+                          .value,
+                      )
+                    }
+                    placeholder="بحث"
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[140px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    المتبقي
+                  </div>
+
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={
+                      filters.amountRemaining
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'amountRemaining',
+                        event.target
+                          .value,
+                      )
+                    }
+                    placeholder="بحث"
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[140px]">
+                <div className="space-y-2 py-1">
+                  <div className="font-medium">
+                    الوضع
+                  </div>
+
+                  <select
+                    value={
+                      filters.paymentStatus
+                    }
+                    onChange={(
+                      event,
+                    ) =>
+                      updateFilter(
+                        'paymentStatus',
+                        event.target
+                          .value,
+                      )
+                    }
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">
+                      الكل
+                    </option>
+
+                    {paymentStatuses.map(
+                      (
+                        status,
+                      ) => (
+                        <option
+                          key={
+                            status
+                          }
+                          value={
+                            status
+                          }
+                        >
+                          {
+                            status
+                          }
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+              </TableHead>
+
+              <TableHead className="min-w-[150px] text-center">
+                إضافة دفعة
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  جاري تحميل بيانات المدفوعات
+                </TableCell>
+              </TableRow>
+            ) : filteredStudents.length ===
+              0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={8}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  لا توجد نتائج مطابقة للفلاتر
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredStudents.map(
+                (
+                  student,
+                  index,
+                ) => {
+                  const remaining =
+                    student.feeExempt
+                      ? 0
+                      : Math.max(
+                          student.amountDue -
+                            student.amountPaid,
+                          0,
+                        )
+
+                  const canAddPayment =
+                    !student.feeExempt &&
+                    remaining > 0
+
+                  return (
+                    <TableRow
+                      key={
+                        student.id
+                      }
+                    >
+                      <TableCell className="text-center text-muted-foreground">
+                        {
+                          index +
+                          1
+                        }
+                      </TableCell>
+
+                      <TableCell className="font-medium">
+                        {
+                          student.name
+                        }
+                      </TableCell>
+
+                      <TableCell>
+                        {
+                          student.personalId ||
+                          '—'
+                        }
+                      </TableCell>
+
+                      <TableCell>
+                        {
+                          student.grade
+                        }
+                      </TableCell>
+
+                      <TableCell className="font-medium tabular-nums">
+                        {student.feeExempt
+                          ? '—'
+                          : formatCurrency(
+                              student.amountPaid,
+                            )}
+                      </TableCell>
+
+                      <TableCell className="font-medium tabular-nums">
+                        {student.feeExempt
+                          ? '—'
+                          : formatCurrency(
+                              remaining,
+                            )}
+                      </TableCell>
+
+                      <TableCell>
+                        <StatusBadge
+                          status={
+                            student.paymentStatus
+                          }
+                        />
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        {canAddPayment ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() =>
+                              openPaymentDialog(
+                                student,
+                              )
+                            }
+                          >
+                            <Plus className="ml-1 size-4" />
+                            إضافة دفعة
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              openPaymentDialog(
+                                student,
+                              )
+                            }
+                          >
+                            <Eye className="ml-1 size-4" />
+                            تفاصيل
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                },
+              )
+            )}
+          </TableBody>
+        </Table>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[190px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        الطالب
-                      </div>
+      {hasFilters && (
+        <div className="flex justify-end border-t px-5 py-3">
+          <button
+            type="button"
+            onClick={
+              clearFilters
+            }
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            مسح جميع الفلاتر
+          </button>
+        </div>
+      )}
+    </CardContent>
+  </Card>
 
-                      <input
-                        type="text"
-                        value={filters.name}
-                        onChange={(event) =>
-                          updateFilter(
-                            'name',
-                            event.target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث عن طالب..."
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </div>
-                  </TableHead>
+  {detailsDialogOpen &&
+    detailsStudent && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <Card className="max-h-[90vh] w-full max-w-2xl overflow-hidden">
+          <CardContent className="flex max-h-[90vh] flex-col p-0">
+            <div className="flex items-start justify-between gap-4 border-b p-6">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  تفاصيل المدفوعات
+                </h2>
 
-                  <TableHead className="min-w-[150px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        المستوى
-                      </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {
+                    detailsStudent.name
+                  }
+                </p>
 
-                      <select
-                        value={filters.grade}
-                        onChange={(event) =>
-                          updateFilter(
-                            'grade',
-                            event.target
-                              .value,
-                          )
-                        }
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      >
-                        <option value="">
-                          الكل
-                        </option>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  السنة الدراسية:{' '}
+                  {
+                    currentAcademicYearName
+                  }
+                </p>
+              </div>
 
-                        {grades.map(
-                          (grade) => (
-                            <option
-                              key={grade}
-                              value={grade}
-                            >
-                              {grade}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  </TableHead>
-
-                  <TableHead className="min-w-[150px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        المبلغ المستحق
-                      </div>
-
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={
-                          filters.amountDue
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'amountDue',
-                            event.target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث بالمبلغ..."
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </div>
-                  </TableHead>
-
-                  <TableHead className="min-w-[150px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        المبلغ المدفوع
-                      </div>
-
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={
-                          filters.amountPaid
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'amountPaid',
-                            event.target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث بالمبلغ..."
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </div>
-                  </TableHead>
-
-                  <TableHead className="min-w-[150px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        المبلغ المتبقي
-                      </div>
-
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={
-                          filters.amountRemaining
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'amountRemaining',
-                            event.target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث بالمبلغ..."
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </div>
-                  </TableHead>
-
-                  <TableHead className="min-w-[150px]">
-                    <div className="space-y-2 py-1">
-                      <div className="font-medium">
-                        الحالة
-                      </div>
-
-                      <select
-                        value={
-                          filters.paymentStatus
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'paymentStatus',
-                            event.target
-                              .value,
-                          )
-                        }
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-                      >
-                        <option value="">
-                          الكل
-                        </option>
-
-                        {paymentStatuses.map(
-                          (status) => (
-                            <option
-                              key={status}
-                              value={
-                                status
-                              }
-                            >
-                              {status}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  </TableHead>
-
-                  <TableHead className="min-w-[210px]">
-                    الإجراء
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="py-10 text-center text-muted-foreground"
-                    >
-                      جاري تحميل بيانات المدفوعات...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredStudents.length ===
-                  0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="py-10 text-center text-muted-foreground"
-                    >
-                      لا توجد نتائج مطابقة للفلاتر
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredStudents.map(
-                    (student) => {
-                      const remaining =
-                        student.paymentStatus ===
-                        'معفي'
-                          ? 0
-                          : Math.max(
-                              student.amountDue -
-                                student.amountPaid,
-                              0,
-                            )
-
-                      return (
-                        <TableRow
-                          key={student.id}
-                        >
-                          <TableCell className="font-medium">
-                            {student.name}
-                          </TableCell>
-
-                          <TableCell className="text-muted-foreground">
-                            {student.grade}
-                          </TableCell>
-
-                          <TableCell className="font-medium tabular-nums">
-                            {student.paymentStatus ===
-                            'معفي'
-                              ? '—'
-                              : formatCurrency(
-                                  student.amountDue,
-                                )}
-                          </TableCell>
-
-                          <TableCell className="font-medium tabular-nums">
-                            {student.paymentStatus ===
-                            'معفي'
-                              ? '—'
-                              : formatCurrency(
-                                  student.amountPaid,
-                                )}
-                          </TableCell>
-
-                          <TableCell className="font-medium tabular-nums">
-                            {student.paymentStatus ===
-                            'معفي'
-                              ? '—'
-                              : formatCurrency(
-                                  remaining,
-                                )}
-                          </TableCell>
-
-                          <TableCell>
-                            <StatusBadge
-                              status={
-                                student.paymentStatus
-                              }
-                            />
-                          </TableCell>
-
-                          <TableCell>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                openPaymentDialog(
-                                  student,
-                                )
-                              }
-                            >
-                              <Eye className="ml-1 size-4" />
-                              تفاصيل
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    },
-                  )
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {hasFilters && (
-            <div className="flex justify-end border-t px-5 py-3">
               <button
                 type="button"
                 onClick={
-                  clearFilters
+                  closeDetailsDialog
                 }
-                className="text-sm font-medium text-primary hover:underline"
+                disabled={
+                  loadingHistory ||
+                  savingPayment
+                }
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted"
               >
-                مسح جميع الفلاتر
+                <X className="size-5" />
               </button>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Payment Details */}
-      {detailsDialogOpen &&
-        detailsStudent && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <Card className="max-h-[90vh] w-full max-w-2xl overflow-hidden">
-              <CardContent className="flex max-h-[90vh] flex-col p-0">
-                <div className="flex items-start justify-between gap-4 border-b p-6">
+            <div className="grid grid-cols-1 gap-3 border-b p-6 sm:grid-cols-3">
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-xs text-muted-foreground">
+                  الرسوم السنوية
+                </p>
+
+                <p className="mt-1 font-semibold tabular-nums">
+                  {detailsStudent.feeExempt
+                    ? 'معفي'
+                    : formatCurrency(
+                        detailsStudent.amountDue,
+                      )}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-xs text-muted-foreground">
+                  إجمالي المدفوع
+                </p>
+
+                <p className="mt-1 font-semibold tabular-nums">
+                  {detailsStudent.feeExempt
+                    ? '—'
+                    : formatCurrency(
+                        detailsStudent.amountPaid,
+                      )}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-xs text-muted-foreground">
+                  المتبقي
+                </p>
+
+                <p className="mt-1 font-semibold tabular-nums">
+                  {detailsStudent.feeExempt
+                    ? '—'
+                    : formatCurrency(
+                        Math.max(
+                          detailsStudent.amountDue -
+                            detailsStudent.amountPaid,
+                          0,
+                        ),
+                      )}
+                </p>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="flex min-h-0 flex-col">
+                <div className="flex items-center justify-between gap-3 px-6 pb-3 pt-5">
                   <div>
-                    <h2 className="text-lg font-semibold">
-                      تفاصيل المدفوعات
-                    </h2>
+                    <h3 className="font-semibold">
+                      سجل الدفعات
+                    </h3>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {detailsStudent.name}
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      السنة الدراسية:{' '}
+                    <p className="text-xs text-muted-foreground">
                       {
-                        currentAcademicYearName
-                      }
+                        paymentHistory.length
+                      }{' '}
+                      دفعة
                     </p>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={
-                      closeDetailsDialog
-                    }
-                    disabled={
-                      loadingHistory ||
-                      savingPayment
-                    }
-                    className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-                  >
-                    <X className="size-5" />
-                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 border-b p-6 sm:grid-cols-3">
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      الرسوم السنوية
-                    </p>
+                <div className="px-6 pb-6">
+                  {loadingHistory ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                      جاري تحميل سجل الدفعات
+                    </div>
+                  ) : paymentHistory.length ===
+                    0 ? (
+                    <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                      لا توجد دفعات مسجلة لهذا الطالب في السنة الحالية.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {paymentHistory.map(
+                        (
+                          payment,
+                        ) => (
+                          <div
+                            key={
+                              payment.id
+                            }
+                            className="rounded-lg border p-4"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-sm text-muted-foreground">
+                                  تاريخ الدفع
+                                </p>
 
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.paymentStatus ===
-                      'معفي'
-                        ? 'معفي'
-                        : formatCurrency(
-                            detailsStudent.amountDue,
-                          )}
-                    </p>
-                  </div>
+                                <p className="mt-1 font-medium">
+                                  {formatPaymentDate(
+                                    payment.payment_date,
+                                  )}
+                                </p>
+                              </div>
 
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      إجمالي المدفوع
-                    </p>
+                              <div className="text-left sm:text-right">
+                                <p className="text-sm text-muted-foreground">
+                                  المبلغ
+                                </p>
 
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.paymentStatus ===
-                      'معفي'
-                        ? '—'
-                        : formatCurrency(
-                            detailsStudent.amountPaid,
-                          )}
-                    </p>
-                  </div>
+                                <p className="mt-1 text-lg font-semibold tabular-nums">
+                                  {formatCurrency(
+                                    Number(
+                                      payment.amount,
+                                    ),
+                                  )}
+                                </p>
+                              </div>
+                            </div>
 
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      المتبقي
-                    </p>
+                            <div className="mt-4 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+                              <div>
+                                <p className="text-xs text-muted-foreground">
+                                  طريقة الدفع
+                                </p>
 
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.paymentStatus ===
-                      'معفي'
-                        ? '—'
-                        : formatCurrency(
-                            Math.max(
+                                <p className="mt-1 text-sm font-medium">
+                                  {
+                                    payment.payment_method
+                                  }
+                                </p>
+                              </div>
+
+                              {payment.reference_number && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground">
+                                    رقم العملية
+                                  </p>
+
+                                  <p className="mt-1 text-sm font-medium">
+                                    {
+                                      payment.reference_number
+                                    }
+                                  </p>
+                                </div>
+                              )}
+
+                              {payment.notes && (
+                                <div className="sm:col-span-2">
+                                  <p className="text-xs text-muted-foreground">
+                                    ملاحظات
+                                  </p>
+
+                                  <p className="mt-1 whitespace-pre-wrap text-sm">
+                                    {
+                                      payment.notes
+                                    }
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {!detailsStudent.feeExempt &&
+                  Math.max(
+                    detailsStudent.amountDue -
+                      detailsStudent.amountPaid,
+                    0,
+                  ) > 0 && (
+                    <div className="border-t bg-muted/20 px-6 py-5">
+                      <div className="mb-4">
+                        <h3 className="font-semibold">
+                          إضافة دفعة
+                        </h3>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          يمكنك تسجيل دفعة جزئية أو تسديد المبلغ المتبقي بالكامل.
+                        </p>
+                      </div>
+
+                      <form
+                        onSubmit={
+                          handleAddPayment
+                        }
+                        className="space-y-4"
+                      >
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium">
+                            المبلغ
+                          </label>
+
+                          <input
+                            name="amount"
+                            type="number"
+                            step="0.001"
+                            min="0.001"
+                            max={Math.max(
                               detailsStudent.amountDue -
                                 detailsStudent.amountPaid,
                               0,
-                            ),
-                          )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <div className="flex min-h-0 flex-col">
-                    <div className="flex items-center justify-between gap-3 px-6 pb-3 pt-5">
-                      <div>
-                        <h3 className="font-semibold">
-                          سجل الدفعات
-                        </h3>
-
-                        <p className="text-xs text-muted-foreground">
-                          {
-                            paymentHistory.length
-                          }{' '}
-                          دفعة
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="px-6 pb-6">
-                      {loadingHistory ? (
-                        <div className="py-10 text-center text-sm text-muted-foreground">
-                          جاري تحميل سجل الدفعات...
+                            )}
+                            required
+                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                          />
                         </div>
-                      ) : paymentHistory.length ===
-                        0 ? (
-                        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                          لا توجد دفعات مسجلة لهذا الطالب في السنة الحالية.
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {paymentHistory.map(
-                            (payment) => (
-                              <div
-                                key={
-                                  payment.id
-                                }
-                                className="rounded-lg border p-4"
-                              >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                  <div>
-                                    <p className="text-sm text-muted-foreground">
-                                      تاريخ الدفع
-                                    </p>
 
-                                    <p className="mt-1 font-medium">
-                                      {formatPaymentDate(
-                                        payment.payment_date,
-                                      )}
-                                    </p>
-                                  </div>
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium">
+                            طريقة الدفع
+                          </label>
 
-                                  <div className="text-left sm:text-right">
-                                    <p className="text-sm text-muted-foreground">
-                                      المبلغ
-                                    </p>
-
-                                    <p className="mt-1 text-lg font-semibold tabular-nums">
-                                      {formatCurrency(
-                                        Number(
-                                          payment.amount,
-                                        ),
-                                      )}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="mt-4 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">
-                                      طريقة الدفع
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-medium">
-                                      {
-                                        payment.payment_method
-                                      }
-                                    </p>
-                                  </div>
-
-                                  {payment.reference_number && (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground">
-                                        رقم العملية
-                                      </p>
-
-                                      <p className="mt-1 text-sm font-medium">
-                                        {
-                                          payment.reference_number
-                                        }
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {payment.notes && (
-                                    <div className="sm:col-span-2">
-                                      <p className="text-xs text-muted-foreground">
-                                        ملاحظات
-                                      </p>
-
-                                      <p className="mt-1 whitespace-pre-wrap text-sm">
-                                        {
-                                          payment.notes
-                                        }
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {detailsStudent.paymentStatus !==
-                      'معفي' &&
-                      Math.max(
-                        detailsStudent.amountDue -
-                          detailsStudent.amountPaid,
-                        0,
-                      ) > 0 && (
-                        <div className="border-t bg-muted/20 px-6 py-5">
-                          <div className="mb-4">
-                            <h3 className="font-semibold">
-                              إضافة دفعة
-                            </h3>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              يمكنك تسجيل دفعة جزئية أو تسديد المبلغ المتبقي بالكامل.
-                            </p>
-                          </div>
-
-                          <form
-                            onSubmit={
-                              handleAddPayment
-                            }
-                            className="space-y-4"
+                          <select
+                            name="paymentMethod"
+                            defaultValue="نقدي"
+                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
                           >
-                            <div>
-                              <label className="mb-1.5 block text-sm font-medium">
-                                المبلغ
-                              </label>
+                            <option value="نقدي">
+                              نقدي
+                            </option>
 
-                              <input
-                                name="amount"
-                                type="number"
-                                step="0.001"
-                                min="0.001"
-                                max={Math.max(
-                                  detailsStudent.amountDue -
-                                    detailsStudent.amountPaid,
-                                  0,
-                                )}
-                                required
-                                className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
+                            <option value="تحويل">
+                              تحويل
+                            </option>
 
-                            <div>
-                              <label className="mb-1.5 block text-sm font-medium">
-                                طريقة الدفع
-                              </label>
-
-                              <select
-                                name="paymentMethod"
-                                defaultValue="نقدي"
-                                className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                              >
-                                <option value="نقدي">
-                                  نقدي
-                                </option>
-
-                                <option value="تحويل">
-                                  تحويل
-                                </option>
-
-                                <option value="بطاقة">
-                                  بطاقة
-                                </option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <label className="mb-1.5 block text-sm font-medium">
-                                تاريخ الدفع
-                              </label>
-
-                              <input
-                                name="paymentDate"
-                                type="date"
-                                defaultValue={
-                                  getToday()
-                                }
-                                required
-                                className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1.5 block text-sm font-medium">
-                                رقم العملية
-                                <span className="mr-1 text-xs text-muted-foreground">
-                                  اختياري
-                                </span>
-                              </label>
-
-                              <input
-                                name="referenceNumber"
-                                type="text"
-                                className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="mb-1.5 block text-sm font-medium">
-                                ملاحظات
-                                <span className="mr-1 text-xs text-muted-foreground">
-                                  اختياري
-                                </span>
-                              </label>
-
-                              <textarea
-                                name="notes"
-                                rows={3}
-                                className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-2">
-                              <Button
-                                type="submit"
-                                disabled={
-                                  savingPayment
-                                }
-                              >
-                                {savingPayment
-                                  ? 'جاري الحفظ...'
-                                  : 'حفظ الدفعة'}
-                              </Button>
-                            </div>
-                          </form>
+                            <option value="بطاقة">
+                              بطاقة
+                            </option>
+                          </select>
                         </div>
-                      )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-    </div>
-  )
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium">
+                            تاريخ الدفع
+                          </label>
+
+                          <input
+                            name="paymentDate"
+                            type="date"
+                            defaultValue={
+                              getToday()
+                            }
+                            required
+                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium">
+                            رقم العملية
+                            <span className="mr-1 text-xs text-muted-foreground">
+                              اختياري
+                            </span>
+                          </label>
+
+                          <input
+                            name="referenceNumber"
+                            type="text"
+                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-sm font-medium">
+                            ملاحظات
+                            <span className="mr-1 text-xs text-muted-foreground">
+                              اختياري
+                            </span>
+                          </label>
+
+                          <textarea
+                            name="notes"
+                            rows={3}
+                            className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <Button
+                            type="submit"
+                            disabled={
+                              savingPayment
+                            }
+                          >
+                            {savingPayment
+                              ? 'جاري الحفظ'
+                              : 'حفظ الدفعة'}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )}
+</div>
+
+
+)
 }
 
 function selectedRemaining(
-  student: StudentRow,
+student: StudentRow,
 ) {
-  if (
-    student.paymentStatus ===
-    'معفي'
-  ) {
-    return 0
-  }
+if (
+student.feeExempt
+) {
+return 0
+}
 
-  return Math.max(
-    student.amountDue -
-      student.amountPaid,
-    0,
-  )
+return Math.max(
+student.amountDue -
+student.amountPaid,
+0,
+)
 }
 
 function formatCurrency(
-  value: number,
+value: number,
 ) {
-  return `${value.toLocaleString(
+return `${value.toLocaleString(
     'ar-BH',
     {
       minimumFractionDigits: 3,
@@ -1494,40 +1791,45 @@ function formatCurrency(
 }
 
 function formatPaymentDate(
-  value: string,
+value: string,
 ) {
-  if (!value) return '—'
+if (!value) {
+return '—'
+}
 
-  const [
-    year,
-    month,
-    day,
-  ] = value.split('-')
+const [
+year,
+month,
+day,
+] = value.split('-')
 
-  if (
-    !year ||
-    !month ||
-    !day
-  ) {
-    return value
-  }
+if (
+!year ||
+!month ||
+!day
+) {
+return value
+}
 
-  return `${day}/${month}/${year}`
+return `${day}/${month}/${year}`
 }
 
 function getToday() {
-  const today = new Date()
+const today =
+new Date()
 
-  const year =
-    today.getFullYear()
+const year =
+today.getFullYear()
 
-  const month = String(
-    today.getMonth() + 1,
-  ).padStart(2, '0')
+const month =
+String(
+today.getMonth() + 1,
+).padStart(2, '0')
 
-  const day = String(
-    today.getDate(),
-  ).padStart(2, '0')
+const day =
+String(
+today.getDate(),
+).padStart(2, '0')
 
-  return `${year}-${month}-${day}`
+return `${year}-${month}-${day}`
 }
