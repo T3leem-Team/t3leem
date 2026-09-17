@@ -396,7 +396,16 @@ export function TeachersView() {
     }
 
     setCourseTeacherIds(teacherMap)
-
+    const {
+      data: {
+        user,
+      },
+    } = await supabase.auth.getUser()
+    
+    console.log(
+      'CURRENT SUPABASE USER:',
+      user,
+    )
     const {
   data: statusRows,
   error: statusError,
