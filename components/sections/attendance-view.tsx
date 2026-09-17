@@ -6,11 +6,6 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import {
-  Check,
-  ChevronDown,
-  ClipboardCheck,
-} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
@@ -56,7 +51,10 @@ export type AttendanceStatusName =
   | 'متأخر'
   | 'مستأذن'
 
-export type AttendanceNotes = Record<string, string>
+export type AttendanceNotes = Record<
+  string,
+  string
+>
 
 const attendanceStatusNames: AttendanceStatusName[] = [
   'حاضر',
@@ -131,65 +129,45 @@ function getStatusName(
   return normalizeStatusName(status.name)
 }
 
-function getStatusStyles(
+function getStatusClasses(
   status: AttendanceStatusName,
 ) {
   switch (status) {
     case 'حاضر':
       return {
-        wrapper:
-          'border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
-        dot: 'bg-green-500',
+        button:
+          'border-green-500 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400',
+        selected:
+          'border-green-600 bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
       }
 
     case 'غائب':
       return {
-        wrapper:
-          'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400',
-        dot: 'bg-red-500',
+        button:
+          'border-red-500 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400',
+        selected:
+          'border-red-600 bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300',
       }
 
     case 'متأخر':
       return {
-        wrapper:
-          'border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400',
-        dot: 'bg-yellow-500',
+        button:
+          'border-yellow-500 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 dark:bg-yellow-950/30 dark:text-yellow-400',
+        selected:
+          'border-yellow-600 bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300',
       }
 
     case 'مستأذن':
       return {
-        wrapper:
-          'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400',
-        dot: 'bg-blue-500',
+        button:
+          'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400',
+        selected:
+          'border-blue-600 bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
       }
   }
 }
 
-function formatDateForDisplay(
-  date: string,
-) {
-  if (!date) {
-    return ''
-  }
-
-  const [year, month, day] =
-    date.split('-')
-
-  if (!year || !month || !day) {
-    return date
-  }
-
-  return `${day}/${month}/${year}`
-}
-
-/*
- * نسبة حضور الطالب في الدورة كاملة.
- *
- * حاضر + متأخر = حضور
- * غائب = غياب
- * مستأذن = لا يدخل في الحساب
- */
-function getStudentAttendancePercentage(
+function getAttendancePercentage(
   studentId: string,
   courseId: string,
   records: AttendanceRecord[],
@@ -222,10 +200,9 @@ function getStudentAttendancePercentage(
     ) {
       attended += 1
       counted += 1
-      continue
-    }
-
-    if (status === 'غائب') {
+    } else if (
+      status === 'غائب'
+    ) {
       counted += 1
     }
   }
@@ -253,122 +230,21 @@ function getPercentageClass(
   return 'text-red-600 dark:text-red-400'
 }
 
-type AttendanceStatusSelectorProps = {
-  value: AttendanceStatusName | null
-  disabled?: boolean
-  onChange: (
-    status: AttendanceStatusName,
-  ) => void
-}
+function formatDateForDisplay(
+  date: string,
+) {
+  if (!date) {
+    return ''
+  }
 
-function AttendanceStatusSelector({
-  value,
-  disabled,
-  onChange,
-}: AttendanceStatusSelectorProps) {
-  const [open, setOpen] =
-    useState(false)
+  const [year, month, day] =
+    date.split('-')
 
-  const styles = value
-    ? getStatusStyles(value)
-    : null
+  if (!year || !month || !day) {
+    return date
+  }
 
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() =>
-          setOpen((current) => !current)
-        }
-        className={`flex h-10 min-w-[145px] items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium transition ${
-          value
-            ? styles?.wrapper
-            : 'border-input bg-background text-muted-foreground hover:border-primary'
-        } ${
-          disabled
-            ? 'cursor-not-allowed opacity-50'
-            : ''
-        }`}
-      >
-        <span className="flex items-center gap-2">
-          {value ? (
-            <>
-              <span
-                className={`size-2 rounded-full ${styles?.dot}`}
-              />
-              {value}
-            </>
-          ) : (
-            'تحديد الحالة'
-          )}
-        </span>
-
-        <ChevronDown
-          className={`size-4 transition-transform ${
-            open
-              ? 'rotate-180'
-              : ''
-          }`}
-        />
-      </button>
-
-      {open && !disabled && (
-        <>
-          <button
-            type="button"
-            aria-label="إغلاق القائمة"
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={() =>
-              setOpen(false)
-            }
-          />
-
-          <div className="absolute right-0 top-11 z-50 w-[170px] rounded-xl border bg-popover p-1.5 shadow-xl">
-            {attendanceStatusNames.map(
-              (status) => {
-                const selected =
-                  value === status
-
-                const statusStyles =
-                  getStatusStyles(
-                    status,
-                  )
-
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => {
-                      setOpen(false)
-                      onChange(status)
-                    }}
-                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition ${
-                      selected
-                        ? statusStyles.wrapper
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`size-2 rounded-full ${statusStyles.dot}`}
-                      />
-
-                      {status}
-                    </span>
-
-                    {selected && (
-                      <Check className="size-4" />
-                    )}
-                  </button>
-                )
-              },
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  )
+  return `${day}/${month}/${year}`
 }
 
 type AttendanceViewProps = {
@@ -422,31 +298,44 @@ export function AttendanceView({
   ] = useState<string | null>(null)
 
   const [
-    selectedStatuses,
-    setSelectedStatuses,
+    localStatuses,
+    setLocalStatuses,
   ] = useState<
     Record<string, AttendanceStatusName>
   >({})
 
   const [
-    search,
-    setSearch,
+    searchTerm,
+    setSearchTerm,
   ] = useState('')
 
-  const [
-    selectedDate,
-    setSelectedDate,
-  ] = useState(
-    selectedAttendanceDate || '',
-  )
+  const today = new Date()
+
+  const todayString = [
+    today.getFullYear(),
+    String(
+      today.getMonth() + 1,
+    ).padStart(2, '0'),
+    String(
+      today.getDate(),
+    ).padStart(2, '0'),
+  ].join('-')
+
+  const isTodayInsideCourse =
+    currentCourse
+      ? todayString >=
+          currentCourse.startDate &&
+        todayString <=
+          currentCourse.endDate
+      : false
 
   const activeDate =
-    selectedDate ||
     selectedAttendanceDate ||
-    currentCourse?.startDate ||
-    ''
+    (isTodayInsideCourse
+      ? todayString
+      : currentCourse?.startDate || '')
 
-  const getRecord = (
+  const getRecordForStudent = (
     studentId: string,
     date: string,
   ) => {
@@ -471,14 +360,15 @@ export function AttendanceView({
   ) => {
     const key = `${date}:${studentId}`
 
-    if (selectedStatuses[key]) {
-      return selectedStatuses[key]
+    if (localStatuses[key]) {
+      return localStatuses[key]
     }
 
-    const record = getRecord(
-      studentId,
-      date,
-    )
+    const record =
+      getRecordForStudent(
+        studentId,
+        date,
+      )
 
     return getStatusName(
       attendanceStatuses,
@@ -499,7 +389,7 @@ export function AttendanceView({
 
       for (const student of assignedStudents) {
         result[student.id] =
-          getStudentAttendancePercentage(
+          getAttendancePercentage(
             student.id,
             currentCourse.id,
             attendanceRecords,
@@ -518,25 +408,25 @@ export function AttendanceView({
   const filteredStudents =
     assignedStudents.filter(
       (student) => {
-        if (!search.trim()) {
+        if (!searchTerm.trim()) {
           return true
         }
 
-        const value =
-          search
+        const search =
+          searchTerm
             .trim()
             .toLowerCase()
 
         return (
           student.name
             .toLowerCase()
-            .includes(value) ||
+            .includes(search) ||
           student.studentId
             .toLowerCase()
-            .includes(value) ||
+            .includes(search) ||
           student.personalId
             .toLowerCase()
-            .includes(value)
+            .includes(search)
         )
       },
     )
@@ -569,16 +459,17 @@ export function AttendanceView({
       return
     }
 
-    const existing = getRecord(
-      student.id,
-      date,
-    )
+    const existing =
+      getRecordForStudent(
+        student.id,
+        date,
+      )
 
     const previousRecords =
       attendanceRecords
 
-    const previousStatus =
-      selectedStatuses[key]
+    const previousLocalStatus =
+      localStatuses[key]
 
     const optimisticRecord: AttendanceRecord =
       {
@@ -600,7 +491,7 @@ export function AttendanceView({
 
     setSavingKey(key)
 
-    setSelectedStatuses(
+    setLocalStatuses(
       (current) => ({
         ...current,
         [key]: statusName,
@@ -609,7 +500,7 @@ export function AttendanceView({
 
     setAttendanceRecords(
       (records) => {
-        const index =
+        const existingIndex =
           records.findIndex(
             (record) =>
               record.studentId ===
@@ -620,7 +511,7 @@ export function AttendanceView({
                 date,
           )
 
-        if (index === -1) {
+        if (existingIndex === -1) {
           return [
             ...records,
             optimisticRecord,
@@ -628,8 +519,8 @@ export function AttendanceView({
         }
 
         return records.map(
-          (record, recordIndex) =>
-            recordIndex === index
+          (record, index) =>
+            index === existingIndex
               ? {
                   ...record,
                   statusId,
@@ -671,7 +562,7 @@ export function AttendanceView({
         }
 
         if (data) {
-          const saved: AttendanceRecord =
+          const savedRecord: AttendanceRecord =
             {
               id: data.id,
               studentId:
@@ -695,7 +586,7 @@ export function AttendanceView({
                 (record) =>
                   record.id ===
                   existing.id
-                    ? saved
+                    ? savedRecord
                     : record,
               ),
           )
@@ -730,7 +621,7 @@ export function AttendanceView({
         }
 
         if (data) {
-          const saved: AttendanceRecord =
+          const savedRecord: AttendanceRecord =
             {
               id: data.id,
               studentId:
@@ -754,7 +645,7 @@ export function AttendanceView({
                 (record) =>
                   record.id ===
                   optimisticRecord.id
-                    ? saved
+                    ? savedRecord
                     : record,
               ),
           )
@@ -762,22 +653,22 @@ export function AttendanceView({
       }
 
       setStatusMessage(
-        `تم حفظ حالة ${student.name}: ${statusName} ✅`,
+        `تم حفظ حالة ${student.name}: ${statusName}`,
       )
     } catch (error: any) {
       setAttendanceRecords(
         previousRecords,
       )
 
-      setSelectedStatuses(
+      setLocalStatuses(
         (current) => {
           const next = {
             ...current,
           }
 
-          if (previousStatus) {
+          if (previousLocalStatus) {
             next[key] =
-              previousStatus
+              previousLocalStatus
           } else {
             delete next[key]
           }
@@ -800,21 +691,22 @@ export function AttendanceView({
   const saveNote = async (
     student: Student,
     date: string,
-    note: string,
+    value: string,
   ) => {
     const key = `${date}:${student.id}`
 
     setAttendanceNotes(
       (current) => ({
         ...current,
-        [key]: note,
+        [key]: value,
       }),
     )
 
-    const existing = getRecord(
-      student.id,
-      date,
-    )
+    const existing =
+      getRecordForStudent(
+        student.id,
+        date,
+      )
 
     if (!existing) {
       return
@@ -827,7 +719,7 @@ export function AttendanceView({
       } = await supabase
         .from('attendance')
         .update({
-          note: note || null,
+          note: value || null,
         })
         .eq('id', existing.id)
         .select(
@@ -840,7 +732,7 @@ export function AttendanceView({
       }
 
       if (data) {
-        const updated: AttendanceRecord =
+        const updatedRecord: AttendanceRecord =
           {
             id: data.id,
             studentId:
@@ -864,7 +756,7 @@ export function AttendanceView({
               (record) =>
                 record.id ===
                 existing.id
-                  ? updated
+                  ? updatedRecord
                   : record,
             ),
         )
@@ -881,10 +773,11 @@ export function AttendanceView({
 
   if (!currentCourse) {
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <ClipboardCheck className="mx-auto size-10 text-muted-foreground" />
-
-        <h3 className="mt-4 text-lg font-semibold">
+      <div
+        dir="rtl"
+        className="rounded-xl border border-dashed p-10 text-center"
+      >
+        <h3 className="text-lg font-semibold">
           لا توجد دورة حالية
         </h3>
 
@@ -921,7 +814,6 @@ export function AttendanceView({
             const date =
               event.target.value
 
-            setSelectedDate(date)
             setSelectedAttendanceDate(
               date || null,
             )
@@ -930,7 +822,6 @@ export function AttendanceView({
         />
       </div>
 
-      {/* Status message */}
       {statusMessage && (
         <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
           {statusMessage}
@@ -938,191 +829,208 @@ export function AttendanceView({
       )}
 
       {/* Search */}
-      <div>
-        <input
-          type="text"
-          value={search}
-          onChange={(event) =>
-            setSearch(
-              event.target.value,
-            )
-          }
-          placeholder="بحث عن طالب..."
-          className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
-      </div>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={(event) =>
+          setSearchTerm(
+            event.target.value,
+          )
+        }
+        placeholder="بحث عن طالب..."
+        className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+      />
 
-      {/* Attendance table */}
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full min-w-[850px]">
-          <thead>
-            <tr className="border-b bg-muted/40">
-              <th className="px-5 py-4 text-right text-sm font-semibold">
-                الطالب
-              </th>
+      {/* Students */}
+      <div className="space-y-3">
+        {filteredStudents.length ===
+        0 ? (
+          <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+            لا يوجد طلبة.
+          </div>
+        ) : (
+          filteredStudents.map(
+            (student) => {
+              const record =
+                getRecordForStudent(
+                  student.id,
+                  activeDate,
+                )
 
-              <th className="px-5 py-4 text-right text-sm font-semibold">
-                الحالة
-              </th>
+              const status =
+                getStudentStatus(
+                  student.id,
+                  activeDate,
+                )
 
-              <th className="px-5 py-4 text-right text-sm font-semibold">
-                الملاحظات
-              </th>
+              const key = `${activeDate}:${student.id}`
 
-              <th className="px-5 py-4 text-right text-sm font-semibold">
-                نسبة حضور الدورة
-              </th>
-            </tr>
-          </thead>
+              const note =
+                record?.note ??
+                attendanceNotes[key] ??
+                ''
 
-          <tbody>
-            {filteredStudents.length ===
-            0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="px-5 py-12 text-center text-sm text-muted-foreground"
-                >
-                  لا يوجد طلبة.
-                </td>
-              </tr>
-            ) : (
-              filteredStudents.map(
-                (student) => {
-                  const record =
-                    getRecord(
-                      student.id,
-                      activeDate,
-                    )
+              const percentage =
+                attendancePercentages[
+                  student.id
+                ] ?? 0
 
-                  const status =
-                    getStudentStatus(
-                      student.id,
-                      activeDate,
-                    )
+              const saving =
+                savingKey === key
 
-                  const key = `${activeDate}:${student.id}`
+              /*
+               * قبل اختيار الحالة:
+               * الاسم في سطر
+               * الحالات في سطر ثاني
+               */
+              if (!status) {
+                return (
+                  <div
+                    key={student.id}
+                    className="rounded-xl border bg-card p-4"
+                  >
+                    <div className="font-semibold">
+                      {student.name}
+                    </div>
 
-                  const note =
-                    record?.note ??
-                    attendanceNotes[key] ??
-                    ''
-
-                  const percentage =
-                    attendancePercentages[
-                      student.id
-                    ] ?? 0
-
-                  const saving =
-                    savingKey === key
-
-                  return (
-                    <tr
-                      key={student.id}
-                      className="border-b last:border-0 hover:bg-muted/20"
-                    >
-                      {/* Student */}
-                      <td className="px-5 py-4">
-                        <div>
-                          <div className="font-medium">
-                            {student.name}
-                          </div>
-
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {student.levelName ||
-                              student.studentId}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-5 py-4">
-                        <AttendanceStatusSelector
-                          value={status}
-                          disabled={saving}
-                          onChange={(
-                            statusName,
-                          ) =>
-                            saveAttendance(
-                              student,
-                              activeDate,
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {attendanceStatusNames.map(
+                        (statusName) => {
+                          const styles =
+                            getStatusClasses(
                               statusName,
                             )
-                          }
-                        />
-                      </td>
 
-                      {/* Note */}
-                      <td className="px-5 py-4">
-                        <input
-                          type="text"
-                          value={note}
-                          onChange={(
-                            event,
-                          ) =>
-                            setAttendanceNotes(
-                              (current) => ({
-                                ...current,
-                                [key]:
-                                  event
-                                    .target
-                                    .value,
-                              }),
-                            )
-                          }
-                          onBlur={(event) =>
-                            saveNote(
-                              student,
-                              activeDate,
-                              event
-                                .target
-                                .value,
-                            )
-                          }
-                          placeholder="ملاحظة..."
-                          className="h-10 w-full min-w-[220px] rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                        />
-                      </td>
-
-                      {/* Percentage */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`text-lg font-bold ${getPercentageClass(
-                              percentage,
-                            )}`}
-                          >
-                            {percentage}%
-                          </span>
-
-                          <div className="h-2 w-20 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className={`h-full rounded-full ${
-                                percentage >=
-                                90
-                                  ? 'bg-green-500'
-                                  : percentage >=
-                                      75
-                                    ? 'bg-yellow-500'
-                                    : 'bg-red-500'
+                          return (
+                            <button
+                              key={
+                                statusName
+                              }
+                              type="button"
+                              disabled={
+                                saving
+                              }
+                              onClick={() =>
+                                saveAttendance(
+                                  student,
+                                  activeDate,
+                                  statusName,
+                                )
+                              }
+                              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.button} ${
+                                saving
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : ''
                               }`}
-                              style={{
-                                width: `${percentage}%`,
-                              }}
-                            />
-                          </div>
+                            >
+                              {statusName}
+                            </button>
+                          )
+                        },
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+
+              /*
+               * بعد اختيار الحالة:
+               * كل تفاصيل الطالب في سطر واحد
+               */
+              const selectedStyles =
+                getStatusClasses(
+                  status,
+                )
+
+              return (
+                <div
+                  key={student.id}
+                  className="rounded-xl border bg-card px-4 py-3"
+                >
+                  <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center">
+                    {/* Student name */}
+                    <div className="min-w-[190px] lg:flex-1">
+                      <div className="font-semibold">
+                        {student.name}
+                      </div>
+
+                      {student.levelName && (
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {student.levelName}
                         </div>
-                      </td>
-                    </tr>
-                  )
-                },
+                      )}
+                    </div>
+
+                    {/* Selected status */}
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        setLocalStatuses(
+                          (current) => {
+                            const next = {
+                              ...current,
+                            }
+
+                            delete next[key]
+
+                            return next
+                          },
+                        )
+                      }}
+                      className={`h-10 min-w-[115px] rounded-lg border px-4 text-sm font-medium ${selectedStyles.selected} ${
+                        saving
+                          ? 'cursor-not-allowed opacity-50'
+                          : ''
+                      }`}
+                    >
+                      {status}
+                    </button>
+
+                    {/* Note */}
+                    <input
+                      type="text"
+                      value={note}
+                      onChange={(event) =>
+                        setAttendanceNotes(
+                          (current) => ({
+                            ...current,
+                            [key]:
+                              event.target
+                                .value,
+                          }),
+                        )
+                      }
+                      onBlur={(event) =>
+                        saveNote(
+                          student,
+                          activeDate,
+                          event.target
+                            .value,
+                        )
+                      }
+                      placeholder="الملاحظات"
+                      className="h-10 min-w-0 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 lg:w-[280px]"
+                    />
+
+                    {/* Attendance percentage */}
+                    <div className="flex h-10 min-w-[90px] items-center justify-center rounded-lg bg-muted/50 px-4">
+                      <span
+                        className={`text-sm font-bold ${getPercentageClass(
+                          percentage,
+                        )}`}
+                      >
+                        {percentage}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
               )
-            )}
-          </tbody>
-        </table>
+            },
+          )
+        )}
       </div>
 
-      {/* Course period */}
       <p className="text-xs text-muted-foreground">
         فترة الدورة:{' '}
         {formatDateForDisplay(
