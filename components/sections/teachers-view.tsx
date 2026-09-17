@@ -2496,9 +2496,7 @@ export function TeachersView() {
                                         student.id,
                                       )
                                     }
-                                    disabled={
-                                      saving
-                                    }
+                                    disabled={false}
                                   >
                                     <ArrowLeftRight className="size-4" />
                                     نقل
