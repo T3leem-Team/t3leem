@@ -1,7 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CalendarDays, Check, Edit3, Plus, Trash2, X } from 'lucide-react'
+import {
+  CalendarDays,
+  Check,
+  Edit3,
+  Plus,
+  Trash2,
+  UserRound,
+  X,
+} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
@@ -18,11 +26,19 @@ type DayOfWeek =
   | 'friday'
   | 'saturday'
 
+type Teacher = {
+  id: string
+  name: string
+  isActive: boolean
+}
+
 type Course = {
+  id?: string
   name: string
   startDate: string
   endDate: string
   days: DayOfWeek[]
+  teacherIds: string[]
 }
 
 type AcademicYear = {
@@ -55,11 +71,16 @@ const createEmptyCourse = (): Course => ({
   startDate: '',
   endDate: '',
   days: [...defaultDays],
+  teacherIds: [],
 })
 
 export default function Page() {
   const [years, setYears] = useState<AcademicYear[]>([])
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+
   const [loadingYears, setLoadingYears] = useState(true)
+  const [loadingTeachers, setLoadingTeachers] = useState(true)
+
   const [saving, setSaving] = useState(false)
   const [supabaseStatus, setSupabaseStatus] = useState('')
 
@@ -76,9 +97,47 @@ export default function Page() {
     Array.from({ length: 3 }, createEmptyCourse),
   )
 
-  const [openDaysDropdown, setOpenDaysDropdown] = useState<number | null>(
-    null,
-  )
+  const [openDaysDropdown, setOpenDaysDropdown] =
+    useState<number | null>(null)
+
+  const [openTeachersDropdown, setOpenTeachersDropdown] =
+    useState<number | null>(null)
+
+  useEffect(() => {
+    const loadTeachers = async () => {
+      setLoadingTeachers(true)
+
+      const { data, error } = await supabase
+        .from('teachers')
+        .select('id, name, is_active')
+        .order('name', { ascending: true })
+
+      if (error) {
+        setSupabaseStatus(
+          `خطأ في تحميل المعلمين: ${error.message}`,
+        )
+        setLoadingTeachers(false)
+        return
+      }
+
+      const mappedTeachers: Teacher[] = (data ?? []).map(
+        (teacher) => ({
+          id: teacher.id,
+          name: teacher.name ?? '',
+          isActive: Boolean(teacher.is_active),
+        }),
+      )
+
+      mappedTeachers.sort((a, b) =>
+        a.name.localeCompare(b.name, 'ar'),
+      )
+
+      setTeachers(mappedTeachers)
+      setLoadingTeachers(false)
+    }
+
+    loadTeachers()
+  }, [])
 
   useEffect(() => {
     const loadYears = async () => {
@@ -99,14 +158,99 @@ export default function Page() {
         return
       }
 
-      const mappedYears: AcademicYear[] = (data ?? []).map((year) => ({
-        id: year.id,
-        name: year.name ?? '',
-        startDate: year.start_date ?? '',
-        endDate: year.end_date ?? '',
-        annualFee: Number(year.annual_fee ?? 0),
-        courses: [],
-      }))
+      const academicYears = data ?? []
+
+      if (academicYears.length === 0) {
+        setYears([])
+        setSupabaseStatus('متصل بـ Supabase ✅')
+        setLoadingYears(false)
+        return
+      }
+
+      const yearIds = academicYears.map((year) => year.id)
+
+      const { data: courseData, error: courseError } =
+        await supabase
+          .from('courses')
+          .select(
+            'id, academic_year_id, name, start_date, end_date, days',
+          )
+          .in('academic_year_id', yearIds)
+          .order('created_at', {
+            ascending: true,
+          })
+
+      if (courseError) {
+        setSupabaseStatus(
+          `خطأ في تحميل الدورات: ${courseError.message}`,
+        )
+        setLoadingYears(false)
+        return
+      }
+
+      const courseIds = (courseData ?? []).map(
+        (course) => course.id,
+      )
+
+      let courseTeacherData: {
+        course_id: string
+        teacher_id: string
+      }[] = []
+
+      if (courseIds.length > 0) {
+        const {
+          data: relationData,
+          error: relationError,
+        } = await supabase
+          .from('course_teachers')
+          .select('course_id, teacher_id')
+          .in('course_id', courseIds)
+
+        if (relationError) {
+          setSupabaseStatus(
+            `خطأ في تحميل معلمي الدورات: ${relationError.message}`,
+          )
+          setLoadingYears(false)
+          return
+        }
+
+        courseTeacherData = relationData ?? []
+      }
+
+      const mappedYears: AcademicYear[] =
+        academicYears.map((year) => {
+          const yearCourses = (courseData ?? [])
+            .filter(
+              (course) =>
+                course.academic_year_id === year.id,
+            )
+            .map((course) => ({
+              id: course.id,
+              name: course.name ?? '',
+              startDate: course.start_date ?? '',
+              endDate: course.end_date ?? '',
+              days:
+                Array.isArray(course.days) &&
+                course.days.length > 0
+                  ? (course.days as DayOfWeek[])
+                  : [...defaultDays],
+              teacherIds: courseTeacherData
+                .filter(
+                  (relation) =>
+                    relation.course_id === course.id,
+                )
+                .map((relation) => relation.teacher_id),
+            }))
+
+          return {
+            id: year.id,
+            name: year.name ?? '',
+            startDate: year.start_date ?? '',
+            endDate: year.end_date ?? '',
+            annualFee: Number(year.annual_fee ?? 0),
+            courses: yearCourses,
+          }
+        })
 
       setYears(mappedYears)
       setSupabaseStatus('متصل بـ Supabase ✅')
@@ -122,10 +266,13 @@ export default function Page() {
     setEndDate('')
     setAnnualFee('')
     setCourseCount(3)
-    setCourses(Array.from({ length: 3 }, createEmptyCourse))
+    setCourses(
+      Array.from({ length: 3 }, createEmptyCourse),
+    )
     setEditingId(null)
     setShowForm(false)
     setOpenDaysDropdown(null)
+    setOpenTeachersDropdown(null)
   }
 
   const openAddForm = () => {
@@ -135,8 +282,12 @@ export default function Page() {
     setEndDate('')
     setAnnualFee('')
     setCourseCount(3)
-    setCourses(Array.from({ length: 3 }, createEmptyCourse))
+    setCourses(
+      Array.from({ length: 3 }, createEmptyCourse),
+    )
     setOpenDaysDropdown(null)
+    setOpenTeachersDropdown(null)
+    setSupabaseStatus('')
     setShowForm(true)
   }
 
@@ -146,25 +297,34 @@ export default function Page() {
     setStartDate(year.startDate)
     setEndDate(year.endDate)
     setAnnualFee(
-      year.annualFee !== undefined && year.annualFee !== null
+      year.annualFee !== undefined &&
+        year.annualFee !== null
         ? String(year.annualFee)
         : '',
     )
+
     setCourseCount(year.courses.length || 3)
 
     setCourses(
       year.courses.length > 0
         ? year.courses.map((course) => ({
             ...course,
+            teacherIds: [...course.teacherIds],
             days:
-              course.days && course.days.length > 0
+              course.days &&
+              course.days.length > 0
                 ? [...course.days]
                 : [...defaultDays],
           }))
-        : Array.from({ length: 3 }, createEmptyCourse),
+        : Array.from(
+            { length: 3 },
+            createEmptyCourse,
+          ),
     )
 
     setOpenDaysDropdown(null)
+    setOpenTeachersDropdown(null)
+    setSupabaseStatus('')
     setShowForm(true)
   }
 
@@ -210,15 +370,50 @@ export default function Page() {
           return course
         }
 
-        const alreadySelected = course.days.includes(day)
+        const alreadySelected =
+          course.days.includes(day)
 
         return {
           ...course,
           days: alreadySelected
             ? course.days.filter(
-                (currentDay) => currentDay !== day,
+                (currentDay) =>
+                  currentDay !== day,
               )
             : [...course.days, day],
+        }
+      }),
+    )
+  }
+
+  const toggleCourseTeacher = (
+    courseIndex: number,
+    teacherId: string,
+  ) => {
+    const teacher = teachers.find(
+      (item) => item.id === teacherId,
+    )
+
+    if (!teacher || !teacher.isActive) {
+      return
+    }
+
+    setCourses((current) =>
+      current.map((course, index) => {
+        if (index !== courseIndex) {
+          return course
+        }
+
+        const alreadySelected =
+          course.teacherIds.includes(teacherId)
+
+        return {
+          ...course,
+          teacherIds: alreadySelected
+            ? course.teacherIds.filter(
+                (id) => id !== teacherId,
+              )
+            : [...course.teacherIds, teacherId],
         }
       }),
     )
@@ -230,31 +425,100 @@ export default function Page() {
     }
 
     return days
-      .filter((day) => course.days.includes(day.value))
+      .filter((day) =>
+        course.days.includes(day.value),
+      )
       .map((day) => day.label)
       .join('، ')
   }
 
+  const getSelectedTeachersLabel = (
+    course: Course,
+  ) => {
+    if (course.teacherIds.length === 0) {
+      return 'اختر المعلمين'
+    }
+
+    const selectedTeachers = teachers.filter(
+      (teacher) =>
+        course.teacherIds.includes(teacher.id),
+    )
+
+    if (selectedTeachers.length === 0) {
+      return 'اختر المعلمين'
+    }
+
+    if (selectedTeachers.length <= 2) {
+      return selectedTeachers
+        .map((teacher) => teacher.name)
+        .join('، ')
+    }
+
+    return `${selectedTeachers[0].name}، ${selectedTeachers[1].name} + ${selectedTeachers.length - 2}`
+  }
+
   const handleSave = async () => {
     const trimmedName = yearName.trim()
+
     const parsedAnnualFee =
-      annualFee.trim() === '' ? 0 : Number(annualFee)
+      annualFee.trim() === ''
+        ? 0
+        : Number(annualFee)
 
     if (!trimmedName) {
-      setSupabaseStatus('يرجى إدخال اسم السنة الدراسية')
+      setSupabaseStatus(
+        'يرجى إدخال اسم السنة الدراسية',
+      )
       return
     }
 
-    if (!Number.isFinite(parsedAnnualFee) || parsedAnnualFee < 0) {
-      setSupabaseStatus('يرجى إدخال رسوم سنوية صحيحة')
+    if (
+      !Number.isFinite(parsedAnnualFee) ||
+      parsedAnnualFee < 0
+    ) {
+      setSupabaseStatus(
+        'يرجى إدخال رسوم سنوية صحيحة',
+      )
       return
+    }
+
+    for (
+      let index = 0;
+      index < courses.length;
+      index += 1
+    ) {
+      const course = courses[index]
+
+      if (!course.name.trim()) {
+        setSupabaseStatus(
+          `يرجى إدخال اسم الدورة ${index + 1}`,
+        )
+        return
+      }
+
+      if (course.days.length === 0) {
+        setSupabaseStatus(
+          `يرجى اختيار يوم واحد على الأقل للدورة ${index + 1}`,
+        )
+        return
+      }
+
+      if (course.teacherIds.length === 0) {
+        setSupabaseStatus(
+          `يرجى إضافة معلم واحد على الأقل للدورة ${index + 1}`,
+        )
+        return
+      }
     }
 
     setSaving(true)
     setSupabaseStatus('جاري الحفظ...')
 
     if (editingId !== null) {
-      const { data: updatedYear, error } = await supabase
+      const {
+        data: updatedYear,
+        error: yearError,
+      } = await supabase
         .from('academic_years')
         .update({
           name: trimmedName,
@@ -264,39 +528,193 @@ export default function Page() {
         })
         .eq('id', editingId)
         .select(
-          'id, name, start_date, end_date, annual_fee, is_current, is_active, created_at',
+          'id, name, start_date, end_date, annual_fee',
         )
         .single()
 
-      if (error) {
+      if (yearError) {
         setSupabaseStatus(
-          `خطأ في تعديل السنة الدراسية: ${error.message}`,
+          `خطأ في تعديل السنة الدراسية: ${yearError.message}`,
         )
         setSaving(false)
         return
       }
 
+      const {
+        data: existingCourses,
+        error: existingCoursesError,
+      } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('academic_year_id', editingId)
+
+      if (existingCoursesError) {
+        setSupabaseStatus(
+          `خطأ في تحميل دورات السنة: ${existingCoursesError.message}`,
+        )
+        setSaving(false)
+        return
+      }
+
+      const existingCourseIds =
+        (existingCourses ?? []).map(
+          (course) => course.id,
+        )
+
+      if (existingCourseIds.length > 0) {
+        const {
+          error: deleteRelationsError,
+        } = await supabase
+          .from('course_teachers')
+          .delete()
+          .in(
+            'course_id',
+            existingCourseIds,
+          )
+
+        if (deleteRelationsError) {
+          setSupabaseStatus(
+            `خطأ في تحديث معلمي الدورات: ${deleteRelationsError.message}`,
+          )
+          setSaving(false)
+          return
+        }
+      }
+
+      const { error: deleteCoursesError } =
+        await supabase
+          .from('courses')
+          .delete()
+          .eq(
+            'academic_year_id',
+            editingId,
+          )
+
+      if (deleteCoursesError) {
+        setSupabaseStatus(
+          `خطأ في تحديث الدورات: ${deleteCoursesError.message}`,
+        )
+        setSaving(false)
+        return
+      }
+
+      const courseRows = courses.map(
+        (course) => ({
+          academic_year_id: editingId,
+          name: course.name.trim(),
+          start_date:
+            course.startDate || null,
+          end_date:
+            course.endDate || null,
+          days: course.days,
+        }),
+      )
+
+      const {
+        data: insertedCourses,
+        error: insertCoursesError,
+      } = await supabase
+        .from('courses')
+        .insert(courseRows)
+        .select(
+          'id, academic_year_id, name, start_date, end_date, days',
+        )
+
+      if (insertCoursesError) {
+        setSupabaseStatus(
+          `خطأ في حفظ الدورات: ${insertCoursesError.message}`,
+        )
+        setSaving(false)
+        return
+      }
+
+      const relationRows: {
+        course_id: string
+        teacher_id: string
+      }[] = []
+
+      ;(insertedCourses ?? []).forEach(
+        (insertedCourse, index) => {
+          const selectedTeacherIds =
+            courses[index]?.teacherIds ?? []
+
+          selectedTeacherIds.forEach(
+            (teacherId) => {
+              relationRows.push({
+                course_id:
+                  insertedCourse.id,
+                teacher_id: teacherId,
+              })
+            },
+          )
+        },
+      )
+
+      if (relationRows.length > 0) {
+        const {
+          error: relationInsertError,
+        } = await supabase
+          .from('course_teachers')
+          .insert(relationRows)
+
+        if (relationInsertError) {
+          setSupabaseStatus(
+            `خطأ في حفظ معلمي الدورات: ${relationInsertError.message}`,
+          )
+          setSaving(false)
+          return
+        }
+      }
+
+      const mappedUpdatedYear: AcademicYear = {
+        id: updatedYear.id,
+        name: updatedYear.name ?? '',
+        startDate:
+          updatedYear.start_date ?? '',
+        endDate:
+          updatedYear.end_date ?? '',
+        annualFee: Number(
+          updatedYear.annual_fee ?? 0,
+        ),
+        courses: (insertedCourses ?? []).map(
+          (course, index) => ({
+            id: course.id,
+            name: course.name ?? '',
+            startDate:
+              course.start_date ?? '',
+            endDate:
+              course.end_date ?? '',
+            days:
+              Array.isArray(course.days) &&
+              course.days.length > 0
+                ? (course.days as DayOfWeek[])
+                : [...defaultDays],
+            teacherIds:
+              courses[index]?.teacherIds ?? [],
+          }),
+        ),
+      }
+
       setYears((current) =>
         current.map((year) =>
           year.id === editingId
-            ? {
-                ...year,
-                name: updatedYear.name ?? '',
-                startDate: updatedYear.start_date ?? '',
-                endDate: updatedYear.end_date ?? '',
-                annualFee: Number(updatedYear.annual_fee ?? 0),
-              }
+            ? mappedUpdatedYear
             : year,
         ),
       )
 
-      setSupabaseStatus('تم تعديل السنة الدراسية في Supabase ✅')
+      setSupabaseStatus(
+        'تم تعديل السنة والدورات والمعلمين في Supabase ✅',
+      )
+
       setSaving(false)
       resetForm()
       return
     }
 
-    const { error: resetCurrentError } = await supabase
+    const {
+      error: resetCurrentError,
+    } = await supabase
       .from('academic_years')
       .update({
         is_current: false,
@@ -311,7 +729,10 @@ export default function Page() {
       return
     }
 
-    const { data: newYear, error } = await supabase
+    const {
+      data: newYear,
+      error: yearError,
+    } = await supabase
       .from('academic_years')
       .insert({
         name: trimmedName,
@@ -322,48 +743,136 @@ export default function Page() {
         is_active: true,
       })
       .select(
-        'id, name, start_date, end_date, annual_fee, is_current, is_active, created_at',
+        'id, name, start_date, end_date, annual_fee',
       )
       .single()
 
-    if (error) {
+    if (yearError) {
       setSupabaseStatus(
-        `خطأ في إضافة السنة الدراسية: ${error.message}`,
+        `خطأ في إضافة السنة الدراسية: ${yearError.message}`,
       )
       setSaving(false)
       return
     }
 
+    const courseRows = courses.map(
+      (course) => ({
+        academic_year_id: newYear.id,
+        name: course.name.trim(),
+        start_date:
+          course.startDate || null,
+        end_date:
+          course.endDate || null,
+        days: course.days,
+      }),
+    )
+
+    const {
+      data: insertedCourses,
+      error: insertCoursesError,
+    } = await supabase
+      .from('courses')
+      .insert(courseRows)
+      .select(
+        'id, academic_year_id, name, start_date, end_date, days',
+      )
+
+    if (insertCoursesError) {
+      setSupabaseStatus(
+        `خطأ في حفظ الدورات: ${insertCoursesError.message}`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const relationRows: {
+      course_id: string
+      teacher_id: string
+    }[] = []
+
+    ;(insertedCourses ?? []).forEach(
+      (course, index) => {
+        const selectedTeacherIds =
+          courses[index]?.teacherIds ?? []
+
+        selectedTeacherIds.forEach(
+          (teacherId) => {
+            relationRows.push({
+              course_id: course.id,
+              teacher_id: teacherId,
+            })
+          },
+        )
+      },
+    )
+
+    if (relationRows.length > 0) {
+      const {
+        error: relationInsertError,
+      } = await supabase
+        .from('course_teachers')
+        .insert(relationRows)
+
+      if (relationInsertError) {
+        setSupabaseStatus(
+          `خطأ في حفظ معلمي الدورات: ${relationInsertError.message}`,
+        )
+        setSaving(false)
+        return
+      }
+    }
+
     const mappedNewYear: AcademicYear = {
       id: newYear.id,
       name: newYear.name ?? '',
-      startDate: newYear.start_date ?? '',
-      endDate: newYear.end_date ?? '',
-      annualFee: Number(newYear.annual_fee ?? 0),
-      courses: courses.map((course) => ({
-        name: course.name.trim(),
-        startDate: course.startDate,
-        endDate: course.endDate,
-        days: [...course.days],
-      })),
+      startDate:
+        newYear.start_date ?? '',
+      endDate:
+        newYear.end_date ?? '',
+      annualFee: Number(
+        newYear.annual_fee ?? 0,
+      ),
+      courses: (insertedCourses ?? []).map(
+        (course, index) => ({
+          id: course.id,
+          name: course.name ?? '',
+          startDate:
+            course.start_date ?? '',
+          endDate:
+            course.end_date ?? '',
+          days:
+            Array.isArray(course.days) &&
+            course.days.length > 0
+              ? (course.days as DayOfWeek[])
+              : [...defaultDays],
+          teacherIds:
+            courses[index]?.teacherIds ?? [],
+        }),
+      ),
     }
 
     setYears((current) => [
       mappedNewYear,
-      ...current.map((year) => year),
+      ...current,
     ])
 
-    setSupabaseStatus('تمت إضافة السنة الدراسية في Supabase ✅')
+    setSupabaseStatus(
+      'تمت إضافة السنة والدورات والمعلمين في Supabase ✅',
+    )
+
     setSaving(false)
     resetForm()
   }
 
   const handleDelete = async (id: string) => {
-    const year = years.find((item) => item.id === id)
+    const year = years.find(
+      (item) => item.id === id,
+    )
 
     if (!year) return
 
-    const displayName = year.name || 'هذه السنة الدراسية'
+    const displayName =
+      year.name || 'هذه السنة الدراسية'
 
     const confirmed = window.confirm(
       `هل أنت متأكد من مسح "${displayName}"؟`,
@@ -388,10 +897,15 @@ export default function Page() {
     }
 
     setYears((current) =>
-      current.filter((item) => item.id !== id),
+      current.filter(
+        (item) => item.id !== id,
+      ),
     )
 
-    setSupabaseStatus('تم مسح السنة الدراسية من Supabase ✅')
+    setSupabaseStatus(
+      'تم مسح السنة الدراسية من Supabase ✅',
+    )
+
     setSaving(false)
   }
 
@@ -424,7 +938,6 @@ export default function Page() {
       {showForm ? (
         <Card>
           <CardContent className="space-y-6 p-6">
-            {/* عنوان النموذج */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -434,7 +947,7 @@ export default function Page() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  يمكنك إدخال البيانات أو تركها فارغة وتعديلها لاحقًا.
+                  يمكنك إدخال البيانات أو تعديلها لاحقًا.
                 </p>
               </div>
 
@@ -450,7 +963,6 @@ export default function Page() {
               </Button>
             </div>
 
-            {/* بيانات السنة */}
             <div className="rounded-lg border p-5">
               <div className="mb-4 flex items-center gap-2">
                 <CalendarDays className="size-5 text-primary" />
@@ -533,7 +1045,6 @@ export default function Page() {
               </div>
             </div>
 
-            {/* الدورات */}
             <div className="rounded-lg border p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -555,118 +1066,239 @@ export default function Page() {
                     value={courseCount}
                     onChange={(event) =>
                       handleCourseCountChange(
-                        Number(event.target.value),
+                        Number(
+                          event.target.value,
+                        ),
                       )
                     }
                     className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   >
-                    {[1, 2, 3, 4, 5].map((count) => (
-                      <option key={count} value={count}>
-                        {count}
-                      </option>
-                    ))}
+                    {[1, 2, 3, 4, 5].map(
+                      (count) => (
+                        <option
+                          key={count}
+                          value={count}
+                        >
+                          {count}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </div>
               </div>
 
               <div className="space-y-4">
-                {courses.map((course, index) => (
-                  <div
-                    key={index}
-                    className="rounded-lg border bg-muted/20 p-4"
-                  >
-                    <h4 className="mb-4 font-medium">
-                      الدورة {index + 1}
-                    </h4>
+                {courses.map(
+                  (course, index) => (
+                    <div
+                      key={course.id ?? index}
+                      className="rounded-lg border bg-muted/20 p-4"
+                    >
+                      <h4 className="mb-4 font-medium">
+                        الدورة {index + 1}
+                      </h4>
 
-                    {/* كل بيانات الدورة في نفس السطر */}
-                    <div className="grid gap-4 md:grid-cols-4">
-                      {/* اسم الدورة */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          اسم الدورة
-                        </label>
+                      <div className="grid gap-4 md:grid-cols-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">
+                            اسم الدورة
+                          </label>
 
-                        <input
-                          type="text"
-                          value={course.name}
-                          onChange={(event) =>
-                            updateCourse(
-                              index,
-                              'name',
-                              event.target.value,
-                            )
-                          }
-                          placeholder={`مثال: الدورة ${index + 1}`}
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                        />
+                          <input
+                            type="text"
+                            value={course.name}
+                            onChange={(event) =>
+                              updateCourse(
+                                index,
+                                'name',
+                                event.target
+                                  .value,
+                              )
+                            }
+                            placeholder={`مثال: الدورة ${index + 1}`}
+                            className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">
+                            من
+                          </label>
+
+                          <input
+                            type="date"
+                            value={
+                              course.startDate
+                            }
+                            onChange={(event) =>
+                              updateCourse(
+                                index,
+                                'startDate',
+                                event.target
+                                  .value,
+                              )
+                            }
+                            className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">
+                            إلى
+                          </label>
+
+                          <input
+                            type="date"
+                            value={
+                              course.endDate
+                            }
+                            onChange={(event) =>
+                              updateCourse(
+                                index,
+                                'endDate',
+                                event.target
+                                  .value,
+                              )
+                            }
+                            className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                        </div>
+
+                        <div className="relative space-y-2">
+                          <label className="text-sm font-medium">
+                            أيام الدورة
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenDaysDropdown(
+                                openDaysDropdown ===
+                                  index
+                                  ? null
+                                  : index,
+                              )
+                            }
+                            className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus:ring-2 focus:ring-primary/30"
+                          >
+                            <span
+                              className={
+                                course.days
+                                  .length ===
+                                0
+                                  ? 'text-muted-foreground'
+                                  : 'truncate'
+                              }
+                            >
+                              {getSelectedDaysLabel(
+                                course,
+                              )}
+                            </span>
+
+                            <span className="mr-2 text-xs text-muted-foreground">
+                              ▼
+                            </span>
+                          </button>
+
+                          {openDaysDropdown ===
+                            index && (
+                            <div className="absolute right-0 z-50 mt-1 w-full min-w-[220px] rounded-md border bg-background p-2 shadow-lg">
+                              <div className="space-y-1">
+                                {days.map(
+                                  (day) => {
+                                    const selected =
+                                      course.days.includes(
+                                        day.value,
+                                      )
+
+                                    return (
+                                      <button
+                                        key={
+                                          day.value
+                                        }
+                                        type="button"
+                                        onClick={() =>
+                                          toggleCourseDay(
+                                            index,
+                                            day.value,
+                                          )
+                                        }
+                                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
+                                      >
+                                        <span
+                                          className={`flex size-4 items-center justify-center rounded-sm border ${
+                                            selected
+                                              ? 'border-primary bg-primary text-primary-foreground'
+                                              : 'border-muted-foreground/40'
+                                          }`}
+                                        >
+                                          {selected && (
+                                            <Check className="size-3" />
+                                          )}
+                                        </span>
+
+                                        <span>
+                                          {
+                                            day.label
+                                          }
+                                        </span>
+                                      </button>
+                                    )
+                                  },
+                                )}
+                              </div>
+
+                              <div className="mt-2 border-t pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setOpenDaysDropdown(
+                                      null,
+                                    )
+                                  }
+                                  className="w-full rounded-md px-3 py-2 text-sm text-primary hover:bg-primary/10"
+                                >
+                                  تم
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* تاريخ البداية */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          من
-                        </label>
-
-                        <input
-                          type="date"
-                          value={course.startDate}
-                          onChange={(event) =>
-                            updateCourse(
-                              index,
-                              'startDate',
-                              event.target.value,
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                        />
-                      </div>
-
-                      {/* تاريخ النهاية */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          إلى
-                        </label>
-
-                        <input
-                          type="date"
-                          value={course.endDate}
-                          onChange={(event) =>
-                            updateCourse(
-                              index,
-                              'endDate',
-                              event.target.value,
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                        />
-                      </div>
-
-                      {/* Dropdown الأيام */}
-                      <div className="relative space-y-2">
-                        <label className="text-sm font-medium">
-                          أيام الدورة
+                      <div className="relative mt-4 space-y-2">
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <UserRound className="size-4 text-primary" />
+                          معلمو الدورة
                         </label>
 
                         <button
                           type="button"
                           onClick={() =>
-                            setOpenDaysDropdown(
-                              openDaysDropdown === index
+                            setOpenTeachersDropdown(
+                              openTeachersDropdown ===
+                                index
                                 ? null
                                 : index,
                             )
                           }
-                          className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus:ring-2 focus:ring-primary/30"
+                          disabled={loadingTeachers}
+                          className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/50 focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span
                             className={
-                              course.days.length === 0
+                              course.teacherIds
+                                .length ===
+                              0
                                 ? 'text-muted-foreground'
                                 : 'truncate'
                             }
                           >
-                            {getSelectedDaysLabel(course)}
+                            {loadingTeachers
+                              ? 'جاري تحميل المعلمين...'
+                              : getSelectedTeachersLabel(
+                                  course,
+                                )}
                           </span>
 
                           <span className="mr-2 text-xs text-muted-foreground">
@@ -674,52 +1306,99 @@ export default function Page() {
                           </span>
                         </button>
 
-                        {openDaysDropdown === index && (
-                          <div className="absolute right-0 z-50 mt-1 w-full min-w-[220px] rounded-md border bg-background p-2 shadow-lg">
-                            <div className="space-y-1">
-                              {days.map((day) => {
-                                const selected =
-                                  course.days.includes(
-                                    day.value,
+                        {openTeachersDropdown ===
+                          index && (
+                          <div className="absolute right-0 z-50 mt-1 w-full rounded-md border bg-background p-2 shadow-lg">
+                            {teachers.filter(
+                              (teacher) =>
+                                teacher.isActive ||
+                                course.teacherIds.includes(
+                                  teacher.id,
+                                ),
+                            ).length === 0 ? (
+                              <div className="p-3 text-center text-sm text-muted-foreground">
+                                لا يوجد معلمون نشطون.
+                                <br />
+                                أضف معلمًا من قسم المعلمين أولًا.
+                              </div>
+                            ) : (
+                              <div className="max-h-64 space-y-1 overflow-y-auto">
+                                {teachers
+                                  .filter(
+                                    (teacher) =>
+                                      teacher.isActive ||
+                                      course.teacherIds.includes(
+                                        teacher.id,
+                                      ),
                                   )
+                                  .map(
+                                    (teacher) => {
+                                      const selected =
+                                        course.teacherIds.includes(
+                                          teacher.id,
+                                        )
 
-                                return (
-                                  <button
-                                    key={day.value}
-                                    type="button"
-                                    onClick={() =>
-                                      toggleCourseDay(
-                                        index,
-                                        day.value,
+                                      const disabledTeacher =
+                                        !teacher.isActive
+
+                                      return (
+                                        <button
+                                          key={
+                                            teacher.id
+                                          }
+                                          type="button"
+                                          onClick={() =>
+                                            toggleCourseTeacher(
+                                              index,
+                                              teacher.id,
+                                            )
+                                          }
+                                          disabled={
+                                            disabledTeacher
+                                          }
+                                          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-right text-sm ${
+                                            disabledTeacher
+                                              ? 'cursor-not-allowed opacity-60'
+                                              : 'hover:bg-muted'
+                                          }`}
+                                        >
+                                          <span
+                                            className={`flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                              selected
+                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                : 'border-muted-foreground/40'
+                                            }`}
+                                          >
+                                            {selected && (
+                                              <Check className="size-3" />
+                                            )}
+                                          </span>
+
+                                          <span className="min-w-0 flex-1 truncate">
+                                            {
+                                              teacher.name
+                                            }
+                                          </span>
+
+                                          {disabledTeacher && (
+                                            <span className="shrink-0 text-xs text-muted-foreground">
+                                              معطل
+                                            </span>
+                                          )}
+                                        </button>
                                       )
-                                    }
-                                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
-                                  >
-                                    <span
-                                      className={`flex size-4 items-center justify-center rounded-sm border ${
-                                        selected
-                                          ? 'border-primary bg-primary text-primary-foreground'
-                                          : 'border-muted-foreground/40'
-                                      }`}
-                                    >
-                                      {selected && (
-                                        <Check className="size-3" />
-                                      )}
-                                    </span>
-
-                                    <span>
-                                      {day.label}
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                            </div>
+                                    },
+                                  )}
+                              </div>
+                            )}
 
                             <div className="mt-2 border-t pt-2">
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setOpenDaysDropdown(null)
+                                  setOpenTeachersDropdown(
+                                    null,
+                                  )
                                 }
                                 className="w-full rounded-md px-3 py-2 text-sm text-primary hover:bg-primary/10"
                               >
@@ -729,13 +1408,44 @@ export default function Page() {
                           </div>
                         )}
                       </div>
+
+                      {course.teacherIds.length >
+                        0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {teachers
+                            .filter(
+                              (teacher) =>
+                                course.teacherIds.includes(
+                                  teacher.id,
+                                ),
+                            )
+                            .map((teacher) => (
+                              <span
+                                key={teacher.id}
+                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs ${
+                                  teacher.isActive
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                <UserRound className="size-3" />
+                                {teacher.name}
+
+                                {!teacher.isActive && (
+                                  <span>
+                                    · معطل
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             </div>
 
-            {/* الأزرار */}
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
@@ -793,14 +1503,19 @@ export default function Page() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-semibold">
-                          {year.name || 'بدون اسم'}
+                          {year.name ||
+                            'بدون اسم'}
                         </h3>
                       </div>
 
-                      {(year.startDate || year.endDate) && (
+                      {(year.startDate ||
+                        year.endDate) && (
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {year.startDate || '—'} →{' '}
-                          {year.endDate || '—'}
+                          {year.startDate ||
+                            '—'}{' '}
+                          →{' '}
+                          {year.endDate ||
+                            '—'}
                         </p>
                       )}
 
@@ -808,7 +1523,10 @@ export default function Page() {
                         <p>
                           الرسوم السنوية:{' '}
                           <span className="font-medium">
-                            {year.annualFee.toFixed(3)} د.ب
+                            {year.annualFee.toFixed(
+                              3,
+                            )}{' '}
+                            د.ب
                           </span>
                         </p>
 
@@ -816,6 +1534,20 @@ export default function Page() {
                           عدد الدورات:{' '}
                           <span className="font-medium">
                             {year.courses.length}
+                          </span>
+                        </p>
+
+                        <p>
+                          عدد المعلمين:{' '}
+                          <span className="font-medium">
+                            {
+                              new Set(
+                                year.courses.flatMap(
+                                  (course) =>
+                                    course.teacherIds,
+                                ),
+                              ).size
+                            }
                           </span>
                         </p>
                       </div>
@@ -826,7 +1558,9 @@ export default function Page() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => openEditForm(year)}
+                        onClick={() =>
+                          openEditForm(year)
+                        }
                         disabled={saving}
                       >
                         <Edit3 className="size-4" />
@@ -837,7 +1571,9 @@ export default function Page() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(year.id)}
+                        onClick={() =>
+                          handleDelete(year.id)
+                        }
                         disabled={saving}
                       >
                         <Trash2 className="size-4" />
@@ -854,3 +1590,4 @@ export default function Page() {
     </div>
   )
 }
+
