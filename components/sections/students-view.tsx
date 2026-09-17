@@ -1491,22 +1491,24 @@ export function StudentsView() {
                   )
                 } else {
                   const {
-                    data: newStudent,
-                    error,
-                  } = await supabase
-                    .from('students')
-                    .insert({
-                      name,
-                      personal_id:
-                        personalId,
-                      phone,
-                      whatsapp,
-                      notes,
-                      health_notes:
-                        chronicDiseases,
-                      status: 'نشط',
-                      fee_exempt: false,
-                    })
+                  data: newStudent,
+                  error,
+                } = await supabase
+                  .from('students')
+                  .insert({
+                    academic_year_id:
+                      currentAcademicYearId,
+                    name,
+                    personal_id:
+                      personalId,
+                    phone,
+                    whatsapp,
+                    notes,
+                    health_notes:
+                      chronicDiseases,
+                    status: 'نشط',
+                    fee_exempt: false,
+                  })
                     .select(
                       'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
                     )
