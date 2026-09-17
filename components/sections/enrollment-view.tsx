@@ -426,15 +426,54 @@ export function EnrollmentView() {
     setSaving(true)
     setStatusMessage('جاري قبول الطلب...')
 
-    const { error } = await supabase
-      .from('registration_requests')
-      .update({
-        status: 'approved',
-        processing_mode: 'direct',
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq('id', request.id)
+    const { data, error } = await supabase.rpc(
+      'approve_registration_request',
+      {
+        p_request_id: request.id,
+      },
+    )
+    
+    if (error) {
+      setStatusMessage(
+        `تعذر قبول الطلب: ${error.message}`,
+      )
+      setSaving(false)
+      return
+    }
+    
+    setRequests((current) =>
+      current.map((item) =>
+        item.id === request.id
+          ? {
+              ...item,
+              status: 'approved',
+              processingMode: 'direct',
+              studentId:
+                data?.student_id ??
+                item.studentId,
+            }
+          : item,
+      ),
+    )
+    
+    setSelectedRequest((current) =>
+      current?.id === request.id
+        ? {
+            ...current,
+            status: 'approved',
+            processingMode: 'direct',
+            studentId:
+              data?.student_id ??
+              current.studentId,
+          }
+        : current,
+    )
+    
+    setStatusMessage(
+      'تم قبول الطلب وإنشاء الطالب وربطه بالصف بنجاح ✅',
+    )
+    
+    setSaving(false)
 
     if (error) {
       setStatusMessage(
