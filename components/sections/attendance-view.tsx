@@ -62,7 +62,9 @@ const attendanceStatusNames: AttendanceStatusName[] = [
   'مستأذن',
 ]
 
-function normalizeStatusName(name: string): AttendanceStatusName | null {
+function normalizeStatusName(
+  name: string,
+): AttendanceStatusName | null {
   const normalized = name.trim()
 
   if (normalized === 'حاضر') return 'حاضر'
@@ -78,7 +80,9 @@ export { normalizeStatusName }
 function isAttendanceStatusName(
   name: string,
 ): name is AttendanceStatusName {
-  return attendanceStatusNames.includes(name as AttendanceStatusName)
+  return attendanceStatusNames.includes(
+    name as AttendanceStatusName,
+  )
 }
 
 function formatDateForDisplay(dateString: string) {
@@ -99,7 +103,10 @@ function todayString() {
   const date = new Date()
 
   const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(
+    2,
+    '0',
+  )
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
@@ -140,16 +147,14 @@ function getStatusName(
   }
 
   const status = statuses.find(
-    (item) => item.id === statusId,
+    (status) => status.id === statusId,
   )
 
   if (!status) {
     return null
   }
 
-  const normalized = normalizeStatusName(status.name)
-
-  return normalized
+  return normalizeStatusName(status.name)
 }
 
 function getAttendanceClass(
@@ -180,7 +185,9 @@ function getAttendanceClass(
 type AttendanceStatusButtonsProps = {
   currentStatus: AttendanceStatusName | null
   saving: boolean
-  onSelect: (status: AttendanceStatusName) => void
+  onSelect: (
+    status: AttendanceStatusName,
+  ) => void
 }
 
 function AttendanceStatusButtons({
@@ -191,7 +198,8 @@ function AttendanceStatusButtons({
   return (
     <div className="relative z-20 flex flex-wrap gap-1.5 pointer-events-auto">
       {attendanceStatusNames.map((status) => {
-        const selected = currentStatus === status
+        const selected =
+          currentStatus === status
 
         return (
           <button
@@ -248,7 +256,21 @@ type AttendanceViewProps = {
   setAttendanceNotes: Dispatch<
     SetStateAction<AttendanceNotes>
   >
-  setStatusMessage: Dispatch<SetStateAction<string>>
+
+  /*
+   * هذه موجودة حتى يبقى الملف متوافقًا
+   * مع teachers-view.tsx الحالي.
+   *
+   * AttendanceView لا يعتمد عليها للحضور.
+   */
+  saving?: boolean
+  setSaving?: Dispatch<
+    SetStateAction<boolean>
+  >
+
+  setStatusMessage: Dispatch<
+    SetStateAction<string>
+  >
   selectedAttendanceDate: string | null
   setSelectedAttendanceDate: Dispatch<
     SetStateAction<string | null>
@@ -268,21 +290,21 @@ export function AttendanceView({
   setSelectedAttendanceDate,
 }: AttendanceViewProps) {
   /*
-   * مهم:
-   * لا نعتمد هنا على saving الموجود في teachers-view.
+   * حالة الحفظ الخاصة بالحضور فقط.
    *
-   * لأن saving العام يستخدم أيضًا لإضافة الطلبة والنقل،
-   * وبالتالي كان ممكن يعطل أزرار الحضور.
+   * لا نعتمد على saving الموجود في teachers-view
+   * لأن teachers-view يستخدمه أيضًا لإضافة الطلبة
+   * والنقل.
    */
   const [attendanceSavingKey, setAttendanceSavingKey] =
     useState<string | null>(null)
 
   /*
-   * هذا يخلي الاختيار يظهر فورًا على الشاشة
-   * حتى قبل رجوع Supabase.
+   * نخزن الاختيار محليًا حتى يظهر مباشرة
+   * بمجرد الضغط، بدون انتظار Supabase.
    *
    * المفتاح:
-   * التاريخ + الطالب
+   * التاريخ + studentId
    */
   const [localSelectedStatuses, setLocalSelectedStatuses] =
     useState<
@@ -293,7 +315,10 @@ export function AttendanceView({
 
   const currentAttendanceDate =
     currentCourse &&
-    isDateWithinCourse(currentDate, currentCourse)
+    isDateWithinCourse(
+      currentDate,
+      currentCourse,
+    )
       ? currentDate
       : null
 
@@ -306,21 +331,17 @@ export function AttendanceView({
       ? selectedAttendanceDate
       : null
 
-  const visibleArchiveRecords = useMemo(() => {
-    if (!archiveAttendanceDate || !currentCourse) {
-      return []
-    }
-
+  useMemo(() => {
     return attendanceRecords.filter(
       (record) =>
-        record.courseId === currentCourse.id &&
+        record.courseId === currentCourse?.id &&
         record.attendanceDate ===
           archiveAttendanceDate,
     )
   }, [
-    archiveAttendanceDate,
     attendanceRecords,
     currentCourse,
+    archiveAttendanceDate,
   ])
 
   const getRecordForStudent = (
@@ -343,7 +364,7 @@ export function AttendanceView({
 
     /*
      * الاختيار المحلي له الأولوية.
-     * هذا هو الذي يجعل الزر يتغير فورًا.
+     * لذلك الزر يتغير مباشرة.
      */
     if (localSelectedStatuses[localKey]) {
       return localSelectedStatuses[localKey]
@@ -366,21 +387,29 @@ export function AttendanceView({
     statusName: AttendanceStatusName,
   ) => {
     if (!currentCourse) {
-      setStatusMessage('لا توجد دورة حالية.')
+      setStatusMessage(
+        'لا توجد دورة حالية.',
+      )
       return
     }
 
-    if (!isDateWithinCourse(date, currentCourse)) {
+    if (
+      !isDateWithinCourse(
+        date,
+        currentCourse,
+      )
+    ) {
       setStatusMessage(
         'تاريخ الحضور خارج فترة الدورة.',
       )
       return
     }
 
-    const statusId = getStatusIdByName(
-      attendanceStatuses,
-      statusName,
-    )
+    const statusId =
+      getStatusIdByName(
+        attendanceStatuses,
+        statusName,
+      )
 
     if (!statusId) {
       setStatusMessage(
@@ -389,41 +418,43 @@ export function AttendanceView({
       return
     }
 
-    const existing = getRecordForStudent(
-      student.id,
-      date,
-    )
-
     const saveKey = `${date}:${student.id}`
 
+    const existing =
+      getRecordForStudent(
+        student.id,
+        date,
+      )
+
     /*
-     * نحفظ الحالة القديمة حتى نقدر نرجع لها
-     * لو فشل الحفظ.
+     * نحفظ الحالة السابقة في حال فشل Supabase.
      */
     const previousLocalStatus =
       localSelectedStatuses[saveKey]
 
     /*
-     * تحديث بصري مباشر قبل Supabase.
+     * تحديث بصري فوري.
      */
-    setLocalSelectedStatuses((current) => ({
-      ...current,
-      [saveKey]: statusName,
-    }))
+    setLocalSelectedStatuses(
+      (current) => ({
+        ...current,
+        [saveKey]: statusName,
+      }),
+    )
 
-    /*
-     * هذه الرسالة تظهر بمجرد الضغط.
-     */
     setStatusMessage(
       `تم الضغط على "${statusName}" للطالب ${student.name}`,
     )
 
     setAttendanceSavingKey(saveKey)
 
-    const previousRecords = attendanceRecords
+    const previousRecords =
+      attendanceRecords
 
     const optimisticRecord: AttendanceRecord = {
-      id: existing?.id ?? `temp-${Date.now()}`,
+      id:
+        existing?.id ??
+        `temp-${Date.now()}`,
       studentId: student.id,
       enrollmentId:
         student.enrollmentId || null,
@@ -432,54 +463,67 @@ export function AttendanceView({
       statusId,
       note:
         existing?.note ??
-        attendanceNotes[
-          `${date}:${student.id}`
-        ] ??
+        attendanceNotes[saveKey] ??
         '',
     }
 
     /*
-     * تحديث الجدول مباشرة.
+     * تحديث الجدول مباشرة قبل Supabase.
      */
-    setAttendanceRecords((records) => {
-      const existingIndex = records.findIndex(
-        (record) =>
-          record.studentId === student.id &&
-          record.courseId === currentCourse.id &&
-          record.attendanceDate === date,
-      )
+    setAttendanceRecords(
+      (records) => {
+        const existingIndex =
+          records.findIndex(
+            (record) =>
+              record.studentId ===
+                student.id &&
+              record.courseId ===
+                currentCourse.id &&
+              record.attendanceDate ===
+                date,
+          )
 
-      if (existingIndex === -1) {
-        return [...records, optimisticRecord]
-      }
+        if (existingIndex === -1) {
+          return [
+            ...records,
+            optimisticRecord,
+          ]
+        }
 
-      return records.map((record, index) =>
-        index === existingIndex
-          ? {
-              ...record,
-              statusId,
-              enrollmentId:
-                student.enrollmentId ||
-                record.enrollmentId ||
-                null,
-            }
-          : record,
-      )
-    })
+        return records.map(
+          (record, index) =>
+            index === existingIndex
+              ? {
+                  ...record,
+                  statusId,
+                  enrollmentId:
+                    student.enrollmentId ||
+                    record.enrollmentId ||
+                    null,
+                }
+              : record,
+        )
+      },
+    )
 
     try {
       if (existing) {
-        const { data, error } = await supabase
+        /*
+         * تحديث سجل موجود.
+         */
+        const {
+          data,
+          error,
+        } = await supabase
           .from('attendance')
           .update({
             status_id: statusId,
             enrollment_id:
-              student.enrollmentId || null,
+              student.enrollmentId ||
+              null,
             note:
               existing.note ||
-              attendanceNotes[
-                `${date}:${student.id}`
-              ] ||
+              attendanceNotes[saveKey] ||
               null,
           })
           .eq('id', existing.id)
@@ -493,40 +537,58 @@ export function AttendanceView({
         }
 
         if (data) {
-          const savedRecord: AttendanceRecord = {
-            id: data.id,
-            studentId: data.student_id,
-            enrollmentId:
-              data.enrollment_id ?? null,
-            courseId: data.course_id,
-            attendanceDate:
-              data.attendance_date,
-            statusId: data.status_id,
-            note: data.note ?? '',
-          }
+          const savedRecord: AttendanceRecord =
+            {
+              id: data.id,
+              studentId:
+                data.student_id,
+              enrollmentId:
+                data.enrollment_id ??
+                null,
+              courseId:
+                data.course_id,
+              attendanceDate:
+                data.attendance_date,
+              statusId:
+                data.status_id,
+              note:
+                data.note ?? '',
+            }
 
-          setAttendanceRecords((records) =>
-            records.map((record) =>
-              record.id === existing.id
-                ? savedRecord
-                : record,
-            ),
+          setAttendanceRecords(
+            (records) =>
+              records.map(
+                (record) =>
+                  record.id ===
+                  existing.id
+                    ? savedRecord
+                    : record,
+              ),
           )
         }
       } else {
-        const { data, error } = await supabase
+        /*
+         * إنشاء سجل جديد.
+         */
+        const {
+          data,
+          error,
+        } = await supabase
           .from('attendance')
           .insert({
-            student_id: student.id,
+            student_id:
+              student.id,
             enrollment_id:
-              student.enrollmentId || null,
+              student.enrollmentId ||
+              null,
             attendance_date: date,
             status_id: statusId,
             note:
               attendanceNotes[
-                `${date}:${student.id}`
+                saveKey
               ] || null,
-            course_id: currentCourse.id,
+            course_id:
+              currentCourse.id,
           })
           .select(
             'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
@@ -538,79 +600,65 @@ export function AttendanceView({
         }
 
         if (data) {
-          const savedRecord: AttendanceRecord = {
-            id: data.id,
-            studentId: data.student_id,
-            enrollmentId:
-              data.enrollment_id ?? null,
-            courseId: data.course_id,
-            attendanceDate:
-              data.attendance_date,
-            statusId: data.status_id,
-            note: data.note ?? '',
-          }
-
-          setAttendanceRecords((records) =>
-            records.map((record) =>
-              record.id === optimisticRecord.id
-                ? savedRecord
-                : record,
-            ),
-          )
-          setAttendanceRecords((records) => {
-            const alreadyExists = records.some(
-              (record) =>
-                record.id === savedRecord.id,
-            )
-
-            if (alreadyExists) {
-              return records
+          const savedRecord: AttendanceRecord =
+            {
+              id: data.id,
+              studentId:
+                data.student_id,
+              enrollmentId:
+                data.enrollment_id ??
+                null,
+              courseId:
+                data.course_id,
+              attendanceDate:
+                data.attendance_date,
+              statusId:
+                data.status_id,
+              note:
+                data.note ?? '',
             }
 
-            return [
-              ...records.filter(
+          setAttendanceRecords(
+            (records) =>
+              records.map(
                 (record) =>
-                  !(
-                    record.studentId ===
-                      student.id &&
-                    record.courseId ===
-                      currentCourse.id &&
-                    record.attendanceDate ===
-                      date &&
-                    record.id.startsWith('temp-')
-                  ),
+                  record.id ===
+                  optimisticRecord.id
+                    ? savedRecord
+                    : record,
               ),
-              savedRecord,
-            ]
-          })
+          )
         }
       }
 
       setStatusMessage(
         `تم حفظ حضور ${student.name}: ${statusName}`,
       )
-
-      /*
-       * نخلي الاختيار المحلي موجود.
-       * بهذه الطريقة يظل الزر محددًا بدون انتظار إعادة تحميل.
-       */
     } catch (error: any) {
       /*
-       * رجوع البيانات في حالة الخطأ.
+       * في حالة فشل الحفظ:
+       * نرجع البيانات السابقة.
        */
-      setAttendanceRecords(previousRecords)
+      setAttendanceRecords(
+        previousRecords,
+      )
 
-      setLocalSelectedStatuses((current) => {
-        const next = { ...current }
+      setLocalSelectedStatuses(
+        (current) => {
+          const next = {
+            ...current,
+          }
 
-        if (previousLocalStatus) {
-          next[saveKey] = previousLocalStatus
-        } else {
-          delete next[saveKey]
-        }
+          if (previousLocalStatus) {
+            next[saveKey] =
+              previousLocalStatus
+          } else {
+            delete next[saveKey]
+          }
 
-        return next
-      })
+          return next
+        },
+      )
 
       const message =
         error?.message ||
@@ -632,13 +680,15 @@ export function AttendanceView({
   ) => {
     const saveKey = `${date}:${student.id}`
 
-    if (attendanceSavingKey === saveKey) {
+    if (
+      attendanceSavingKey ===
+      saveKey
+    ) {
       return
     }
 
     /*
-     * هذه الرسالة أيضًا موجودة في بداية الحدث
-     * للتأكد أن الضغط وصل فعلًا.
+     * تظهر فورًا عند الضغط.
      */
     setStatusMessage(
       `تم الضغط على "${statusName}" للطالب ${student.name}`,
@@ -658,32 +708,39 @@ export function AttendanceView({
   ) => {
     const key = `${date}:${student.id}`
 
-    const existing = getRecordForStudent(
-      student.id,
-      date,
-    )
+    const existing =
+      getRecordForStudent(
+        student.id,
+        date,
+      )
 
     /*
-     * إذا لم يوجد سجل حضور بعد:
-     * نخزن الملاحظة مؤقتًا، وعند اختيار الحالة
-     * يتم إرسالها مع سجل الحضور.
+     * لا يوجد سجل حضور:
+     * نخزن الملاحظة محليًا إلى أن يختار المستخدم حالة.
      */
     if (!existing) {
-      setAttendanceNotes((current) => ({
-        ...current,
-        [key]: value,
-      }))
+      setAttendanceNotes(
+        (current) => ({
+          ...current,
+          [key]: value,
+        }),
+      )
 
       return
     }
 
-    setAttendanceNotes((current) => ({
-      ...current,
-      [key]: value,
-    }))
+    setAttendanceNotes(
+      (current) => ({
+        ...current,
+        [key]: value,
+      }),
+    )
 
     try {
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from('attendance')
         .update({
           note: value || null,
@@ -699,46 +756,93 @@ export function AttendanceView({
       }
 
       if (data) {
-        const updatedRecord: AttendanceRecord = {
-          id: data.id,
-          studentId: data.student_id,
-          enrollmentId:
-            data.enrollment_id ?? null,
-          courseId: data.course_id,
-          attendanceDate:
-            data.attendance_date,
-          statusId: data.status_id,
-          note: data.note ?? '',
-        }
+        const updatedRecord: AttendanceRecord =
+          {
+            id: data.id,
+            studentId:
+              data.student_id,
+            enrollmentId:
+              data.enrollment_id ??
+              null,
+            courseId:
+              data.course_id,
+            attendanceDate:
+              data.attendance_date,
+            statusId:
+              data.status_id,
+            note:
+              data.note ?? '',
+          }
 
-        setAttendanceRecords((records) =>
-          records.map((record) =>
-            record.id === existing.id
-              ? updatedRecord
-              : record,
-          ),
+        setAttendanceRecords(
+          (records) =>
+            records.map(
+              (record) =>
+                record.id ===
+                existing.id
+                  ? updatedRecord
+                  : record,
+            ),
         )
       }
 
-      setStatusMessage('تم حفظ الملاحظة.')
+      setStatusMessage(
+        'تم حفظ الملاحظة.',
+      )
     } catch (error: any) {
       setStatusMessage(
         `تعذر حفظ الملاحظة: ${
-          error?.message || 'خطأ غير معروف'
+          error?.message ||
+          'خطأ غير معروف'
         }`,
       )
     }
+  }
+
+  const getAttendanceSummary = (
+    date: string,
+  ) => {
+    const summary = {
+      حاضر: 0,
+      غائب: 0,
+      متأخر: 0,
+      مستأذن: 0,
+    }
+
+    assignedStudents.forEach(
+      (student) => {
+        const status =
+          getStudentStatus(
+            student.id,
+            date,
+          )
+
+        if (
+          status &&
+          isAttendanceStatusName(
+            status,
+          )
+        ) {
+          summary[status] += 1
+        }
+      },
+    )
+
+    return summary
   }
 
   const renderAttendanceTable = (
     date: string,
     title: string,
   ) => {
-    const dateRecords = attendanceRecords.filter(
-      (record) =>
-        record.courseId === currentCourse?.id &&
-        record.attendanceDate === date,
-    )
+    const dateRecords =
+      attendanceRecords.filter(
+        (record) =>
+          record.courseId ===
+            currentCourse?.id &&
+          record.attendanceDate ===
+            date,
+      )
 
     return (
       <div className="space-y-4">
@@ -749,12 +853,16 @@ export function AttendanceView({
             </h3>
 
             <p className="text-sm text-muted-foreground">
-              التاريخ: {formatDateForDisplay(date)}
+              التاريخ:{' '}
+              {formatDateForDisplay(
+                date,
+              )}
             </p>
           </div>
 
           <div className="text-sm text-muted-foreground">
-            عدد الطلبة: {assignedStudents.length}
+            عدد الطلبة:{' '}
+            {assignedStudents.length}
           </div>
         </div>
 
@@ -781,105 +889,130 @@ export function AttendanceView({
             </thead>
 
             <tbody>
-              {assignedStudents.length === 0 ? (
+              {assignedStudents.length ===
+              0 ? (
                 <tr>
                   <td
                     colSpan={4}
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
-                    لا يوجد طلبة مسجلون لدى هذا المعلم.
+                    لا يوجد طلبة
+                    مسجلون لدى هذا
+                    المعلم.
                   </td>
                 </tr>
               ) : (
-                assignedStudents.map((student) => {
-                  const record =
-                    dateRecords.find(
-                      (item) =>
-                        item.studentId ===
+                assignedStudents.map(
+                  (student) => {
+                    const record =
+                      dateRecords.find(
+                        (item) =>
+                          item.studentId ===
+                          student.id,
+                      )
+
+                    const status =
+                      getStudentStatus(
                         student.id,
-                    )
+                        date,
+                      )
 
-                  const status =
-                    getStudentStatus(
-                      student.id,
-                      date,
-                    )
+                    const note =
+                      record?.note ??
+                      attendanceNotes[
+                        `${date}:${student.id}`
+                      ] ??
+                      ''
 
-                  const note =
-                    record?.note ??
-                    attendanceNotes[
-                      `${date}:${student.id}`
-                    ] ??
-                    ''
+                    const saveKey = `${date}:${student.id}`
 
-                  const saveKey = `${date}:${student.id}`
+                    const studentSaving =
+                      attendanceSavingKey ===
+                      saveKey
 
-                  const studentSaving =
-                    attendanceSavingKey === saveKey
+                    return (
+                      <tr
+                        key={`${date}-${student.id}`}
+                        className="border-b last:border-b-0"
+                      >
+                        <td className="px-4 py-4 align-top">
+                          <div>
+                            <p className="font-medium">
+                              {
+                                student.name
+                              }
+                            </p>
 
-                  return (
-                    <tr
-                      key={`${date}-${student.id}`}
-                      className="border-b last:border-b-0"
-                    >
-                      <td className="px-4 py-4 align-top">
-                        <div>
-                          <p className="font-medium">
-                            {student.name}
-                          </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {student.personalId ||
+                                student.studentId}
+                            </p>
+                          </div>
+                        </td>
 
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {student.personalId ||
-                              student.studentId}
-                          </p>
-                        </div>
-                      </td>
+                        <td className="px-4 py-4 align-top">
+                          {student.levelName ||
+                            '-'}
+                        </td>
 
-                      <td className="px-4 py-4 align-top">
-                        {student.levelName || '-'}
-                      </td>
-
-                      <td className="relative z-10 px-4 py-4 align-top">
-                        <AttendanceStatusButtons
-                          currentStatus={status}
-                          saving={studentSaving}
-                          onSelect={(statusName) =>
-                            handleAttendanceClick(
-                              student,
-                              date,
+                        <td className="relative z-10 px-4 py-4 align-top">
+                          <AttendanceStatusButtons
+                            currentStatus={
+                              status
+                            }
+                            saving={
+                              studentSaving
+                            }
+                            onSelect={(
                               statusName,
-                            )
-                          }
-                        />
-                      </td>
+                            ) =>
+                              handleAttendanceClick(
+                                student,
+                                date,
+                                statusName,
+                              )
+                            }
+                          />
+                        </td>
 
-                      <td className="px-4 py-4 align-top">
-                        <input
-                          type="text"
-                          value={note}
-                          onChange={(event) =>
-                            setAttendanceNotes(
-                              (current) => ({
-                                ...current,
-                                [saveKey]:
-                                  event.target.value,
-                              }),
-                            )
-                          }
-                          onBlur={(event) =>
-                            updateAttendanceNote(
-                              student,
-                              date,
-                              event.target.value,
-                            )
-                          }
-                          placeholder="إضافة ملاحظة..."
-                          className="w-full min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                        />
-                      </td>
-                    </tr>
-                  )
-                })
+                        <td className="px-4 py-4 align-top">
+                          <input
+                            type="text"
+                            value={note}
+                            onChange={(
+                              event,
+                            ) =>
+                              setAttendanceNotes(
+                                (
+                                  current,
+                                ) => ({
+                                  ...current,
+                                  [saveKey]:
+                                    event
+                                      .target
+                                      .value,
+                                }),
+                              )
+                            }
+                            onBlur={(
+                              event,
+                            ) =>
+                              updateAttendanceNote(
+                                student,
+                                date,
+                                event
+                                  .target
+                                  .value,
+                              )
+                            }
+                            placeholder="إضافة ملاحظة..."
+                            className="w-full min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          />
+                        </td>
+                      </tr>
+                    )
+                  },
+                )
               )}
             </tbody>
           </table>
@@ -887,38 +1020,6 @@ export function AttendanceView({
       </div>
     )
   }
-
-  const getAttendanceSummary = (
-    date: string,
-  ) => {
-    const summary = {
-      حاضر: 0,
-      غائب: 0,
-      متأخر: 0,
-      مستأذن: 0,
-    }
-
-    assignedStudents.forEach((student) => {
-      const status = getStudentStatus(
-        student.id,
-        date,
-      )
-
-      if (status && isAttendanceStatusName(status)) {
-        summary[status] += 1
-      }
-    })
-
-    return summary
-  }
-
-  const activeDate =
-    archiveAttendanceDate ||
-    currentAttendanceDate
-
-  const activeSummary = activeDate
-    ? getAttendanceSummary(activeDate)
-    : null
 
   if (!currentCourse) {
     return (
@@ -929,13 +1030,24 @@ export function AttendanceView({
           </h3>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            لم يتم العثور على دورة مرتبطة بالسنة
-            الأكاديمية الحالية.
+            لم يتم العثور على دورة
+            مرتبطة بالسنة الأكاديمية
+            الحالية.
           </p>
         </div>
       </div>
     )
   }
+
+  const activeDate =
+    archiveAttendanceDate ||
+    currentAttendanceDate
+
+  const activeSummary = activeDate
+    ? getAttendanceSummary(
+        activeDate,
+      )
+    : null
 
   return (
     <div className="space-y-6">
@@ -1066,18 +1178,26 @@ export function AttendanceView({
             </h3>
 
             <p className="text-sm text-muted-foreground">
-              اختر تاريخًا داخل فترة الدورة لعرض
-              الحضور.
+              اختر تاريخًا داخل فترة
+              الدورة لعرض الحضور.
             </p>
           </div>
 
           <input
             type="date"
-            value={selectedAttendanceDate ?? ''}
-            min={currentCourse.startDate}
-            max={currentCourse.endDate}
+            value={
+              selectedAttendanceDate ??
+              ''
+            }
+            min={
+              currentCourse.startDate
+            }
+            max={
+              currentCourse.endDate
+            }
             onChange={(event) => {
-              const value = event.target.value
+              const value =
+                event.target.value
 
               setSelectedAttendanceDate(
                 value || null,
@@ -1094,12 +1214,13 @@ export function AttendanceView({
           )
         ) : (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-            اختر تاريخًا لعرض سجل الحضور.
+            اختر تاريخًا لعرض سجل
+            الحضور.
           </div>
         )}
       </div>
 
-      {/* معلومات الحالات */}
+      {/* الحالات الموجودة في قاعدة البيانات */}
       {attendanceStatuses.length > 0 && (
         <div className="rounded-xl border bg-muted/20 p-4">
           <p className="mb-3 text-sm font-semibold">
@@ -1107,39 +1228,43 @@ export function AttendanceView({
           </p>
 
           <div className="flex flex-wrap gap-2">
-            {attendanceStatuses.map((status) => {
-              const normalized =
-                normalizeStatusName(
-                  status.name,
+            {attendanceStatuses.map(
+              (status) => {
+                const normalized =
+                  normalizeStatusName(
+                    status.name,
+                  )
+
+                if (!normalized) {
+                  return null
+                }
+
+                return (
+                  <span
+                    key={status.id}
+                    className={`rounded-md border px-3 py-1.5 text-xs font-medium ${getAttendanceClass(
+                      normalized,
+                      normalized,
+                    )}`}
+                  >
+                    {status.name}
+                  </span>
                 )
-
-              if (!normalized) {
-                return null
-              }
-
-              return (
-                <span
-                  key={status.id}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-medium ${getAttendanceClass(
-                    normalized,
-                    normalized,
-                  )}`}
-                >
-                  {status.name}
-                </span>
-              )
-            })}
+              },
+            )}
           </div>
         </div>
       )}
 
-      {/* زر الرجوع */}
+      {/* إلغاء تحديد التاريخ */}
       <div className="flex justify-end">
         <Button
           type="button"
           variant="outline"
           onClick={() =>
-            setSelectedAttendanceDate(null)
+            setSelectedAttendanceDate(
+              null,
+            )
           }
         >
           إلغاء تحديد التاريخ
