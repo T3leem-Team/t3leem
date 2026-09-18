@@ -987,10 +987,52 @@ export function DashboardView() {
         return latestAttendanceDate
       }
 
-      return (
-        availableDates.at(-1) ??
-        ''
-      )
+      useEffect(() => {
+        if (!selectedCourse) {
+          setSelectedDate('')
+          return
+        }
+      
+        setSelectedDate((current) => {
+          if (
+            current &&
+            availableDates.includes(current)
+          ) {
+            return current
+          }
+      
+          const today = new Date()
+            .toISOString()
+            .slice(0, 10)
+      
+          // إذا اليوم موجود ضمن أيام الدورة
+          if (availableDates.includes(today)) {
+            return today
+          }
+      
+          // إذا اليوم ليس من أيام الدورة،
+          // نختار أقرب يوم سابق لليوم
+          const previousDates = availableDates.filter(
+            (date) => date <= today,
+          )
+      
+          if (previousDates.length > 0) {
+            return previousDates[
+              previousDates.length - 1
+            ]
+          }
+      
+          // إذا ما فيه يوم سابق، نختار أقرب يوم قادم
+          const nextDates = availableDates.filter(
+            (date) => date > today,
+          )
+      
+          return nextDates[0] ?? ''
+        })
+      }, [
+        selectedCourse,
+        availableDates,
+      ])
     })
   }, [
     selectedCourse,
