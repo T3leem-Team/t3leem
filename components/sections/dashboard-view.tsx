@@ -186,7 +186,6 @@ function getDateRange(
   }
 
   const dates: string[] = []
-
   const current = new Date(start)
 
   while (current <= end) {
@@ -208,9 +207,7 @@ function getDateRange(
   return dates
 }
 
-function weekdayNamesForDate(
-  date: string,
-) {
+function weekdayNamesForDate(date: string) {
   const parsed = new Date(`${date}T00:00:00`)
 
   if (Number.isNaN(parsed.getTime())) {
@@ -243,18 +240,16 @@ function courseIncludesDate(
   course: Course,
   date: string,
 ) {
-  if (
-    course.days.length === 0
-  ) {
+  if (course.days.length === 0) {
     return true
   }
 
-  const normalizedDays =
-    course.days.map((day) =>
+  const normalizedDays = course.days.map(
+    (day) =>
       String(day)
         .trim()
         .toLowerCase(),
-    )
+  )
 
   const possibleNames =
     weekdayNamesForDate(date).map(
@@ -270,15 +265,21 @@ function courseIncludesDate(
   )
 }
 
+function normalizeStatusName(name: string) {
+  return String(name ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
 function getStatusName(
   statusId: string,
   statuses: AttendanceStatus[],
 ) {
-  return (
+  return normalizeStatusName(
     statuses.find(
       (status) =>
         status.id === statusId,
-    )?.name ?? ''
+    )?.name ?? '',
   )
 }
 
@@ -370,22 +371,82 @@ export function DashboardView() {
   const [selectedDate, setSelectedDate] =
     useState('')
 
-  const [stats, setStats] =
-    useState<DashboardStats>(
-      EMPTY_STATS,
-    )
-
   const [loading, setLoading] =
     useState(true)
-
-  const [statsLoading, setStatsLoading] =
-    useState(false)
 
   const [refreshing, setRefreshing] =
     useState(false)
 
+  const [attendanceRefreshing, setAttendanceRefreshing] =
+    useState(false)
+
   const [statusMessage, setStatusMessage] =
     useState('')
+
+  /*
+   * مهم:
+   * الحضور له Loader مستقل.
+   * هذا يمنع أن يعتمد تحديث الحضور على بقية بيانات الداشبورد.
+   */
+  const loadAttendance = async (
+    courseIds: string[],
+  ) => {
+    if (courseIds.length === 0) {
+      setAttendanceRecords([])
+      return
+    }
+
+    setAttendanceRefreshing(true)
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from('attendance')
+        .select(
+          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+        )
+        .in('course_id', courseIds)
+
+      if (error) {
+        throw new Error(
+          `خطأ في تحميل الحضور: ${error.message}`,
+        )
+      }
+
+      const mappedAttendance: AttendanceRecord[] =
+        (data ?? []).map((row) => ({
+          id: row.id,
+          studentId:
+            row.student_id,
+          enrollmentId:
+            row.enrollment_id,
+          attendanceDate:
+            String(row.attendance_date).slice(
+              0,
+              10,
+            ),
+          statusId:
+            row.status_id,
+          note: row.note,
+          courseId:
+            row.course_id,
+        }))
+
+      setAttendanceRecords(
+        mappedAttendance,
+      )
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء تحديث الحضور.',
+      )
+    } finally {
+      setAttendanceRefreshing(false)
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -419,10 +480,6 @@ export function DashboardView() {
         setAttendanceRecords([])
         setPayments([])
         setRegistrationRequests([])
-        setStats(EMPTY_STATS)
-        setStatusMessage(
-          'لا توجد سنة دراسية حالية مفعلة.',
-        )
         return
       }
 
@@ -617,51 +674,30 @@ export function DashboardView() {
       let mappedAssignments: Assignment[] =
         []
 
-      let mappedAttendance: AttendanceRecord[] =
-        []
-
       if (courseIds.length > 0) {
-        const [
-          assignmentsResult,
-          attendanceResult,
-        ] = await Promise.all([
-          supabase
-            .from(
-              'teacher_student_assignments',
-            )
-            .select(
-              'id, course_id, teacher_id, student_id',
-            )
-            .in(
-              'course_id',
-              courseIds,
-            ),
-
-          supabase
-            .from('attendance')
-            .select(
-              'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-            )
-            .in(
-              'course_id',
-              courseIds,
-            ),
-        ])
-
-        if (assignmentsResult.error) {
-          throw new Error(
-            `خطأ في تحميل توزيع الطلاب: ${assignmentsResult.error.message}`,
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'teacher_student_assignments',
           )
-        }
+          .select(
+            'id, course_id, teacher_id, student_id',
+          )
+          .in(
+            'course_id',
+            courseIds,
+          )
 
-        if (attendanceResult.error) {
+        if (error) {
           throw new Error(
-            `خطأ في تحميل الحضور: ${attendanceResult.error.message}`,
+            `خطأ في تحميل توزيع الطلاب: ${error.message}`,
           )
         }
 
         mappedAssignments = (
-          assignmentsResult.data ?? []
+          data ?? []
         ).map((row) => ({
           id: row.id,
           courseId:
@@ -670,23 +706,6 @@ export function DashboardView() {
             row.teacher_id,
           studentId:
             row.student_id,
-        }))
-
-        mappedAttendance = (
-          attendanceResult.data ?? []
-        ).map((row) => ({
-          id: row.id,
-          studentId:
-            row.student_id,
-          enrollmentId:
-            row.enrollment_id,
-          attendanceDate:
-            row.attendance_date,
-          statusId:
-            row.status_id,
-          note: row.note,
-          courseId:
-            row.course_id,
         }))
       }
 
@@ -700,9 +719,11 @@ export function DashboardView() {
           )
           .map((status) => ({
             id: status.id,
-            name: String(
-              status.name ?? '',
-            ).trim(),
+            name: normalizeStatusName(
+              String(
+                status.name ?? '',
+              ),
+            ),
           }))
 
       const mappedPayments: Payment[] =
@@ -750,9 +771,6 @@ export function DashboardView() {
       setAttendanceStatuses(
         mappedStatuses,
       )
-      setAttendanceRecords(
-        mappedAttendance,
-      )
       setPayments(mappedPayments)
       setRegistrationRequests(
         mappedRegistrations,
@@ -773,6 +791,12 @@ export function DashboardView() {
           mappedCourses[0]?.id ?? ''
         )
       })
+
+      /*
+       * الحضور يتم تحميله بشكل مستقل
+       * بعد معرفة الدورات.
+       */
+      await loadAttendance(courseIds)
     } catch (error) {
       setStatusMessage(
         error instanceof Error
@@ -785,9 +809,66 @@ export function DashboardView() {
   }
 
   useEffect(() => {
-    loadData()
+    void loadData()
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /*
+   * عند الرجوع للصفحة / التبويب:
+   * نعيد جلب الحضور فقط.
+   *
+   * هذا مهم لأن المستخدم قد يسجل الحضور
+   * من قسم المعلمين ثم يرجع للداشبورد.
+   */
+  useEffect(() => {
+    const refreshAttendance = () => {
+      if (courses.length === 0) {
+        return
+      }
+
+      void loadAttendance(
+        courses.map(
+          (course) => course.id,
+        ),
+      )
+    }
+
+    const handleFocus = () => {
+      refreshAttendance()
+    }
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState ===
+        'visible'
+      ) {
+        refreshAttendance()
+      }
+    }
+
+    window.addEventListener(
+      'focus',
+      handleFocus,
+    )
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'focus',
+        handleFocus,
+      )
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+    }
+  }, [courses])
 
   const selectedCourse =
     courses.find(
@@ -830,20 +911,35 @@ export function DashboardView() {
         ),
       )
 
-    const combined =
-      courseDates.length > 0
-        ? courseDates
-        : attendanceDates
-
+    /*
+     * نضمن أن أي يوم يوجد فيه حضور فعلي
+     * يظهر في القائمة حتى لو كان خارج
+     * نطاق الأيام المحسوبة من الدورة.
+     */
     return Array.from(
-      new Set(combined),
+      new Set([
+        ...courseDates,
+        ...attendanceDates,
+      ]),
     ).sort()
   }, [
     selectedCourse,
     attendanceRecords,
   ])
 
+  /*
+   * عند تغيير الدورة:
+   * إذا كان اليوم الحالي غير موجود فيها،
+   * نختار آخر يوم فيه حضور أولاً،
+   * ثم اليوم الحالي إن كان ضمن الدورة،
+   * ثم أول يوم متاح.
+   */
   useEffect(() => {
+    if (!selectedCourse) {
+      setSelectedDate('')
+      return
+    }
+
     setSelectedDate((current) => {
       if (
         current &&
@@ -852,11 +948,55 @@ export function DashboardView() {
         return current
       }
 
+      const today =
+        new Date()
+          .toISOString()
+          .slice(0, 10)
+
+      if (
+        availableDates.includes(
+          today,
+        )
+      ) {
+        return today
+      }
+
+      const courseAttendanceDates =
+        attendanceRecords
+          .filter(
+            (record) =>
+              record.courseId ===
+              selectedCourse.id,
+          )
+          .map(
+            (record) =>
+              record.attendanceDate,
+          )
+
+      const latestAttendanceDate =
+        [...new Set(
+          courseAttendanceDates,
+        )].sort().at(-1)
+
+      if (
+        latestAttendanceDate &&
+        availableDates.includes(
+          latestAttendanceDate,
+        )
+      ) {
+        return latestAttendanceDate
+      }
+
       return (
-        availableDates[0] ?? ''
+        availableDates.at(-1) ??
+        ''
       )
     })
-  }, [availableDates])
+  }, [
+    selectedCourse,
+    availableDates,
+    attendanceRecords,
+  ])
 
   const currentYearStudentIds =
     useMemo(() => {
@@ -867,9 +1007,7 @@ export function DashboardView() {
               enrollment.status ===
                 'نشط' ||
               enrollment.status ===
-                'active' ||
-              enrollment.status ===
-                'نشط',
+                'active',
           )
           .map(
             (enrollment) =>
@@ -910,6 +1048,13 @@ export function DashboardView() {
       courseAssignmentStudentIds,
     ])
 
+  /*
+   * الحضور لليوم المحدد.
+   *
+   * مهم:
+   * لا نعتبر كل طلاب السنة حاضرين/غائبين.
+   * فقط الطلاب الموزعون في الدورة.
+   */
   const attendanceForSelectedDay =
     useMemo(() => {
       if (
@@ -936,131 +1081,145 @@ export function DashboardView() {
       courseAssignmentStudentIds,
     ])
 
-  const calculateStats =
-    useMemo(() => {
-      const studentsCount =
-        currentYearStudentIds.size
+  /*
+   * الإحصائيات محسوبة مباشرة من الـ state.
+   * ما عاد عندنا stats state منفصل ممكن يتأخر
+   * عن attendanceRecords.
+   */
+  const stats = useMemo<DashboardStats>(() => {
+    const studentsCount =
+      currentYearStudentIds.size
 
-      const assignedCount =
-        selectedCourseStudents.filter(
-          (studentId) =>
-            currentYearStudentIds.has(
-              studentId,
-            ),
-        ).length
+    const assignedCount =
+      selectedCourseStudents.filter(
+        (studentId) =>
+          currentYearStudentIds.has(
+            studentId,
+          ),
+      ).length
 
-      const unassignedCount = Math.max(
-        studentsCount -
-          assignedCount,
-        0,
-      )
-
-      let presentCount = 0
-      let absentCount = 0
-      let lateCount = 0
-      let excusedCount = 0
-
-      for (const record of attendanceForSelectedDay) {
-        const status =
-          getStatusName(
-            record.statusId,
-            attendanceStatuses,
-          )
-
-        if (status === 'حاضر') {
-          presentCount += 1
-        } else if (
-          status === 'غائب'
-        ) {
-          absentCount += 1
-        } else if (
-          status === 'متأخر'
-        ) {
-          lateCount += 1
-        } else if (
-          status === 'مستأذن'
-        ) {
-          excusedCount += 1
-        }
-      }
-
-      const paymentTotal =
-        payments.reduce(
-          (total, payment) =>
-            total +
-            Number(
-              payment.amount ?? 0,
-            ),
-          0,
-        )
-
-      const pendingRegistrations =
-        registrationRequests.filter(
-          (request) =>
-            request.status ===
-            'pending',
-        ).length
-
-      const underReviewRegistrations =
-        registrationRequests.filter(
-          (request) =>
-            request.status ===
-            'under_review',
-        ).length
-
-      const approvedRegistrations =
-        registrationRequests.filter(
-          (request) =>
-            request.status ===
-            'approved',
-        ).length
-
-      const rejectedRegistrations =
-        registrationRequests.filter(
-          (request) =>
-            request.status ===
-            'rejected',
-        ).length
-
-      return {
-        studentsCount,
+    const unassignedCount = Math.max(
+      studentsCount -
         assignedCount,
-        unassignedCount,
-        presentCount,
-        absentCount,
-        lateCount,
-        excusedCount,
-        paymentTotal,
-        paymentCount:
-          payments.length,
-        pendingRegistrations,
-        underReviewRegistrations,
-        approvedRegistrations,
-        rejectedRegistrations,
-      }
-    }, [
-      currentYearStudentIds,
-      selectedCourseStudents,
-      attendanceForSelectedDay,
-      attendanceStatuses,
-      payments,
-      registrationRequests,
-    ])
-
-  useEffect(() => {
-    setStatsLoading(true)
-
-    const timer = window.setTimeout(
-      () => {
-        setStats(calculateStats)
-        setStatsLoading(false)
-      },
       0,
     )
 
-    return () =>
-      window.clearTimeout(timer)
-  }, [calculateStats])
+    let presentCount = 0
+    let absentCount = 0
+    let lateCount = 0
+    let excusedCount = 0
+
+    /*
+     * نمنع تكرار نفس الطالب في حالة
+     * وجود أكثر من سجل لنفس اليوم.
+     */
+    const processedStudents =
+      new Set<string>()
+
+    for (const record of attendanceForSelectedDay) {
+      if (
+        processedStudents.has(
+          record.studentId,
+        )
+      ) {
+        continue
+      }
+
+      processedStudents.add(
+        record.studentId,
+      )
+
+      const status =
+        getStatusName(
+          record.statusId,
+          attendanceStatuses,
+        )
+
+      if (
+        status === 'حاضر' ||
+        status === 'حضور'
+      ) {
+        presentCount += 1
+      } else if (
+        status === 'غائب' ||
+        status === 'غياب'
+      ) {
+        absentCount += 1
+      } else if (
+        status === 'متأخر' ||
+        status === 'متأخر عن الحضور'
+      ) {
+        lateCount += 1
+      } else if (
+        status === 'مستأذن' ||
+        status === 'مستأذن بعذر'
+      ) {
+        excusedCount += 1
+      }
+    }
+
+    const paymentTotal =
+      payments.reduce(
+        (total, payment) =>
+          total +
+          Number(
+            payment.amount ?? 0,
+          ),
+        0,
+      )
+
+    const pendingRegistrations =
+      registrationRequests.filter(
+        (request) =>
+          request.status ===
+          'pending',
+      ).length
+
+    const underReviewRegistrations =
+      registrationRequests.filter(
+        (request) =>
+          request.status ===
+          'under_review',
+      ).length
+
+    const approvedRegistrations =
+      registrationRequests.filter(
+        (request) =>
+          request.status ===
+          'approved',
+      ).length
+
+    const rejectedRegistrations =
+      registrationRequests.filter(
+        (request) =>
+          request.status ===
+          'rejected',
+      ).length
+
+    return {
+      studentsCount,
+      assignedCount,
+      unassignedCount,
+      presentCount,
+      absentCount,
+      lateCount,
+      excusedCount,
+      paymentTotal,
+      paymentCount:
+        payments.length,
+      pendingRegistrations,
+      underReviewRegistrations,
+      approvedRegistrations,
+      rejectedRegistrations,
+    }
+  }, [
+    currentYearStudentIds,
+    selectedCourseStudents,
+    attendanceForSelectedDay,
+    attendanceStatuses,
+    payments,
+    registrationRequests,
+  ])
 
   const assignedPercentage =
     stats.studentsCount > 0
@@ -1088,18 +1247,23 @@ export function DashboardView() {
         )
       : 0
 
-  const latestPayments = useMemo(
-    () =>
-      [...payments]
-        .sort(
-          (a, b) =>
-            b.paymentDate.localeCompare(
-              a.paymentDate,
-            ),
+  /*
+   * نسبة تحصيل الرسوم فقط.
+   */
+  const paymentCollectionPercentage =
+    academicYear &&
+    academicYear.annualFee > 0 &&
+    stats.studentsCount > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (stats.paymentTotal /
+              (stats.studentsCount *
+                academicYear.annualFee)) *
+              100,
+          ),
         )
-        .slice(0, 5),
-    [payments],
-  )
+      : 0
 
   const latestRegistrations =
     useMemo(
@@ -1193,11 +1357,12 @@ export function DashboardView() {
 
           <select
             value={selectedCourseId}
-            onChange={(event) =>
+            onChange={(event) => {
               setSelectedCourseId(
                 event.target.value,
               )
-            }
+              setSelectedDate('')
+            }}
             className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">
@@ -1316,6 +1481,13 @@ export function DashboardView() {
                       selectedDate,
                     )}
                   </span>
+
+                  {attendanceRefreshing && (
+                    <span className="mr-2 inline-flex items-center gap-1 text-xs">
+                      <RefreshCw className="size-3 animate-spin" />
+                      تحديث الحضور...
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -1335,9 +1507,7 @@ export function DashboardView() {
               ? academicYear.name
               : undefined
           }
-          loading={
-            loading || statsLoading
-          }
+          loading={loading}
         />
 
         <MetricCard
@@ -1347,9 +1517,7 @@ export function DashboardView() {
             <UserCheck className="size-5" />
           }
           description={`${assignedPercentage}% من طلاب السنة`}
-          loading={
-            loading || statsLoading
-          }
+          loading={loading}
         />
 
         <MetricCard
@@ -1359,9 +1527,7 @@ export function DashboardView() {
             <UserX className="size-5" />
           }
           description="طلاب السنة غير المسندين لهذه الدورة"
-          loading={
-            loading || statsLoading
-          }
+          loading={loading}
         />
 
         <MetricCard
@@ -1377,9 +1543,7 @@ export function DashboardView() {
                 )
               : 'اختر يومًا'
           }
-          loading={
-            loading || statsLoading
-          }
+          loading={loading}
         />
 
         <MetricCard
@@ -1395,9 +1559,7 @@ export function DashboardView() {
                 )
               : 'اختر يومًا'
           }
-          loading={
-            loading || statsLoading
-          }
+          loading={loading}
         />
       </div>
 
@@ -1578,245 +1740,177 @@ export function DashboardView() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CreditCard className="size-5" />
-              المدفوعات
-            </CardTitle>
-          </CardHeader>
+      {/* نسبة المدفوعات فقط */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
+                <CreditCard className="size-5" />
+              </div>
 
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border p-4">
-                <p className="text-sm text-muted-foreground">
-                  إجمالي المدفوع
-                </p>
-
-                <p className="mt-1 text-2xl font-bold">
-                  {formatCurrency(
-                    stats.paymentTotal,
-                  )}
+              <div>
+                <p className="font-medium">
+                  نسبة تحصيل الرسوم
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  من جدول المدفوعات للسنة الحالية
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <p className="text-sm text-muted-foreground">
-                  عدد العمليات
-                </p>
-
-                <p className="mt-1 text-2xl font-bold">
-                  {stats.paymentCount}
+                  مقارنة بإجمالي الرسوم السنوية للطلاب
                 </p>
               </div>
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-lg border">
-              {latestPayments.length ===
-              0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  لا توجد مدفوعات مسجلة.
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {latestPayments.map(
-                    (payment) => {
-                      const student =
-                        students.find(
-                          (item) =>
-                            item.id ===
-                            payment.studentId,
-                        )
+            <p className="text-3xl font-bold tabular-nums">
+              {paymentCollectionPercentage}%
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
-                      return (
-                        <div
-                          key={
-                            payment.id
-                          }
-                          className="flex items-center justify-between gap-4 p-4"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {student?.name ??
-                                'طالب'}
-                            </p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ClipboardCheck className="size-5" />
+            طلبات التسجيل
+          </CardTitle>
+        </CardHeader>
 
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {
-                                payment.paymentMethod
-                              }{' '}
-                              •{' '}
-                              {formatDate(
-                                payment.paymentDate,
-                              )}
-                            </p>
-                          </div>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">
+                قيد الانتظار
+              </p>
 
-                          <p className="shrink-0 font-semibold tabular-nums">
-                            {formatCurrency(
-                              payment.amount,
+              <p className="mt-1 text-xl font-semibold">
+                {
+                  stats.pendingRegistrations
+                }
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">
+                قيد المراجعة
+              </p>
+
+              <p className="mt-1 text-xl font-semibold">
+                {
+                  stats.underReviewRegistrations
+                }
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">
+                مقبولة
+              </p>
+
+              <p className="mt-1 text-xl font-semibold">
+                {
+                  stats.approvedRegistrations
+                }
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">
+                مرفوضة
+              </p>
+
+              <p className="mt-1 text-xl font-semibold">
+                {
+                  stats.rejectedRegistrations
+                }
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-lg border">
+            {latestRegistrations.length ===
+            0 ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                لا توجد طلبات تسجيل.
+              </div>
+            ) : (
+              <div className="divide-y">
+                {latestRegistrations.map(
+                  (request) => {
+                    let statusLabel =
+                      '—'
+
+                    if (
+                      request.status ===
+                      'pending'
+                    ) {
+                      statusLabel =
+                        'قيد الانتظار'
+                    } else if (
+                      request.status ===
+                      'under_review'
+                    ) {
+                      statusLabel =
+                        'قيد المراجعة'
+                    } else if (
+                      request.status ===
+                      'approved'
+                    ) {
+                      statusLabel =
+                        'مقبول'
+                    } else if (
+                      request.status ===
+                      'rejected'
+                    ) {
+                      statusLabel =
+                        'مرفوض'
+                    } else if (
+                      request.status ===
+                      'cancelled'
+                    ) {
+                      statusLabel =
+                        'ملغي'
+                    }
+
+                    return (
+                      <div
+                        key={
+                          request.id
+                        }
+                        className="flex items-center justify-between gap-4 p-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {request.name}
+                          </p>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {
+                              request.requestNumber
+                            }{' '}
+                            •{' '}
+                            {formatDate(
+                              request.createdAt.slice(
+                                0,
+                                10,
+                              ),
                             )}
                           </p>
                         </div>
-                      )
-                    },
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardCheck className="size-5" />
-              طلبات التسجيل
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">
-                  قيد الانتظار
-                </p>
-
-                <p className="mt-1 text-xl font-semibold">
-                  {
-                    stats.pendingRegistrations
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">
-                  قيد المراجعة
-                </p>
-
-                <p className="mt-1 text-xl font-semibold">
-                  {
-                    stats.underReviewRegistrations
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">
-                  مقبولة
-                </p>
-
-                <p className="mt-1 text-xl font-semibold">
-                  {
-                    stats.approvedRegistrations
-                  }
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">
-                  مرفوضة
-                </p>
-
-                <p className="mt-1 text-xl font-semibold">
-                  {
-                    stats.rejectedRegistrations
-                  }
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-lg border">
-              {latestRegistrations.length ===
-              0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  لا توجد طلبات تسجيل.
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {latestRegistrations.map(
-                    (request) => {
-                      let statusLabel =
-                        '—'
-
-                      if (
-                        request.status ===
-                        'pending'
-                      ) {
-                        statusLabel =
-                          'قيد الانتظار'
-                      } else if (
-                        request.status ===
-                        'under_review'
-                      ) {
-                        statusLabel =
-                          'قيد المراجعة'
-                      } else if (
-                        request.status ===
-                        'approved'
-                      ) {
-                        statusLabel =
-                          'مقبول'
-                      } else if (
-                        request.status ===
-                        'rejected'
-                      ) {
-                        statusLabel =
-                          'مرفوض'
-                      } else if (
-                        request.status ===
-                        'cancelled'
-                      ) {
-                        statusLabel =
-                          'ملغي'
-                      }
-
-                      return (
-                        <div
-                          key={
-                            request.id
+                        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs">
+                          {
+                            statusLabel
                           }
-                          className="flex items-center justify-between gap-4 p-4"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {request.name}
-                            </p>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {
-                                request.requestNumber
-                              }{' '}
-                              •{' '}
-                              {formatDate(
-                                request.createdAt.slice(
-                                  0,
-                                  10,
-                                ),
-                              )}
-                            </p>
-                          </div>
-
-                          <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs">
-                            {
-                              statusLabel
-                            }
-                          </span>
-                        </div>
-                      )
-                    },
-                  )}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                        </span>
+                      </div>
+                    )
+                  },
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
