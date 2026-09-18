@@ -18,15 +18,15 @@ const quickLinks = [
   {
     title: 'التسجيل العام',
     description:
-      'فتح صفحة التسجيل العامة مباشرة وإرسال رابطها للطلاب أو أولياء الأمور.',
-    href: '/registration',
+      'فتح صفحة التسجيل العامة مباشرة للوصول إليها أو مشاركة الرابط مع الطلاب وأولياء الأمور.',
+    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/register',
     icon: ClipboardCheck,
   },
   {
-    title: 'تقييم الطالب',
+    title: 'حالة الطالب',
     description:
-      'فتح صفحة تقييم الطالب مباشرة للوصول إليها بسرعة عند الحاجة.',
-    href: '/student-evaluation',
+      'فتح صفحة حالة الطالب وتقييمه مباشرة للوصول إليها بسرعة عند الحاجة.',
+    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/student-status',
     icon: ClipboardCheck,
   },
 ]
@@ -110,9 +110,12 @@ export function SettingsView() {
       {/* روابط سريعة */}
       <div>
         <div className="mb-4">
-          <h2 className="text-lg font-semibold">روابط سريعة</h2>
+          <h2 className="text-lg font-semibold">
+            روابط سريعة
+          </h2>
+
           <p className="text-sm text-muted-foreground">
-            الوصول المباشر إلى الصفحات التي تستخدمها بشكل متكرر
+            الوصول المباشر إلى الصفحات العامة التي تستخدمها بشكل متكرر
           </p>
         </div>
 
@@ -121,9 +124,11 @@ export function SettingsView() {
             const Icon = link.icon
 
             return (
-              <Link
+              <a
                 key={link.href}
                 href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group block"
               >
                 <Card className="h-full transition-colors hover:border-primary/40">
@@ -137,22 +142,28 @@ export function SettingsView() {
                     </div>
 
                     <div className="mt-5">
-                      <h3 className="text-base font-semibold">
-                        {link.title}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base font-semibold">
+                          {link.title}
+                        </h3>
+
+                        <Badge variant="neutral">
+                          رابط عام
+                        </Badge>
+                      </div>
 
                       <p className="mt-2 text-sm leading-6 text-muted-foreground">
                         {link.description}
                       </p>
 
                       <div className="mt-5 flex items-center text-sm font-medium text-primary">
-                        فتح الصفحة
+                        فتح الرابط
                         <ArrowLeft className="mr-2 size-4 transition-transform group-hover:-translate-x-1" />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              </Link>
+              </a>
             )
           })}
         </div>
@@ -161,7 +172,10 @@ export function SettingsView() {
       {/* الإدارة الرئيسية */}
       <div>
         <div className="mb-4">
-          <h2 className="text-lg font-semibold">الإدارة الرئيسية</h2>
+          <h2 className="text-lg font-semibold">
+            الإدارة الرئيسية
+          </h2>
+
           <p className="text-sm text-muted-foreground">
             اختر القسم الذي تريد إدارته
           </p>
@@ -233,12 +247,15 @@ export function SettingsView() {
         </div>
       </div>
 
+      {/* تنبيه الأرشفة */}
       <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
         <CardContent className="flex gap-3 p-5">
           <Archive className="mt-0.5 size-5 shrink-0 text-amber-600" />
 
           <div>
-            <p className="font-medium">الأرشفة لا تعني الحذف</p>
+            <p className="font-medium">
+              الأرشفة لا تعني الحذف
+            </p>
 
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               عند أرشفة دورة أو سنة دراسية، تبقى جميع بيانات الطلاب والحضور
