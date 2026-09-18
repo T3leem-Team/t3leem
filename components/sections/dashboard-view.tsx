@@ -1,27 +1,27 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   CalendarCheck,
-  CreditCard,
   ClipboardCheck,
-  Users,
-  UserCheck,
-  UserX,
   Clock3,
   RefreshCw,
+  UserCheck,
+  UserX,
+  Users,
   BookOpen,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
-import { PageHeader } from '@/components/dashboard/page-header'
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+
 import { Button } from '@/components/ui/button'
 
 type AcademicYear = {
@@ -39,12 +39,6 @@ type Course = {
   endDate: string | null
   days: string[]
   createdAt: string | null
-}
-
-type Student = {
-  id: string
-  name: string
-  personalId: string | null
 }
 
 type Enrollment = {
@@ -77,25 +71,6 @@ type AttendanceRecord = {
   courseId: string
 }
 
-type Payment = {
-  id: string
-  studentId: string
-  academicYearId: string
-  amount: number
-  paymentMethod: string
-  paymentDate: string
-  referenceNumber: string | null
-}
-
-type RegistrationRequest = {
-  id: string
-  requestNumber: string
-  name: string
-  status: string
-  paymentStatus: string
-  createdAt: string
-}
-
 type DashboardStats = {
   studentsCount: number
   assignedCount: number
@@ -104,55 +79,88 @@ type DashboardStats = {
   absentCount: number
   lateCount: number
   excusedCount: number
-  paymentTotal: number
-  paymentCount: number
-  pendingRegistrations: number
-  underReviewRegistrations: number
-  approvedRegistrations: number
-  rejectedRegistrations: number
 }
 
-function formatDate(date: string | null) {
-  if (!date) {
-    return '—'
+type RegistrationRequest = {
+  id: string
+  status: string
+}
+
+function getLocalDateString() {
+  const now = new Date()
+
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function normalizeDay(value: string) {
+  return normalizeText(value).toLowerCase()
+}
+
+function getDayIndex(value: string) {
+  const day = normalizeDay(value)
+
+  const map: Record<string, number> = {
+    sunday: 0,
+    sun: 0,
+    الأحد: 0,
+
+    monday: 1,
+    mon: 1,
+    الاثنين: 1,
+    الإثنين: 1,
+
+    tuesday: 2,
+    tue: 2,
+    tues: 2,
+    الثلاثاء: 2,
+
+    wednesday: 3,
+    wed: 3,
+    الأربعاء: 3,
+
+    thursday: 4,
+    thu: 4,
+    thurs: 4,
+    الخميس: 4,
+
+    friday: 5,
+    fri: 5,
+    الجمعة: 5,
+
+    saturday: 6,
+    sat: 6,
+    السبت: 6,
   }
 
-  const parsed = new Date(`${date}T00:00:00`)
+  return map[day]
+}
 
-  if (Number.isNaN(parsed.getTime())) {
+function formatDate(date: string) {
+  if (!date) return ''
+
+  const parts = date.split('-')
+
+  if (parts.length !== 3) {
     return date
   }
 
-  return new Intl.DateTimeFormat('ar-BH', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(parsed)
-}
-
-function formatShortDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return date
-  }
-
-  return new Intl.DateTimeFormat('ar-BH', {
-    day: '2-digit',
-    month: '2-digit',
-  }).format(parsed)
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('ar-BH', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(value)
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
 function getDateRange(
   startDate: string | null,
   endDate: string | null,
+  days: string[],
 ) {
   if (!startDate || !endDate) {
     return []
@@ -169,159 +177,94 @@ function getDateRange(
     return []
   }
 
-  const dates: string[] = []
+  const allowedDays = days
+    .map(getDayIndex)
+    .filter(
+      (day): day is number =>
+        typeof day === 'number',
+    )
+
+  const result: string[] = []
+
   const current = new Date(start)
 
   while (current <= end) {
-    const year = current.getFullYear()
-    const month = String(
-      current.getMonth() + 1,
-    ).padStart(2, '0')
-    const day = String(
-      current.getDate(),
-    ).padStart(2, '0')
+    const dayIndex = current.getDay()
 
-    dates.push(`${year}-${month}-${day}`)
+    if (
+      allowedDays.length === 0 ||
+      allowedDays.includes(dayIndex)
+    ) {
+      const year = current.getFullYear()
+      const month = String(
+        current.getMonth() + 1,
+      ).padStart(2, '0')
+      const day = String(
+        current.getDate(),
+      ).padStart(2, '0')
+
+      result.push(
+        `${year}-${month}-${day}`,
+      )
+    }
 
     current.setDate(
       current.getDate() + 1,
     )
   }
 
-  return dates
+  return result
 }
 
-function weekdayNamesForDate(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
+function isPresentStatus(name: string) {
+  const value = normalizeText(name)
 
-  if (Number.isNaN(parsed.getTime())) {
-    return []
-  }
-
-  const arabic = new Intl.DateTimeFormat(
-    'ar-BH',
-    {
-      weekday: 'long',
-    },
-  ).format(parsed)
-
-  const english = new Intl.DateTimeFormat(
-    'en-US',
-    {
-      weekday: 'long',
-    },
-  ).format(parsed)
-
-  return [
-    arabic,
-    arabic.replace('يوم ', ''),
-    english,
-    english.slice(0, 3),
-  ]
-}
-
-function courseIncludesDate(
-  course: Course,
-  date: string,
-) {
-  if (course.days.length === 0) {
-    return true
-  }
-
-  const normalizedDays = course.days.map(
-    (day) =>
-      String(day)
-        .trim()
-        .toLowerCase(),
-  )
-
-  const possibleNames =
-    weekdayNamesForDate(date).map(
-      (name) =>
-        name
-          .trim()
-          .toLowerCase(),
-    )
-
-  return normalizedDays.some(
-    (day) =>
-      possibleNames.includes(day),
-  )
-}
-
-function normalizeStatusName(name: string) {
-  return String(name ?? '')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
-
-function getStatusName(
-  statusId: string,
-  statuses: AttendanceStatus[],
-) {
-  return normalizeStatusName(
-    statuses.find(
-      (status) =>
-        status.id === statusId,
-    )?.name ?? '',
-  )
-}
-
-function MetricCard({
-  title,
-  value,
-  icon,
-  description,
-  loading,
-}: {
-  title: string
-  value: string | number
-  icon: React.ReactNode
-  description?: string
-  loading?: boolean
-}) {
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {title}
-            </p>
+    value === 'حاضر' ||
+    value === 'حضور'
+  )
+}
 
-            {loading ? (
-              <div className="mt-2 h-9 w-20 animate-pulse rounded bg-muted" />
-            ) : (
-              <p className="mt-2 text-3xl font-bold tabular-nums">
-                {value}
-              </p>
-            )}
+function isAbsentStatus(name: string) {
+  const value = normalizeText(name)
 
-            {description && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {description}
-              </p>
-            )}
-          </div>
+  return (
+    value === 'غائب' ||
+    value === 'غياب'
+  )
+}
 
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+function isLateStatus(name: string) {
+  const value = normalizeText(name)
+
+  return (
+    value === 'متأخر' ||
+    value === 'متأخر عن الحضور'
+  )
+}
+
+function isExcusedStatus(name: string) {
+  const value = normalizeText(name)
+
+  return (
+    value === 'مستأذن' ||
+    value === 'مستأذن بعذر'
   )
 }
 
 export function DashboardView() {
+  const router = useRouter()
+
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] =
+    useState(false)
+
   const [academicYear, setAcademicYear] =
     useState<AcademicYear | null>(null)
 
-  const [courses, setCourses] =
-    useState<Course[]>([])
-
-  const [students, setStudents] =
-    useState<Student[]>([])
+  const [courses, setCourses] = useState<Course[]>(
+    [],
+  )
 
   const [enrollments, setEnrollments] =
     useState<Enrollment[]>([])
@@ -329,25 +272,11 @@ export function DashboardView() {
   const [assignments, setAssignments] =
     useState<Assignment[]>([])
 
-  const [
-    attendanceStatuses,
-    setAttendanceStatuses,
-  ] = useState<AttendanceStatus[]>([])
+  const [attendanceStatuses, setAttendanceStatuses] =
+    useState<AttendanceStatus[]>([])
 
-  const [
-    attendanceRecords,
-    setAttendanceRecords,
-  ] = useState<AttendanceRecord[]>([])
-
-  const [payments, setPayments] =
-    useState<Payment[]>([])
-
-  const [
-    registrationRequests,
-    setRegistrationRequests,
-  ] = useState<
-    RegistrationRequest[]
-  >([])
+  const [attendanceRecords, setAttendanceRecords] =
+    useState<AttendanceRecord[]>([])
 
   const [selectedCourseId, setSelectedCourseId] =
     useState('')
@@ -358,451 +287,450 @@ export function DashboardView() {
   const [dateNeedsDefault, setDateNeedsDefault] =
     useState(true)
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [refreshing, setRefreshing] =
-    useState(false)
-
   const [
-    attendanceRefreshing,
-    setAttendanceRefreshing,
-  ] = useState(false)
+    pendingRegistrationCount,
+    setPendingRegistrationCount,
+  ] = useState(0)
 
-  const [statusMessage, setStatusMessage] =
-    useState('')
+  const selectedCourse = useMemo(() => {
+    return (
+      courses.find(
+        (course) =>
+          course.id === selectedCourseId,
+      ) ?? null
+    )
+  }, [courses, selectedCourseId])
 
-  const loadAttendance = async (
-    courseIds: string[],
-  ) => {
-    if (courseIds.length === 0) {
-      setAttendanceRecords([])
-      return
+  const availableDates = useMemo(() => {
+    if (!selectedCourse) {
+      return []
     }
 
-    setAttendanceRefreshing(true)
+    return getDateRange(
+      selectedCourse.startDate,
+      selectedCourse.endDate,
+      selectedCourse.days,
+    )
+  }, [selectedCourse])
 
-    try {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('attendance')
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .in('course_id', courseIds)
-
-      if (error) {
-        throw new Error(
-          `خطأ في تحميل الحضور: ${error.message}`,
-        )
-      }
-
-      const mappedAttendance: AttendanceRecord[] =
-        (data ?? []).map((row) => ({
-          id: row.id,
-          studentId:
-            row.student_id,
-          enrollmentId:
-            row.enrollment_id,
-          attendanceDate:
-            String(
-              row.attendance_date,
-            ).slice(0, 10),
-          statusId:
-            row.status_id,
-          note: row.note,
-          courseId:
-            row.course_id,
-        }))
-
-      setAttendanceRecords(
-        mappedAttendance,
-      )
-    } catch (error) {
-      setStatusMessage(
-        error instanceof Error
-          ? error.message
-          : 'حدث خطأ أثناء تحديث الحضور.',
-      )
-    } finally {
-      setAttendanceRefreshing(false)
-    }
-  }
-
-  const loadData = async () => {
-    setLoading(true)
-    setStatusMessage('')
-
-    try {
-      const {
-        data: year,
-        error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, annual_fee, start_date, end_date',
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      if (yearError) {
-        throw new Error(
-          `خطأ في تحميل السنة الدراسية: ${yearError.message}`,
-        )
-      }
-
-      if (!year) {
-        setAcademicYear(null)
-        setCourses([])
-        setStudents([])
-        setEnrollments([])
-        setAssignments([])
+  const loadAttendance = useCallback(
+    async (courseIds: string[]) => {
+      if (courseIds.length === 0) {
         setAttendanceRecords([])
-        setPayments([])
-        setRegistrationRequests([])
-        setSelectedCourseId('')
-        setSelectedDate('')
-        setDateNeedsDefault(true)
         return
       }
 
-      const mappedYear: AcademicYear = {
-        id: year.id,
-        name: year.name,
-        annualFee:
-          Number(year.annual_fee ?? 0),
-        startDate:
-          year.start_date ?? null,
-        endDate:
-          year.end_date ?? null,
-      }
-
-      setAcademicYear(mappedYear)
-
       const [
-        coursesResult,
-        enrollmentsResult,
-        paymentsResult,
-        registrationsResult,
+        attendanceResult,
         statusesResult,
       ] = await Promise.all([
         supabase
-          .from('courses')
+          .from('attendance')
           .select(
-            'id, name, start_date, end_date, days, created_at',
+            `
+              id,
+              student_id,
+              enrollment_id,
+              attendance_date,
+              status_id,
+              note,
+              course_id
+            `,
           )
-          .eq(
-            'academic_year_id',
-            year.id,
-          )
-          .order('created_at', {
-            ascending: true,
-          }),
-
-        supabase
-          .from('enrollments')
-          .select(
-            'id, student_id, academic_year_id, level_id, status',
-          )
-          .eq(
-            'academic_year_id',
-            year.id,
-          ),
-
-        supabase
-          .from('payments')
-          .select(
-            'id, student_id, academic_year_id, amount, payment_method, payment_date, reference_number',
-          )
-          .eq(
-            'academic_year_id',
-            year.id,
-          )
-          .order('payment_date', {
-            ascending: false,
-          }),
-
-        supabase
-          .from('registration_requests')
-          .select(
-            'id, request_number, name, status, payment_status, created_at',
-          )
-          .order('created_at', {
-            ascending: false,
-          }),
+          .in('course_id', courseIds),
 
         supabase
           .from('attendance_statuses')
           .select(
-            'id, name, is_active, sort_order',
+            'id, name',
           )
-          .order('sort_order', {
-            ascending: true,
-          }),
+          .eq('is_active', true)
+          .order(
+            'sort_order',
+            {
+              ascending: true,
+            },
+          ),
       ])
 
-      if (coursesResult.error) {
-        throw new Error(
-          `خطأ في تحميل الدورات: ${coursesResult.error.message}`,
+      if (attendanceResult.error) {
+        console.error(
+          'Attendance load error:',
+          attendanceResult.error,
         )
-      }
-
-      if (enrollmentsResult.error) {
-        throw new Error(
-          `خطأ في تحميل تسجيلات الطلاب: ${enrollmentsResult.error.message}`,
-        )
-      }
-
-      if (paymentsResult.error) {
-        throw new Error(
-          `خطأ في تحميل المدفوعات: ${paymentsResult.error.message}`,
-        )
-      }
-
-      if (registrationsResult.error) {
-        throw new Error(
-          `خطأ في تحميل طلبات التسجيل: ${registrationsResult.error.message}`,
+        setAttendanceRecords([])
+      } else {
+        setAttendanceRecords(
+          (attendanceResult.data ??
+            []) as AttendanceRecord[],
         )
       }
 
       if (statusesResult.error) {
-        throw new Error(
-          `خطأ في تحميل حالات الحضور: ${statusesResult.error.message}`,
+        console.error(
+          'Attendance statuses load error:',
+          statusesResult.error,
+        )
+
+        setAttendanceStatuses([])
+      } else {
+        setAttendanceStatuses(
+          (statusesResult.data ??
+            []) as AttendanceStatus[],
         )
       }
+    },
+    [],
+  )
 
-      const mappedCourses: Course[] = (
-        coursesResult.data ?? []
-      ).map((course) => ({
-        id: course.id,
-        name: course.name,
-        startDate:
-          course.start_date ?? null,
-        endDate:
-          course.end_date ?? null,
-        days: Array.isArray(course.days)
-          ? course.days.map((day) =>
-              String(day),
+  const loadData = useCallback(
+    async (showRefresh = false) => {
+      if (showRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
+      try {
+        const { data: yearData, error: yearError } =
+          await supabase
+            .from('academic_years')
+            .select(
+              `
+                id,
+                name,
+                annual_fee,
+                start_date,
+                end_date
+              `,
             )
-          : [],
-        createdAt:
-          course.created_at ?? null,
-      }))
+            .eq('is_current', true)
+            .eq('is_active', true)
+            .maybeSingle()
 
-      const mappedEnrollments: Enrollment[] =
-        (
-          enrollmentsResult.data ?? []
-        ).map((row) => ({
-          id: row.id,
-          studentId: row.student_id,
-          academicYearId:
-            row.academic_year_id,
-          levelId: row.level_id,
-          status: row.status,
-        }))
-
-      const enrollmentStudentIds =
-        Array.from(
-          new Set(
-            mappedEnrollments.map(
-              (row) => row.studentId,
-            ),
-          ),
-        )
-
-      let studentRows: {
-        id: string
-        name: string
-        personal_id: string | null
-      }[] = []
-
-      if (
-        enrollmentStudentIds.length > 0
-      ) {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('students')
-          .select(
-            'id, name, personal_id',
-          )
-          .in(
-            'id',
-            enrollmentStudentIds,
-          )
-
-        if (error) {
-          throw new Error(
-            `خطأ في تحميل الطلاب: ${error.message}`,
-          )
+        if (yearError) {
+          throw yearError
         }
 
-        studentRows = data ?? []
-      }
-
-      const mappedStudents: Student[] =
-        studentRows.map((student) => ({
-          id: student.id,
-          name: student.name,
-          personalId:
-            student.personal_id,
-        }))
-
-      const courseIds =
-        mappedCourses.map(
-          (course) => course.id,
-        )
-
-      let mappedAssignments: Assignment[] =
-        []
-
-      if (courseIds.length > 0) {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from(
-            'teacher_student_assignments',
-          )
-          .select(
-            'id, course_id, teacher_id, student_id',
-          )
-          .in(
-            'course_id',
-            courseIds,
-          )
-
-        if (error) {
-          throw new Error(
-            `خطأ في تحميل توزيع الطلاب: ${error.message}`,
-          )
+        if (!yearData) {
+          setAcademicYear(null)
+          setCourses([])
+          setEnrollments([])
+          setAssignments([])
+          setAttendanceRecords([])
+          setPendingRegistrationCount(0)
+          return
         }
 
-        mappedAssignments = (
-          data ?? []
-        ).map((row) => ({
-          id: row.id,
-          courseId:
-            row.course_id,
-          teacherId:
-            row.teacher_id,
-          studentId:
-            row.student_id,
-        }))
-      }
+        const currentYear: AcademicYear = {
+          id: yearData.id,
+          name: yearData.name,
+          annualFee:
+            Number(yearData.annual_fee) || 0,
+          startDate:
+            yearData.start_date ?? null,
+          endDate:
+            yearData.end_date ?? null,
+        }
 
-      const mappedStatuses: AttendanceStatus[] =
-        (
-          statusesResult.data ?? []
-        )
-          .filter(
-            (status) =>
-              status.is_active !== false,
-          )
-          .map((status) => ({
-            id: status.id,
-            name: normalizeStatusName(
-              String(
-                status.name ?? '',
-              ),
+        setAcademicYear(currentYear)
+
+        const [
+          coursesResult,
+          enrollmentsResult,
+          registrationsResult,
+        ] = await Promise.all([
+          supabase
+            .from('courses')
+            .select(
+              `
+                id,
+                name,
+                start_date,
+                end_date,
+                days,
+                created_at
+              `,
+            )
+            .eq(
+              'academic_year_id',
+              currentYear.id,
+            )
+            .order(
+              'created_at',
+              {
+                ascending: true,
+              },
             ),
+
+          supabase
+            .from('enrollments')
+            .select(
+              `
+                id,
+                student_id,
+                academic_year_id,
+                level_id,
+                status
+              `,
+            )
+            .eq(
+              'academic_year_id',
+              currentYear.id,
+            )
+            .eq(
+              'status',
+              'نشط',
+            ),
+
+          supabase
+            .from('registration_requests')
+            .select(
+              'id, status',
+            )
+            .eq(
+              'status',
+              'pending',
+            ),
+        ])
+
+        if (coursesResult.error) {
+          throw coursesResult.error
+        }
+
+        if (enrollmentsResult.error) {
+          throw enrollmentsResult.error
+        }
+
+        if (registrationsResult.error) {
+          throw registrationsResult.error
+        }
+
+        const mappedCourses: Course[] = (
+          coursesResult.data ?? []
+        ).map((course) => ({
+          id: course.id,
+          name: course.name,
+          startDate:
+            course.start_date ?? null,
+          endDate:
+            course.end_date ?? null,
+          days: Array.isArray(course.days)
+            ? course.days
+            : [],
+          createdAt:
+            course.created_at ?? null,
+        }))
+
+        const mappedEnrollments: Enrollment[] =
+          (
+            enrollmentsResult.data ?? []
+          ).map((enrollment) => ({
+            id: enrollment.id,
+            studentId:
+              enrollment.student_id,
+            academicYearId:
+              enrollment.academic_year_id,
+            levelId:
+              enrollment.level_id ?? null,
+            status:
+              enrollment.status,
           }))
 
-      const mappedPayments: Payment[] =
-        (
-          paymentsResult.data ?? []
-        ).map((payment) => ({
-          id: payment.id,
-          studentId:
-            payment.student_id,
-          academicYearId:
-            payment.academic_year_id,
-          amount:
-            Number(payment.amount ?? 0),
-          paymentMethod:
-            payment.payment_method,
-          paymentDate:
-            payment.payment_date,
-          referenceNumber:
-            payment.reference_number,
-        }))
-
-      const mappedRegistrations: RegistrationRequest[] =
-        (
-          registrationsResult.data ?? []
-        ).map((request) => ({
-          id: request.id,
-          requestNumber:
-            request.request_number,
-          name: request.name,
-          status: request.status,
-          paymentStatus:
-            request.payment_status,
-          createdAt:
-            request.created_at,
-        }))
-
-      setCourses(mappedCourses)
-      setEnrollments(
-        mappedEnrollments,
-      )
-      setStudents(mappedStudents)
-      setAssignments(
-        mappedAssignments,
-      )
-      setAttendanceStatuses(
-        mappedStatuses,
-      )
-      setPayments(mappedPayments)
-      setRegistrationRequests(
-        mappedRegistrations,
-      )
-
-      setSelectedCourseId((current) => {
-        if (
-          current &&
-          mappedCourses.some(
-            (course) =>
-              course.id === current,
+        const courseIds =
+          mappedCourses.map(
+            (course) => course.id,
           )
-        ) {
-          return current
+
+        let mappedAssignments: Assignment[] =
+          []
+
+        if (courseIds.length > 0) {
+          const {
+            data: assignmentsData,
+            error: assignmentsError,
+          } = await supabase
+            .from(
+              'teacher_student_assignments',
+            )
+            .select(
+              `
+                id,
+                course_id,
+                teacher_id,
+                student_id
+              `,
+            )
+            .in(
+              'course_id',
+              courseIds,
+            )
+
+          if (assignmentsError) {
+            throw assignmentsError
+          }
+
+          mappedAssignments = (
+            assignmentsData ?? []
+          ).map((assignment) => ({
+            id: assignment.id,
+            courseId:
+              assignment.course_id,
+            teacherId:
+              assignment.teacher_id,
+            studentId:
+              assignment.student_id,
+          }))
         }
 
-        return (
-          mappedCourses[0]?.id ?? ''
+        setCourses(mappedCourses)
+        setEnrollments(
+          mappedEnrollments,
         )
-      })
+        setAssignments(
+          mappedAssignments,
+        )
 
-      setDateNeedsDefault(true)
+        setPendingRegistrationCount(
+          (
+            registrationsResult.data ??
+            []
+          ).filter(
+            (
+              request: RegistrationRequest,
+            ) =>
+              request.status ===
+              'pending',
+          ).length,
+        )
 
-      await loadAttendance(courseIds)
-    } catch (error) {
-      setStatusMessage(
-        error instanceof Error
-          ? error.message
-          : 'حدث خطأ أثناء تحميل لوحة التحكم.',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
+        setSelectedCourseId((current) => {
+          if (
+            current &&
+            mappedCourses.some(
+              (course) =>
+                course.id === current,
+            )
+          ) {
+            return current
+          }
+
+          if (
+            mappedCourses.length ===
+            0
+          ) {
+            return ''
+          }
+
+          const today =
+            getLocalDateString()
+
+          const currentCourse =
+            mappedCourses.find(
+              (course) => {
+                const starts =
+                  !course.startDate ||
+                  course.startDate <=
+                    today
+
+                const ends =
+                  !course.endDate ||
+                  course.endDate >=
+                    today
+
+                return starts && ends
+              },
+            )
+
+          return (
+            currentCourse?.id ??
+            mappedCourses[
+              mappedCourses.length - 1
+            ]?.id ??
+            ''
+          )
+        })
+
+        setDateNeedsDefault(true)
+
+        await loadAttendance(
+          courseIds,
+        )
+      } catch (error) {
+        console.error(
+          'Dashboard load error:',
+          error,
+        )
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    },
+    [loadAttendance],
+  )
 
   useEffect(() => {
     void loadData()
-  }, [])
+  }, [loadData])
 
   useEffect(() => {
-    const refreshAttendance = () => {
-      if (courses.length === 0) {
+    if (
+      !selectedCourse ||
+      availableDates.length ===
+        0 ||
+      !dateNeedsDefault
+    ) {
+      return
+    }
+
+    const today =
+      getLocalDateString()
+
+    if (
+      availableDates.includes(today)
+    ) {
+      setSelectedDate(today)
+      setDateNeedsDefault(false)
+      return
+    }
+
+    const previousDates =
+      availableDates.filter(
+        (date) => date < today,
+      )
+
+    if (
+      previousDates.length > 0
+    ) {
+      setSelectedDate(
+        previousDates[
+          previousDates.length - 1
+        ],
+      )
+      setDateNeedsDefault(false)
+      return
+    }
+
+    setSelectedDate(
+      availableDates[0] ?? '',
+    )
+
+    setDateNeedsDefault(false)
+  }, [
+    selectedCourse,
+    availableDates,
+    dateNeedsDefault,
+  ])
+
+  useEffect(() => {
+    const refreshAttendance = async () => {
+      if (
+        courses.length === 0
+      ) {
         return
       }
 
-      void loadAttendance(
+      await loadAttendance(
         courses.map(
           (course) => course.id,
         ),
@@ -810,17 +738,18 @@ export function DashboardView() {
     }
 
     const handleFocus = () => {
-      refreshAttendance()
+      void refreshAttendance()
     }
 
-    const handleVisibilityChange = () => {
-      if (
-        document.visibilityState ===
-        'visible'
-      ) {
-        refreshAttendance()
+    const handleVisibilityChange =
+      () => {
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+          void refreshAttendance()
+        }
       }
-    }
 
     window.addEventListener(
       'focus',
@@ -843,529 +772,199 @@ export function DashboardView() {
         handleVisibilityChange,
       )
     }
-  }, [courses])
-
-  const selectedCourse =
-    courses.find(
-      (course) =>
-        course.id ===
-        selectedCourseId,
-    ) ?? null
-
-  const availableDates = useMemo(() => {
-    if (!selectedCourse) {
-      return []
-    }
-
-    const dates = getDateRange(
-      selectedCourse.startDate,
-      selectedCourse.endDate,
-    )
-
-    const courseDates =
-      dates.filter((date) =>
-        courseIncludesDate(
-          selectedCourse,
-          date,
-        ),
-      )
-
-    const attendanceDates =
-      Array.from(
-        new Set(
-          attendanceRecords
-            .filter(
-              (record) =>
-                record.courseId ===
-                selectedCourse.id,
-            )
-            .map(
-              (record) =>
-                record.attendanceDate,
-            ),
-        ),
-      )
-
-    return Array.from(
-      new Set([
-        ...courseDates,
-        ...attendanceDates,
-      ]),
-    ).sort()
   }, [
-    selectedCourse,
-    attendanceRecords,
+    courses,
+    loadAttendance,
   ])
 
-  /*
-   * اختيار تاريخ اليوم بشكل آمن:
-   *
-   * 1. إذا اليوم موجود في أيام الدورة -> اختاره.
-   * 2. إذا اليوم ليس ضمن الدورة -> أقرب يوم سابق.
-   * 3. إذا لا يوجد يوم سابق -> أقرب يوم قادم.
-   *
-   * dateNeedsDefault يمنع Refresh الحضور
-   * من تغيير التاريخ الذي اختاره المستخدم يدوياً.
-   */
-  useEffect(() => {
-    if (
-      !selectedCourse ||
-      availableDates.length === 0 ||
-      !dateNeedsDefault
-    ) {
-      return
-    }
-
-    const today = new Date()
-      .toISOString()
-      .slice(0, 10)
-
-    if (
-      availableDates.includes(today)
-    ) {
-      setSelectedDate(today)
-      setDateNeedsDefault(false)
-      return
-    }
-
-    const previousDates =
-      availableDates.filter(
-        (date) => date < today,
-      )
-
-    if (previousDates.length > 0) {
-      setSelectedDate(
-        previousDates[
-          previousDates.length - 1
-        ],
-      )
-      setDateNeedsDefault(false)
-      return
-    }
-
-    setSelectedDate(
-      availableDates[0] ?? '',
-    )
-    setDateNeedsDefault(false)
-  }, [
-    selectedCourse,
-    availableDates,
-    dateNeedsDefault,
-  ])
-
-  const currentYearStudentIds =
-    useMemo(() => {
-      return new Set(
+  const stats = useMemo<DashboardStats>(
+    () => {
+      const studentIds = new Set(
         enrollments
           .filter(
             (enrollment) =>
               enrollment.status ===
-                'نشط' ||
-              enrollment.status ===
-                'active',
+              'نشط',
           )
           .map(
             (enrollment) =>
               enrollment.studentId,
           ),
       )
-    }, [enrollments])
 
-  const courseAssignmentStudentIds =
-    useMemo(() => {
-      if (!selectedCourse) {
-        return new Set<string>()
-      }
+      const assignedStudentIds =
+        new Set(
+          assignments
+            .filter(
+              (assignment) =>
+                assignment.courseId ===
+                selectedCourseId,
+            )
+            .map(
+              (assignment) =>
+                assignment.studentId,
+            ),
+        )
 
-      return new Set(
-        assignments
-          .filter(
-            (assignment) =>
-              assignment.courseId ===
-              selectedCourse.id,
-          )
-          .map(
-            (assignment) =>
-              assignment.studentId,
-          ),
+      const studentsCount =
+        studentIds.size
+
+      const assignedCount =
+        assignedStudentIds.size
+
+      const unassignedCount =
+        Array.from(studentIds).filter(
+          (studentId) =>
+            !assignedStudentIds.has(
+              studentId,
+            ),
+        ).length
+
+      let presentCount = 0
+      let absentCount = 0
+      let lateCount = 0
+      let excusedCount = 0
+
+      const selectedDateRecords =
+        attendanceRecords.filter(
+          (record) =>
+            record.courseId ===
+              selectedCourseId &&
+            record.attendanceDate ===
+              selectedDate &&
+            assignedStudentIds.has(
+              record.studentId,
+            ),
+        )
+
+      const statusMap = new Map(
+        attendanceStatuses.map(
+          (status) => [
+            status.id,
+            status.name,
+          ],
+        ),
       )
-    }, [
-      assignments,
-      selectedCourse,
-    ])
 
-  const selectedCourseStudents =
-    useMemo(() => {
-      return Array.from(
-        courseAssignmentStudentIds,
-      )
-    }, [
-      courseAssignmentStudentIds,
-    ])
+      const seenStudents =
+        new Set<string>()
 
-  const attendanceForSelectedDay =
-    useMemo(() => {
-      if (
-        !selectedCourse ||
-        !selectedDate
-      ) {
-        return []
-      }
-
-      return attendanceRecords.filter(
-        (record) =>
-          record.courseId ===
-            selectedCourse.id &&
-          record.attendanceDate ===
-            selectedDate &&
-          courseAssignmentStudentIds.has(
+      for (const record of selectedDateRecords) {
+        if (
+          seenStudents.has(
             record.studentId,
-          ),
-      )
-    }, [
-      attendanceRecords,
-      selectedCourse,
-      selectedDate,
-      courseAssignmentStudentIds,
-    ])
+          )
+        ) {
+          continue
+        }
 
-  const stats = useMemo<DashboardStats>(() => {
-    const studentsCount =
-      currentYearStudentIds.size
-
-    const assignedCount =
-      selectedCourseStudents.filter(
-        (studentId) =>
-          currentYearStudentIds.has(
-            studentId,
-          ),
-      ).length
-
-    const unassignedCount = Math.max(
-      studentsCount -
-        assignedCount,
-      0,
-    )
-
-    let presentCount = 0
-    let absentCount = 0
-    let lateCount = 0
-    let excusedCount = 0
-
-    const processedStudents =
-      new Set<string>()
-
-    for (const record of attendanceForSelectedDay) {
-      if (
-        processedStudents.has(
+        seenStudents.add(
           record.studentId,
         )
-      ) {
-        continue
+
+        const statusName =
+          statusMap.get(
+            record.statusId,
+          ) ?? ''
+
+        if (
+          isPresentStatus(
+            statusName,
+          )
+        ) {
+          presentCount += 1
+        } else if (
+          isAbsentStatus(
+            statusName,
+          )
+        ) {
+          absentCount += 1
+        } else if (
+          isLateStatus(
+            statusName,
+          )
+        ) {
+          lateCount += 1
+        } else if (
+          isExcusedStatus(
+            statusName,
+          )
+        ) {
+          excusedCount += 1
+        }
       }
 
-      processedStudents.add(
-        record.studentId,
-      )
-
-      const status =
-        getStatusName(
-          record.statusId,
-          attendanceStatuses,
-        )
-
-      if (
-        status === 'حاضر' ||
-        status === 'حضور'
-      ) {
-        presentCount += 1
-      } else if (
-        status === 'غائب' ||
-        status === 'غياب'
-      ) {
-        absentCount += 1
-      } else if (
-        status === 'متأخر' ||
-        status === 'متأخر عن الحضور'
-      ) {
-        lateCount += 1
-      } else if (
-        status === 'مستأذن' ||
-        status === 'مستأذن بعذر'
-      ) {
-        excusedCount += 1
+      return {
+        studentsCount,
+        assignedCount,
+        unassignedCount,
+        presentCount,
+        absentCount,
+        lateCount,
+        excusedCount,
       }
-    }
+    },
+    [
+      enrollments,
+      assignments,
+      attendanceRecords,
+      attendanceStatuses,
+      selectedCourseId,
+      selectedDate,
+    ],
+  )
 
-    const paymentTotal =
-      payments.reduce(
-        (total, payment) =>
-          total +
-          Number(
-            payment.amount ?? 0,
-          ),
-        0,
-      )
-
-    const pendingRegistrations =
-      registrationRequests.filter(
-        (request) =>
-          request.status ===
-          'pending',
-      ).length
-
-    const underReviewRegistrations =
-      registrationRequests.filter(
-        (request) =>
-          request.status ===
-          'under_review',
-      ).length
-
-    const approvedRegistrations =
-      registrationRequests.filter(
-        (request) =>
-          request.status ===
-          'approved',
-      ).length
-
-    const rejectedRegistrations =
-      registrationRequests.filter(
-        (request) =>
-          request.status ===
-          'rejected',
-      ).length
-
-    return {
-      studentsCount,
-      assignedCount,
-      unassignedCount,
-      presentCount,
-      absentCount,
-      lateCount,
-      excusedCount,
-      paymentTotal,
-      paymentCount:
-        payments.length,
-      pendingRegistrations,
-      underReviewRegistrations,
-      approvedRegistrations,
-      rejectedRegistrations,
-    }
-  }, [
-    currentYearStudentIds,
-    selectedCourseStudents,
-    attendanceForSelectedDay,
-    attendanceStatuses,
-    payments,
-    registrationRequests,
-  ])
-
-  const assignedPercentage =
-    stats.studentsCount > 0
-      ? Math.round(
-          (stats.assignedCount /
-            stats.studentsCount) *
-            100,
-        )
-      : 0
-
-  const attendanceTotal =
+  const attendanceRecordedCount =
     stats.presentCount +
     stats.absentCount +
     stats.lateCount +
     stats.excusedCount
 
-  const attendancePercentage =
-    attendanceTotal > 0
-      ? Math.round(
-          ((stats.presentCount +
-            stats.lateCount +
-            stats.excusedCount) /
-            attendanceTotal) *
-            100,
-        )
-      : 0
-
-  const paymentCollectionPercentage =
-    academicYear &&
-    academicYear.annualFee > 0 &&
-    stats.studentsCount > 0
-      ? Math.min(
-          100,
-          Math.round(
-            (stats.paymentTotal /
-              (stats.studentsCount *
-                academicYear.annualFee)) *
-              100,
-          ),
-        )
-      : 0
-
-  const latestRegistrations =
-    useMemo(
-      () =>
-        [...registrationRequests]
-          .sort((a, b) =>
-            b.createdAt.localeCompare(
-              a.createdAt,
-            ),
-          )
-          .slice(0, 5),
-      [registrationRequests],
-    )
-
-  const refresh = async () => {
-    setRefreshing(true)
-
-    try {
-      await loadData()
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-  if (
-    !loading &&
-    !academicYear
-  ) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <PageHeader
-          title="لوحة التحكم"
-          description="نظرة عامة على بيانات النظام"
-        />
-
-        <Card>
-          <CardContent className="p-10 text-center">
-            <CalendarCheck className="mx-auto size-10 text-muted-foreground" />
-
-            <p className="mt-4 font-medium">
-              لا توجد سنة دراسية حالية
-            </p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              أضف سنة دراسية واجعلها الحالية من قسم الإدارة والتحكم.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <RefreshCw className="size-4 animate-spin" />
+          جاري تحميل لوحة التحكم...
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="لوحة التحكم"
-        description={
-          academicYear
-            ? `نظرة عامة على السنة الدراسية ${academicYear.name}`
-            : 'نظرة عامة على بيانات النظام'
-        }
-      />
+    <div
+      dir="rtl"
+      className="space-y-6"
+    >
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            لوحة التحكم
+          </h1>
 
-      {statusMessage && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm">
-          <span>{statusMessage}</span>
+          <p className="mt-1 text-sm text-muted-foreground">
+            نظرة سريعة على وضع الطلاب والدورات والحضور
+          </p>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={refreshing}
-          >
-            <RefreshCw
-              className={`size-4 ${
-                refreshing
-                  ? 'animate-spin'
-                  : ''
-              }`}
-            />
-            تحديث
-          </Button>
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border bg-card p-5">
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-2 block text-sm font-medium">
-            الدورة
-          </label>
-
-          <select
-            value={selectedCourseId}
-            onChange={(event) => {
-              setSelectedCourseId(
-                event.target.value,
-              )
-
-              setSelectedDate('')
-
-              setDateNeedsDefault(true)
-            }}
-            className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="">
-              اختر الدورة
-            </option>
-
-            {courses.map((course) => (
-              <option
-                key={course.id}
-                value={course.id}
-              >
-                {course.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-2 block text-sm font-medium">
-            اليوم
-          </label>
-
-          <select
-            value={selectedDate}
-            onChange={(event) => {
-              setSelectedDate(
-                event.target.value,
-              )
-
-              setDateNeedsDefault(false)
-            }}
-            disabled={
-              !selectedCourse ||
-              availableDates.length ===
-                0
-            }
-            className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="">
-              {!selectedCourse
-                ? 'اختر الدورة أولاً'
-                : availableDates.length ===
-                    0
-                  ? 'لا توجد أيام متاحة'
-                  : 'اختر اليوم'}
-            </option>
-
-            {availableDates.map(
-              (date) => (
-                <option
-                  key={date}
-                  value={date}
-                >
-                  {formatDate(date)}
-                </option>
-              ),
-            )}
-          </select>
+          {academicYear && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              السنة الدراسية:{' '}
+              <span className="font-medium text-foreground">
+                {academicYear.name}
+              </span>
+            </p>
+          )}
         </div>
 
         <Button
+          type="button"
           variant="outline"
-          onClick={refresh}
+          onClick={() =>
+            void loadData(true)
+          }
           disabled={refreshing}
+          className="gap-2"
         >
           <RefreshCw
             className={`size-4 ${
@@ -1374,524 +973,353 @@ export function DashboardView() {
                 : ''
             }`}
           />
-          تحديث البيانات
+          تحديث
         </Button>
       </div>
 
-      {selectedCourse && (
+      {/* Course / Day selectors */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <BookOpen className="size-4 text-primary" />
+                الدورة
+              </label>
+
+              <select
+                value={selectedCourseId}
+                onChange={(event) => {
+                  setSelectedCourseId(
+                    event.target.value,
+                  )
+                  setSelectedDate('')
+                  setDateNeedsDefault(
+                    true,
+                  )
+                }}
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
+              >
+                {courses.length ===
+                  0 && (
+                  <option value="">
+                    لا توجد دورات
+                  </option>
+                )}
+
+                {courses.map(
+                  (course) => (
+                    <option
+                      key={course.id}
+                      value={course.id}
+                    >
+                      {course.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <CalendarCheck className="size-4 text-primary" />
+                اليوم
+              </label>
+
+              <select
+                value={selectedDate}
+                onChange={(event) => {
+                  setSelectedDate(
+                    event.target.value,
+                  )
+                  setDateNeedsDefault(
+                    false,
+                  )
+                }}
+                disabled={
+                  availableDates.length ===
+                  0
+                }
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {availableDates.length ===
+                  0 && (
+                  <option value="">
+                    لا توجد أيام متاحة
+                  </option>
+                )}
+
+                {availableDates.map(
+                  (date) => (
+                    <option
+                      key={date}
+                      value={date}
+                    >
+                      {formatDate(date)}
+                      {date ===
+                        getLocalDateString()
+                        ? ' — اليوم'
+                        : ''}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Main statistics */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <BookOpen className="size-5 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  طلاب السنة
+                </p>
 
-                  <h2 className="font-semibold">
-                    {selectedCourse.name}
-                  </h2>
-                </div>
-
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span className="rounded-full bg-muted px-3 py-1.5">
-                    {formatDate(
-                      selectedCourse.startDate,
-                    )}{' '}
-                    —{' '}
-                    {formatDate(
-                      selectedCourse.endDate,
-                    )}
-                  </span>
-
-                  {selectedCourse
-                    .days
-                    .length > 0 && (
-                    <span className="rounded-full bg-muted px-3 py-1.5">
-                      {selectedCourse.days.join(
-                        ' • ',
-                      )}
-                    </span>
-                  )}
-                </div>
+                <p className="mt-2 text-3xl font-bold">
+                  {stats.studentsCount}
+                </p>
               </div>
 
+              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Users className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  الموزعون في الدورة
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {stats.assignedCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <UserCheck className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  غير الموزعين في الدورة
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {stats.unassignedCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <UserX className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  سجلات اليوم
+                </p>
+
+                <p className="mt-2 text-3xl font-bold">
+                  {attendanceRecordedCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <CalendarCheck className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Attendance */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarCheck className="size-5 text-primary" />
+            حضور اليوم
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <UserCheck className="size-5" />
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    حضروا اليوم
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold">
+                    {stats.presentCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <UserX className="size-5" />
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    غابوا اليوم
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold">
+                    {stats.absentCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <Clock3 className="size-5" />
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    متأخرون
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold">
+                    {stats.lateCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <ClipboardCheck className="size-5" />
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    مستأذنون
+                  </p>
+
+                  <p className="mt-1 text-2xl font-bold">
+                    {stats.excusedCount}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {selectedCourse && (
+            <div className="mt-4 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+              الدورة:{' '}
+              <span className="font-medium text-foreground">
+                {selectedCourse.name}
+              </span>
+
               {selectedDate && (
-                <div className="text-sm text-muted-foreground">
-                  اليوم المحدد:{' '}
+                <>
+                  {' '}
+                  · التاريخ:{' '}
                   <span className="font-medium text-foreground">
                     {formatDate(
                       selectedDate,
                     )}
                   </span>
-
-                  {attendanceRefreshing && (
-                    <span className="mr-2 inline-flex items-center gap-1 text-xs">
-                      <RefreshCw className="size-3 animate-spin" />
-                      تحديث الحضور...
-                    </span>
-                  )}
-                </div>
+                </>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard
-          title="طلاب السنة"
-          value={stats.studentsCount}
-          icon={
-            <Users className="size-5" />
+      {/* Pending registrations */}
+      {pendingRegistrationCount >
+        0 && (
+        <button
+          type="button"
+          onClick={() =>
+            router.push(
+              '/enrollment',
+            )
           }
-          description={
-            academicYear
-              ? academicYear.name
-              : undefined
-          }
-          loading={loading}
-        />
-
-        <MetricCard
-          title="الموزعون في الدورة"
-          value={stats.assignedCount}
-          icon={
-            <UserCheck className="size-5" />
-          }
-          description={`${assignedPercentage}% من طلاب السنة`}
-          loading={loading}
-        />
-
-        <MetricCard
-          title="غير الموزعين في الدورة"
-          value={stats.unassignedCount}
-          icon={
-            <UserX className="size-5" />
-          }
-          description="طلاب السنة غير المسندين لهذه الدورة"
-          loading={loading}
-        />
-
-        <MetricCard
-          title="حضروا اليوم"
-          value={stats.presentCount}
-          icon={
-            <CalendarCheck className="size-5" />
-          }
-          description={
-            selectedDate
-              ? formatShortDate(
-                  selectedDate,
-                )
-              : 'اختر يومًا'
-          }
-          loading={loading}
-        />
-
-        <MetricCard
-          title="غابوا اليوم"
-          value={stats.absentCount}
-          icon={
-            <Clock3 className="size-5" />
-          }
-          description={
-            selectedDate
-              ? formatShortDate(
-                  selectedDate,
-                )
-              : 'اختر يومًا'
-          }
-          loading={loading}
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardCheck className="size-5" />
-              ملخص الحضور
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            {!selectedCourse ||
-            !selectedDate ? (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                اختر الدورة واليوم لعرض الحضور.
-              </div>
-            ) : (
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      نسبة الحضور
-                    </p>
-
-                    <p className="mt-1 text-3xl font-bold">
-                      {attendancePercentage}%
-                    </p>
-                  </div>
-
-                  <div className="text-left text-sm text-muted-foreground">
-                    إجمالي المسجلين للحضور:{' '}
-                    <span className="font-medium text-foreground">
-                      {attendanceTotal}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="h-3 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-foreground transition-all"
-                    style={{
-                      width: `${Math.min(
-                        attendancePercentage,
-                        100,
-                      )}%`,
-                    }}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">
-                      حاضر
-                    </p>
-
-                    <p className="mt-1 text-xl font-semibold">
-                      {
-                        stats.presentCount
-                      }
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">
-                      غائب
-                    </p>
-
-                    <p className="mt-1 text-xl font-semibold">
-                      {
-                        stats.absentCount
-                      }
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">
-                      متأخر
-                    </p>
-
-                    <p className="mt-1 text-xl font-semibold">
-                      {
-                        stats.lateCount
-                      }
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">
-                      مستأذن
-                    </p>
-
-                    <p className="mt-1 text-xl font-semibold">
-                      {
-                        stats.excusedCount
-                      }
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="size-5" />
-              توزيع الطلاب
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <div className="space-y-5">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    الموزعون في الدورة
-                  </p>
-
-                  <p className="mt-1 text-3xl font-bold">
-                    {stats.assignedCount}
-                  </p>
-                </div>
-
-                <div className="text-left text-sm text-muted-foreground">
-                  من أصل{' '}
-                  <span className="font-medium text-foreground">
-                    {stats.studentsCount}
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-3 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-foreground transition-all"
-                  style={{
-                    width: `${Math.min(
-                      assignedPercentage,
-                      100,
-                    )}%`,
-                  }}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-muted-foreground">
-                    موزعون
-                  </p>
-
-                  <p className="mt-1 text-2xl font-semibold">
-                    {
-                      stats.assignedCount
-                    }
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-muted-foreground">
-                    غير موزعين
-                  </p>
-
-                  <p className="mt-1 text-2xl font-semibold">
-                    {
-                      stats.unassignedCount
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                التوزيع يعني أن الطالب مسجل عند معلم في الدورة، وليس أنه حضر فعليًا.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardContent className="p-5">
+          className="w-full rounded-xl border bg-card p-4 text-right shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                <CreditCard className="size-5" />
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ClipboardCheck className="size-5" />
               </div>
 
               <div>
                 <p className="font-medium">
-                  نسبة تحصيل الرسوم
+                  طلبات تسجيل جديدة
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  مقارنة بإجمالي الرسوم السنوية للطلاب
+                  لديك{' '}
+                  {pendingRegistrationCount}{' '}
+                  {pendingRegistrationCount ===
+                  1
+                    ? 'طلب تسجيل معلّق'
+                    : 'طلبات تسجيل معلّقة'}
                 </p>
               </div>
             </div>
 
-            <p className="text-3xl font-bold tabular-nums">
-              {paymentCollectionPercentage}%
-            </p>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {pendingRegistrationCount}
+            </span>
           </div>
-        </CardContent>
-      </Card>
+        </button>
+      )}
 
+      {/* Teacher comments */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardCheck className="size-5" />
-            طلبات التسجيل
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardCheck className="size-5 text-primary" />
+            تعليقات المعلمين على الطلبة
           </CardTitle>
         </CardHeader>
 
         <CardContent>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                قيد الانتظار
+          <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 text-center">
+            <div>
+              <ClipboardCheck className="mx-auto size-7 text-muted-foreground/50" />
+
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                تعليقات المعلمين ستظهر هنا
               </p>
 
-              <p className="mt-1 text-xl font-semibold">
-                {
-                  stats.pendingRegistrations
-                }
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                قيد المراجعة
-              </p>
-
-              <p className="mt-1 text-xl font-semibold">
-                {
-                  stats.underReviewRegistrations
-                }
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                مقبولة
-              </p>
-
-              <p className="mt-1 text-xl font-semibold">
-                {
-                  stats.approvedRegistrations
-                }
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                مرفوضة
-              </p>
-
-              <p className="mt-1 text-xl font-semibold">
-                {
-                  stats.rejectedRegistrations
-                }
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 overflow-hidden rounded-lg border">
-            {latestRegistrations.length ===
-            0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                لا توجد طلبات تسجيل.
-              </div>
-            ) : (
-              <div className="divide-y">
-                {latestRegistrations.map(
-                  (request) => {
-                    let statusLabel =
-                      '—'
-
-                    if (
-                      request.status ===
-                      'pending'
-                    ) {
-                      statusLabel =
-                        'قيد الانتظار'
-                    } else if (
-                      request.status ===
-                      'under_review'
-                    ) {
-                      statusLabel =
-                        'قيد المراجعة'
-                    } else if (
-                      request.status ===
-                      'approved'
-                    ) {
-                      statusLabel =
-                        'مقبول'
-                    } else if (
-                      request.status ===
-                      'rejected'
-                    ) {
-                      statusLabel =
-                        'مرفوض'
-                    } else if (
-                      request.status ===
-                      'cancelled'
-                    ) {
-                      statusLabel =
-                        'ملغي'
-                    }
-
-                    return (
-                      <div
-                        key={
-                          request.id
-                        }
-                        className="flex items-center justify-between gap-4 p-4"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {request.name}
-                          </p>
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {
-                              request.requestNumber
-                            }{' '}
-                            •{' '}
-                            {formatDate(
-                              request.createdAt.slice(
-                                0,
-                                10,
-                              ),
-                            )}
-                          </p>
-                        </div>
-
-                        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs">
-                          {
-                            statusLabel
-                          }
-                        </span>
-                      </div>
-                    )
-                  },
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            معلومات السنة الحالية
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                السنة الدراسية
-              </p>
-
-              <p className="mt-1 font-semibold">
-                {academicYear?.name ??
-                  '—'}
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                الرسوم السنوية
-              </p>
-
-              <p className="mt-1 font-semibold">
-                {formatCurrency(
-                  academicYear?.annualFee ??
-                    0,
-                )}
-              </p>
-            </div>
-
-            <div className="rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                عدد الدورات
-              </p>
-
-              <p className="mt-1 font-semibold">
-                {courses.length}
+              <p className="mt-1 text-xs text-muted-foreground">
+                سيتم تفعيل عرض التفاصيل عند إضافة خاصية تعليقات المعلمين.
               </p>
             </div>
           </div>
