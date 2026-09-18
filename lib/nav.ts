@@ -1,10 +1,11 @@
 import {
   LayoutDashboard,
-  GraduationCap,
+  ShieldCheck,
+  Eye,
   ClipboardList,
+  GraduationCap,
   Users,
   CreditCard,
-  Settings,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -17,22 +18,34 @@ export type NavItem = {
 
 export const navItems: NavItem[] = [
   {
-    title: 'لوحة التحكم',
+    title: 'لوحة المعلومات',
     href: '/',
     icon: LayoutDashboard,
     description: 'نظرة عامة على أداء المدرسة',
   },
   {
-    title: 'الطلاب',
-    href: '/students',
-    icon: GraduationCap,
-    description: 'إدارة بيانات وسجلات الطلاب',
+    title: 'لوحة التحكم',
+    href: '/settings',
+    icon: ShieldCheck,
+    description: 'إدارة إعدادات النظام والصلاحيات',
+  },
+  {
+    title: 'الإشراف',
+    href: '/supervision',
+    icon: Eye,
+    description: 'ممارسة ومتابعة أعمال الإشراف',
   },
   {
     title: 'طلبات التسجيل',
     href: '/enrollment',
     icon: ClipboardList,
     description: 'مراجعة طلبات الالتحاق الجديدة',
+  },
+  {
+    title: 'الطلاب',
+    href: '/students',
+    icon: GraduationCap,
+    description: 'إدارة بيانات وسجلات الطلاب',
   },
   {
     title: 'المعلمون',
@@ -45,11 +58,5 @@ export const navItems: NavItem[] = [
     href: '/payments',
     icon: CreditCard,
     description: 'متابعة الرسوم والمدفوعات',
-  },
-  {
-    title: 'الإدارة والإعدادات',
-    href: '/settings',
-    icon: Settings,
-    description: 'ضبط إعدادات النظام والصلاحيات',
   },
 ]
