@@ -112,22 +112,6 @@ type DashboardStats = {
   rejectedRegistrations: number
 }
 
-const EMPTY_STATS: DashboardStats = {
-  studentsCount: 0,
-  assignedCount: 0,
-  unassignedCount: 0,
-  presentCount: 0,
-  absentCount: 0,
-  lateCount: 0,
-  excusedCount: 0,
-  paymentTotal: 0,
-  paymentCount: 0,
-  pendingRegistrations: 0,
-  underReviewRegistrations: 0,
-  approvedRegistrations: 0,
-  rejectedRegistrations: 0,
-}
-
 function formatDate(date: string | null) {
   if (!date) {
     return '—'
@@ -371,14 +355,19 @@ export function DashboardView() {
   const [selectedDate, setSelectedDate] =
     useState('')
 
+  const [dateNeedsDefault, setDateNeedsDefault] =
+    useState(true)
+
   const [loading, setLoading] =
     useState(true)
 
   const [refreshing, setRefreshing] =
     useState(false)
 
-  const [attendanceRefreshing, setAttendanceRefreshing] =
-    useState(false)
+  const [
+    attendanceRefreshing,
+    setAttendanceRefreshing,
+  ] = useState(false)
 
   const [statusMessage, setStatusMessage] =
     useState('')
@@ -418,10 +407,9 @@ export function DashboardView() {
           enrollmentId:
             row.enrollment_id,
           attendanceDate:
-            String(row.attendance_date).slice(
-              0,
-              10,
-            ),
+            String(
+              row.attendance_date,
+            ).slice(0, 10),
           statusId:
             row.status_id,
           note: row.note,
@@ -475,6 +463,9 @@ export function DashboardView() {
         setAttendanceRecords([])
         setPayments([])
         setRegistrationRequests([])
+        setSelectedCourseId('')
+        setSelectedDate('')
+        setDateNeedsDefault(true)
         return
       }
 
@@ -787,6 +778,8 @@ export function DashboardView() {
         )
       })
 
+      setDateNeedsDefault(true)
+
       await loadAttendance(courseIds)
     } catch (error) {
       setStatusMessage(
@@ -904,74 +897,60 @@ export function DashboardView() {
     attendanceRecords,
   ])
 
+  /*
+   * اختيار تاريخ اليوم بشكل آمن:
+   *
+   * 1. إذا اليوم موجود في أيام الدورة -> اختاره.
+   * 2. إذا اليوم ليس ضمن الدورة -> أقرب يوم سابق.
+   * 3. إذا لا يوجد يوم سابق -> أقرب يوم قادم.
+   *
+   * dateNeedsDefault يمنع Refresh الحضور
+   * من تغيير التاريخ الذي اختاره المستخدم يدوياً.
+   */
   useEffect(() => {
-    if (!selectedCourse) {
-      setSelectedDate('')
+    if (
+      !selectedCourse ||
+      availableDates.length === 0 ||
+      !dateNeedsDefault
+    ) {
       return
     }
 
-    setSelectedDate((current) => {
-      if (
-        current &&
-        availableDates.includes(current)
-      ) {
-        return current
-      }
+    const today = new Date()
+      .toISOString()
+      .slice(0, 10)
 
-      const today = new Date()
-        .toISOString()
-        .slice(0, 10)
+    if (
+      availableDates.includes(today)
+    ) {
+      setSelectedDate(today)
+      setDateNeedsDefault(false)
+      return
+    }
 
-      if (availableDates.includes(today)) {
-        return today
-      }
-
-      const courseAttendanceDates =
-        attendanceRecords
-          .filter(
-            (record) =>
-              record.courseId ===
-              selectedCourse.id,
-          )
-          .map(
-            (record) =>
-              record.attendanceDate,
-          )
-
-      const latestAttendanceDate =
-        [...new Set(
-          courseAttendanceDates,
-        )].sort().at(-1)
-
-      if (
-        latestAttendanceDate &&
-        availableDates.includes(
-          latestAttendanceDate,
-        )
-      ) {
-        return latestAttendanceDate
-      }
-
-      const previousDates = availableDates.filter(
-        (date) => date <= today,
+    const previousDates =
+      availableDates.filter(
+        (date) => date < today,
       )
 
-      if (previousDates.length > 0) {
-        return previousDates[
+    if (previousDates.length > 0) {
+      setSelectedDate(
+        previousDates[
           previousDates.length - 1
-        ]
-      }
-
-      const nextDates = availableDates.filter(
-        (date) => date > today,
+        ],
       )
+      setDateNeedsDefault(false)
+      return
+    }
 
-      return nextDates[0] ?? ''
-    })
+    setSelectedDate(
+      availableDates[0] ?? '',
+    )
+    setDateNeedsDefault(false)
   }, [
     selectedCourse,
     availableDates,
-    attendanceRecords,
+    dateNeedsDefault,
   ])
 
   const currentYearStudentIds =
@@ -1318,7 +1297,10 @@ export function DashboardView() {
               setSelectedCourseId(
                 event.target.value,
               )
+
               setSelectedDate('')
+
+              setDateNeedsDefault(true)
             }}
             className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
           >
@@ -1344,11 +1326,13 @@ export function DashboardView() {
 
           <select
             value={selectedDate}
-            onChange={(event) =>
+            onChange={(event) => {
               setSelectedDate(
                 event.target.value,
               )
-            }
+
+              setDateNeedsDefault(false)
+            }}
             disabled={
               !selectedCourse ||
               availableDates.length ===
