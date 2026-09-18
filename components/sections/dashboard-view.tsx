@@ -383,11 +383,6 @@ export function DashboardView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  /*
-   * مهم:
-   * الحضور له Loader مستقل.
-   * هذا يمنع أن يعتمد تحديث الحضور على بقية بيانات الداشبورد.
-   */
   const loadAttendance = async (
     courseIds: string[],
   ) => {
@@ -792,10 +787,6 @@ export function DashboardView() {
         )
       })
 
-      /*
-       * الحضور يتم تحميله بشكل مستقل
-       * بعد معرفة الدورات.
-       */
       await loadAttendance(courseIds)
     } catch (error) {
       setStatusMessage(
@@ -810,17 +801,8 @@ export function DashboardView() {
 
   useEffect(() => {
     void loadData()
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /*
-   * عند الرجوع للصفحة / التبويب:
-   * نعيد جلب الحضور فقط.
-   *
-   * هذا مهم لأن المستخدم قد يسجل الحضور
-   * من قسم المعلمين ثم يرجع للداشبورد.
-   */
   useEffect(() => {
     const refreshAttendance = () => {
       if (courses.length === 0) {
@@ -911,11 +893,6 @@ export function DashboardView() {
         ),
       )
 
-    /*
-     * نضمن أن أي يوم يوجد فيه حضور فعلي
-     * يظهر في القائمة حتى لو كان خارج
-     * نطاق الأيام المحسوبة من الدورة.
-     */
     return Array.from(
       new Set([
         ...courseDates,
@@ -927,13 +904,6 @@ export function DashboardView() {
     attendanceRecords,
   ])
 
-  /*
-   * عند تغيير الدورة:
-   * إذا كان اليوم الحالي غير موجود فيها،
-   * نختار آخر يوم فيه حضور أولاً،
-   * ثم اليوم الحالي إن كان ضمن الدورة،
-   * ثم أول يوم متاح.
-   */
   useEffect(() => {
     if (!selectedCourse) {
       setSelectedDate('')
@@ -948,16 +918,11 @@ export function DashboardView() {
         return current
       }
 
-      const today =
-        new Date()
-          .toISOString()
-          .slice(0, 10)
+      const today = new Date()
+        .toISOString()
+        .slice(0, 10)
 
-      if (
-        availableDates.includes(
-          today,
-        )
-      ) {
+      if (availableDates.includes(today)) {
         return today
       }
 
@@ -987,52 +952,21 @@ export function DashboardView() {
         return latestAttendanceDate
       }
 
-      useEffect(() => {
-        if (!selectedCourse) {
-          setSelectedDate('')
-          return
-        }
-      
-        setSelectedDate((current) => {
-          if (
-            current &&
-            availableDates.includes(current)
-          ) {
-            return current
-          }
-      
-          const today = new Date()
-            .toISOString()
-            .slice(0, 10)
-      
-          // إذا اليوم موجود ضمن أيام الدورة
-          if (availableDates.includes(today)) {
-            return today
-          }
-      
-          // إذا اليوم ليس من أيام الدورة،
-          // نختار أقرب يوم سابق لليوم
-          const previousDates = availableDates.filter(
-            (date) => date <= today,
-          )
-      
-          if (previousDates.length > 0) {
-            return previousDates[
-              previousDates.length - 1
-            ]
-          }
-      
-          // إذا ما فيه يوم سابق، نختار أقرب يوم قادم
-          const nextDates = availableDates.filter(
-            (date) => date > today,
-          )
-      
-          return nextDates[0] ?? ''
-        })
-      }, [
-        selectedCourse,
-        availableDates,
-      ])
+      const previousDates = availableDates.filter(
+        (date) => date <= today,
+      )
+
+      if (previousDates.length > 0) {
+        return previousDates[
+          previousDates.length - 1
+        ]
+      }
+
+      const nextDates = availableDates.filter(
+        (date) => date > today,
+      )
+
+      return nextDates[0] ?? ''
     })
   }, [
     selectedCourse,
@@ -1090,13 +1024,6 @@ export function DashboardView() {
       courseAssignmentStudentIds,
     ])
 
-  /*
-   * الحضور لليوم المحدد.
-   *
-   * مهم:
-   * لا نعتبر كل طلاب السنة حاضرين/غائبين.
-   * فقط الطلاب الموزعون في الدورة.
-   */
   const attendanceForSelectedDay =
     useMemo(() => {
       if (
@@ -1123,11 +1050,6 @@ export function DashboardView() {
       courseAssignmentStudentIds,
     ])
 
-  /*
-   * الإحصائيات محسوبة مباشرة من الـ state.
-   * ما عاد عندنا stats state منفصل ممكن يتأخر
-   * عن attendanceRecords.
-   */
   const stats = useMemo<DashboardStats>(() => {
     const studentsCount =
       currentYearStudentIds.size
@@ -1151,10 +1073,6 @@ export function DashboardView() {
     let lateCount = 0
     let excusedCount = 0
 
-    /*
-     * نمنع تكرار نفس الطالب في حالة
-     * وجود أكثر من سجل لنفس اليوم.
-     */
     const processedStudents =
       new Set<string>()
 
@@ -1289,9 +1207,6 @@ export function DashboardView() {
         )
       : 0
 
-  /*
-   * نسبة تحصيل الرسوم فقط.
-   */
   const paymentCollectionPercentage =
     academicYear &&
     academicYear.annualFee > 0 &&
@@ -1782,7 +1697,6 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* نسبة المدفوعات فقط */}
       <Card>
         <CardContent className="p-5">
           <div className="flex items-center justify-between gap-4">
