@@ -1,10 +1,13 @@
 'use client'
 
 import { FormEvent, useState } from 'react'
-import { Eye, EyeOff, GraduationCap, Loader2 } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  GraduationCap,
+  Loader2,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
-
-import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,12 +18,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault()
 
     setError('')
 
-    if (!username.trim() || !password) {
+    const cleanUsername = username.trim()
+
+    if (!cleanUsername || !password) {
       setError('أدخل اسم المستخدم وكلمة المرور.')
       return
     }
@@ -28,41 +35,35 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('auth_user_id, username, full_name, role, is_active')
-        .eq('username', username.trim())
-        .maybeSingle()
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: cleanUsername,
+          password,
+        }),
+      })
 
-      if (profileError) {
-        console.error(profileError)
-        setError('حدث خطأ أثناء التحقق من بيانات المستخدم.')
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(
+          typeof data.error === 'string'
+            ? data.error
+            : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
+        )
         return
       }
 
-      if (!profile) {
-        setError('اسم المستخدم أو كلمة المرور غير صحيحة.')
-        return
-      }
-
-      if (!profile.is_active) {
-        setError('هذا الحساب غير مفعل.')
-        return
-      }
-
-      /*
-       * Supabase Auth يحتاج البريد الإلكتروني عند تسجيل الدخول.
-       * البريد مخفي عن المستخدم، ونأخذه من auth.users عبر السيرفر
-       * في الخطوة التالية.
-       *
-       * مؤقتًا نوقف هنا حتى نضيف Route آمن لجلب البريد.
-       */
-      setError(
-        'تم العثور على الحساب. باقي خطوة ربط تسجيل الدخول بـ Supabase Auth.',
-      )
+      router.replace('/')
+      router.refresh()
     } catch (error) {
-      console.error(error)
-      setError('حدث خطأ غير متوقع.')
+      console.error('Login request error:', error)
+      setError(
+        'تعذر الاتصال بالخادم. حاول مرة أخرى.',
+      )
     } finally {
       setLoading(false)
     }
@@ -105,7 +106,9 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                onChange={(event) =>
+                  setUsername(event.target.value)
+                }
                 placeholder="أدخل اسم المستخدم"
                 autoComplete="username"
                 disabled={loading}
@@ -124,9 +127,15 @@ export default function LoginPage() {
               <div className="relative">
                 <input
                   id="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={
+                    showPassword
+                      ? 'text'
+                      : 'password'
+                  }
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
                   placeholder="أدخل كلمة المرور"
                   autoComplete="current-password"
                   disabled={loading}
@@ -135,7 +144,11 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => setShowPassword((value) => !value)}
+                  onClick={() =>
+                    setShowPassword(
+                      (value) => !value,
+                    )
+                  }
                   disabled={loading}
                   className="absolute left-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none"
                   aria-label={
@@ -171,13 +184,17 @@ export default function LoginPage() {
                 <Loader2 className="size-4 animate-spin" />
               )}
 
-              {loading ? 'جارٍ التحقق...' : 'دخول'}
+              {loading
+                ? 'جارٍ تسجيل الدخول...'
+                : 'دخول'}
             </button>
 
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => router.push('/forgot-password')}
+                onClick={() =>
+                  router.push('/forgot-password')
+                }
                 className="text-sm font-medium text-primary hover:underline"
               >
                 نسيت كلمة المرور؟
