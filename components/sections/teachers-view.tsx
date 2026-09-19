@@ -45,17 +45,29 @@ export function TeachersView() {
   const [courses, setCourses] = useState<Course[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
+
   const [attendanceStatuses, setAttendanceStatuses] = useState<
     AttendanceStatus[]
   >([])
+
   const [attendanceRecords, setAttendanceRecords] = useState<
     AttendanceRecord[]
   >([])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
   const [deletingAssignmentId, setDeletingAssignmentId] =
     useState<string | null>(null)
+
+  /*
+   * صلاحيات النقل والمسح القادمة من إعدادات الإشراف
+   */
+  const [allowTeacherTransfer, setAllowTeacherTransfer] =
+    useState(false)
+
+  const [allowTeacherRemove, setAllowTeacherRemove] =
+    useState(false)
 
   const [statusMessage, setStatusMessage] = useState('')
   const [search, setSearch] = useState('')
@@ -92,6 +104,44 @@ export function TeachersView() {
   const loadData = async () => {
     setLoading(true)
     setStatusMessage('')
+
+    /*
+     * تحميل إعدادات الإشراف
+     *
+     * إذا لم نستطع قراءة الإعدادات، نغلق
+     * النقل والمسح احتياطياً.
+     */
+    const {
+      data: supervisionSettings,
+      error: supervisionSettingsError,
+    } = await supabase
+      .from('supervision_settings')
+      .select(
+        'id, allow_teacher_transfer, allow_teacher_remove',
+      )
+      .eq('id', 'default')
+      .maybeSingle()
+
+    if (supervisionSettingsError) {
+      setAllowTeacherTransfer(false)
+      setAllowTeacherRemove(false)
+
+      setStatusMessage(
+        `خطأ في تحميل إعدادات الإشراف: ${supervisionSettingsError.message}`,
+      )
+    } else {
+      setAllowTeacherTransfer(
+        Boolean(
+          supervisionSettings?.allow_teacher_transfer,
+        ),
+      )
+
+      setAllowTeacherRemove(
+        Boolean(
+          supervisionSettings?.allow_teacher_remove,
+        ),
+      )
+    }
 
     const {
       data: academicYear,
@@ -958,14 +1008,23 @@ export function TeachersView() {
   const openTransfer = (
     studentId: string,
   ) => {
+    if (!allowTeacherTransfer) {
+      return
+    }
+
     setTransferStudentId(
       studentId,
     )
+
     setTransferTeacherId('')
     setIsTransferOpen(true)
   }
 
   const saveTransfer = async () => {
+    if (!allowTeacherTransfer) {
+      return
+    }
+
     if (
       !selectedTeacherId ||
       !currentCourse ||
@@ -1048,9 +1107,11 @@ export function TeachersView() {
     setTransferStudentId(null)
     setTransferTeacherId('')
     setIsTransferOpen(false)
+
     setStatusMessage(
       'تم نقل الطالب بنجاح ✅',
     )
+
     setSaving(false)
   }
 
@@ -1058,6 +1119,10 @@ export function TeachersView() {
     assignment: Assignment,
     student: Student,
   ) => {
+    if (!allowTeacherRemove) {
+      return
+    }
+
     const confirmed = window.confirm(
       `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء توزيع الطالب على المعلم فقط، ولن يتم حذف الطالب من النظام أو حذف سجلات حضوره.`,
     )
@@ -1069,6 +1134,7 @@ export function TeachersView() {
     setDeletingAssignmentId(
       assignment.id,
     )
+
     setStatusMessage(
       'جاري مسح الطالب من المعلم...',
     )
@@ -1087,6 +1153,7 @@ export function TeachersView() {
       setStatusMessage(
         `تعذر مسح الطالب من المعلم: ${error.message}`,
       )
+
       setDeletingAssignmentId(null)
       return
     }
@@ -1109,6 +1176,7 @@ export function TeachersView() {
     )
 
     setDeletingAssignmentId(null)
+
     setStatusMessage(
       `تم مسح ${student.name} من المعلم بنجاح ✅`,
     )
@@ -1567,9 +1635,12 @@ export function TeachersView() {
                               المستوى
                             </th>
 
-                            <th className="px-4 py-3 text-right font-medium">
-                              إجراء
-                            </th>
+                            {(allowTeacherTransfer ||
+                              allowTeacherRemove) && (
+                              <th className="px-4 py-3 text-right font-medium">
+                                إجراء
+                              </th>
+                            )}
                           </tr>
                         </thead>
 
@@ -1617,52 +1688,60 @@ export function TeachersView() {
                                     }
                                   </td>
 
-                                  <td className="px-4 py-3">
-                                    <div className="flex flex-wrap gap-2">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          openTransfer(
-                                            student.id,
-                                          )
-                                        }
-                                        disabled={
-                                          isDeleting
-                                        }
-                                      >
-                                        <ArrowLeftRight className="size-4" />
-                                        نقل
-                                      </Button>
+                                  {(allowTeacherTransfer ||
+                                    allowTeacherRemove) && (
+                                    <td className="px-4 py-3">
+                                      <div className="flex flex-wrap gap-2">
+                                        {allowTeacherTransfer && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                              openTransfer(
+                                                student.id,
+                                              )
+                                            }
+                                            disabled={
+                                              isDeleting ||
+                                              saving
+                                            }
+                                          >
+                                            <ArrowLeftRight className="size-4" />
+                                            نقل
+                                          </Button>
+                                        )}
 
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          if (
-                                            assignment
-                                          ) {
-                                            removeStudentFromTeacher(
-                                              assignment,
-                                              student,
-                                            )
-                                          }
-                                        }}
-                                        disabled={
-                                          !assignment ||
-                                          isDeleting ||
-                                          saving
-                                        }
-                                        className="text-destructive hover:text-destructive"
-                                      >
-                                        <Trash2 className="size-4" />
+                                        {allowTeacherRemove && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              if (
+                                                assignment
+                                              ) {
+                                                removeStudentFromTeacher(
+                                                  assignment,
+                                                  student,
+                                                )
+                                              }
+                                            }}
+                                            disabled={
+                                              !assignment ||
+                                              isDeleting ||
+                                              saving
+                                            }
+                                            className="text-destructive hover:text-destructive"
+                                          >
+                                            <Trash2 className="size-4" />
 
-                                        {isDeleting
-                                          ? 'جاري المسح...'
-                                          : 'مسح'}
-                                      </Button>
-                                    </div>
-                                  </td>
+                                            {isDeleting
+                                              ? 'جاري المسح...'
+                                              : 'مسح'}
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  )}
                                 </tr>
                               )
                             },
@@ -1717,6 +1796,7 @@ export function TeachersView() {
                           event.target
                             .value,
                         )
+
                         setSelectedStudentIds(
                           [],
                         )
@@ -1934,7 +2014,8 @@ export function TeachersView() {
       {isTransferOpen &&
         transferStudentId &&
         selectedTeacher &&
-        currentCourse && (
+        currentCourse &&
+        allowTeacherTransfer && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
             <Card className="w-full max-w-md">
               <CardContent className="space-y-4 p-5">
