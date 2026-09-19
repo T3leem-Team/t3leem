@@ -72,6 +72,17 @@ type Filters = {
   status: string
 }
 
+type KeyRow = {
+  key_name: string
+  enabled: boolean
+}
+
+const CURRENT_YEAR_KEY =
+  'allow_add_to_current_year'
+
+const ARCHIVE_KEY =
+  'allow_add_to_archive'
+
 const emptyFilters: Filters = {
   id: '',
   name: '',
@@ -249,12 +260,68 @@ export function EnrollmentView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  /*
-   * تم تعطيل الاعتماد على system_keys مؤقتًا.
-   *
-   * الزران يظهران دائمًا بهدف اختبار
-   * مكونات الاستيراد نفسها.
-   */
+  const [permissionsLoading, setPermissionsLoading] =
+    useState(true)
+
+  const [allowCurrentYearImport, setAllowCurrentYearImport] =
+    useState(false)
+
+  const [allowArchiveImport, setAllowArchiveImport] =
+    useState(false)
+
+  const loadImportPermissions = async () => {
+    setPermissionsLoading(true)
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('system_keys')
+      .select('key_name, enabled')
+      .in('key_name', [
+        CURRENT_YEAR_KEY,
+        ARCHIVE_KEY,
+      ])
+
+    if (error) {
+      console.error(
+        'Could not load import permissions:',
+        error,
+      )
+
+      setAllowCurrentYearImport(false)
+      setAllowArchiveImport(false)
+      setPermissionsLoading(false)
+
+      return
+    }
+
+    const rows = (data ?? []) as KeyRow[]
+
+    const currentYearRow =
+      rows.find(
+        (row) =>
+          row.key_name ===
+          CURRENT_YEAR_KEY,
+      )
+
+    const archiveRow =
+      rows.find(
+        (row) =>
+          row.key_name ===
+          ARCHIVE_KEY,
+      )
+
+    setAllowCurrentYearImport(
+      currentYearRow?.enabled === true,
+    )
+
+    setAllowArchiveImport(
+      archiveRow?.enabled === true,
+    )
+
+    setPermissionsLoading(false)
+  }
 
   const loadRequests = async () => {
     setLoading(true)
@@ -322,7 +389,14 @@ export function EnrollmentView() {
   }
 
   useEffect(() => {
-    loadRequests()
+    const loadPage = async () => {
+      await Promise.all([
+        loadRequests(),
+        loadImportPermissions(),
+      ])
+    }
+
+    loadPage()
   }, [])
 
   const updateFilter = (
@@ -875,41 +949,52 @@ export function EnrollmentView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* مؤقتًا: الزران لا يعتمدان على system_keys */}
+          {!permissionsLoading &&
+            allowCurrentYearImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowImport(true)
+                }
+                className="gap-2"
+              >
+                <FileSpreadsheet className="size-4" />
+                استيراد سجل
+              </Button>
+            )}
 
-          <Button
-            variant="outline"
-            onClick={() =>
-              setShowImport(true)
-            }
-            className="gap-2"
-          >
-            <FileSpreadsheet className="size-4" />
-            استيراد سجل
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() =>
-              setShowArchive(true)
-            }
-            className="gap-2"
-          >
-            <FileArchive className="size-4" />
-            استيراد للأرشيف
-          </Button>
+          {!permissionsLoading &&
+            allowArchiveImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowArchive(true)
+                }
+                className="gap-2"
+              >
+                <FileArchive className="size-4" />
+                استيراد للأرشيف
+              </Button>
+            )}
 
           <Button
             variant="outline"
             onClick={async () => {
-              await loadRequests()
+              await Promise.all([
+                loadRequests(),
+                loadImportPermissions(),
+              ])
             }}
-            disabled={loading}
+            disabled={
+              loading ||
+              permissionsLoading
+            }
             className="gap-2"
           >
             <RefreshCw
               className={`size-4 ${
-                loading
+                loading ||
+                permissionsLoading
                   ? 'animate-spin'
                   : ''
               }`}
