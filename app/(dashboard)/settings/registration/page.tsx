@@ -340,12 +340,12 @@ export default function RegistrationSettingsPage() {
       )}
 
       <div>
-        <Button variant="outline" asChild>
-          <Link href="/settings">
+        <Link href="/settings">
+          <Button variant="outline">
             <ArrowRight className="ml-2 size-4" />
             العودة للإعدادات
-          </Link>
-        </Button>
+          </Button>
+        </Link>
       </div>
 
       {/* التسجيل العام */}
@@ -370,7 +370,7 @@ export default function RegistrationSettingsPage() {
             {registrationOpen ? (
               <Badge variant="success">التسجيل مفتوح</Badge>
             ) : (
-              <Badge variant="destructive">التسجيل مغلق</Badge>
+              <Badge variant="danger">التسجيل مغلق</Badge>
             )}
           </div>
         </CardContent>

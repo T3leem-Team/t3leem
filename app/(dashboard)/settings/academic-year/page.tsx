@@ -669,11 +669,20 @@ export default function Page() {
           courseId = insertedCourse.id
         }
 
-        const relationError =
-          await saveCourseTeachers(
-            courseId,
-            course.teacherIds,
-          )
+            if (!courseId) {
+      setSupabaseStatus(
+        `تعذر تحديد رقم الدورة "${course.name}".`,
+      )
+      setSaving(false)
+      return
+    }
+
+    const relationError =
+      await saveCourseTeachers(
+        courseId,
+        course.teacherIds,
+      )
+  
 
         if (relationError) {
           setSupabaseStatus(
