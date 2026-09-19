@@ -112,6 +112,7 @@ type DashboardStats = {
   absentCount: number
   lateCount: number
   excusedCount: number
+  recordedCount: number
 }
 
 type StudentSearchResult = {
@@ -150,6 +151,24 @@ function normalizeText(
   return String(value ?? '')
     .trim()
     .replace(/\s+/g, ' ')
+}
+
+function normalizeId(
+  value: string | null | undefined,
+) {
+  return String(value ?? '').trim()
+}
+
+/*
+ * مهم جدًا:
+ * attendance_date في Supabase عندنا DATE،
+ * لكن هذا يجعل الكود آمنًا حتى لو رجعت القيمة
+ * بصيغة فيها وقت مستقبلًا.
+ */
+function normalizeAttendanceDate(
+  value: string | null | undefined,
+) {
+  return String(value ?? '').slice(0, 10)
 }
 
 function normalizeDay(value: string) {
@@ -280,30 +299,23 @@ function getCourseDays(
 ): string[] {
   if (Array.isArray(value)) {
     return value
-      .map((item) =>
-        String(item),
-      )
+      .map((item) => String(item))
       .filter(Boolean)
   }
 
   if (typeof value === 'string') {
     try {
-      const parsed =
-        JSON.parse(value)
+      const parsed = JSON.parse(value)
 
       if (Array.isArray(parsed)) {
         return parsed
-          .map((item) =>
-            String(item),
-          )
+          .map((item) => String(item))
           .filter(Boolean)
       }
     } catch {
       return value
         .split(',')
-        .map((item) =>
-          item.trim(),
-        )
+        .map((item) => item.trim())
         .filter(Boolean)
     }
   }
@@ -337,11 +349,7 @@ function getLessonDateStatus(
     return 'lesson'
   }
 
-  /*
-   * نستخدم UTC حتى لا يتغير اليوم بسبب timezone.
-   */
-  const parts =
-    selectedDate.split('-')
+  const parts = selectedDate.split('-')
 
   if (parts.length !== 3) {
     return 'no-lesson'
@@ -363,8 +371,7 @@ function getLessonDateStatus(
     return 'no-lesson'
   }
 
-  const dayIndex =
-    date.getUTCDay()
+  const dayIndex = date.getUTCDay()
 
   const isCourseDay =
     course.days.some(
@@ -410,16 +417,12 @@ export function DashboardView() {
   const [
     attendanceStatuses,
     setAttendanceStatuses,
-  ] = useState<AttendanceStatus[]>(
-    [],
-  )
+  ] = useState<AttendanceStatus[]>([])
 
   const [
     attendanceRecords,
     setAttendanceRecords,
-  ] = useState<AttendanceRecord[]>(
-    [],
-  )
+  ] = useState<AttendanceRecord[]>([])
 
   const [students, setStudents] =
     useState<Student[]>([])
@@ -463,8 +466,8 @@ export function DashboardView() {
     () =>
       courses.find(
         (course) =>
-          course.id ===
-          selectedCourseId,
+          normalizeId(course.id) ===
+          normalizeId(selectedCourseId),
       ) ?? null,
     [
       courses,
@@ -486,19 +489,25 @@ export function DashboardView() {
     )
 
   /*
-   * تحميل الحضور.
-   *
-   * يتم تحميل سجلات الحضور للدورات المطلوبة
-   * من Supabase مباشرة.
+   * قراءة الحضور من Supabase.
    */
   const loadAttendance =
     useCallback(
       async (courseIds: string[]) => {
+        const normalizedCourseIds =
+          Array.from(
+            new Set(
+              courseIds
+                .map(normalizeId)
+                .filter(Boolean),
+            ),
+          )
+
         if (
-          courseIds.length === 0
+          normalizedCourseIds.length ===
+          0
         ) {
           setAttendanceRecords([])
-          setAttendanceStatuses([])
           return
         }
 
@@ -521,10 +530,16 @@ export function DashboardView() {
             )
             .in(
               'course_id',
-              courseIds,
+              normalizedCourseIds,
             )
             .order(
               'attendance_date',
+              {
+                ascending: false,
+              },
+            )
+            .order(
+              'created_at',
               {
                 ascending: false,
               },
@@ -556,11 +571,8 @@ export function DashboardView() {
             'Attendance load error:',
             attendanceResult.error,
           )
-        } else {
-          setAttendanceRecords(
-            (attendanceResult.data ??
-              []) as AttendanceRecord[],
-          )
+
+          return
         }
 
         if (
@@ -570,10 +582,64 @@ export function DashboardView() {
             'Attendance statuses load error:',
             statusesResult.error,
           )
-        } else {
+        }
+
+        const records =
+          (
+            attendanceResult.data ??
+            []
+          ).map(
+            (record) => ({
+              id: String(
+                record.id,
+              ),
+              studentId: normalizeId(
+                record.student_id,
+              ),
+              enrollmentId:
+                record.enrollment_id
+                  ? String(
+                      record.enrollment_id,
+                    )
+                  : null,
+              attendanceDate:
+                normalizeAttendanceDate(
+                  record.attendance_date,
+                ),
+              statusId: normalizeId(
+                record.status_id,
+              ),
+              note:
+                record.note ??
+                null,
+              courseId: normalizeId(
+                record.course_id,
+              ),
+            }),
+          )
+
+        setAttendanceRecords(
+          records,
+        )
+
+        if (
+          !statusesResult.error
+        ) {
           setAttendanceStatuses(
-            (statusesResult.data ??
-              []) as AttendanceStatus[],
+            (
+              statusesResult.data ??
+              []
+            ).map(
+              (status) => ({
+                id: normalizeId(
+                  status.id,
+                ),
+                name: String(
+                  status.name ??
+                    '',
+                ),
+              }),
+            ),
           )
         }
       },
@@ -633,27 +699,27 @@ export function DashboardView() {
             setStudents([])
             setAttendanceRecords([])
             setAttendanceStatuses([])
-            setPendingRegistrationCount(
-              0,
-            )
+            setPendingRegistrationCount(0)
             return
           }
 
-          const currentYear: AcademicYear =
-            {
-              id: yearData.id,
-              name: yearData.name,
-              annualFee:
-                Number(
-                  yearData.annual_fee,
-                ) || 0,
-              startDate:
-                yearData.start_date ??
-                null,
-              endDate:
-                yearData.end_date ??
-                null,
-            }
+          const currentYear: AcademicYear = {
+            id: String(
+              yearData.id,
+            ),
+            name:
+              yearData.name,
+            annualFee:
+              Number(
+                yearData.annual_fee,
+              ) || 0,
+            startDate:
+              yearData.start_date ??
+              null,
+            endDate:
+              yearData.end_date ??
+              null,
+          }
 
           setAcademicYear(
             currentYear,
@@ -744,22 +810,28 @@ export function DashboardView() {
             (
               coursesResult.data ??
               []
-            ).map((course) => ({
-              id: course.id,
-              name: course.name,
-              startDate:
-                course.start_date ??
-                null,
-              endDate:
-                course.end_date ??
-                null,
-              days: getCourseDays(
-                course.days,
-              ),
-              createdAt:
-                course.created_at ??
-                null,
-            }))
+            ).map(
+              (course) => ({
+                id: normalizeId(
+                  course.id,
+                ),
+                name:
+                  course.name,
+                startDate:
+                  course.start_date ??
+                  null,
+                endDate:
+                  course.end_date ??
+                  null,
+                days:
+                  getCourseDays(
+                    course.days,
+                  ),
+                createdAt:
+                  course.created_at ??
+                  null,
+              }),
+            )
 
           const mappedEnrollments: Enrollment[] =
             (
@@ -767,14 +839,23 @@ export function DashboardView() {
               []
             ).map(
               (enrollment) => ({
-                id: enrollment.id,
+                id: normalizeId(
+                  enrollment.id,
+                ),
                 studentId:
-                  enrollment.student_id,
+                  normalizeId(
+                    enrollment.student_id,
+                  ),
                 academicYearId:
-                  enrollment.academic_year_id,
+                  normalizeId(
+                    enrollment.academic_year_id,
+                  ),
                 levelId:
-                  enrollment.level_id ??
-                  null,
+                  enrollment.level_id
+                    ? normalizeId(
+                        enrollment.level_id,
+                      )
+                    : null,
                 status:
                   enrollment.status,
               }),
@@ -854,13 +935,21 @@ export function DashboardView() {
                 []
               ).map(
                 (assignment) => ({
-                  id: assignment.id,
+                  id: normalizeId(
+                    assignment.id,
+                  ),
                   courseId:
-                    assignment.course_id,
+                    normalizeId(
+                      assignment.course_id,
+                    ),
                   teacherId:
-                    assignment.teacher_id,
+                    normalizeId(
+                      assignment.teacher_id,
+                    ),
                   studentId:
-                    assignment.student_id,
+                    normalizeId(
+                      assignment.student_id,
+                    ),
                 }),
               )
 
@@ -870,11 +959,17 @@ export function DashboardView() {
                 []
               ).map(
                 (item) => ({
-                  id: item.id,
+                  id: normalizeId(
+                    item.id,
+                  ),
                   courseId:
-                    item.course_id,
+                    normalizeId(
+                      item.course_id,
+                    ),
                   teacherId:
-                    item.teacher_id,
+                    normalizeId(
+                      item.teacher_id,
+                    ),
                 }),
               )
 
@@ -916,8 +1011,11 @@ export function DashboardView() {
                   []
                 ).map(
                   (teacher) => ({
-                    id: teacher.id,
-                    name: teacher.name,
+                    id: normalizeId(
+                      teacher.id,
+                    ),
+                    name:
+                      teacher.name,
                   }),
                 )
             }
@@ -971,7 +1069,9 @@ export function DashboardView() {
                 []
               ).map(
                 (student) => ({
-                  id: student.id,
+                  id: normalizeId(
+                    student.id,
+                  ),
                   studentId:
                     student.student_id ??
                     null,
@@ -1078,10 +1178,6 @@ export function DashboardView() {
             },
           )
 
-          /*
-           * تحميل جميع سجلات الحضور للدورات.
-           * بعدها يوجد تحديث إضافي للدورة المحددة.
-           */
           await loadAttendance(
             courseIds,
           )
@@ -1103,26 +1199,11 @@ export function DashboardView() {
   }, [loadData])
 
   /*
-   * مهم:
-   * عند تغيير الدورة أو التاريخ، نعيد قراءة الحضور
-   * من Supabase حتى لا نعتمد على بيانات قديمة في الذاكرة.
+   * عند تغيير الدورة أو التاريخ:
+   * نعيد قراءة الحضور للدورة المختارة.
    */
   useEffect(() => {
-    if (
-      !selectedCourseId ||
-      courses.length === 0
-    ) {
-      return
-    }
-
-    const courseExists =
-      courses.some(
-        (course) =>
-          course.id ===
-          selectedCourseId,
-      )
-
-    if (!courseExists) {
+    if (!selectedCourseId) {
       return
     }
 
@@ -1132,61 +1213,71 @@ export function DashboardView() {
   }, [
     selectedCourseId,
     selectedDate,
-    courses,
     loadAttendance,
   ])
 
   /*
-   * تحديث الحضور عند الرجوع للداشبورد
-   * أو عند عودة التبويب للواجهة.
+   * تحديث عند الرجوع للصفحة.
    */
   useEffect(() => {
-    const refreshCurrentAttendance =
-      async () => {
-        if (
-          !selectedCourseId
-        ) {
-          return
-        }
+    if (!selectedCourseId) {
+      return
+    }
 
-        await loadAttendance([
+    const refresh = () => {
+      if (
+        document.visibilityState ===
+        'visible'
+      ) {
+        void loadAttendance([
           selectedCourseId,
         ])
       }
-
-    const handleFocus = () => {
-      void refreshCurrentAttendance()
     }
-
-    const handleVisibilityChange =
-      () => {
-        if (
-          document.visibilityState ===
-          'visible'
-        ) {
-          void refreshCurrentAttendance()
-        }
-      }
 
     window.addEventListener(
       'focus',
-      handleFocus,
+      refresh,
     )
 
     document.addEventListener(
       'visibilitychange',
-      handleVisibilityChange,
+      refresh,
     )
+
+    /*
+     * تحديث تلقائي كل 5 ثوانٍ طالما
+     * الداشبورد ظاهر.
+     *
+     * هذا مهم حتى لو انتقل المستخدم
+     * من صفحة الحضور إلى الداشبورد
+     * بدون إعادة تحميل الصفحة.
+     */
+    const interval =
+      window.setInterval(() => {
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+          void loadAttendance([
+            selectedCourseId,
+          ])
+        }
+      }, 5000)
 
     return () => {
       window.removeEventListener(
         'focus',
-        handleFocus,
+        refresh,
       )
 
       document.removeEventListener(
         'visibilitychange',
-        handleVisibilityChange,
+        refresh,
+      )
+
+      window.clearInterval(
+        interval,
       )
     }
   }, [
@@ -1199,7 +1290,9 @@ export function DashboardView() {
       new Map(
         attendanceStatuses.map(
           (status) => [
-            status.id,
+            normalizeId(
+              status.id,
+            ),
             status.name,
           ],
         ),
@@ -1212,8 +1305,12 @@ export function DashboardView() {
       () =>
         assignments.filter(
           (assignment) =>
-            assignment.courseId ===
-            selectedCourseId,
+            normalizeId(
+              assignment.courseId,
+            ) ===
+            normalizeId(
+              selectedCourseId,
+            ),
         ),
       [
         assignments,
@@ -1227,44 +1324,71 @@ export function DashboardView() {
         new Set(
           selectedCourseAssignments.map(
             (assignment) =>
-              assignment.studentId,
+              normalizeId(
+                assignment.studentId,
+              ),
           ),
         ),
       [selectedCourseAssignments],
     )
 
   /*
-   * سجلات الحضور الخاصة فقط:
-   * - بالدورة المختارة
-   * - بالتاريخ المختار
-   * - بالطلاب الموزعين في الدورة
+   * الحضور الفعلي لليوم المختار.
    *
-   * ويتم تجاهل التكرار لنفس الطالب.
+   * مهم:
+   * لا نعتمد هنا على assignments لتحديد
+   * هل سجل الحضور موجود أم لا.
+   *
+   * Supabase أثبت أن attendance هو
+   * المصدر الحقيقي لتسجيل الحضور.
    */
   const selectedDateRecords =
     useMemo(() => {
+      const selectedCourse =
+        normalizeId(
+          selectedCourseId,
+        )
+
+      const selectedDay =
+        normalizeAttendanceDate(
+          selectedDate,
+        )
+
       const seenStudents =
         new Set<string>()
 
       return attendanceRecords.filter(
         (record) => {
+          const recordCourse =
+            normalizeId(
+              record.courseId,
+            )
+
+          const recordStudent =
+            normalizeId(
+              record.studentId,
+            )
+
+          const recordDate =
+            normalizeAttendanceDate(
+              record.attendanceDate,
+            )
+
           if (
-            record.courseId !==
-              selectedCourseId ||
-            record.attendanceDate !==
-              selectedDate ||
-            !assignedStudentIds.has(
-              record.studentId,
-            ) ||
+            recordCourse !==
+              selectedCourse ||
+            recordDate !==
+              selectedDay ||
+            !recordStudent ||
             seenStudents.has(
-              record.studentId,
+              recordStudent,
             )
           ) {
             return false
           }
 
           seenStudents.add(
-            record.studentId,
+            recordStudent,
           )
 
           return true
@@ -1274,7 +1398,6 @@ export function DashboardView() {
       attendanceRecords,
       selectedCourseId,
       selectedDate,
-      assignedStudentIds,
     ])
 
   const stats = useMemo<DashboardStats>(
@@ -1289,8 +1412,11 @@ export function DashboardView() {
             )
             .map(
               (enrollment) =>
-                enrollment.studentId,
-            ),
+                normalizeId(
+                  enrollment.studentId,
+                ),
+            )
+            .filter(Boolean),
         )
 
       const studentsCount =
@@ -1314,10 +1440,15 @@ export function DashboardView() {
       let lateCount = 0
       let excusedCount = 0
 
+      /*
+       * نحسب من سجلات Supabase الفعلية.
+       */
       for (const record of selectedDateRecords) {
         const statusName =
           statusMap.get(
-            record.statusId,
+            normalizeId(
+              record.statusId,
+            ),
           ) ?? ''
 
         if (
@@ -1347,6 +1478,12 @@ export function DashboardView() {
         }
       }
 
+      const recordedCount =
+        presentCount +
+        absentCount +
+        lateCount +
+        excusedCount
+
       return {
         studentsCount,
         assignedCount,
@@ -1355,6 +1492,7 @@ export function DashboardView() {
         absentCount,
         lateCount,
         excusedCount,
+        recordedCount,
       }
     },
     [
@@ -1366,26 +1504,24 @@ export function DashboardView() {
   )
 
   /*
-   * إجمالي السجلات التي تم تسجيلها فعليًا.
-   */
-  const attendanceRecordedCount =
-    stats.presentCount +
-    stats.absentCount +
-    stats.lateCount +
-    stats.excusedCount
-
-  /*
-   * إذا سجلنا الحضور لبعض الطلاب فقط،
-   * نحسب النسبة من السجلات المسجلة فعليًا.
+   * النسبة:
    *
-   * مثال:
-   * 8 حاضر + 2 غائب = 80%.
+   * إذا كان لدينا 5 طلاب موزعين
+   * وتم تسجيل 5:
+   *
+   * 5 حاضر / 5 موزعين = 100%
+   *
+   * وإذا تم تسجيل 4 فقط:
+   *
+   * 4 حاضر / 5 موزعين = 80%
+   *
+   * وهذا يعكس حالة الدورة بشكل صحيح.
    */
   const attendancePercentage =
-    attendanceRecordedCount > 0
+    stats.assignedCount > 0
       ? Math.round(
           (stats.presentCount /
-            attendanceRecordedCount) *
+            stats.assignedCount) *
             100,
         )
       : 0
@@ -1404,20 +1540,30 @@ export function DashboardView() {
         const courseTeacherRows =
           courseTeachers.filter(
             (item) =>
-              item.courseId ===
-              selectedCourseId,
+              normalizeId(
+                item.courseId,
+              ) ===
+              normalizeId(
+                selectedCourseId,
+              ),
           )
 
         const assignmentTeacherIds =
           assignments
             .filter(
               (item) =>
-                item.courseId ===
-                selectedCourseId,
+                normalizeId(
+                  item.courseId,
+                ) ===
+                normalizeId(
+                  selectedCourseId,
+                ),
             )
             .map(
               (item) =>
-                item.teacherId,
+                normalizeId(
+                  item.teacherId,
+                ),
             )
 
         const teacherIds =
@@ -1425,10 +1571,13 @@ export function DashboardView() {
             new Set([
               ...courseTeacherRows.map(
                 (item) =>
-                  item.teacherId,
+                  normalizeId(
+                    item.teacherId,
+                  ),
               ),
               ...assignmentTeacherIds,
             ]),
+          ).values(),
           )
 
         return teacherIds.map(
@@ -1436,7 +1585,9 @@ export function DashboardView() {
             const teacher =
               teachers.find(
                 (item) =>
-                  item.id ===
+                  normalizeId(
+                    item.id,
+                  ) ===
                   teacherId,
               )
 
@@ -1445,14 +1596,22 @@ export function DashboardView() {
                 assignments
                   .filter(
                     (item) =>
-                      item.courseId ===
-                        selectedCourseId &&
-                      item.teacherId ===
+                      normalizeId(
+                        item.courseId,
+                      ) ===
+                        normalizeId(
+                          selectedCourseId,
+                        ) &&
+                      normalizeId(
+                        item.teacherId,
+                      ) ===
                         teacherId,
                   )
                   .map(
                     (item) =>
-                      item.studentId,
+                      normalizeId(
+                        item.studentId,
+                      ),
                   ),
               )
 
@@ -1462,24 +1621,31 @@ export function DashboardView() {
               new Set<string>()
 
             for (const record of selectedDateRecords) {
+              const studentId =
+                normalizeId(
+                  record.studentId,
+                )
+
               if (
                 !studentIds.has(
-                  record.studentId,
+                  studentId,
                 ) ||
                 seen.has(
-                  record.studentId,
+                  studentId,
                 )
               ) {
                 continue
               }
 
               seen.add(
-                record.studentId,
+                studentId,
               )
 
               const statusName =
                 statusMap.get(
-                  record.statusId,
+                  normalizeId(
+                    record.statusId,
+                  ),
                 ) ?? ''
 
               if (
@@ -1615,12 +1781,18 @@ export function DashboardView() {
                   assignments
                     .filter(
                       (assignment) =>
-                        assignment.studentId ===
-                        student.id,
+                        normalizeId(
+                          assignment.studentId,
+                        ) ===
+                        normalizeId(
+                          student.id,
+                        ),
                     )
                     .map(
                       (assignment) =>
-                        assignment.courseId,
+                        normalizeId(
+                          assignment.courseId,
+                        ),
                     ),
                 ),
               )
@@ -1631,7 +1803,9 @@ export function DashboardView() {
                   (courseId) =>
                     courses.find(
                       (course) =>
-                        course.id ===
+                        normalizeId(
+                          course.id,
+                        ) ===
                         courseId,
                     )?.name,
                 )
@@ -1648,15 +1822,23 @@ export function DashboardView() {
                   assignments
                     .filter(
                       (assignment) =>
-                        assignment.studentId ===
-                        student.id,
+                        normalizeId(
+                          assignment.studentId,
+                        ) ===
+                        normalizeId(
+                          student.id,
+                        ),
                     )
                     .map(
                       (assignment) =>
                         teachers.find(
                           (teacher) =>
-                            teacher.id ===
-                            assignment.teacherId,
+                            normalizeId(
+                              teacher.id,
+                            ) ===
+                            normalizeId(
+                              assignment.teacherId,
+                            ),
                         )?.name,
                     )
                     .filter(
@@ -1681,18 +1863,32 @@ export function DashboardView() {
               const record =
                 attendanceRecords.find(
                   (item) =>
-                    item.studentId ===
-                      student.id &&
-                    item.courseId ===
-                      selectedCourseId &&
-                    item.attendanceDate ===
-                      selectedDate,
+                    normalizeId(
+                      item.studentId,
+                    ) ===
+                      normalizeId(
+                        student.id,
+                      ) &&
+                    normalizeId(
+                      item.courseId,
+                    ) ===
+                      normalizeId(
+                        selectedCourseId,
+                      ) &&
+                    normalizeAttendanceDate(
+                      item.attendanceDate,
+                    ) ===
+                      normalizeAttendanceDate(
+                        selectedDate,
+                      ),
                 )
 
               if (record) {
                 const rawStatus =
                   statusMap.get(
-                    record.statusId,
+                    normalizeId(
+                      record.statusId,
+                    ),
                   ) ?? ''
 
                 attendanceStatus =
@@ -1733,15 +1929,23 @@ export function DashboardView() {
       return assignments
         .filter(
           (assignment) =>
-            assignment.studentId ===
-            selectedStudent.student.id,
+            normalizeId(
+              assignment.studentId,
+            ) ===
+            normalizeId(
+              selectedStudent.student.id,
+            ),
         )
         .map(
           (assignment) =>
             courses.find(
               (course) =>
-                course.id ===
-                assignment.courseId,
+                normalizeId(
+                  course.id,
+                ) ===
+                normalizeId(
+                  assignment.courseId,
+                ),
             ),
         )
         .filter(
@@ -1767,15 +1971,23 @@ export function DashboardView() {
           assignments
             .filter(
               (assignment) =>
-                assignment.studentId ===
-                selectedStudent.student.id,
+                normalizeId(
+                  assignment.studentId,
+                ) ===
+                normalizeId(
+                  selectedStudent.student.id,
+                ),
             )
             .map(
               (assignment) =>
                 teachers.find(
                   (teacher) =>
-                    teacher.id ===
-                    assignment.teacherId,
+                    normalizeId(
+                      teacher.id,
+                    ) ===
+                    normalizeId(
+                      assignment.teacherId,
+                    ),
                 )?.name,
             )
             .filter(
@@ -2169,21 +2381,26 @@ export function DashboardView() {
                         }{' '}
                         حاضر من أصل{' '}
                         {
-                          attendanceRecordedCount
+                          stats.assignedCount
                         }{' '}
-                        مسجل حضور
-                        {stats.assignedCount >
-                          0 && (
-                          <>
-                            {' '}
+                        موزعين في الدورة
+                      </p>
+
+                      {stats.recordedCount >
+                        0 &&
+                        stats.recordedCount <
+                          stats.assignedCount && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            تم تسجيل الحضور لـ{' '}
+                            {
+                              stats.recordedCount
+                            }{' '}
                             من أصل{' '}
                             {
                               stats.assignedCount
-                            }{' '}
-                            موزعين في الدورة
-                          </>
+                            }
+                          </p>
                         )}
-                      </p>
                     </>
                   ) : (
                     <p className="text-sm font-medium text-muted-foreground">
@@ -2227,7 +2444,6 @@ export function DashboardView() {
               </div>
             </div>
 
-            {/* Before course */}
             {lessonDateStatus ===
               'not-started' && (
               <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
@@ -2248,7 +2464,6 @@ export function DashboardView() {
               </div>
             )}
 
-            {/* After course */}
             {lessonDateStatus ===
               'ended' && (
               <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
@@ -2269,7 +2484,6 @@ export function DashboardView() {
               </div>
             )}
 
-            {/* Not a course day */}
             {lessonDateStatus ===
               'no-lesson' && (
               <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
@@ -2285,7 +2499,6 @@ export function DashboardView() {
               </div>
             )}
 
-            {/* No course */}
             {lessonDateStatus ===
               'no-course' && (
               <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
@@ -2297,7 +2510,6 @@ export function DashboardView() {
               </div>
             )}
 
-            {/* Normal lesson summary */}
             {lessonDateStatus ===
               'lesson' &&
               attendanceItems.length >
@@ -2341,7 +2553,6 @@ export function DashboardView() {
                 </div>
               )}
 
-            {/* No records on an actual lesson day */}
             {lessonDateStatus ===
               'lesson' &&
               attendanceItems.length ===
@@ -2409,7 +2620,7 @@ export function DashboardView() {
           </button>
         )}
 
-        {/* Teacher comments placeholder */}
+        {/* Teacher comments */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
