@@ -1578,8 +1578,7 @@ export function DashboardView() {
               ...assignmentTeacherIds,
             ]),
           ).values(),
-          )
-
+          
         return teacherIds.map(
           (teacherId) => {
             const teacher =
