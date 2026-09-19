@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   Plus,
   Search,
+  Trash2,
   X,
 } from 'lucide-react'
 
@@ -24,7 +25,6 @@ import {
   AttendanceNotes,
   Course,
   Student,
-  normalizeStatusName,
 } from '@/components/sections/attendance-view'
 
 type Teacher = {
@@ -54,6 +54,9 @@ export function TeachersView() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deletingAssignmentId, setDeletingAssignmentId] =
+    useState<string | null>(null)
+
   const [statusMessage, setStatusMessage] = useState('')
   const [search, setSearch] = useState('')
 
@@ -396,65 +399,66 @@ export function TeachersView() {
     }
 
     setCourseTeacherIds(teacherMap)
-    
-const {
-  data: statusRows,
-  error: statusError,
-} = await supabase
-  .from('attendance_statuses')
-  .select(
-    'id, name, is_active, sort_order',
-  )
-  .order('sort_order', {
-    ascending: true,
-  })
 
-if (statusError) {
-  setStatusMessage(
-    `خطأ في تحميل حالات الحضور: ${statusError.message}`,
-  )
-  setLoading(false)
-  return
-}
+    const {
+      data: statusRows,
+      error: statusError,
+    } = await supabase
+      .from('attendance_statuses')
+      .select(
+        'id, name, is_active, sort_order',
+      )
+      .order('sort_order', {
+        ascending: true,
+      })
 
-const mappedStatuses: AttendanceStatus[] = (
-  statusRows ?? []
-)
-  .filter((status) => {
-    const name = String(
-      status.name ?? '',
-    ).trim()
+    if (statusError) {
+      setStatusMessage(
+        `خطأ في تحميل حالات الحضور: ${statusError.message}`,
+      )
+      setLoading(false)
+      return
+    }
 
-    return (
-      name === 'حاضر' ||
-      name === 'غائب' ||
-      name === 'متأخر' ||
-      name === 'مستأذن'
+    const mappedStatuses: AttendanceStatus[] = (
+      statusRows ?? []
     )
-  })
-  .map((status) => ({
-    id: status.id,
-    name: String(
-      status.name,
-    ).trim() as AttendanceStatus['name'],
-    isActive: Boolean(
-      status.is_active,
-    ),
-    sortOrder:
-      status.sort_order ?? 0,
-  }))
+      .filter((status) => {
+        const name = String(
+          status.name ?? '',
+        ).trim()
 
-setAttendanceStatuses(
-  mappedStatuses,
-)
+        return (
+          name === 'حاضر' ||
+          name === 'غائب' ||
+          name === 'متأخر' ||
+          name === 'مستأذن'
+        )
+      })
+      .map((status) => ({
+        id: status.id,
+        name: String(
+          status.name,
+        ).trim() as AttendanceStatus['name'],
+        isActive: Boolean(
+          status.is_active,
+        ),
+        sortOrder:
+          status.sort_order ?? 0,
+      }))
 
-if (mappedStatuses.length === 0) {
-  setStatusMessage(
-    `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
-      statusRows?.length ?? 0
-    }`,
-  )
-}
+    setAttendanceStatuses(
+      mappedStatuses,
+    )
+
+    if (mappedStatuses.length === 0) {
+      setStatusMessage(
+        `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
+          statusRows?.length ?? 0
+        }`,
+      )
+    }
+
     let attendanceRows: {
       id: string
       student_id: string
@@ -1050,6 +1054,66 @@ if (mappedStatuses.length === 0) {
     setSaving(false)
   }
 
+  const removeStudentFromTeacher = async (
+    assignment: Assignment,
+    student: Student,
+  ) => {
+    const confirmed = window.confirm(
+      `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء توزيع الطالب على المعلم فقط، ولن يتم حذف الطالب من النظام أو حذف سجلات حضوره.`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeletingAssignmentId(
+      assignment.id,
+    )
+    setStatusMessage(
+      'جاري مسح الطالب من المعلم...',
+    )
+
+    const { error } = await supabase
+      .from(
+        'teacher_student_assignments',
+      )
+      .delete()
+      .eq(
+        'id',
+        assignment.id,
+      )
+
+    if (error) {
+      setStatusMessage(
+        `تعذر مسح الطالب من المعلم: ${error.message}`,
+      )
+      setDeletingAssignmentId(null)
+      return
+    }
+
+    setAssignments(
+      (current) =>
+        current.filter(
+          (item) =>
+            item.id !==
+            assignment.id,
+        ),
+    )
+
+    setSelectedStudentIds(
+      (current) =>
+        current.filter(
+          (id) =>
+            id !== student.id,
+        ),
+    )
+
+    setDeletingAssignmentId(null)
+    setStatusMessage(
+      `تم مسح ${student.name} من المعلم بنجاح ✅`,
+    )
+  }
+
   if (
     !loading &&
     !currentCourse
@@ -1513,46 +1577,95 @@ if (mappedStatuses.length === 0) {
                           {assignedStudents.map(
                             (
                               student,
-                            ) => (
-                              <tr
-                                key={
-                                  student.id
-                                }
-                                className="border-t"
-                              >
-                                <td className="px-4 py-3 font-medium">
-                                  {
-                                    student.name
+                            ) => {
+                              const assignment =
+                                assignments.find(
+                                  (item) =>
+                                    item.courseId ===
+                                      currentCourse?.id &&
+                                    item.teacherId ===
+                                      selectedTeacher.id &&
+                                    item.studentId ===
+                                      student.id,
+                                )
+
+                              const isDeleting =
+                                assignment?.id ===
+                                deletingAssignmentId
+
+                              return (
+                                <tr
+                                  key={
+                                    student.id
                                   }
-                                </td>
-
-                                <td className="px-4 py-3">
-                                  {student.personalId ||
-                                    '—'}
-                                </td>
-
-                                <td className="px-4 py-3">
-                                  {
-                                    student.levelName
-                                  }
-                                </td>
-
-                                <td className="px-4 py-3">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      openTransfer(
-                                        student.id,
-                                      )
+                                  className="border-t"
+                                >
+                                  <td className="px-4 py-3 font-medium">
+                                    {
+                                      student.name
                                     }
-                                  >
-                                    <ArrowLeftRight className="size-4" />
-                                    نقل
-                                  </Button>
-                                </td>
-                              </tr>
-                            ),
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {student.personalId ||
+                                      '—'}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {
+                                      student.levelName
+                                    }
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          openTransfer(
+                                            student.id,
+                                          )
+                                        }
+                                        disabled={
+                                          isDeleting
+                                        }
+                                      >
+                                        <ArrowLeftRight className="size-4" />
+                                        نقل
+                                      </Button>
+
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (
+                                            assignment
+                                          ) {
+                                            removeStudentFromTeacher(
+                                              assignment,
+                                              student,
+                                            )
+                                          }
+                                        }}
+                                        disabled={
+                                          !assignment ||
+                                          isDeleting ||
+                                          saving
+                                        }
+                                        className="text-destructive hover:text-destructive"
+                                      >
+                                        <Trash2 className="size-4" />
+
+                                        {isDeleting
+                                          ? 'جاري المسح...'
+                                          : 'مسح'}
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            },
                           )}
                         </tbody>
                       </table>
