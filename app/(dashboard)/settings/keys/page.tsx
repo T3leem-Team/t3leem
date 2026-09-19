@@ -1,104 +1,74 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  Archive,
-  ArrowRight,
-  KeyRound,
-  Loader2,
-  Save,
-  Upload,
-} from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { Check, Loader2, Save, Settings2 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 
-export default function SystemKeysPage() {
-  const router = useRouter()
-
-  const [allowAddToCurrentYear, setAllowAddToCurrentYear] =
-    useState(false)
-
-  const [allowAddToArchive, setAllowAddToArchive] =
-    useState(false)
+export default function KeysPage() {
+  const [allowAddToCurrentYear, setAllowAddToCurrentYear] = useState(false)
+  const [allowAddToArchive, setAllowAddToArchive] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   useEffect(() => {
     loadKeys()
   }, [])
 
-  async function loadKeys() {
+  const loadKeys = async () => {
     setLoading(true)
-    setError('')
-    setMessage('')
-
-    const { data, error } = await supabase
-      .from('system_keys')
-      .select('key_name, enabled')
-      .in('key_name', [
-        'allow_add_to_current_year',
-        'allow_add_to_archive',
-      ])
-
-    if (error) {
-      console.error(
-        'system_keys load error:',
-        error,
-      )
-
-      setError(
-        `تعذر تحميل مفاتيح النظام: ${error.message}`,
-      )
-
-      setLoading(false)
-      return
-    }
-
-    for (const item of data ?? []) {
-      if (
-        item.key_name ===
-        'allow_add_to_current_year'
-      ) {
-        setAllowAddToCurrentYear(
-          item.enabled === true,
-        )
-      }
-
-      if (
-        item.key_name ===
-        'allow_add_to_archive'
-      ) {
-        setAllowAddToArchive(
-          item.enabled === true,
-        )
-      }
-    }
-
-    setLoading(false)
-  }
-
-  async function saveKeys() {
-    setSaving(true)
-    setMessage('')
-    setError('')
+    setError(null)
 
     try {
-      const rows = [
+      const { data, error } = await supabase
+        .from('system_keys')
+        .select('key_name, enabled')
+        .in('key_name', [
+          'allow_add_to_current_year',
+          'allow_add_to_archive',
+        ])
+
+      if (error) {
+        throw error
+      }
+
+      for (const row of data ?? []) {
+        if (row.key_name === 'allow_add_to_current_year') {
+          setAllowAddToCurrentYear(Boolean(row.enabled))
+        }
+
+        if (row.key_name === 'allow_add_to_archive') {
+          setAllowAddToArchive(Boolean(row.enabled))
+        }
+      }
+    } catch (error: any) {
+      console.error('load system keys error:', error)
+
+      setError(
+        `تعذر تحميل إعدادات المفاتيح: ${
+          error?.message || 'حدث خطأ غير معروف'
+        }`
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveKeys = async () => {
+    setSaving(true)
+    setError(null)
+    setSuccess(false)
+
+    try {
+      const updates = [
         {
           key_name: 'allow_add_to_current_year',
           enabled: allowAddToCurrentYear,
@@ -109,66 +79,32 @@ export default function SystemKeysPage() {
         },
       ]
 
-      console.log(
-        'Saving system keys:',
-        rows,
-      )
+      for (const item of updates) {
+        const { error } = await supabase
+          .from('system_keys')
+          .update({
+            enabled: item.enabled,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('key_name', item.key_name)
 
-      const { data, error } = await supabase
-        .from('system_keys')
-        .upsert(rows, {
-          onConflict: 'key_name',
-        })
-        .select('key_name, enabled')
-
-      if (error) {
-        console.error(
-          'system_keys save error:',
-          error,
-        )
-
-        setError(
-          `تعذر حفظ إعدادات المفاتيح: ${error.message}`,
-        )
-
-        setSaving(false)
-        return
+        if (error) {
+          throw error
+        }
       }
 
-      console.log(
-        'system_keys saved successfully:',
-        data,
-      )
-
-      setMessage(
-        'تم حفظ إعدادات المفاتيح بنجاح.',
-      )
-
-      /*
-       * إعادة تحميل القيم من قاعدة البيانات
-       * للتأكد أن الحفظ تم فعلاً.
-       */
-      await loadKeys()
-
-      setMessage(
-        'تم حفظ إعدادات المفاتيح بنجاح.',
-      )
+      setSuccess(true)
 
       setTimeout(() => {
-        setMessage('')
+        setSuccess(false)
       }, 3000)
-    } catch (err) {
-      console.error(
-        'Unexpected system_keys error:',
-        err,
-      )
+    } catch (error: any) {
+      console.error('save system keys error:', error)
 
       setError(
-        `حدث خطأ غير متوقع: ${
-          err instanceof Error
-            ? err.message
-            : 'خطأ غير معروف'
-        }`,
+        `تعذر حفظ إعدادات المفاتيح: ${
+          error?.message || 'حدث خطأ غير معروف'
+        }`
       )
     } finally {
       setSaving(false)
@@ -179,222 +115,133 @@ export default function SystemKeysPage() {
     <div className="space-y-6">
       <PageHeader
         title="إدارة المفاتيح"
-        description="التحكم في خيارات استيراد سجل الطلاب والعمليات المرتبطة بها."
+        description="التحكم في الخيارات المتاحة داخل نظام التسجيل والاستيراد."
       />
 
-      <Button
-        variant="outline"
-        onClick={() => router.push('/settings')}
-        className="gap-2"
-      >
-        <ArrowRight className="h-4 w-4" />
-        العودة إلى الإدارة
-      </Button>
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
-      {loading ? (
-        <Card>
-          <CardContent className="flex min-h-[180px] items-center justify-center">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              جاري تحميل المفاتيح...
+      {success && (
+        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          <Check className="size-4" />
+          تم حفظ الإعدادات بنجاح
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings2 className="size-5" />
+            إعدادات الاستيراد
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
+              <Loader2 className="ml-2 size-5 animate-spin" />
+              جاري تحميل الإعدادات...
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {/* إضافة لهذه السنة */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Upload className="h-5 w-5" />
-                </div>
-
-                <div>
-                  <CardTitle className="text-base">
-                    إضافة لهذه السنة الدراسية
-                  </CardTitle>
-
-                  <CardDescription className="mt-1 leading-6">
-                    السماح باستخدام خيار إضافة السجلات
-                    المستوردة إلى الطلاب في السنة
-                    الدراسية الحالية.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent>
+          ) : (
+            <>
+              {/* إضافة للسنة الحالية */}
               <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
-                <div>
-                  <p className="font-medium">
-                    السماح بالإضافة لهذه السنة
-                    الدراسية
-                  </p>
+                <div className="space-y-1">
+                  <div className="font-medium">
+                    إضافة لهذه السنة الدراسية
+                  </div>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {allowAddToCurrentYear
-                      ? 'مفعل — سيظهر خيار الإضافة لهذه السنة.'
-                      : 'معطل — خيار الإضافة لهذه السنة غير متاح.'}
-                  </p>
+                  <div className="text-sm text-muted-foreground">
+                    السماح بظهور خيار استيراد سجل وإضافته إلى السنة
+                    الدراسية الحالية.
+                  </div>
                 </div>
 
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={
-                    allowAddToCurrentYear
-                  }
                   onClick={() =>
                     setAllowAddToCurrentYear(
-                      (current) => !current,
+                      !allowAddToCurrentYear
                     )
                   }
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                     allowAddToCurrentYear
                       ? 'bg-primary'
-                      : 'bg-muted-foreground/30'
+                      : 'bg-muted'
                   }`}
+                  aria-label="إضافة لهذه السنة الدراسية"
                 >
                   <span
-                    className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${
+                    className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
                       allowAddToCurrentYear
-                        ? 'right-1'
-                        : 'right-6'
+                        ? 'translate-x-1'
+                        : 'translate-x-6'
                     }`}
                   />
                 </button>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* إضافة إلى الأرشيف */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Archive className="h-5 w-5" />
-                </div>
-
-                <div>
-                  <CardTitle className="text-base">
-                    إضافة إلى الأرشيف
-                  </CardTitle>
-
-                  <CardDescription className="mt-1 leading-6">
-                    السماح باستخدام خيار إضافة السجلات
-                    المستوردة إلى الأرشيف فقط دون
-                    إضافتها إلى الطلاب الحاليين.
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent>
+              {/* إضافة للأرشيف */}
               <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
-                <div>
-                  <p className="font-medium">
-                    السماح بالإضافة إلى الأرشيف
-                  </p>
+                <div className="space-y-1">
+                  <div className="font-medium">
+                    إضافة إلى الأرشيف
+                  </div>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {allowAddToArchive
-                      ? 'مفعل — سيظهر خيار الإضافة إلى الأرشيف.'
-                      : 'معطل — خيار الإضافة إلى الأرشيف غير متاح.'}
-                  </p>
+                  <div className="text-sm text-muted-foreground">
+                    السماح بظهور خيار استيراد سجل إلى الأرشيف.
+                  </div>
                 </div>
 
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={allowAddToArchive}
                   onClick={() =>
-                    setAllowAddToArchive(
-                      (current) => !current,
-                    )
+                    setAllowAddToArchive(!allowAddToArchive)
                   }
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                     allowAddToArchive
                       ? 'bg-primary'
-                      : 'bg-muted-foreground/30'
+                      : 'bg-muted'
                   }`}
+                  aria-label="إضافة إلى الأرشيف"
                 >
                   <span
-                    className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition ${
+                    className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
                       allowAddToArchive
-                        ? 'right-1'
-                        : 'right-6'
+                        ? 'translate-x-1'
+                        : 'translate-x-6'
                     }`}
                   />
                 </button>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* الحفظ */}
-          <Card>
-            <CardContent className="space-y-4 p-5">
-              {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  <p className="font-medium">
-                    حدث خطأ
-                  </p>
-
-                  <p className="mt-1 break-words">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {message && (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
-                  {message}
-                </div>
-              )}
-
-              <div className="flex justify-end">
+              {/* حفظ */}
+              <div className="flex justify-end pt-2">
                 <Button
                   onClick={saveKeys}
                   disabled={saving}
                   className="gap-2"
                 >
                   {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      جاري الحفظ...
+                    </>
                   ) : (
-                    <Save className="h-4 w-4" />
+                    <>
+                      <Save className="size-4" />
+                      حفظ الإعدادات
+                    </>
                   )}
-
-                  {saving
-                    ? 'جاري الحفظ...'
-                    : 'حفظ التغييرات'}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* معلومات */}
-          <Card className="border-dashed">
-            <CardContent className="flex items-start gap-3 p-5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                <KeyRound className="h-4 w-4 text-muted-foreground" />
-              </div>
-
-              <div>
-                <p className="font-medium">
-                  مفاتيح النظام
-                </p>
-
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  عند تفعيل أي مفتاح سيظهر الخيار
-                  المرتبط به في صفحة طلبات التسجيل.
-                  يمكن تشغيل كل خيار أو إيقافه بشكل
-                  مستقل.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
