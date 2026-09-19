@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const publishableKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabaseAdmin = createClient(
@@ -38,6 +42,10 @@ export async function POST(request: Request) {
       )
     }
 
+    /*
+     * نبحث عن حساب المستخدم باستخدام الاسم.
+     * البحث يتم على السيرفر باستخدام Service Role.
+     */
     const { data: profile, error: profileError } =
       await supabaseAdmin
         .from('user_profiles')
@@ -58,9 +66,6 @@ export async function POST(request: Request) {
       )
     }
 
-    /*
-     * لا نكشف إذا كان اسم المستخدم موجودًا أو غير موجود.
-     */
     if (!profile || !profile.is_active) {
       return NextResponse.json(
         {
@@ -71,17 +76,21 @@ export async function POST(request: Request) {
     }
 
     /*
-     * نقرأ البريد الداخلي لحساب Supabase Auth.
-     * هذا لا يخرج من السيرفر للمستخدم.
+     * نقرأ الإيميل الداخلي المرتبط بحساب Supabase Auth.
+     * الإيميل لا يتم إرساله للمتصفح.
      */
     const {
       data: authUser,
       error: authUserError,
-    } = await supabaseAdmin.auth.admin.getUserById(
-      profile.auth_user_id,
-    )
+    } =
+      await supabaseAdmin.auth.admin.getUserById(
+        profile.auth_user_id,
+      )
 
-    if (authUserError || !authUser.user?.email) {
+    if (
+      authUserError ||
+      !authUser.user?.email
+    ) {
       console.error(
         'Auth user lookup error:',
         authUserError,
@@ -96,30 +105,10 @@ export async function POST(request: Request) {
     }
 
     /*
-     * تسجيل الدخول الفعلي باستخدام Supabase Auth.
+     * ننشئ Response من البداية حتى نتمكن
+     * من حفظ جلسة Supabase داخل Cookies.
      */
-    const {
-      data: authData,
-      error: signInError,
-    } = await supabaseAdmin.auth.signInWithPassword({
-      email: authUser.user.email,
-      password,
-    })
-
-    if (signInError || !authData.session) {
-      return NextResponse.json(
-        {
-          error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
-        },
-        { status: 401 },
-      )
-    }
-
-    return NextResponse.json({
-      session: {
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
-      },
+    const response = NextResponse.json({
       user: {
         id: profile.auth_user_id,
         username: profile.username,
@@ -127,14 +116,88 @@ export async function POST(request: Request) {
         role: profile.role,
       },
     })
+
+    /*
+     * هذا العميل يستخدم المفتاح العام لتسجيل الدخول الفعلي.
+     * Service Role لا يتم استخدامه لإنشاء جلسة المتصفح.
+     */
+    const supabase = createServerClient(
+      supabaseUrl,
+      publishableKey,
+      {
+        cookies: {
+          getAll() {
+            return request.headers
+              .get('cookie')
+              ?.split('; ')
+              .filter(Boolean)
+              .map((cookie) => {
+                const index = cookie.indexOf('=')
+
+                return {
+                  name:
+                    index === -1
+                      ? cookie
+                      : cookie.slice(0, index),
+                  value:
+                    index === -1
+                      ? ''
+                      : cookie.slice(index + 1),
+                }
+              }) ?? []
+          },
+
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(
+              ({ name, value, options }) => {
+                response.cookies.set(
+                  name,
+                  value,
+                  options,
+                )
+              },
+            )
+          },
+        },
+      },
+    )
+
+    /*
+     * تسجيل الدخول الحقيقي في Supabase Auth.
+     */
+    const {
+      data: authData,
+      error: signInError,
+    } =
+      await supabase.auth.signInWithPassword({
+        email: authUser.user.email,
+        password,
+      })
+
+    if (
+      signInError ||
+      !authData.session
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'اسم المستخدم أو كلمة المرور غير صحيحة.',
+        },
+        { status: 401 },
+      )
+    }
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
 
     return NextResponse.json(
       {
-        error: 'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
+        error:
+          'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
       },
       { status: 500 },
     )
   }
 }
+
