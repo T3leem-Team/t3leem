@@ -7,9 +7,40 @@ import { PageHeader } from '@/components/dashboard/page-header'
 const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
 const ARCHIVE_KEY = 'allow_add_to_archive'
 
+type KeyRow = {
+  key_name: string
+  enabled: boolean
+}
+
 type KeysState = {
   allowAddToCurrentYear: boolean
   allowAddToArchive: boolean
+}
+
+function getSupabaseError(error: unknown) {
+  if (!error) {
+    return 'خطأ غير معروف'
+  }
+
+  if (typeof error === 'object') {
+    const e = error as {
+      message?: string
+      details?: string
+      hint?: string
+      code?: string
+    }
+
+    return [
+      e.message,
+      e.details,
+      e.hint,
+      e.code ? `Code: ${e.code}` : '',
+    ]
+      .filter(Boolean)
+      .join(' — ')
+  }
+
+  return String(error)
 }
 
 export default function KeysPage() {
@@ -20,6 +51,7 @@ export default function KeysPage() {
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -30,9 +62,10 @@ export default function KeysPage() {
   const loadSettings = async () => {
     setIsLoading(true)
     setError('')
+    setMessage('')
 
     try {
-      const { data, error: settingsError } = await supabase
+      const result = await supabase
         .from('system_keys')
         .select('key_name, enabled')
         .in('key_name', [
@@ -40,34 +73,32 @@ export default function KeysPage() {
           ARCHIVE_KEY,
         ])
 
-      if (settingsError) {
-        throw settingsError
+      if (result.error) {
+        throw result.error
       }
 
-      const currentYearRow = data?.find(
+      const data = (result.data ?? []) as KeyRow[]
+
+      const currentYear = data.find(
         (row) =>
           row.key_name === CURRENT_YEAR_KEY,
       )
 
-      const archiveRow = data?.find(
+      const archive = data.find(
         (row) =>
           row.key_name === ARCHIVE_KEY,
       )
 
       setSettings({
         allowAddToCurrentYear:
-          currentYearRow?.enabled ?? true,
+          currentYear?.enabled ?? true,
 
         allowAddToArchive:
-          archiveRow?.enabled ?? true,
+          archive?.enabled ?? true,
       })
     } catch (err) {
-      console.error(err)
-
       setError(
-        err instanceof Error
-          ? err.message
-          : 'تعذر تحميل إعدادات المفاتيح.',
+        `تعذر تحميل إعدادات المفاتيح: ${getSupabaseError(err)}`,
       )
     } finally {
       setIsLoading(false)
@@ -80,11 +111,13 @@ export default function KeysPage() {
       | typeof ARCHIVE_KEY,
     value: boolean,
   ) => {
-    setIsSaving(true)
-    setMessage('')
-    setError('')
+    if (isSaving) return
 
-    const previousSettings = settings
+    setIsSaving(true)
+    setError('')
+    setMessage('')
+
+    const previous = settings
 
     setSettings((current) => ({
       ...current,
@@ -98,24 +131,23 @@ export default function KeysPage() {
     }))
 
     try {
-      const { data, error: updateError } =
-        await supabase
-          .from('system_keys')
-          .update({
-            enabled: value,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('key_name', keyName)
-          .select('key_name, enabled')
-          .single()
+      const result = await supabase
+        .from('system_keys')
+        .update({
+          enabled: value,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('key_name', keyName)
+        .select('key_name, enabled')
+        .single()
 
-      if (updateError) {
-        throw updateError
+      if (result.error) {
+        throw result.error
       }
 
-      if (!data) {
+      if (!result.data) {
         throw new Error(
-          'لم يتم العثور على إعداد المفاتيح المطلوب تحديثه.',
+          'لم يتم إرجاع السجل بعد الحفظ.',
         )
       }
 
@@ -125,14 +157,10 @@ export default function KeysPage() {
         setMessage('')
       }, 2500)
     } catch (err) {
-      console.error(err)
-
-      setSettings(previousSettings)
+      setSettings(previous)
 
       setError(
-        err instanceof Error
-          ? err.message
-          : 'تعذر حفظ إعداد المفاتيح.',
+        `تعذر حفظ إعداد المفاتيح: ${getSupabaseError(err)}`,
       )
     } finally {
       setIsSaving(false)
@@ -206,13 +234,7 @@ export default function KeysPage() {
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <div className="font-medium">
-            تعذر تحميل إعدادات المفاتيح
-          </div>
-
-          <div className="mt-1 break-words">
-            {error}
-          </div>
+          {error}
         </div>
       )}
 
@@ -223,8 +245,7 @@ export default function KeysPage() {
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            هذه الإعدادات تحدد الأزرار التي تظهر في صفحة
-            الطلبات.
+            هذه الإعدادات تحدد الأزرار التي تظهر في صفحة الطلبات.
           </p>
         </div>
 
@@ -237,9 +258,7 @@ export default function KeysPage() {
             <PermissionRow
               title="السماح بالإضافة إلى السنة الحالية"
               description="إظهار زر استيراد السجل وإتاحة إضافة السجلات إلى السنة الدراسية الحالية."
-              enabled={
-                settings.allowAddToCurrentYear
-              }
+              enabled={settings.allowAddToCurrentYear}
               onChange={(value) =>
                 updateSetting(
                   CURRENT_YEAR_KEY,
@@ -251,9 +270,7 @@ export default function KeysPage() {
             <PermissionRow
               title="السماح بالإضافة إلى الأرشيف"
               description="إظهار زر الاستيراد إلى الأرشيف في صفحة الطلبات."
-              enabled={
-                settings.allowAddToArchive
-              }
+              enabled={settings.allowAddToArchive}
               onChange={(value) =>
                 updateSetting(
                   ARCHIVE_KEY,
