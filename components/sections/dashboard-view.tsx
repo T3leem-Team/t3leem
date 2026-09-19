@@ -1501,173 +1501,203 @@ export function DashboardView() {
       : 0
 
   const teacherAttendanceDetails =
-    useMemo<TeacherAttendanceDetail[]>(
-      () => {
-        if (
-          !selectedCourseId ||
-          lessonDateStatus !==
-            'lesson'
-        ) {
-          return []
-        }
+  useMemo<TeacherAttendanceDetail[]>(
+    () => {
+      if (
+        !selectedCourseId ||
+        lessonDateStatus !== 'lesson'
+      ) {
+        return []
+      }
 
-        const courseTeacherRows =
-          courseTeachers.filter(
-            (item) =>
-              normalizeId(
-                item.courseId,
-              ) ===
-              normalizeId(
-                selectedCourseId,
-              ),
-          )
+      const normalizedCourseId =
+        normalizeId(selectedCourseId)
 
-        const assignmentTeacherIds =
-          assignments
-            .filter(
-              (item) =>
-                normalizeId(
-                  item.courseId,
-                ) ===
-                normalizeId(
-                  selectedCourseId,
-                ),
-            )
-            .map(
+      /*
+       * جميع المعلمين المسجلين في الدورة.
+       *
+       * نأخذهم من course_teachers أولاً،
+       * ونضيف أي معلم موجود في assignments
+       * حتى لا يختفي أحد من التفاصيل.
+       */
+      const courseTeacherRows =
+        courseTeachers.filter(
+          (item) =>
+            normalizeId(
+              item.courseId,
+            ) === normalizedCourseId,
+        )
+
+      const assignmentRows =
+        assignments.filter(
+          (item) =>
+            normalizeId(
+              item.courseId,
+            ) === normalizedCourseId,
+        )
+
+      const teacherIds =
+        Array.from(
+          new Set([
+            ...courseTeacherRows.map(
               (item) =>
                 normalizeId(
                   item.teacherId,
                 ),
+            ),
+            ...assignmentRows.map(
+              (item) =>
+                normalizeId(
+                  item.teacherId,
+                ),
+            ),
+          ]),
+        ).filter(Boolean)
+
+      return teacherIds.map(
+        (teacherId) => {
+          const teacher =
+            teachers.find(
+              (item) =>
+                normalizeId(
+                  item.id,
+                ) === teacherId,
             )
 
-        /*
-         * إصلاح خطأ البناء:
-         * كان هناك .values(), وقوس زائد هنا.
-         */
-        const teacherIds =
-          Array.from(
-            new Set([
-              ...courseTeacherRows.map(
-                (item) =>
-                  normalizeId(
-                    item.teacherId,
-                  ),
-              ),
-              ...assignmentTeacherIds,
-            ]),
-          )
+          /*
+           * الطلاب الموزعون على هذا المعلم
+           * في الدورة الحالية.
+           */
+          const teacherStudentIds =
+            new Set(
+              assignmentRows
+                .filter(
+                  (item) =>
+                    normalizeId(
+                      item.teacherId,
+                    ) === teacherId,
+                )
+                .map(
+                  (item) =>
+                    normalizeId(
+                      item.studentId,
+                    ),
+                )
+                .filter(Boolean),
+            )
 
-        return teacherIds.map(
-          (teacherId) => {
-            const teacher =
-              teachers.find(
-                (item) =>
+          const studentCount =
+            teacherStudentIds.size
+
+          /*
+           * سجلات الحضور لهذا المعلم فقط.
+           */
+          const teacherRecords =
+            selectedDateRecords.filter(
+              (record) =>
+                teacherStudentIds.has(
                   normalizeId(
-                    item.id,
-                  ) ===
-                  teacherId,
+                    record.studentId,
+                  ),
+                ),
+            )
+
+          /*
+           * نضمن عدم احتساب الطالب أكثر
+           * من مرة في حالة وجود سجل مكرر.
+           */
+          const seenStudents =
+            new Set<string>()
+
+          let presentCount = 0
+
+          for (const record of teacherRecords) {
+            const studentId =
+              normalizeId(
+                record.studentId,
               )
 
-            const studentIds =
-              new Set(
-                assignments
-                  .filter(
-                    (item) =>
-                      normalizeId(
-                        item.courseId,
-                      ) ===
-                        normalizeId(
-                          selectedCourseId,
-                        ) &&
-                      normalizeId(
-                        item.teacherId,
-                      ) ===
-                        teacherId,
-                  )
-                  .map(
-                    (item) =>
-                      normalizeId(
-                        item.studentId,
-                      ),
-                  ),
-              )
-
-            let presentCount = 0
-
-            const seen =
-              new Set<string>()
-
-            for (const record of selectedDateRecords) {
-              const studentId =
-                normalizeId(
-                  record.studentId,
-                )
-
-              if (
-                !studentIds.has(
-                  studentId,
-                ) ||
-                seen.has(
-                  studentId,
-                )
-              ) {
-                continue
-              }
-
-              seen.add(
+            if (
+              !studentId ||
+              seenStudents.has(
                 studentId,
               )
+            ) {
+              continue
+            }
 
-              const statusName =
-                statusMap.get(
-                  normalizeId(
-                    record.statusId,
-                  ),
-                ) ?? ''
+            seenStudents.add(
+              studentId,
+            )
 
-              if (
-                isPresentStatus(
-                  statusName,
+            const statusName =
+              statusMap.get(
+                normalizeId(
+                  record.statusId,
+                ),
+              ) ?? ''
+
+            if (
+              isPresentStatus(
+                statusName,
+              )
+            ) {
+              presentCount += 1
+            }
+          }
+
+          /*
+           * هذا هو الفرق المهم:
+           *
+           * recordedCount = عدد الطلاب الذين
+           * لديهم سجل حضور فعلي.
+           */
+          const recordedCount =
+            seenStudents.size
+
+          /*
+           * إذا المعلم عنده طلاب لكن لم يسجل
+           * لأي واحد منهم، نرسل percentage = null
+           * حتى تعرض الواجهة "لم يسجل".
+           */
+          const percentage =
+            recordedCount === 0
+              ? null
+              : Math.round(
+                  (presentCount /
+                    studentCount) *
+                    100,
                 )
-              ) {
-                presentCount += 1
-              }
-            }
 
-            const studentCount =
-              studentIds.size
+          return {
+            teacherId,
+            teacherName:
+              teacher?.name ??
+              'معلم غير معروف',
+            studentCount,
+            presentCount,
+            percentage,
 
-            const percentage =
-              studentCount > 0
-                ? Math.round(
-                    (presentCount /
-                      studentCount) *
-                      100,
-                  )
-                : null
-
-            return {
-              teacherId,
-              teacherName:
-                teacher?.name ??
-                'معلم غير معروف',
-              studentCount,
-              presentCount,
-              percentage,
-            }
-          },
-        )
-      },
-      [
-        courseTeachers,
-        assignments,
-        teachers,
-        selectedCourseId,
-        selectedDateRecords,
-        statusMap,
-        lessonDateStatus,
-      ],
-    )
+            /*
+             * نحتاج هذه القيمة في
+             * AttendanceDetails لعرض:
+             * "لم يسجل"
+             */
+            recordedCount,
+          } as TeacherAttendanceDetail
+        },
+      )
+    },
+    [
+      courseTeachers,
+      assignments,
+      teachers,
+      selectedCourseId,
+      selectedDateRecords,
+      statusMap,
+      lessonDateStatus,
+    ],
+  )
 
   const attendanceItems =
     useMemo(
