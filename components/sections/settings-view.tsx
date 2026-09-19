@@ -1,265 +1,219 @@
-import Link from 'next/link'
+'use client'
+
 import {
   Archive,
-  ArrowLeft,
   BookOpen,
   ClipboardCheck,
   ExternalLink,
+  FileKey,
+  GraduationCap,
+  KeyRound,
+  LockKeyhole,
   Settings2,
-  ShieldAlert,
+  ShieldCheck,
+  UserCog,
   Users,
 } from 'lucide-react'
 
+import { useRouter } from 'next/navigation'
+
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+
+type ManagementOption = {
+  title: string
+  description: string
+  href: string
+  icon: typeof Settings2
+  badge?: string
+}
 
 const quickLinks = [
   {
-    title: 'التسجيل العام',
-    description:
-      'فتح صفحة التسجيل العامة مباشرة للوصول إليها أو مشاركة الرابط مع الطلاب وأولياء الأمور.',
-    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/register',
-    icon: ClipboardCheck,
+    title: 'التسجيل الخارجي',
+    description: 'فتح ومراجعة صفحة التسجيل الخارجي وإعداداتها.',
+    href: '/settings/registration',
+    icon: ExternalLink,
   },
   {
-    title: 'حالة الطالب',
-    description:
-      'فتح صفحة حالة الطالب وتقييمه مباشرة للوصول إليها بسرعة عند الحاجة.',
-    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/student-status',
-    icon: ClipboardCheck,
+    title: 'حالة الطلاب',
+    description: 'إدارة حالات الطلاب والبيانات المرتبطة بهم.',
+    href: '/students',
+    icon: GraduationCap,
   },
 ]
 
-const managementOptions = [
+const managementOptions: ManagementOption[] = [
   {
     title: 'إعدادات التسجيل',
-    description:
-      'التحكم في صفحة التسجيل العامة، وتحديد الحقول الظاهرة والمطلوبة، وإعدادات الدفع وطرق الدفع وإثبات الدفع.',
+    description: 'التحكم في نموذج التسجيل الخارجي والحقول المطلوبة وطرق الدفع.',
     href: '/settings/registration',
-    icon: Settings2,
-    badge: 'التسجيل العام',
+    icon: ClipboardCheck,
   },
   {
     title: 'المستخدمون والصلاحيات',
-    description:
-      'إضافة المستخدمين وإدارة حساباتهم وتحديد الأدوار والصلاحيات لكل مستخدم.',
+    description: 'إدارة المستخدمين والأدوار والصلاحيات داخل النظام.',
     href: '/settings/users',
-    icon: Users,
-    badge: 'إدارة المستخدمين',
+    icon: UserCog,
   },
   {
     title: 'السنة الدراسية والدورات',
-    description:
-      'إدارة السنة الدراسية، الدورات التابعة لها، مواعيدها وأيام الدراسة.',
+    description: 'إدارة السنوات الدراسية والدورات ومواعيدها وأيام الدراسة.',
     href: '/settings/academic-year',
     icon: BookOpen,
-    badge: 'إدارة الدورات',
   },
   {
     title: 'المعلمون',
-    description:
-      'إضافة وإدارة المعلمين وتعديل بياناتهم وتفعيلهم أو تعطيلهم.',
+    description: 'إدارة بيانات المعلمين وربطهم بالدورات والطلاب.',
     href: '/settings/teachers',
     icon: Users,
-    badge: 'إدارة المعلمين',
   },
   {
     title: 'إشراف الدوام والدروس',
-    description:
-      'إدارة الحالات اليومية للدروس والمعلمين، مثل إلغاء يوم دراسي أو درس، تسجيل غياب أو تأخر المعلم، وإضافة الملاحظات الإشرافية.',
+    description: 'إعدادات الحضور والدوام ومتابعة تسجيل الدروس.',
     href: '/settings/supervision',
-    icon: ClipboardCheck,
-    badge: 'الإشراف',
+    icon: ShieldCheck,
   },
   {
     title: 'المواد الدراسية',
-    description:
-      'إضافة وتعديل المواد الدراسية التي يستخدمها النظام والمعلمون.',
+    description: 'إضافة وتعديل وحذف المواد الدراسية المستخدمة في النظام.',
     href: '/settings/subjects',
-    icon: BookOpen,
-    badge: 'المواد',
+    icon: GraduationCap,
   },
   {
     title: 'الأرشيف',
-    description:
-      'أرشفة دورة محددة أو سنة دراسية كاملة مع الاحتفاظ بجميع بياناتها.',
+    description: 'الوصول إلى السجلات والبيانات المؤرشفة وإدارتها.',
     href: '/settings/archive',
     icon: Archive,
-    badge: 'الأرشفة',
+  },
+  {
+    title: 'إدارة المفاتيح',
+    description:
+      'إدارة مفاتيح التحكم الخاصة بالوظائف الحساسة والمميزات التي يمكن تفعيلها أو تعطيلها من الإدارة.',
+    href: '/settings/keys',
+    icon: KeyRound,
+    badge: 'مفاتيح النظام',
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
-    description:
-      'إجراءات إدارية خاصة تحتاج إلى صلاحية محددة، مثل احتساب نسب الحضور وتجهيز قوائم التكريم وبعض الإجراءات الحساسة.',
+    description: 'إدارة الإجراءات الحساسة التي تحتاج إلى صلاحيات خاصة.',
     href: '/settings/special-actions',
-    icon: ShieldAlert,
-    badge: 'إجراءات خاصة',
-    danger: true,
+    icon: LockKeyhole,
   },
 ]
 
 export function SettingsView() {
+  const router = useRouter()
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="الإدارة والتحكم"
-        description="إدارة المستخدمين والصلاحيات والتسجيل والدورات والمعلمين والمواد والإشراف والأرشيف والإجراءات الإدارية"
+        title="الإدارة"
+        description="إدارة إعدادات النظام والصلاحيات والوظائف الرئيسية."
       />
 
       {/* روابط سريعة */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">
-            روابط سريعة
-          </h2>
-
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">روابط سريعة</h2>
           <p className="text-sm text-muted-foreground">
-            الوصول المباشر إلى الصفحات العامة التي تستخدمها بشكل متكرر
+            الوصول السريع إلى أكثر الإعدادات استخدامًا.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {quickLinks.map((link) => {
-            const Icon = link.icon
+          {quickLinks.map((item) => {
+            const Icon = item.icon
 
             return (
-              <a
-                key={link.href}
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group block"
+              <Card
+                key={item.href}
+                className="cursor-pointer transition hover:shadow-md"
+                onClick={() => router.push(item.href)}
               >
-                <Card className="h-full transition-colors hover:border-primary/40">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Icon className="size-6" />
-                      </span>
+                <CardContent className="flex items-center gap-4 p-5">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-6 w-6" />
+                  </div>
 
-                      <ExternalLink className="mt-2 size-5 text-muted-foreground transition-colors group-hover:text-primary" />
-                    </div>
-
-                    <div className="mt-5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold">
-                          {link.title}
-                        </h3>
-
-                        <Badge variant="neutral">
-                          رابط عام
-                        </Badge>
-                      </div>
-
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        {link.description}
-                      </p>
-
-                      <div className="mt-5 flex items-center text-sm font-medium text-primary">
-                        فتح الرابط
-                        <ArrowLeft className="mr-2 size-4 transition-transform group-hover:-translate-x-1" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </a>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold">{item.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {item.description}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             )
           })}
         </div>
-      </div>
+      </section>
 
-      {/* الإدارة الرئيسية */}
-      <div>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">
-            الإدارة الرئيسية
-          </h2>
-
+      {/* إعدادات الإدارة */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">إعدادات الإدارة</h2>
           <p className="text-sm text-muted-foreground">
-            اختر القسم الذي تريد إدارته
+            إدارة أقسام النظام والإعدادات الداخلية.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {managementOptions.map((option) => {
-            const Icon = option.icon
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {managementOptions.map((item) => {
+            const Icon = item.icon
 
             return (
-              <Link
-                key={option.title}
-                href={option.href}
-                className="group block"
+              <Card
+                key={item.href}
+                className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                onClick={() => router.push(item.href)}
               >
-                <Card
-                  className={`h-full transition-colors ${
-                    option.danger
-                      ? 'hover:border-destructive/50'
-                      : 'hover:border-primary/40'
-                  }`}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <span
-                        className={`flex size-12 shrink-0 items-center justify-center rounded-xl ${
-                          option.danger
-                            ? 'bg-destructive/10 text-destructive'
-                            : 'bg-primary/10 text-primary'
-                        }`}
-                      >
-                        <Icon className="size-6" />
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+
+                    {item.badge && (
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        {item.badge}
                       </span>
+                    )}
+                  </div>
 
-                      <ArrowLeft className="mt-2 size-5 text-muted-foreground transition-transform group-hover:-translate-x-1 group-hover:text-primary" />
-                    </div>
+                  <CardTitle className="pt-2 text-base">
+                    {item.title}
+                  </CardTitle>
 
-                    <div className="mt-5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold">
-                          {option.title}
-                        </h3>
-
-                        <Badge
-                          variant={
-                            option.danger
-                              ? 'destructive'
-                              : 'neutral'
-                          }
-                        >
-                          {option.badge}
-                        </Badge>
-                      </div>
-
-                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                        {option.description}
-                      </p>
-
-                      <div className="mt-5 flex items-center text-sm font-medium text-primary">
-                        فتح القسم
-                        <ArrowLeft className="mr-2 size-4 transition-transform group-hover:-translate-x-1" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+                  <CardDescription className="leading-6">
+                    {item.description}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
             )
           })}
         </div>
-      </div>
+      </section>
 
-      {/* تنبيه الأرشفة */}
-      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
-        <CardContent className="flex gap-3 p-5">
-          <Archive className="mt-0.5 size-5 shrink-0 text-amber-600" />
+      {/* تنبيه */}
+      <Card className="border-dashed">
+        <CardContent className="flex items-start gap-3 p-5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <FileKey className="h-4 w-4 text-muted-foreground" />
+          </div>
 
           <div>
-            <p className="font-medium">
-              الأرشفة لا تعني الحذف
-            </p>
-
+            <p className="font-medium">مفاتيح النظام</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              عند أرشفة دورة أو سنة دراسية، تبقى جميع بيانات الطلاب والحضور
-              والمعلمين والمدفوعات والسجلات محفوظة ويمكن الرجوع إليها لاحقًا.
+              سيتم من خلال إدارة المفاتيح التحكم في الوظائف الحساسة مثل
+              استيراد سجل الطلاب وغيرها من العمليات التي تحتاج إلى تفعيل
+              صريح من الإدارة.
             </p>
           </div>
         </CardContent>
