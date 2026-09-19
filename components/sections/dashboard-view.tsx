@@ -160,7 +160,6 @@ function normalizeId(
 }
 
 /*
- * مهم جدًا:
  * attendance_date في Supabase عندنا DATE،
  * لكن هذا يجعل الكود آمنًا حتى لو رجعت القيمة
  * بصيغة فيها وقت مستقبلًا.
@@ -1248,10 +1247,6 @@ export function DashboardView() {
     /*
      * تحديث تلقائي كل 5 ثوانٍ طالما
      * الداشبورد ظاهر.
-     *
-     * هذا مهم حتى لو انتقل المستخدم
-     * من صفحة الحضور إلى الداشبورد
-     * بدون إعادة تحميل الصفحة.
      */
     const interval =
       window.setInterval(() => {
@@ -1335,12 +1330,8 @@ export function DashboardView() {
   /*
    * الحضور الفعلي لليوم المختار.
    *
-   * مهم:
    * لا نعتمد هنا على assignments لتحديد
    * هل سجل الحضور موجود أم لا.
-   *
-   * Supabase أثبت أن attendance هو
-   * المصدر الحقيقي لتسجيل الحضور.
    */
   const selectedDateRecords =
     useMemo(() => {
@@ -1440,9 +1431,6 @@ export function DashboardView() {
       let lateCount = 0
       let excusedCount = 0
 
-      /*
-       * نحسب من سجلات Supabase الفعلية.
-       */
       for (const record of selectedDateRecords) {
         const statusName =
           statusMap.get(
@@ -1503,20 +1491,6 @@ export function DashboardView() {
     ],
   )
 
-  /*
-   * النسبة:
-   *
-   * إذا كان لدينا 5 طلاب موزعين
-   * وتم تسجيل 5:
-   *
-   * 5 حاضر / 5 موزعين = 100%
-   *
-   * وإذا تم تسجيل 4 فقط:
-   *
-   * 4 حاضر / 5 موزعين = 80%
-   *
-   * وهذا يعكس حالة الدورة بشكل صحيح.
-   */
   const attendancePercentage =
     stats.assignedCount > 0
       ? Math.round(
@@ -1566,6 +1540,10 @@ export function DashboardView() {
                 ),
             )
 
+        /*
+         * إصلاح خطأ البناء:
+         * كان هناك .values(), وقوس زائد هنا.
+         */
         const teacherIds =
           Array.from(
             new Set([
@@ -1577,8 +1555,8 @@ export function DashboardView() {
               ),
               ...assignmentTeacherIds,
             ]),
-          ).values(),
-          
+          )
+
         return teacherIds.map(
           (teacherId) => {
             const teacher =
