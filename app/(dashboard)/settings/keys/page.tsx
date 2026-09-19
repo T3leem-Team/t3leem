@@ -26,8 +26,11 @@ import {
 export default function SystemKeysPage() {
   const router = useRouter()
 
-  const [allowAddToCurrentYear, setAllowAddToCurrentYear] = useState(false)
-  const [allowAddToArchive, setAllowAddToArchive] = useState(false)
+  const [allowAddToCurrentYear, setAllowAddToCurrentYear] =
+    useState(false)
+
+  const [allowAddToArchive, setAllowAddToArchive] =
+    useState(false)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -42,6 +45,7 @@ export default function SystemKeysPage() {
   async function loadKeys() {
     setLoading(true)
     setError('')
+    setMessage('')
 
     const { data, error } = await supabase
       .from('system_keys')
@@ -52,18 +56,36 @@ export default function SystemKeysPage() {
       ])
 
     if (error) {
-      setError('تعذر تحميل مفاتيح النظام.')
+      console.error(
+        'system_keys load error:',
+        error,
+      )
+
+      setError(
+        `تعذر تحميل مفاتيح النظام: ${error.message}`,
+      )
+
       setLoading(false)
       return
     }
 
     for (const item of data ?? []) {
-      if (item.key_name === 'allow_add_to_current_year') {
-        setAllowAddToCurrentYear(item.enabled)
+      if (
+        item.key_name ===
+        'allow_add_to_current_year'
+      ) {
+        setAllowAddToCurrentYear(
+          item.enabled === true,
+        )
       }
 
-      if (item.key_name === 'allow_add_to_archive') {
-        setAllowAddToArchive(item.enabled)
+      if (
+        item.key_name ===
+        'allow_add_to_archive'
+      ) {
+        setAllowAddToArchive(
+          item.enabled === true,
+        )
       }
     }
 
@@ -75,36 +97,82 @@ export default function SystemKeysPage() {
     setMessage('')
     setError('')
 
-    const { error } = await supabase
-      .from('system_keys')
-      .upsert(
-        [
-          {
-            key_name: 'allow_add_to_current_year',
-            enabled: allowAddToCurrentYear,
-          },
-          {
-            key_name: 'allow_add_to_archive',
-            enabled: allowAddToArchive,
-          },
-        ],
+    try {
+      const rows = [
         {
-          onConflict: 'key_name',
-        }
+          key_name: 'allow_add_to_current_year',
+          enabled: allowAddToCurrentYear,
+        },
+        {
+          key_name: 'allow_add_to_archive',
+          enabled: allowAddToArchive,
+        },
+      ]
+
+      console.log(
+        'Saving system keys:',
+        rows,
       )
 
-    if (error) {
-      setError('تعذر حفظ إعدادات المفاتيح.')
+      const { data, error } = await supabase
+        .from('system_keys')
+        .upsert(rows, {
+          onConflict: 'key_name',
+        })
+        .select('key_name, enabled')
+
+      if (error) {
+        console.error(
+          'system_keys save error:',
+          error,
+        )
+
+        setError(
+          `تعذر حفظ إعدادات المفاتيح: ${error.message}`,
+        )
+
+        setSaving(false)
+        return
+      }
+
+      console.log(
+        'system_keys saved successfully:',
+        data,
+      )
+
+      setMessage(
+        'تم حفظ إعدادات المفاتيح بنجاح.',
+      )
+
+      /*
+       * إعادة تحميل القيم من قاعدة البيانات
+       * للتأكد أن الحفظ تم فعلاً.
+       */
+      await loadKeys()
+
+      setMessage(
+        'تم حفظ إعدادات المفاتيح بنجاح.',
+      )
+
+      setTimeout(() => {
+        setMessage('')
+      }, 3000)
+    } catch (err) {
+      console.error(
+        'Unexpected system_keys error:',
+        err,
+      )
+
+      setError(
+        `حدث خطأ غير متوقع: ${
+          err instanceof Error
+            ? err.message
+            : 'خطأ غير معروف'
+        }`,
+      )
+    } finally {
       setSaving(false)
-      return
     }
-
-    setMessage('تم حفظ إعدادات المفاتيح بنجاح.')
-    setSaving(false)
-
-    setTimeout(() => {
-      setMessage('')
-    }, 3000)
   }
 
   return (
@@ -148,8 +216,9 @@ export default function SystemKeysPage() {
                   </CardTitle>
 
                   <CardDescription className="mt-1 leading-6">
-                    السماح باستخدام خيار إضافة السجلات المستوردة مباشرة
-                    إلى الطلاب في السنة الدراسية الحالية.
+                    السماح باستخدام خيار إضافة السجلات
+                    المستوردة إلى الطلاب في السنة
+                    الدراسية الحالية.
                   </CardDescription>
                 </div>
               </div>
@@ -159,7 +228,8 @@ export default function SystemKeysPage() {
               <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
                 <div>
                   <p className="font-medium">
-                    السماح بالإضافة لهذه السنة الدراسية
+                    السماح بالإضافة لهذه السنة
+                    الدراسية
                   </p>
 
                   <p className="mt-1 text-sm text-muted-foreground">
@@ -172,9 +242,13 @@ export default function SystemKeysPage() {
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={allowAddToCurrentYear}
+                  aria-checked={
+                    allowAddToCurrentYear
+                  }
                   onClick={() =>
-                    setAllowAddToCurrentYear((current) => !current)
+                    setAllowAddToCurrentYear(
+                      (current) => !current,
+                    )
                   }
                   className={`relative h-7 w-12 shrink-0 rounded-full transition ${
                     allowAddToCurrentYear
@@ -208,8 +282,9 @@ export default function SystemKeysPage() {
                   </CardTitle>
 
                   <CardDescription className="mt-1 leading-6">
-                    السماح باستخدام خيار إضافة السجلات المستوردة إلى
-                    الأرشيف فقط دون إضافتها إلى الطلاب الحاليين.
+                    السماح باستخدام خيار إضافة السجلات
+                    المستوردة إلى الأرشيف فقط دون
+                    إضافتها إلى الطلاب الحاليين.
                   </CardDescription>
                 </div>
               </div>
@@ -234,7 +309,9 @@ export default function SystemKeysPage() {
                   role="switch"
                   aria-checked={allowAddToArchive}
                   onClick={() =>
-                    setAllowAddToArchive((current) => !current)
+                    setAllowAddToArchive(
+                      (current) => !current,
+                    )
                   }
                   className={`relative h-7 w-12 shrink-0 rounded-full transition ${
                     allowAddToArchive
@@ -254,12 +331,18 @@ export default function SystemKeysPage() {
             </CardContent>
           </Card>
 
-          {/* حفظ */}
+          {/* الحفظ */}
           <Card>
             <CardContent className="space-y-4 p-5">
               {error && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {error}
+                  <p className="font-medium">
+                    حدث خطأ
+                  </p>
+
+                  <p className="mt-1 break-words">
+                    {error}
+                  </p>
                 </div>
               )}
 
@@ -281,7 +364,9 @@ export default function SystemKeysPage() {
                     <Save className="h-4 w-4" />
                   )}
 
-                  {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+                  {saving
+                    ? 'جاري الحفظ...'
+                    : 'حفظ التغييرات'}
                 </Button>
               </div>
             </CardContent>
@@ -295,11 +380,15 @@ export default function SystemKeysPage() {
               </div>
 
               <div>
-                <p className="font-medium">مفاتيح النظام</p>
+                <p className="font-medium">
+                  مفاتيح النظام
+                </p>
 
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  عند تفعيل أي مفتاح سيظهر الخيار المرتبط به في صفحة
-                  استيراد السجل. يمكن تشغيل كل خيار أو إيقافه بشكل مستقل.
+                  عند تفعيل أي مفتاح سيظهر الخيار
+                  المرتبط به في صفحة طلبات التسجيل.
+                  يمكن تشغيل كل خيار أو إيقافه بشكل
+                  مستقل.
                 </p>
               </div>
             </CardContent>
