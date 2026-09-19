@@ -325,11 +325,22 @@ export function Header({
     )
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
 
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+    })
+  } catch (error) {
+    console.error(
+      'Logout request error:',
+      error,
+    )
+  } finally {
     window.location.href = '/login'
   }
+}
+
 
   const displayName =
     profile?.full_name ||
