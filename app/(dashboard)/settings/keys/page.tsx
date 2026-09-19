@@ -91,12 +91,18 @@ export default function KeysPage() {
           row.key_name === ARCHIVE_KEY,
       )
 
+      /*
+       * نقرأ القيمة كما هي من قاعدة البيانات.
+       *
+       * لا نستخدم ?? true هنا، لأن المفتاح إذا لم يكن
+       * موجودًا فهذا لا يعني أن الصلاحية مفعلة.
+       */
       setSettings({
         allowAddToCurrentYear:
-          currentYearRow?.enabled ?? true,
+          currentYearRow?.enabled === true,
 
         allowAddToArchive:
-          archiveRow?.enabled ?? true,
+          archiveRow?.enabled === true,
       })
     } catch (err) {
       setError(
@@ -121,7 +127,7 @@ export default function KeysPage() {
 
     const previousSettings = settings
 
-    // تحديث فوري للزر
+    // تحديث فوري للواجهة
     setSettings((current) => ({
       ...current,
       ...(keyName === CURRENT_YEAR_KEY
@@ -134,7 +140,14 @@ export default function KeysPage() {
     }))
 
     try {
-      const { error: updateError } =
+      /*
+       * select() مهم جدًا هنا.
+       *
+       * نريد التأكد أن Supabase أعاد الصف الذي تم تحديثه.
+       * إذا رجعت data فارغة فهذا يعني أن UPDATE لم يعدّل
+       * أي صف، وغالبًا السبب RLS أو أن المفتاح غير موجود.
+       */
+      const { data, error: updateError } =
         await supabase
           .from('system_keys')
           .update({
@@ -142,10 +155,35 @@ export default function KeysPage() {
             updated_at: new Date().toISOString(),
           })
           .eq('key_name', keyName)
+          .select('key_name, enabled')
 
       if (updateError) {
         throw updateError
       }
+
+      if (!data || data.length === 0) {
+        throw new Error(
+          `لم يتم تحديث المفتاح "${keyName}". تأكد من وجود المفتاح وصلاحيات UPDATE في system_keys.`,
+        )
+      }
+
+      const updatedRow = data[0] as KeyRow
+
+      /*
+       * نتأكد أن القيمة التي رجعت من قاعدة البيانات
+       * هي نفس القيمة المطلوبة.
+       */
+      if (updatedRow.enabled !== value) {
+        throw new Error(
+          `تم تحديث المفتاح "${keyName}" ولكن القيمة المحفوظة غير مطابقة للقيمة المطلوبة.`,
+        )
+      }
+
+      /*
+       * إعادة تحميل الإعدادات من قاعدة البيانات بعد الحفظ.
+       * هذا يمنع بقاء الواجهة على قيمة مختلفة عن DB.
+       */
+      await loadSettings()
 
       setMessage('تم حفظ الإعداد بنجاح.')
 
@@ -153,7 +191,7 @@ export default function KeysPage() {
         setMessage('')
       }, 2500)
     } catch (err) {
-      // إرجاع القيمة القديمة إذا فشل الحفظ
+      // إرجاع القيمة القديمة في حال فشل الحفظ
       setSettings(previousSettings)
 
       setError(
