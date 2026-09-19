@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-const CURRENT_YEAR_KEY =
-  'allow_add_to_current_year'
+const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
+const ARCHIVE_KEY = 'allow_add_to_archive'
 
-const ARCHIVE_KEY =
-  'allow_add_to_archive'
+type SystemKey = {
+  key_name: string
+  enabled: boolean
+}
 
 export default function KeysPage() {
   const [allowAddToCurrentYear, setAllowAddToCurrentYear] =
@@ -32,68 +34,40 @@ export default function KeysPage() {
   const [allowAddToArchive, setAllowAddToArchive] =
     useState(false)
 
-  const [loading, setLoading] =
-    useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  const [saving, setSaving] =
-    useState(false)
-
-  const [error, setError] =
-    useState<string | null>(null)
-
-  const [success, setSuccess] =
-    useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const loadKeys = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const {
-        data: {
-          session,
-        },
-      } = await supabase.auth.getSession()
+      const { data, error: selectError } = await supabase
+        .from('system_keys')
+        .select('key_name, enabled')
+        .in('key_name', [
+          CURRENT_YEAR_KEY,
+          ARCHIVE_KEY,
+        ])
 
-      if (!session) {
-        throw new Error(
-          'لم يتم العثور على جلسة تسجيل الدخول.'
-        )
+      if (selectError) {
+        throw selectError
       }
 
-      const { data, error } =
-        await supabase
-          .from('system_keys')
-          .select(
-            'key_name, enabled'
-          )
-          .in('key_name', [
-            CURRENT_YEAR_KEY,
-            ARCHIVE_KEY,
-          ])
+      console.log('SYSTEM KEYS LOADED:', data)
 
-      if (error) {
-        throw error
-      }
+      const rows = (data ?? []) as SystemKey[]
 
-      console.log(
-        'SYSTEM KEYS LOADED:',
-        data
+      const currentYear = rows.find(
+        (row) => row.key_name === CURRENT_YEAR_KEY
       )
 
-      const currentYear =
-        data?.find(
-          (row) =>
-            row.key_name ===
-            CURRENT_YEAR_KEY
-        )
-
-      const archive =
-        data?.find(
-          (row) =>
-            row.key_name ===
-            ARCHIVE_KEY
-        )
+      const archive = rows.find(
+        (row) => row.key_name === ARCHIVE_KEY
+      )
 
       setAllowAddToCurrentYear(
         currentYear?.enabled === true
@@ -127,56 +101,38 @@ export default function KeysPage() {
     keyName: string,
     enabled: boolean
   ) => {
-    const updatedAt =
-      new Date().toISOString()
+    const updatedAt = new Date().toISOString()
 
-    /*
-     * نستخدم UPDATE فقط.
-     *
-     * وبعدها نعمل SELECT مباشر للتأكد
-     * أن القيمة فعلاً انحفظت في قاعدة البيانات.
-     */
-    const { error: updateError } =
-      await supabase
-        .from('system_keys')
-        .update({
-          enabled,
-          updated_at: updatedAt,
-        })
-        .eq(
-          'key_name',
-          keyName
-        )
+    const { data, error } = await supabase
+      .from('system_keys')
+      .update({
+        enabled,
+        updated_at: updatedAt,
+      })
+      .eq('key_name', keyName)
+      .select(
+        'key_name, enabled, updated_at'
+      )
+      .maybeSingle()
 
-    if (updateError) {
-      throw updateError
-    }
-
-    const { data, error: verifyError } =
-      await supabase
-        .from('system_keys')
-        .select(
-          'key_name, enabled'
-        )
-        .eq(
-          'key_name',
-          keyName
-        )
-        .maybeSingle()
-
-    if (verifyError) {
-      throw verifyError
+    if (error) {
+      throw error
     }
 
     if (!data) {
       throw new Error(
-        `لم يتم العثور على المفتاح ${keyName} بعد الحفظ.`
+        `لم يتم تحديث المفتاح "${keyName}". لم يتم العثور على السجل أو لا توجد صلاحية للتعديل.`
       )
     }
 
+    console.log(
+      'SYSTEM KEY SAVED:',
+      data
+    )
+
     if (data.enabled !== enabled) {
       throw new Error(
-        `تم تنفيذ الحفظ لكن القيمة لم تثبت في قاعدة البيانات للمفتاح ${keyName}.`
+        `تم تنفيذ الحفظ ولكن القيمة المحفوظة للمفتاح "${keyName}" غير مطابقة.`
       )
     }
 
@@ -189,9 +145,6 @@ export default function KeysPage() {
     setSuccess(false)
 
     try {
-      /*
-       * نحفظ المفتاحين بشكل مستقل.
-       */
       await saveOneKey(
         CURRENT_YEAR_KEY,
         allowAddToCurrentYear
@@ -202,15 +155,12 @@ export default function KeysPage() {
         allowAddToArchive
       )
 
-      /*
-       * بعد الحفظ نعيد القراءة من قاعدة البيانات
-       * حتى تكون الواجهة مبنية على القيمة الحقيقية.
-       */
+      // إعادة القراءة من قاعدة البيانات بعد الحفظ
       await loadKeys()
 
       setSuccess(true)
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         setSuccess(false)
       }, 3000)
     } catch (error: any) {
@@ -226,10 +176,7 @@ export default function KeysPage() {
         }`
       )
 
-      /*
-       * إذا فشل الحفظ نعيد قراءة القيم الحقيقية
-       * حتى لا تبقى الواجهة تعرض قيمة وهمية.
-       */
+      // في حالة الخطأ، نعرض القيم الحقيقية من قاعدة البيانات
       await loadKeys()
     } finally {
       setSaving(false)
@@ -305,6 +252,9 @@ export default function KeysPage() {
                       : ''
                   }`}
                   aria-label="إضافة لهذه السنة الدراسية"
+                  aria-pressed={
+                    allowAddToCurrentYear
+                  }
                 >
                   <span
                     className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
@@ -346,6 +296,9 @@ export default function KeysPage() {
                       : ''
                   }`}
                   aria-label="إضافة إلى الأرشيف"
+                  aria-pressed={
+                    allowAddToArchive
+                  }
                 >
                   <span
                     className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
