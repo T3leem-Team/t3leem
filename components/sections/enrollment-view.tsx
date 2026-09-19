@@ -113,7 +113,8 @@ function mapRequest(row: any): RegistrationRequest {
         : null,
     paymentReference: row.payment_reference ?? '',
     paymentProofUrl: row.payment_proof_url ?? '',
-    paymentStatus: row.payment_status ?? 'not_required',
+    paymentStatus:
+      row.payment_status ?? 'not_required',
     verifiedPaymentAmount:
       row.verified_payment_amount !== null &&
       row.verified_payment_amount !== undefined
@@ -219,47 +220,35 @@ export function EnrollmentView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  const [allowCurrentYearImport, setAllowCurrentYearImport] =
-    useState(false)
+  const [
+    allowCurrentYearImport,
+    setAllowCurrentYearImport,
+  ] = useState(false)
 
-  const [allowArchiveImport, setAllowArchiveImport] =
-    useState(false)
+  const [
+    allowArchiveImport,
+    setAllowArchiveImport,
+  ] = useState(false)
 
-  const [permissionsLoading, setPermissionsLoading] =
-    useState(true)
+  const [
+    permissionsLoading,
+    setPermissionsLoading,
+  ] = useState(true)
 
   /*
-   * قراءة مفاتيح الاستيراد
+   * قراءة مفاتيح النظام مباشرة.
    *
-   * مهم:
-   * ننتظر جلسة Supabase أولاً لأن system_keys
-   * تستخدم RLS على authenticated.
+   * لا يوجد getSession
+   * ولا يوجد onAuthStateChange
+   * ولا يوجد تحكم آخر بالأزرار.
+   *
+   * المصدر الوحيد:
+   * system_keys
    */
   const loadImportPermissions = async () => {
     setPermissionsLoading(true)
 
     try {
-      const {
-        data: {
-          session,
-        },
-      } = await supabase.auth.getSession()
-
-      /*
-       * إذا لم توجد جلسة بعد، لا نعتبرها خطأ نهائياً.
-       * سنحاول مرة أخرى من خلال onAuthStateChange.
-       */
-      if (!session) {
-        console.warn(
-          'EnrollmentView: لا توجد جلسة Supabase حالياً.',
-        )
-
-        setAllowCurrentYearImport(false)
-        setAllowArchiveImport(false)
-
-        return
-      }
-
       const { data, error } = await supabase
         .from('system_keys')
         .select('key_name, enabled')
@@ -269,45 +258,29 @@ export function EnrollmentView() {
         ])
 
       if (error) {
-        console.error(
-          'EnrollmentView system_keys error:',
-          error,
-        )
-
-        setStatusMessage(
-          `تعذر قراءة إعدادات الاستيراد: ${error.message}`,
-        )
-
-        return
+        throw error
       }
 
-      console.log(
-        'EnrollmentView SYSTEM KEYS:',
-        data,
-      )
+      const currentYearRow =
+        data?.find(
+          (row) =>
+            row.key_name ===
+            'allow_add_to_current_year',
+        )
 
-      const currentYearEnabled =
-        data?.some(
-          (item) =>
-            item.key_name ===
-              'allow_add_to_current_year' &&
-            item.enabled === true,
-        ) ?? false
-
-      const archiveEnabled =
-        data?.some(
-          (item) =>
-            item.key_name ===
-              'allow_add_to_archive' &&
-            item.enabled === true,
-        ) ?? false
+      const archiveRow =
+        data?.find(
+          (row) =>
+            row.key_name ===
+            'allow_add_to_archive',
+        )
 
       setAllowCurrentYearImport(
-        currentYearEnabled,
+        currentYearRow?.enabled === true,
       )
 
       setAllowArchiveImport(
-        archiveEnabled,
+        archiveRow?.enabled === true,
       )
     } catch (error) {
       console.error(
@@ -315,8 +288,11 @@ export function EnrollmentView() {
         error,
       )
 
+      setAllowCurrentYearImport(false)
+      setAllowArchiveImport(false)
+
       setStatusMessage(
-        `تعذر قراءة إعدادات الاستيراد: ${
+        `تعذر تحميل إعدادات المفاتيح: ${
           error instanceof Error
             ? error.message
             : 'خطأ غير معروف'
@@ -380,39 +356,22 @@ export function EnrollmentView() {
     setLoading(false)
   }
 
-  /*
-   * التحميل الأول
-   *
-   * ونضيف listener حتى إذا كانت جلسة Supabase
-   * لم تجهز وقت فتح الصفحة، يعاد تحميل المفاتيح
-   * فور جاهزية الجلسة.
-   */
   useEffect(() => {
     let mounted = true
 
     const initialize = async () => {
-      await loadRequests()
+      await Promise.all([
+        loadRequests(),
+        loadImportPermissions(),
+      ])
 
-      if (mounted) {
-        await loadImportPermissions()
-      }
+      if (!mounted) return
     }
 
     initialize()
 
-    const {
-      data: authListener,
-    } = supabase.auth.onAuthStateChange(
-      async () => {
-        if (!mounted) return
-
-        await loadImportPermissions()
-      },
-    )
-
     return () => {
       mounted = false
-      authListener.subscription.unsubscribe()
     }
   }, [])
 
@@ -436,16 +395,22 @@ export function EnrollmentView() {
         !filters.id ||
         request.requestNumber
           .toLowerCase()
-          .includes(filters.id.toLowerCase()) ||
+          .includes(
+            filters.id.toLowerCase(),
+          ) ||
         request.id
           .toLowerCase()
-          .includes(filters.id.toLowerCase())
+          .includes(
+            filters.id.toLowerCase(),
+          )
 
       const matchesName =
         !filters.name ||
         request.name
           .toLowerCase()
-          .includes(filters.name.toLowerCase())
+          .includes(
+            filters.name.toLowerCase(),
+          )
 
       const matchesPhone =
         !filters.phone ||
@@ -471,13 +436,17 @@ export function EnrollmentView() {
     })
   }, [requests, filters])
 
-  const externalRequests = filteredRequests.filter(
-    (request) => request.source === 'external',
-  )
+  const externalRequests =
+    filteredRequests.filter(
+      (request) =>
+        request.source === 'external',
+    )
 
-  const importedRequests = filteredRequests.filter(
-    (request) => request.source === 'import',
-  )
+  const importedRequests =
+    filteredRequests.filter(
+      (request) =>
+        request.source === 'import',
+    )
 
   const pendingCount = requests.filter(
     (request) =>
@@ -565,13 +534,14 @@ export function EnrollmentView() {
         data?.already_processed === true
 
       if (studentId) {
-        const { error: studentUpdateError } =
-          await supabase
-            .from('students')
-            .update({
-              source: 'registration',
-            })
-            .eq('id', studentId)
+        const {
+          error: studentUpdateError,
+        } = await supabase
+          .from('students')
+          .update({
+            source: 'registration',
+          })
+          .eq('id', studentId)
 
         if (studentUpdateError) {
           console.warn(
@@ -848,31 +818,33 @@ export function EnrollmentView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {allowCurrentYearImport && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                setShowImport(true)
-              }
-              className="gap-2"
-            >
-              <FileSpreadsheet className="size-4" />
-              استيراد سجل
-            </Button>
-          )}
+          {!permissionsLoading &&
+            allowCurrentYearImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowImport(true)
+                }
+                className="gap-2"
+              >
+                <FileSpreadsheet className="size-4" />
+                استيراد سجل
+              </Button>
+            )}
 
-          {allowArchiveImport && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                setShowArchive(true)
-              }
-              className="gap-2"
-            >
-              <FileArchive className="size-4" />
-              استيراد للأرشيف
-            </Button>
-          )}
+          {!permissionsLoading &&
+            allowArchiveImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowArchive(true)
+                }
+                className="gap-2"
+              >
+                <FileArchive className="size-4" />
+                استيراد للأرشيف
+              </Button>
+            )}
 
           <Button
             variant="outline"
@@ -890,7 +862,8 @@ export function EnrollmentView() {
           >
             <RefreshCw
               className={`size-4 ${
-                loading || permissionsLoading
+                loading ||
+                permissionsLoading
                   ? 'animate-spin'
                   : ''
               }`}
