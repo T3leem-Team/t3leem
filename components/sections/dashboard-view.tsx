@@ -43,6 +43,7 @@ type AcademicYear = {
   startDate: string | null
   endDate: string | null
 }
+
 type Course = {
   id: string
   name: string
@@ -103,11 +104,6 @@ type AttendanceRecord = {
   courseId: string
 }
 
-type RegistrationRequest = {
-  id: string
-  status: string
-}
-
 type DashboardStats = {
   studentsCount: number
   assignedCount: number
@@ -125,13 +121,22 @@ type StudentSearchResult = {
   attendanceStatus: string | null
 }
 
+type LessonDateStatus =
+  | 'no-course'
+  | 'not-started'
+  | 'ended'
+  | 'no-lesson'
+  | 'lesson'
+
 function getLocalDateString() {
   const now = new Date()
 
   const year = now.getFullYear()
+
   const month = String(
     now.getMonth() + 1,
   ).padStart(2, '0')
+
   const day = String(
     now.getDate(),
   ).padStart(2, '0')
@@ -202,76 +207,7 @@ function formatDate(date: string) {
   return `${parts[2]}/${parts[1]}/${parts[0]}`
 }
 
-function getDateRange(
-  startDate: string | null,
-  endDate: string | null,
-  days: string[],
-) {
-  if (!startDate || !endDate) {
-    return []
-  }
-
-  const start = new Date(
-    `${startDate}T00:00:00`,
-  )
-
-  const end = new Date(
-    `${endDate}T00:00:00`,
-  )
-
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    start > end
-  ) {
-    return []
-  }
-
-  const allowedDays = days
-    .map(getDayIndex)
-    .filter(
-      (day): day is number =>
-        typeof day === 'number',
-    )
-
-  const result: string[] = []
-
-  const current = new Date(start)
-
-  while (current <= end) {
-    const dayIndex = current.getDay()
-
-    if (
-      allowedDays.length === 0 ||
-      allowedDays.includes(dayIndex)
-    ) {
-      const year =
-        current.getFullYear()
-
-      const month = String(
-        current.getMonth() + 1,
-      ).padStart(2, '0')
-
-      const day = String(
-        current.getDate(),
-      ).padStart(2, '0')
-
-      result.push(
-        `${year}-${month}-${day}`,
-      )
-    }
-
-    current.setDate(
-      current.getDate() + 1,
-    )
-  }
-
-  return result
-}
-
-function isPresentStatus(
-  name: string,
-) {
+function isPresentStatus(name: string) {
   const value = normalizeText(name)
 
   return (
@@ -280,9 +216,7 @@ function isPresentStatus(
   )
 }
 
-function isAbsentStatus(
-  name: string,
-) {
+function isAbsentStatus(name: string) {
   const value = normalizeText(name)
 
   return (
@@ -291,9 +225,7 @@ function isAbsentStatus(
   )
 }
 
-function isLateStatus(
-  name: string,
-) {
+function isLateStatus(name: string) {
   const value = normalizeText(name)
 
   return (
@@ -302,9 +234,7 @@ function isLateStatus(
   )
 }
 
-function isExcusedStatus(
-  name: string,
-) {
+function isExcusedStatus(name: string) {
   const value = normalizeText(name)
 
   return (
@@ -371,6 +301,68 @@ function getCourseDays(
   return []
 }
 
+function getLessonDateStatus(
+  course: Course | null,
+  selectedDate: string,
+): LessonDateStatus {
+  if (!course || !selectedDate) {
+    return 'no-course'
+  }
+
+  /*
+   * التاريخ يتم مقارنته كنص YYYY-MM-DD.
+   * بهذه الطريقة لا ندخل في مشاكل timezone.
+   */
+
+  if (
+    course.startDate &&
+    selectedDate < course.startDate
+  ) {
+    return 'not-started'
+  }
+
+  if (
+    course.endDate &&
+    selectedDate > course.endDate
+  ) {
+    return 'ended'
+  }
+
+  /*
+   * داخل فترة الدورة.
+   * الآن فقط نتحقق هل اليوم من أيام الدراسة.
+   */
+
+  if (course.days.length === 0) {
+    /*
+     * إذا الدورة ليس لها أيام محددة،
+     * نعتبر أي يوم داخل الفترة يوم درس.
+     */
+    return 'lesson'
+  }
+
+  const date = new Date(
+    `${selectedDate}T00:00:00`,
+  )
+
+  if (Number.isNaN(date.getTime())) {
+    return 'no-lesson'
+  }
+
+  const dayIndex = date.getDay()
+
+  const isCourseDay =
+    course.days.some(
+      (day) =>
+        getDayIndex(day) ===
+        dayIndex,
+    )
+
+  return isCourseDay
+    ? 'lesson'
+    : 'no-lesson'
+}
+
 export function DashboardView() {
   const router = useRouter()
 
@@ -422,15 +414,17 @@ export function DashboardView() {
     setSelectedCourseId,
   ] = useState('')
 
+  /*
+   * التاريخ طبيعي.
+   * نبدأ بتاريخ اليوم فقط.
+   * بعد ذلك المستخدم يقدر يختار أي تاريخ.
+   */
   const [
     selectedDate,
     setSelectedDate,
-  ] = useState('')
-
-  const [
-    dateNeedsDefault,
-    setDateNeedsDefault,
-  ] = useState(true)
+  ] = useState(
+    getLocalDateString(),
+  )
 
   const [
     pendingRegistrationCount,
@@ -468,20 +462,33 @@ export function DashboardView() {
     ],
   )
 
-  const availableDates = useMemo(
-    () => {
-      if (!selectedCourse) {
-        return []
-      }
-
-      return getDateRange(
-        selectedCourse.startDate,
-        selectedCourse.endDate,
-        selectedCourse.days,
-      )
-    },
-    [selectedCourse],
-  )
+  /*
+   * تحديد حالة التاريخ:
+   *
+   * قبل الدورة:
+   * لم تبدأ الدورة بعد
+   *
+   * بعد الدورة:
+   * انتهت الدورة
+   *
+   * داخل الدورة ولكن ليس يوم دراسة:
+   * لا يوجد درس هذا اليوم
+   *
+   * يوم دراسة:
+   * الملخص يعمل طبيعي
+   */
+  const lessonDateStatus =
+    useMemo(
+      () =>
+        getLessonDateStatus(
+          selectedCourse,
+          selectedDate,
+        ),
+      [
+        selectedCourse,
+        selectedDate,
+      ],
+    )
 
   const loadAttendance =
     useCallback(
@@ -1069,9 +1076,11 @@ export function DashboardView() {
             },
           )
 
-          setDateNeedsDefault(
-            true,
-          )
+          /*
+           * لا نغير selectedDate هنا.
+           * التاريخ يبقى تاريخ اليوم أو التاريخ
+           * الذي اختاره المستخدم.
+           */
 
           await loadAttendance(
             courseIds,
@@ -1092,57 +1101,6 @@ export function DashboardView() {
   useEffect(() => {
     void loadData()
   }, [loadData])
-
-  useEffect(() => {
-    if (
-      !selectedCourse ||
-      availableDates.length ===
-        0 ||
-      !dateNeedsDefault
-    ) {
-      return
-    }
-
-    const today =
-      getLocalDateString()
-
-    if (
-      availableDates.includes(
-        today,
-      )
-    ) {
-      setSelectedDate(today)
-      setDateNeedsDefault(false)
-      return
-    }
-
-    const previousDates =
-      availableDates.filter(
-        (date) => date < today,
-      )
-
-    if (
-      previousDates.length > 0
-    ) {
-      setSelectedDate(
-        previousDates[
-          previousDates.length - 1
-        ],
-      )
-      setDateNeedsDefault(false)
-      return
-    }
-
-    setSelectedDate(
-      availableDates[0] ?? '',
-    )
-
-    setDateNeedsDefault(false)
-  }, [
-    selectedCourse,
-    availableDates,
-    dateNeedsDefault,
-  ])
 
   useEffect(() => {
     const refreshAttendance =
@@ -1373,17 +1331,13 @@ export function DashboardView() {
         )
       : 0
 
-  const attendanceRecordedCount =
-    stats.presentCount +
-    stats.absentCount +
-    stats.lateCount +
-    stats.excusedCount
-
   const teacherAttendanceDetails =
     useMemo<TeacherAttendanceDetail[]>(
       () => {
         if (
-          !selectedCourseId
+          !selectedCourseId ||
+          lessonDateStatus !==
+            'lesson'
         ) {
           return []
         }
@@ -1509,6 +1463,7 @@ export function DashboardView() {
         selectedCourseId,
         selectedDateRecords,
         statusMap,
+        lessonDateStatus,
       ],
     )
 
@@ -1660,7 +1615,9 @@ export function DashboardView() {
 
             if (
               selectedCourseId &&
-              selectedDate
+              selectedDate &&
+              lessonDateStatus ===
+                'lesson'
             ) {
               const record =
                 attendanceRecords.find(
@@ -1704,6 +1661,7 @@ export function DashboardView() {
         selectedCourseId,
         selectedDate,
         statusMap,
+        lessonDateStatus,
       ],
     )
 
@@ -1973,10 +1931,11 @@ export function DashboardView() {
                       event.target
                         .value,
                     )
-                    setSelectedDate('')
-                    setDateNeedsDefault(
-                      true,
-                    )
+
+                    /*
+                     * لا نغير التاريخ.
+                     * التاريخ يبقى كما اختاره المستخدم.
+                     */
                   }}
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
                 >
@@ -2012,7 +1971,9 @@ export function DashboardView() {
                   التاريخ
                 </label>
 
-                <select
+                {/* التاريخ الطبيعي */}
+                <input
+                  type="date"
                   value={
                     selectedDate
                   }
@@ -2023,39 +1984,9 @@ export function DashboardView() {
                       event.target
                         .value,
                     )
-                    setDateNeedsDefault(
-                      false,
-                    )
                   }}
-                  disabled={
-                    availableDates.length ===
-                    0
-                  }
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {availableDates.length ===
-                    0 && (
-                    <option value="">
-                      لا توجد أيام متاحة
-                    </option>
-                  )}
-
-                  {availableDates.map(
-                    (date) => (
-                      <option
-                        key={date}
-                        value={date}
-                      >
-                        {formatDate(
-                          date,
-                        )}
-                        {date ===
-                          getLocalDateString() &&
-                          ' — اليوم'}
-                      </option>
-                    ),
-                  )}
-                </select>
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
+                />
               </div>
             </div>
           </CardContent>
@@ -2136,7 +2067,7 @@ export function DashboardView() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="flex items-center gap-2">
                 <CalendarCheck className="size-5 text-primary" />
-                حضور اليوم
+                ملخص الحضور
               </CardTitle>
 
               <Button
@@ -2149,7 +2080,9 @@ export function DashboardView() {
                 }
                 disabled={
                   !selectedCourseId ||
-                  !selectedDate
+                  !selectedDate ||
+                  lessonDateStatus !==
+                    'lesson'
                 }
                 className="gap-2"
               >
@@ -2160,30 +2093,49 @@ export function DashboardView() {
           </CardHeader>
 
           <CardContent>
+            {/* Summary */}
             <div className="rounded-xl border bg-muted/20 p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">
-                    نسبة الحضور اليوم
-                  </p>
+                  {lessonDateStatus ===
+                  'lesson' ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        نسبة الحضور اليوم
+                      </p>
 
-                  <p className="mt-1 text-3xl font-bold">
-                    {
-                      attendancePercentage
-                    }
-                    %
-                  </p>
+                      <p className="mt-1 text-3xl font-bold">
+                        {
+                          attendancePercentage
+                        }
+                        %
+                      </p>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {
-                      stats.presentCount
-                    }{' '}
-                    حاضر من أصل{' '}
-                    {
-                      stats.assignedCount
-                    }{' '}
-                    موزعين في الدورة
-                  </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {
+                          stats.presentCount
+                        }{' '}
+                        حاضر من أصل{' '}
+                        {
+                          stats.assignedCount
+                        }{' '}
+                        موزعين في الدورة
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {lessonDateStatus ===
+                      'not-started'
+                        ? 'لم تبدأ الدورة بعد'
+                        : lessonDateStatus ===
+                            'ended'
+                          ? 'انتهت الدورة'
+                          : lessonDateStatus ===
+                              'no-lesson'
+                            ? 'لا يوجد درس هذا اليوم'
+                            : 'اختر دورة لعرض ملخص الحضور'}
+                    </p>
+                  )}
                 </div>
 
                 <div className="text-sm text-muted-foreground">
@@ -2212,64 +2164,143 @@ export function DashboardView() {
               </div>
             </div>
 
-            {attendanceItems.length >
-            0 ? (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {attendanceItems.map(
-                  (item) => {
-                    const Icon =
-                      item.icon
-
-                    return (
-                      <div
-                        key={
-                          item.label
-                        }
-                        className="rounded-xl border p-4"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Icon className="size-5" />
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground">
-                              {
-                                item.label
-                              }
-                            </p>
-
-                            <p className="mt-1 text-2xl font-bold">
-                              {
-                                item.count
-                              }
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  },
-                )}
-              </div>
-            ) : (
+            {/* Before course */}
+            {lessonDateStatus ===
+              'not-started' && (
               <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
                 <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا توجد سجلات حضور لهذا اليوم
+                  لم تبدأ الدورة بعد
                 </p>
 
-                {stats.assignedCount >
-                  0 && (
+                {selectedCourse?.startDate && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    عدد الطلاب الموزعين:{' '}
-                    {
-                      stats.assignedCount
-                    }
+                    تبدأ الدورة في{' '}
+                    {formatDate(
+                      selectedCourse.startDate,
+                    )}
                   </p>
                 )}
               </div>
             )}
+
+            {/* After course */}
+            {lessonDateStatus ===
+              'ended' && (
+              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+
+                <p className="mt-3 text-sm font-medium text-muted-foreground">
+                  انتهت الدورة
+                </p>
+
+                {selectedCourse?.endDate && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    انتهت الدورة في{' '}
+                    {formatDate(
+                      selectedCourse.endDate,
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Not a course day */}
+            {lessonDateStatus ===
+              'no-lesson' && (
+              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+
+                <p className="mt-3 text-sm font-medium text-muted-foreground">
+                  لا يوجد درس هذا اليوم
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  هذا التاريخ داخل فترة الدورة، لكنه ليس من أيام الدراسة المحددة للدورة.
+                </p>
+              </div>
+            )}
+
+            {/* No course */}
+            {lessonDateStatus ===
+              'no-course' && (
+              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+
+                <p className="mt-3 text-sm font-medium text-muted-foreground">
+                  لا توجد دورة محددة
+                </p>
+              </div>
+            )}
+
+            {/* Normal lesson summary */}
+            {lessonDateStatus ===
+              'lesson' &&
+              attendanceItems.length >
+                0 && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {attendanceItems.map(
+                    (item) => {
+                      const Icon =
+                        item.icon
+
+                      return (
+                        <div
+                          key={
+                            item.label
+                          }
+                          className="rounded-xl border p-4"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <Icon className="size-5" />
+                            </div>
+
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                {
+                                  item.label
+                                }
+                              </p>
+
+                              <p className="mt-1 text-2xl font-bold">
+                                {
+                                  item.count
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    },
+                  )}
+                </div>
+              )}
+
+            {/* No records on an actual lesson day */}
+            {lessonDateStatus ===
+              'lesson' &&
+              attendanceItems.length ===
+                0 && (
+                <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
+                  <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+
+                  <p className="mt-3 text-sm font-medium text-muted-foreground">
+                    لا توجد سجلات حضور لهذا اليوم
+                  </p>
+
+                  {stats.assignedCount >
+                    0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      عدد الطلاب الموزعين:{' '}
+                      {
+                        stats.assignedCount
+                      }
+                    </p>
+                  )}
+                </div>
+              )}
           </CardContent>
         </Card>
 
@@ -2537,26 +2568,28 @@ export function DashboardView() {
       )}
 
       {/* Teacher attendance details */}
-      {attendanceDetailsOpen && (
-        <AttendanceDetails
-          courseName={
-            selectedCourse?.name ??
-            'الدورة'
-          }
-          date={selectedDate}
-          details={
-            teacherAttendanceDetails
-          }
-          overallPercentage={
-            attendancePercentage
-          }
-          onClose={() =>
-            setAttendanceDetailsOpen(
-              false,
-            )
-          }
-        />
-      )}
+      {attendanceDetailsOpen &&
+        lessonDateStatus ===
+          'lesson' && (
+          <AttendanceDetails
+            courseName={
+              selectedCourse?.name ??
+              'الدورة'
+            }
+            date={selectedDate}
+            details={
+              teacherAttendanceDetails
+            }
+            overallPercentage={
+              attendancePercentage
+            }
+            onClose={() =>
+              setAttendanceDetailsOpen(
+                false,
+              )
+            }
+          />
+        )}
     </>
   )
 }
