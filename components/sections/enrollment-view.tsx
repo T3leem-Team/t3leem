@@ -86,6 +86,12 @@ const inputClass =
 const selectClass =
   'h-9 w-full min-w-[130px] rounded-md border border-input bg-background px-2 text-xs'
 
+const CURRENT_YEAR_KEY =
+  'allow_add_to_current_year'
+
+const ARCHIVE_KEY =
+  'allow_add_to_archive'
+
 function mapRequest(row: any): RegistrationRequest {
   return {
     id: row.id ?? '',
@@ -94,27 +100,38 @@ function mapRequest(row: any): RegistrationRequest {
     name: row.name ?? '',
     personalId: row.personal_id ?? '',
     gender: row.gender ?? '',
-    age: typeof row.age === 'number' ? row.age : null,
+    age:
+      typeof row.age === 'number'
+        ? row.age
+        : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
     levelId: row.level_id ?? null,
     classId: row.class_id ?? null,
     notes: row.notes ?? '',
     healthNotes: row.health_notes ?? '',
-    status: row.status ?? 'pending',
-    processingMode: row.processing_mode ?? 'review',
-    studentId: row.student_id ?? null,
-    rejectionReason: row.rejection_reason ?? '',
-    paymentMethod: row.payment_method ?? '',
+    status:
+      row.status ?? 'pending',
+    processingMode:
+      row.processing_mode ?? 'review',
+    studentId:
+      row.student_id ?? null,
+    rejectionReason:
+      row.rejection_reason ?? '',
+    paymentMethod:
+      row.payment_method ?? '',
     paymentAmount:
       row.payment_amount !== null &&
       row.payment_amount !== undefined
         ? Number(row.payment_amount)
         : null,
-    paymentReference: row.payment_reference ?? '',
-    paymentProofUrl: row.payment_proof_url ?? '',
+    paymentReference:
+      row.payment_reference ?? '',
+    paymentProofUrl:
+      row.payment_proof_url ?? '',
     paymentStatus:
-      row.payment_status ?? 'not_required',
+      row.payment_status ??
+      'not_required',
     verifiedPaymentAmount:
       row.verified_payment_amount !== null &&
       row.verified_payment_amount !== undefined
@@ -122,7 +139,8 @@ function mapRequest(row: any): RegistrationRequest {
         : null,
     paymentRejectionReason:
       row.payment_rejection_reason ?? '',
-    createdAt: row.created_at ?? '',
+    createdAt:
+      row.created_at ?? '',
     source:
       row.source === 'import'
         ? 'import'
@@ -130,11 +148,15 @@ function mapRequest(row: any): RegistrationRequest {
   }
 }
 
-function hasHealthNotes(request: RegistrationRequest) {
+function hasHealthNotes(
+  request: RegistrationRequest,
+) {
   return request.healthNotes.trim() !== ''
 }
 
-function hasNotes(request: RegistrationRequest) {
+function hasNotes(
+  request: RegistrationRequest,
+) {
   return request.notes.trim() !== ''
 }
 
@@ -153,14 +175,19 @@ function getStatusLabel(
   switch (status) {
     case 'pending':
       return 'قيد المراجعة'
+
     case 'under_review':
       return 'تحت المراجعة'
+
     case 'approved':
       return 'مقبول'
+
     case 'rejected':
       return 'مرفوض'
+
     case 'cancelled':
       return 'ملغي'
+
     default:
       return status
   }
@@ -175,17 +202,25 @@ function formatDate(value: string) {
     return value
   }
 
-  return new Intl.DateTimeFormat('ar-BH', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
+  return new Intl.DateTimeFormat(
+    'ar-BH',
+    {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+  ).format(date)
 }
 
-function formatAmount(value: number | null) {
-  if (value === null || value === undefined) {
+function formatAmount(
+  value: number | null,
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return '—'
   }
 
@@ -236,78 +271,117 @@ export function EnrollmentView() {
   ] = useState(true)
 
   /*
-   * قراءة مفاتيح النظام مباشرة.
+   * تحميل مفاتيح الاستيراد
    *
-   * لا يوجد getSession
-   * ولا يوجد onAuthStateChange
-   * ولا يوجد تحكم آخر بالأزرار.
-   *
-   * المصدر الوحيد:
+   * المصدر الوحيد للتحكم بالأزرار:
    * system_keys
    */
-  const loadImportPermissions = async () => {
-    setPermissionsLoading(true)
+  const loadImportPermissions =
+    async () => {
+      setPermissionsLoading(true)
 
-    try {
-      const { data, error } = await supabase
-        .from('system_keys')
-        .select('key_name, enabled')
-        .in('key_name', [
-          'allow_add_to_current_year',
-          'allow_add_to_archive',
-        ])
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('system_keys')
+          .select(
+            'key_name, enabled',
+          )
+          .in('key_name', [
+            CURRENT_YEAR_KEY,
+            ARCHIVE_KEY,
+          ])
 
-      if (error) {
-        throw error
+        if (error) {
+          throw error
+        }
+
+        /*
+         * تشخيص مؤقت:
+         * راح تشوف النتيجة في Console
+         */
+        console.log(
+          'SYSTEM KEYS FROM SUPABASE:',
+          data,
+        )
+
+        const currentYearRow =
+          data?.find(
+            (row) =>
+              row.key_name ===
+              CURRENT_YEAR_KEY,
+          )
+
+        const archiveRow =
+          data?.find(
+            (row) =>
+              row.key_name ===
+              ARCHIVE_KEY,
+          )
+
+        const currentYearEnabled =
+          currentYearRow?.enabled === true
+
+        const archiveEnabled =
+          archiveRow?.enabled === true
+
+        console.log(
+          'IMPORT PERMISSIONS:',
+          {
+            currentYearRow,
+            archiveRow,
+            currentYearEnabled,
+            archiveEnabled,
+          },
+        )
+
+        setAllowCurrentYearImport(
+          currentYearEnabled,
+        )
+
+        setAllowArchiveImport(
+          archiveEnabled,
+        )
+      } catch (error) {
+        console.error(
+          'loadImportPermissions error:',
+          error,
+        )
+
+        setAllowCurrentYearImport(
+          false,
+        )
+
+        setAllowArchiveImport(
+          false,
+        )
+
+        setStatusMessage(
+          `تعذر تحميل إعدادات المفاتيح: ${
+            error instanceof Error
+              ? error.message
+              : 'خطأ غير معروف'
+          }`,
+        )
+      } finally {
+        setPermissionsLoading(
+          false,
+        )
       }
-
-      const currentYearRow =
-        data?.find(
-          (row) =>
-            row.key_name ===
-            'allow_add_to_current_year',
-        )
-
-      const archiveRow =
-        data?.find(
-          (row) =>
-            row.key_name ===
-            'allow_add_to_archive',
-        )
-
-      setAllowCurrentYearImport(
-        currentYearRow?.enabled === true,
-      )
-
-      setAllowArchiveImport(
-        archiveRow?.enabled === true,
-      )
-    } catch (error) {
-      console.error(
-        'loadImportPermissions error:',
-        error,
-      )
-
-      setAllowCurrentYearImport(false)
-      setAllowArchiveImport(false)
-
-      setStatusMessage(
-        `تعذر تحميل إعدادات المفاتيح: ${
-          error instanceof Error
-            ? error.message
-            : 'خطأ غير معروف'
-        }`,
-      )
-    } finally {
-      setPermissionsLoading(false)
     }
-  }
 
   const loadRequests = async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from('registration_requests')
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        'registration_requests',
+      )
       .select(`
         id,
         request_number,
@@ -336,21 +410,28 @@ export function EnrollmentView() {
         created_at,
         source
       `)
-      .order('created_at', {
-        ascending: false,
-      })
+      .order(
+        'created_at',
+        {
+          ascending: false,
+        },
+      )
 
     if (error) {
       setStatusMessage(
         `خطأ في تحميل طلبات التسجيل: ${error.message}`,
       )
+
       setRequests([])
       setLoading(false)
+
       return
     }
 
     setRequests(
-      (data ?? []).map(mapRequest),
+      (data ?? []).map(
+        mapRequest,
+      ),
     )
 
     setLoading(false)
@@ -359,14 +440,15 @@ export function EnrollmentView() {
   useEffect(() => {
     let mounted = true
 
-    const initialize = async () => {
-      await Promise.all([
-        loadRequests(),
-        loadImportPermissions(),
-      ])
+    const initialize =
+      async () => {
+        await Promise.all([
+          loadRequests(),
+          loadImportPermissions(),
+        ])
 
-      if (!mounted) return
-    }
+        if (!mounted) return
+      }
 
     initialize()
 
@@ -379,92 +461,120 @@ export function EnrollmentView() {
     key: keyof Filters,
     value: string,
   ) => {
-    setFilters((current) => ({
-      ...current,
-      [key]: value,
-    }))
+    setFilters(
+      (current) => ({
+        ...current,
+        [key]: value,
+      }),
+    )
   }
 
   const clearFilters = () => {
-    setFilters(emptyFilters)
+    setFilters(
+      emptyFilters,
+    )
   }
 
-  const filteredRequests = useMemo(() => {
-    return requests.filter((request) => {
-      const matchesId =
-        !filters.id ||
-        request.requestNumber
-          .toLowerCase()
-          .includes(
-            filters.id.toLowerCase(),
-          ) ||
-        request.id
-          .toLowerCase()
-          .includes(
-            filters.id.toLowerCase(),
+  const filteredRequests =
+    useMemo(() => {
+      return requests.filter(
+        (request) => {
+          const matchesId =
+            !filters.id ||
+            request.requestNumber
+              .toLowerCase()
+              .includes(
+                filters.id.toLowerCase(),
+              ) ||
+            request.id
+              .toLowerCase()
+              .includes(
+                filters.id.toLowerCase(),
+              )
+
+          const matchesName =
+            !filters.name ||
+            request.name
+              .toLowerCase()
+              .includes(
+                filters.name.toLowerCase(),
+              )
+
+          const matchesPhone =
+            !filters.phone ||
+            request.phone.includes(
+              filters.phone,
+            )
+
+          const matchesDate =
+            !filters.submittedAt ||
+            formatDate(
+              request.createdAt,
+            ).includes(
+              filters.submittedAt,
+            )
+
+          const matchesStatus =
+            !filters.status ||
+            request.status ===
+              filters.status
+
+          return (
+            matchesId &&
+            matchesName &&
+            matchesPhone &&
+            matchesDate &&
+            matchesStatus
           )
-
-      const matchesName =
-        !filters.name ||
-        request.name
-          .toLowerCase()
-          .includes(
-            filters.name.toLowerCase(),
-          )
-
-      const matchesPhone =
-        !filters.phone ||
-        request.phone.includes(filters.phone)
-
-      const matchesDate =
-        !filters.submittedAt ||
-        formatDate(request.createdAt).includes(
-          filters.submittedAt,
-        )
-
-      const matchesStatus =
-        !filters.status ||
-        request.status === filters.status
-
-      return (
-        matchesId &&
-        matchesName &&
-        matchesPhone &&
-        matchesDate &&
-        matchesStatus
+        },
       )
-    })
-  }, [requests, filters])
+    }, [
+      requests,
+      filters,
+    ])
 
   const externalRequests =
     filteredRequests.filter(
       (request) =>
-        request.source === 'external',
+        request.source ===
+        'external',
     )
 
   const importedRequests =
     filteredRequests.filter(
       (request) =>
-        request.source === 'import',
+        request.source ===
+        'import',
     )
 
-  const pendingCount = requests.filter(
-    (request) =>
-      request.status === 'pending' ||
-      request.status === 'under_review',
-  ).length
+  const pendingCount =
+    requests.filter(
+      (request) =>
+        request.status ===
+          'pending' ||
+        request.status ===
+          'under_review',
+    ).length
 
-  const specialCount = requests.filter(
-    (request) =>
-      request.status !== 'rejected' &&
-      request.status !== 'cancelled' &&
-      hasSpecialInformation(request),
-  ).length
+  const specialCount =
+    requests.filter(
+      (request) =>
+        request.status !==
+          'rejected' &&
+        request.status !==
+          'cancelled' &&
+        hasSpecialInformation(
+          request,
+        ),
+    ).length
 
   const openReview = (
     request: RegistrationRequest,
   ) => {
-    setSelectedRequest(request)
+    setSelectedRequest(
+      request,
+    )
+
     setShowReview(true)
   }
 
@@ -475,193 +585,252 @@ export function EnrollmentView() {
     setSelectedRequest(null)
   }
 
-  const approveRequest = async (
-    request: RegistrationRequest,
-  ) => {
-    if (
-      request.status !== 'pending' &&
-      request.status !== 'under_review'
-    ) {
-      return
-    }
+  const approveRequest =
+    async (
+      request: RegistrationRequest,
+    ) => {
+      if (
+        request.status !==
+          'pending' &&
+        request.status !==
+          'under_review'
+      ) {
+        return
+      }
 
-    if (!request.levelId) {
+      if (!request.levelId) {
+        setStatusMessage(
+          'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من قبول طلب ${
+            request.requestNumber ||
+            request.name
+          }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
+        )
+
+      if (!confirmed) return
+
+      setSaving(true)
+
       setStatusMessage(
-        'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
+        'جاري قبول الطلب وترحيله إلى الطلاب...',
       )
-      return
-    }
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من قبول طلب ${
-        request.requestNumber || request.name
-      }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
-    )
-
-    if (!confirmed) return
-
-    setSaving(true)
-    setStatusMessage(
-      'جاري قبول الطلب وترحيله إلى الطلاب...',
-    )
-
-    try {
-      const { data, error } =
-        await supabase.rpc(
+      try {
+        const {
+          data,
+          error,
+        } = await supabase.rpc(
           'approve_registration_request',
           {
-            p_request_id: request.id,
+            p_request_id:
+              request.id,
           },
         )
 
-      if (error) {
+        if (error) {
+          console.error(
+            'approve_registration_request error:',
+            error,
+          )
+
+          setStatusMessage(
+            `تعذر ترحيل الطلب: ${error.message}`,
+          )
+
+          return
+        }
+
+        const studentId =
+          data?.student_id ??
+          null
+
+        const alreadyProcessed =
+          data?.already_processed ===
+          true
+
+        if (studentId) {
+          const {
+            error:
+              studentUpdateError,
+          } = await supabase
+            .from('students')
+            .update({
+              source:
+                'registration',
+            })
+            .eq(
+              'id',
+              studentId,
+            )
+
+          if (
+            studentUpdateError
+          ) {
+            console.warn(
+              'Could not update student source:',
+              studentUpdateError,
+            )
+          }
+        }
+
+        const {
+          error:
+            deleteError,
+        } = await supabase
+          .from(
+            'registration_requests',
+          )
+          .delete()
+          .eq(
+            'id',
+            request.id,
+          )
+
+        if (deleteError) {
+          console.error(
+            'Could not delete approved request:',
+            deleteError,
+          )
+
+          setStatusMessage(
+            'تم إنشاء الطالب بنجاح، لكن تعذر حذف طلب التسجيل من قائمة الطلبات. سيتم إعادة المحاولة لاحقاً.',
+          )
+
+          await loadRequests()
+
+          return
+        }
+
+        setShowReview(false)
+        setSelectedRequest(
+          null,
+        )
+
+        setStatusMessage(
+          alreadyProcessed
+            ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
+            : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
+        )
+
+        await loadRequests()
+      } catch (error) {
         console.error(
-          'approve_registration_request error:',
+          'Unexpected approval error:',
           error,
         )
 
         setStatusMessage(
-          `تعذر ترحيل الطلب: ${error.message}`,
+          `حدث خطأ غير متوقع أثناء الترحيل: ${
+            error instanceof Error
+              ? error.message
+              : 'خطأ غير معروف'
+          }`,
         )
+      } finally {
+        setSaving(false)
+      }
+    }
 
+  const rejectRequest =
+    async (
+      request: RegistrationRequest,
+    ) => {
+      if (
+        request.status !==
+          'pending' &&
+        request.status !==
+          'under_review'
+      ) {
         return
       }
 
-      const studentId =
-        data?.student_id ?? null
-
-      const alreadyProcessed =
-        data?.already_processed === true
-
-      if (studentId) {
-        const {
-          error: studentUpdateError,
-        } = await supabase
-          .from('students')
-          .update({
-            source: 'registration',
-          })
-          .eq('id', studentId)
-
-        if (studentUpdateError) {
-          console.warn(
-            'Could not update student source:',
-            studentUpdateError,
-          )
-        }
-      }
-
-      const { error: deleteError } =
-        await supabase
-          .from('registration_requests')
-          .delete()
-          .eq('id', request.id)
-
-      if (deleteError) {
-        console.error(
-          'Could not delete approved request:',
-          deleteError,
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من رفض طلب ${
+            request.requestNumber ||
+            request.name
+          }؟`,
         )
 
-        setStatusMessage(
-          'تم إنشاء الطالب بنجاح، لكن تعذر حذف طلب التسجيل من قائمة الطلبات. سيتم إعادة المحاولة لاحقاً.',
-        )
+      if (!confirmed) return
 
-        await loadRequests()
-        return
-      }
-
-      setShowReview(false)
-      setSelectedRequest(null)
-
+      setSaving(true)
       setStatusMessage(
-        alreadyProcessed
-          ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
-          : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
+        'جاري رفض الطلب...',
       )
 
-      await loadRequests()
-    } catch (error) {
-      console.error(
-        'Unexpected approval error:',
+      const {
         error,
+      } = await supabase
+        .from(
+          'registration_requests',
+        )
+        .update({
+          status:
+            'rejected',
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          'id',
+          request.id,
+        )
+
+      if (error) {
+        setStatusMessage(
+          `تعذر رفض الطلب: ${error.message}`,
+        )
+
+        setSaving(false)
+
+        return
+      }
+
+      setRequests(
+        (current) =>
+          current.map(
+            (item) =>
+              item.id ===
+              request.id
+                ? {
+                    ...item,
+                    status:
+                      'rejected',
+                  }
+                : item,
+          ),
+      )
+
+      setSelectedRequest(
+        (current) =>
+          current?.id ===
+          request.id
+            ? {
+                ...current,
+                status:
+                  'rejected',
+              }
+            : current,
       )
 
       setStatusMessage(
-        `حدث خطأ غير متوقع أثناء الترحيل: ${
-          error instanceof Error
-            ? error.message
-            : 'خطأ غير معروف'
-        }`,
+        'تم رفض الطلب.',
       )
-    } finally {
+
       setSaving(false)
     }
-  }
-
-  const rejectRequest = async (
-    request: RegistrationRequest,
-  ) => {
-    if (
-      request.status !== 'pending' &&
-      request.status !== 'under_review'
-    ) {
-      return
-    }
-
-    const confirmed = window.confirm(
-      `هل أنت متأكد من رفض طلب ${
-        request.requestNumber || request.name
-      }؟`,
-    )
-
-    if (!confirmed) return
-
-    setSaving(true)
-    setStatusMessage('جاري رفض الطلب...')
-
-    const { error } = await supabase
-      .from('registration_requests')
-      .update({
-        status: 'rejected',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', request.id)
-
-    if (error) {
-      setStatusMessage(
-        `تعذر رفض الطلب: ${error.message}`,
-      )
-      setSaving(false)
-      return
-    }
-
-    setRequests((current) =>
-      current.map((item) =>
-        item.id === request.id
-          ? {
-              ...item,
-              status: 'rejected',
-            }
-          : item,
-      ),
-    )
-
-    setSelectedRequest((current) =>
-      current?.id === request.id
-        ? {
-            ...current,
-            status: 'rejected',
-          }
-        : current,
-    )
-
-    setStatusMessage('تم رفض الطلب.')
-    setSaving(false)
-  }
 
   const hasFilters =
-    Object.values(filters).some(Boolean)
+    Object.values(
+      filters,
+    ).some(Boolean)
 
   const renderTable = (
     tableRequests: RegistrationRequest[],
@@ -682,7 +851,10 @@ export function EnrollmentView() {
       )
     }
 
-    if (tableRequests.length === 0) {
+    if (
+      tableRequests.length ===
+      0
+    ) {
       return (
         <tr>
           <td
@@ -695,84 +867,95 @@ export function EnrollmentView() {
       )
     }
 
-    return tableRequests.map((request) => {
-      const hasHealth =
-        hasHealthNotes(request)
+    return tableRequests.map(
+      (request) => {
+        const hasHealth =
+          hasHealthNotes(
+            request,
+          )
 
-      const hasRequestNotes =
-        hasNotes(request)
+        const hasRequestNotes =
+          hasNotes(request)
 
-      const special =
-        hasSpecialInformation(request)
+        const special =
+          hasSpecialInformation(
+            request,
+          )
 
-      return (
-        <tr
-          key={request.id}
-          className={`border-b last:border-0 transition-colors ${
-            special
-              ? 'bg-amber-50/70 hover:bg-amber-100/70'
-              : 'hover:bg-muted/30'
-          }`}
-        >
-          <td className="px-4 py-4">
-            <div className="font-medium tabular-nums">
-              {request.requestNumber ||
-                request.id}
-            </div>
-
-            {special && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {hasHealth && (
-                  <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                    🩺 معلومات صحية
-                  </span>
-                )}
-
-                {hasRequestNotes && (
-                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                    📝 ملاحظات
-                  </span>
-                )}
+        return (
+          <tr
+            key={request.id}
+            className={`border-b last:border-0 transition-colors ${
+              special
+                ? 'bg-amber-50/70 hover:bg-amber-100/70'
+                : 'hover:bg-muted/30'
+            }`}
+          >
+            <td className="px-4 py-4">
+              <div className="font-medium tabular-nums">
+                {request.requestNumber ||
+                  request.id}
               </div>
-            )}
-          </td>
 
-          <td className="px-4 py-4 font-medium">
-            {request.name}
-          </td>
+              {special && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {hasHealth && (
+                    <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                      🩺 معلومات صحية
+                    </span>
+                  )}
 
-          <td className="px-4 py-4 tabular-nums text-muted-foreground">
-            {request.phone || '—'}
-          </td>
-
-          <td className="px-4 py-4 text-muted-foreground">
-            {formatDate(request.createdAt)}
-          </td>
-
-          <td className="px-4 py-4">
-            <StatusBadge
-              status={getStatusLabel(
-                request.status,
+                  {hasRequestNotes && (
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      📝 ملاحظات
+                    </span>
+                  )}
+                </div>
               )}
-            />
-          </td>
+            </td>
 
-          <td className="px-4 py-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                openReview(request)
-              }
-              className="gap-2"
-            >
-              <Eye className="size-4" />
-              مراجعة
-            </Button>
-          </td>
-        </tr>
-      )
-    })
+            <td className="px-4 py-4 font-medium">
+              {request.name}
+            </td>
+
+            <td className="px-4 py-4 tabular-nums text-muted-foreground">
+              {request.phone ||
+                '—'}
+            </td>
+
+            <td className="px-4 py-4 text-muted-foreground">
+              {formatDate(
+                request.createdAt,
+              )}
+            </td>
+
+            <td className="px-4 py-4">
+              <StatusBadge
+                status={getStatusLabel(
+                  request.status,
+                )}
+              />
+            </td>
+
+            <td className="px-4 py-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  openReview(
+                    request,
+                  )
+                }
+                className="gap-2"
+              >
+                <Eye className="size-4" />
+                مراجعة
+              </Button>
+            </td>
+          </tr>
+        )
+      },
+    )
   }
 
   return (
@@ -785,8 +968,12 @@ export function EnrollmentView() {
       {statusMessage && (
         <div
           className={`rounded-lg border p-4 text-sm ${
-            statusMessage.includes('خطأ') ||
-            statusMessage.includes('تعذر')
+            statusMessage.includes(
+              'خطأ',
+            ) ||
+            statusMessage.includes(
+              'تعذر',
+            )
               ? 'border-red-200 bg-red-50 text-red-800'
               : 'border-emerald-200 bg-emerald-50 text-emerald-800'
           }`}
@@ -806,12 +993,14 @@ export function EnrollmentView() {
             </span>
           </div>
 
-          {specialCount > 0 && (
+          {specialCount >
+            0 && (
             <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               <AlertTriangle className="size-4" />
 
               <span>
-                {specialCount} طلب فيه ملاحظات أو معلومات صحية
+                {specialCount}{' '}
+                طلب فيه ملاحظات أو معلومات صحية
               </span>
             </div>
           )}
@@ -823,7 +1012,9 @@ export function EnrollmentView() {
               <Button
                 variant="outline"
                 onClick={() =>
-                  setShowImport(true)
+                  setShowImport(
+                    true,
+                  )
                 }
                 className="gap-2"
               >
@@ -837,7 +1028,9 @@ export function EnrollmentView() {
               <Button
                 variant="outline"
                 onClick={() =>
-                  setShowArchive(true)
+                  setShowArchive(
+                    true,
+                  )
                 }
                 className="gap-2"
               >
@@ -881,85 +1074,139 @@ export function EnrollmentView() {
                 <tr className="border-b bg-muted/40">
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
-                      <div>رقم الطلب</div>
+                      <div>
+                        رقم الطلب
+                      </div>
+
                       <input
-                        value={filters.id}
-                        onChange={(event) =>
+                        value={
+                          filters.id
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'id',
-                            event.target.value,
+                            event
+                              .target
+                              .value,
                           )
                         }
                         placeholder="بحث"
-                        className={inputClass}
+                        className={
+                          inputClass
+                        }
                       />
                     </div>
                   </th>
 
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
-                      <div>اسم الطالب</div>
+                      <div>
+                        اسم الطالب
+                      </div>
+
                       <input
-                        value={filters.name}
-                        onChange={(event) =>
+                        value={
+                          filters.name
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'name',
-                            event.target.value,
+                            event
+                              .target
+                              .value,
                           )
                         }
                         placeholder="بحث"
-                        className={inputClass}
+                        className={
+                          inputClass
+                        }
                       />
                     </div>
                   </th>
 
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
-                      <div>رقم الجوال</div>
+                      <div>
+                        رقم الجوال
+                      </div>
+
                       <input
-                        value={filters.phone}
-                        onChange={(event) =>
+                        value={
+                          filters.phone
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'phone',
-                            event.target.value,
+                            event
+                              .target
+                              .value,
                           )
                         }
                         placeholder="بحث"
-                        className={inputClass}
+                        className={
+                          inputClass
+                        }
                       />
                     </div>
                   </th>
 
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
-                      <div>تاريخ التقديم</div>
+                      <div>
+                        تاريخ التقديم
+                      </div>
+
                       <input
-                        value={filters.submittedAt}
-                        onChange={(event) =>
+                        value={
+                          filters.submittedAt
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'submittedAt',
-                            event.target.value,
+                            event
+                              .target
+                              .value,
                           )
                         }
                         placeholder="بحث"
-                        className={inputClass}
+                        className={
+                          inputClass
+                        }
                       />
                     </div>
                   </th>
 
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
-                      <div>الحالة</div>
+                      <div>
+                        الحالة
+                      </div>
 
                       <select
-                        value={filters.status}
-                        onChange={(event) =>
+                        value={
+                          filters.status
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'status',
-                            event.target.value,
+                            event
+                              .target
+                              .value,
                           )
                         }
-                        className={selectClass}
+                        className={
+                          selectClass
+                        }
                       >
                         <option value="">
                           جميع الحالات
@@ -1002,7 +1249,8 @@ export function EnrollmentView() {
             </table>
           </div>
 
-          {importedRequests.length > 0 && (
+          {importedRequests.length >
+            0 && (
             <div className="border-t">
               <div className="flex items-center gap-2 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
                 <FileSpreadsheet className="size-4" />
@@ -1010,7 +1258,9 @@ export function EnrollmentView() {
                 الطلبات المستوردة من Excel
 
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs">
-                  {importedRequests.length}
+                  {
+                    importedRequests.length
+                  }
                 </span>
               </div>
 
@@ -1059,14 +1309,23 @@ export function EnrollmentView() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Filter className="size-4" />
 
-                عرض {filteredRequests.length} من{' '}
-                {requests.length} طلب
+                عرض{' '}
+                {
+                  filteredRequests.length
+                }{' '}
+                من{' '}
+                {
+                  requests.length
+                }{' '}
+                طلب
               </div>
 
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={clearFilters}
+                onClick={
+                  clearFilters
+                }
               >
                 مسح الفلاتر
               </Button>
@@ -1090,365 +1349,398 @@ export function EnrollmentView() {
       {showArchive && (
         <EnrollmentArchive
           onClose={() =>
-            setShowArchive(false)
+            setShowArchive(
+              false,
+            )
           }
         />
       )}
 
-      {showReview && selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  مراجعة طلب التسجيل
-                </h2>
+      {showReview &&
+        selectedRequest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
+              <div className="flex items-center justify-between border-b p-5">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    مراجعة طلب التسجيل
+                  </h2>
 
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    {selectedRequest.requestNumber ||
-                      selectedRequest.id}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      {
+                        selectedRequest.requestNumber ||
+                        selectedRequest.id
+                      }
+                    </p>
 
-                  {selectedRequest.source ===
-                    'import' && (
-                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                      مستورد من Excel
-                    </span>
-                  )}
+                    {selectedRequest.source ===
+                      'import' && (
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                        مستورد من Excel
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={
+                    closeReview
+                  }
+                  disabled={saving}
+                >
+                  <X className="size-4" />
+                </Button>
               </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeReview}
-                disabled={saving}
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
+              <div className="space-y-5 p-5">
+                {hasSpecialInformation(
+                  selectedRequest,
+                ) && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 size-5 shrink-0" />
 
-            <div className="space-y-5 p-5">
-              {hasSpecialInformation(
-                selectedRequest,
-              ) && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                      <div>
+                        <p className="font-semibold">
+                          تنبيه: توجد معلومات تحتاج الانتباه
+                        </p>
 
-                    <div>
-                      <p className="font-semibold">
-                        تنبيه: توجد معلومات تحتاج الانتباه
-                      </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {hasHealthNotes(
+                            selectedRequest,
+                          ) && (
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
+                              🩺 يحتوي على معلومات صحية
+                            </span>
+                          )}
 
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {hasHealthNotes(
-                          selectedRequest,
-                        ) && (
-                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                            🩺 يحتوي على معلومات صحية
-                          </span>
-                        )}
-
-                        {hasNotes(
-                          selectedRequest,
-                        ) && (
-                          <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                            📝 يحتوي على ملاحظات
-                          </span>
-                        )}
+                          {hasNotes(
+                            selectedRequest,
+                          ) && (
+                            <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                              📝 يحتوي على ملاحظات
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    اسم الطالب
-                  </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      اسم الطالب
+                    </p>
 
-                  <p className="mt-1 font-medium">
-                    {selectedRequest.name ||
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    الرقم الشخصي
-                  </p>
-
-                  <p className="mt-1 font-medium tabular-nums">
-                    {selectedRequest.personalId ||
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    العمر
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {selectedRequest.age ??
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    الجنس
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {selectedRequest.gender ||
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    رقم الجوال
-                  </p>
-
-                  <p className="mt-1 font-medium tabular-nums">
-                    {selectedRequest.phone ||
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    الواتساب
-                  </p>
-
-                  <p className="mt-1 font-medium tabular-nums">
-                    {selectedRequest.whatsapp ||
-                      'غير مضاف'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    المستوى
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {selectedRequest.levelId ||
-                      'غير محدد'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    تاريخ التقديم
-                  </p>
-
-                  <p className="mt-1 font-medium">
-                    {formatDate(
-                      selectedRequest.createdAt,
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <p className="text-sm font-medium">
-                  المعلومات الصحية
-                </p>
-
-                <p
-                  className={`mt-2 whitespace-pre-wrap text-sm ${
-                    hasHealthNotes(
-                      selectedRequest,
-                    )
-                      ? 'font-medium text-rose-700'
-                      : 'text-muted-foreground'
-                  }`}
-                >
-                  {selectedRequest.healthNotes ||
-                    'لا توجد معلومات صحية'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <p className="text-sm font-medium">
-                  الملاحظات
-                </p>
-
-                <p
-                  className={`mt-2 whitespace-pre-wrap text-sm ${
-                    hasNotes(selectedRequest)
-                      ? 'font-medium text-amber-800'
-                      : 'text-muted-foreground'
-                  }`}
-                >
-                  {selectedRequest.notes ||
-                    'لا توجد ملاحظات'}
-                </p>
-              </div>
-
-              {selectedRequest.paymentMethod && (
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    بيانات الدفع
-                  </p>
-
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        طريقة الدفع
-                      </p>
-
-                      <p className="mt-1 font-medium">
-                        {
-                          selectedRequest.paymentMethod
-                        }
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        المبلغ المدخل
-                      </p>
-
-                      <p className="mt-1 font-medium tabular-nums">
-                        {formatAmount(
-                          selectedRequest.paymentAmount,
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        المرجع
-                      </p>
-
-                      <p className="mt-1 font-medium">
-                        {selectedRequest.paymentReference ||
-                          '—'}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        حالة الدفع
-                      </p>
-
-                      <p className="mt-1 font-medium">
-                        {selectedRequest.paymentStatus ===
-                        'verified'
-                          ? 'تم التحقق'
-                          : selectedRequest.paymentStatus ===
-                              'rejected'
-                            ? 'مرفوض'
-                            : selectedRequest.paymentStatus ===
-                                'pending'
-                              ? 'بانتظار التحقق'
-                              : 'غير مطلوب'}
-                      </p>
-                    </div>
+                    <p className="mt-1 font-medium">
+                      {
+                        selectedRequest.name ||
+                        'غير مضاف'
+                      }
+                    </p>
                   </div>
 
-                  {selectedRequest.paymentProofUrl && (
-                    <a
-                      href={
-                        selectedRequest.paymentProofUrl
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-4 inline-flex text-sm font-medium text-primary underline"
-                    >
-                      عرض إثبات الدفع
-                    </a>
-                  )}
-                </div>
-              )}
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      الرقم الشخصي
+                    </p>
 
-              {selectedRequest.rejectionReason && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+                    <p className="mt-1 font-medium tabular-nums">
+                      {
+                        selectedRequest.personalId ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      العمر
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {
+                        selectedRequest.age ??
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      الجنس
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {
+                        selectedRequest.gender ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      رقم الجوال
+                    </p>
+
+                    <p className="mt-1 font-medium tabular-nums">
+                      {
+                        selectedRequest.phone ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      الواتساب
+                    </p>
+
+                    <p className="mt-1 font-medium tabular-nums">
+                      {
+                        selectedRequest.whatsapp ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      المستوى
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {
+                        selectedRequest.levelId ||
+                        'غير محدد'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      تاريخ التقديم
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {formatDate(
+                        selectedRequest.createdAt,
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
                   <p className="text-sm font-medium">
-                    سبب الرفض
+                    المعلومات الصحية
                   </p>
 
-                  <p className="mt-2 text-sm">
+                  <p
+                    className={`mt-2 whitespace-pre-wrap text-sm ${
+                      hasHealthNotes(
+                        selectedRequest,
+                      )
+                        ? 'font-medium text-rose-700'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
                     {
-                      selectedRequest.rejectionReason
+                      selectedRequest.healthNotes ||
+                      'لا توجد معلومات صحية'
                     }
                   </p>
                 </div>
-              )}
 
-              <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-                <Button
-                  variant="ghost"
-                  onClick={closeReview}
-                  disabled={saving}
-                >
-                  إغلاق
-                </Button>
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    الملاحظات
+                  </p>
 
-                {(
-                  selectedRequest.status ===
-                    'pending' ||
-                  selectedRequest.status ===
-                    'under_review'
-                ) && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        rejectRequest(
-                          selectedRequest,
-                        )
-                      }
-                      disabled={saving}
-                      className="gap-2"
-                    >
-                      {saving ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <X className="size-4" />
-                      )}
+                  <p
+                    className={`mt-2 whitespace-pre-wrap text-sm ${
+                      hasNotes(
+                        selectedRequest,
+                      )
+                        ? 'font-medium text-amber-800'
+                        : 'text-muted-foreground'
+                    }`}
+                  >
+                    {
+                      selectedRequest.notes ||
+                      'لا توجد ملاحظات'
+                    }
+                  </p>
+                </div>
 
-                      رفض الطلب
-                    </Button>
+                {selectedRequest.paymentMethod && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">
+                      بيانات الدفع
+                    </p>
 
-                    <Button
-                      onClick={() =>
-                        approveRequest(
-                          selectedRequest,
-                        )
-                      }
-                      disabled={saving}
-                      className="gap-2"
-                    >
-                      {saving ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Check className="size-4" />
-                      )}
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          طريقة الدفع
+                        </p>
 
-                      قبول وترحيل للطلاب
-                    </Button>
-                  </>
-                )}
+                        <p className="mt-1 font-medium">
+                          {
+                            selectedRequest.paymentMethod
+                          }
+                        </p>
+                      </div>
 
-                {selectedRequest.status ===
-                  'approved' && (
-                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                    <Check className="size-4" />
-                    تم قبول الطلب وترحيله للطلاب
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          المبلغ المدخل
+                        </p>
+
+                        <p className="mt-1 font-medium tabular-nums">
+                          {formatAmount(
+                            selectedRequest.paymentAmount,
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          المرجع
+                        </p>
+
+                        <p className="mt-1 font-medium">
+                          {
+                            selectedRequest.paymentReference ||
+                            '—'
+                          }
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          حالة الدفع
+                        </p>
+
+                        <p className="mt-1 font-medium">
+                          {selectedRequest.paymentStatus ===
+                          'verified'
+                            ? 'تم التحقق'
+                            : selectedRequest.paymentStatus ===
+                                'rejected'
+                              ? 'مرفوض'
+                              : selectedRequest.paymentStatus ===
+                                  'pending'
+                                ? 'بانتظار التحقق'
+                                : 'غير مطلوب'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {selectedRequest.paymentProofUrl && (
+                      <a
+                        href={
+                          selectedRequest.paymentProofUrl
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex text-sm font-medium text-primary underline"
+                      >
+                        عرض إثبات الدفع
+                      </a>
+                    )}
                   </div>
                 )}
+
+                {selectedRequest.rejectionReason && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+                    <p className="text-sm font-medium">
+                      سبب الرفض
+                    </p>
+
+                    <p className="mt-2 text-sm">
+                      {
+                        selectedRequest.rejectionReason
+                      }
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                  <Button
+                    variant="ghost"
+                    onClick={
+                      closeReview
+                    }
+                    disabled={saving}
+                  >
+                    إغلاق
+                  </Button>
+
+                  {(selectedRequest.status ===
+                    'pending' ||
+                    selectedRequest.status ===
+                      'under_review') && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          rejectRequest(
+                            selectedRequest,
+                          )
+                        }
+                        disabled={
+                          saving
+                        }
+                        className="gap-2"
+                      >
+                        {saving ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <X className="size-4" />
+                        )}
+
+                        رفض الطلب
+                      </Button>
+
+                      <Button
+                        onClick={() =>
+                          approveRequest(
+                            selectedRequest,
+                          )
+                        }
+                        disabled={
+                          saving
+                        }
+                        className="gap-2"
+                      >
+                        {saving ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Check className="size-4" />
+                        )}
+
+                        قبول وترحيل للطلاب
+                      </Button>
+                    </>
+                  )}
+
+                  {selectedRequest.status ===
+                    'approved' && (
+                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                      <Check className="size-4" />
+                      تم قبول الطلب وترحيله للطلاب
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   )
 }
