@@ -163,6 +163,7 @@ function getDayIndex(value: string) {
     sunday: 0,
     sun: 0,
     الأحد: 0,
+    الاحد: 0,
 
     monday: 1,
     mon: 1,
@@ -177,6 +178,7 @@ function getDayIndex(value: string) {
     wednesday: 3,
     wed: 3,
     الأربعاء: 3,
+    الاربعاء: 3,
 
     thursday: 4,
     thu: 4,
@@ -190,6 +192,14 @@ function getDayIndex(value: string) {
     saturday: 6,
     sat: 6,
     السبت: 6,
+  }
+
+  if (
+    /^\d$/.test(day) &&
+    Number(day) >= 0 &&
+    Number(day) <= 6
+  ) {
+    return Number(day)
   }
 
   return map[day]
@@ -309,11 +319,6 @@ function getLessonDateStatus(
     return 'no-course'
   }
 
-  /*
-   * التاريخ يتم مقارنته كنص YYYY-MM-DD.
-   * بهذه الطريقة لا ندخل في مشاكل timezone.
-   */
-
   if (
     course.startDate &&
     selectedDate < course.startDate
@@ -328,33 +333,43 @@ function getLessonDateStatus(
     return 'ended'
   }
 
-  /*
-   * داخل فترة الدورة.
-   * الآن فقط نتحقق هل اليوم من أيام الدراسة.
-   */
-
   if (course.days.length === 0) {
-    /*
-     * إذا الدورة ليس لها أيام محددة،
-     * نعتبر أي يوم داخل الفترة يوم درس.
-     */
     return 'lesson'
   }
 
+  /*
+   * نستخدم UTC حتى لا يتغير اليوم بسبب timezone.
+   */
+  const parts =
+    selectedDate.split('-')
+
+  if (parts.length !== 3) {
+    return 'no-lesson'
+  }
+
+  const year = Number(parts[0])
+  const month = Number(parts[1])
+  const day = Number(parts[2])
+
   const date = new Date(
-    `${selectedDate}T00:00:00`,
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
   )
 
   if (Number.isNaN(date.getTime())) {
     return 'no-lesson'
   }
 
-  const dayIndex = date.getDay()
+  const dayIndex =
+    date.getUTCDay()
 
   const isCourseDay =
     course.days.some(
-      (day) =>
-        getDayIndex(day) ===
+      (courseDay) =>
+        getDayIndex(courseDay) ===
         dayIndex,
     )
 
@@ -414,11 +429,6 @@ export function DashboardView() {
     setSelectedCourseId,
   ] = useState('')
 
-  /*
-   * التاريخ طبيعي.
-   * نبدأ بتاريخ اليوم فقط.
-   * بعد ذلك المستخدم يقدر يختار أي تاريخ.
-   */
   const [
     selectedDate,
     setSelectedDate,
@@ -462,21 +472,6 @@ export function DashboardView() {
     ],
   )
 
-  /*
-   * تحديد حالة التاريخ:
-   *
-   * قبل الدورة:
-   * لم تبدأ الدورة بعد
-   *
-   * بعد الدورة:
-   * انتهت الدورة
-   *
-   * داخل الدورة ولكن ليس يوم دراسة:
-   * لا يوجد درس هذا اليوم
-   *
-   * يوم دراسة:
-   * الملخص يعمل طبيعي
-   */
   const lessonDateStatus =
     useMemo(
       () =>
@@ -490,6 +485,12 @@ export function DashboardView() {
       ],
     )
 
+  /*
+   * تحميل الحضور.
+   *
+   * يتم تحميل سجلات الحضور للدورات المطلوبة
+   * من Supabase مباشرة.
+   */
   const loadAttendance =
     useCallback(
       async (courseIds: string[]) => {
@@ -521,6 +522,12 @@ export function DashboardView() {
             .in(
               'course_id',
               courseIds,
+            )
+            .order(
+              'attendance_date',
+              {
+                ascending: false,
+              },
             ),
 
           supabase
@@ -549,8 +556,6 @@ export function DashboardView() {
             'Attendance load error:',
             attendanceResult.error,
           )
-
-          setAttendanceRecords([])
         } else {
           setAttendanceRecords(
             (attendanceResult.data ??
@@ -565,8 +570,6 @@ export function DashboardView() {
             'Attendance statuses load error:',
             statusesResult.error,
           )
-
-          setAttendanceStatuses([])
         } else {
           setAttendanceStatuses(
             (statusesResult.data ??
@@ -629,6 +632,7 @@ export function DashboardView() {
             setTeachers([])
             setStudents([])
             setAttendanceRecords([])
+            setAttendanceStatuses([])
             setPendingRegistrationCount(
               0,
             )
@@ -957,9 +961,7 @@ export function DashboardView() {
                 enrolledStudentIds,
               )
 
-            if (
-              studentsError
-            ) {
+            if (studentsError) {
               throw studentsError
             }
 
@@ -1077,11 +1079,9 @@ export function DashboardView() {
           )
 
           /*
-           * لا نغير selectedDate هنا.
-           * التاريخ يبقى تاريخ اليوم أو التاريخ
-           * الذي اختاره المستخدم.
+           * تحميل جميع سجلات الحضور للدورات.
+           * بعدها يوجد تحديث إضافي للدورة المحددة.
            */
-
           await loadAttendance(
             courseIds,
           )
@@ -1102,25 +1102,60 @@ export function DashboardView() {
     void loadData()
   }, [loadData])
 
+  /*
+   * مهم:
+   * عند تغيير الدورة أو التاريخ، نعيد قراءة الحضور
+   * من Supabase حتى لا نعتمد على بيانات قديمة في الذاكرة.
+   */
   useEffect(() => {
-    const refreshAttendance =
+    if (
+      !selectedCourseId ||
+      courses.length === 0
+    ) {
+      return
+    }
+
+    const courseExists =
+      courses.some(
+        (course) =>
+          course.id ===
+          selectedCourseId,
+      )
+
+    if (!courseExists) {
+      return
+    }
+
+    void loadAttendance([
+      selectedCourseId,
+    ])
+  }, [
+    selectedCourseId,
+    selectedDate,
+    courses,
+    loadAttendance,
+  ])
+
+  /*
+   * تحديث الحضور عند الرجوع للداشبورد
+   * أو عند عودة التبويب للواجهة.
+   */
+  useEffect(() => {
+    const refreshCurrentAttendance =
       async () => {
         if (
-          courses.length === 0
+          !selectedCourseId
         ) {
           return
         }
 
-        await loadAttendance(
-          courses.map(
-            (course) =>
-              course.id,
-          ),
-        )
+        await loadAttendance([
+          selectedCourseId,
+        ])
       }
 
     const handleFocus = () => {
-      void refreshAttendance()
+      void refreshCurrentAttendance()
     }
 
     const handleVisibilityChange =
@@ -1129,7 +1164,7 @@ export function DashboardView() {
           document.visibilityState ===
           'visible'
         ) {
-          void refreshAttendance()
+          void refreshCurrentAttendance()
         }
       }
 
@@ -1155,7 +1190,7 @@ export function DashboardView() {
       )
     }
   }, [
-    courses,
+    selectedCourseId,
     loadAttendance,
   ])
 
@@ -1198,6 +1233,14 @@ export function DashboardView() {
       [selectedCourseAssignments],
     )
 
+  /*
+   * سجلات الحضور الخاصة فقط:
+   * - بالدورة المختارة
+   * - بالتاريخ المختار
+   * - بالطلاب الموزعين في الدورة
+   *
+   * ويتم تجاهل التكرار لنفس الطالب.
+   */
   const selectedDateRecords =
     useMemo(() => {
       const seenStudents =
@@ -1322,11 +1365,27 @@ export function DashboardView() {
     ],
   )
 
+  /*
+   * إجمالي السجلات التي تم تسجيلها فعليًا.
+   */
+  const attendanceRecordedCount =
+    stats.presentCount +
+    stats.absentCount +
+    stats.lateCount +
+    stats.excusedCount
+
+  /*
+   * إذا سجلنا الحضور لبعض الطلاب فقط،
+   * نحسب النسبة من السجلات المسجلة فعليًا.
+   *
+   * مثال:
+   * 8 حاضر + 2 غائب = 80%.
+   */
   const attendancePercentage =
-    stats.assignedCount > 0
+    attendanceRecordedCount > 0
       ? Math.round(
           (stats.presentCount /
-            stats.assignedCount) *
+            attendanceRecordedCount) *
             100,
         )
       : 0
@@ -1931,11 +1990,6 @@ export function DashboardView() {
                       event.target
                         .value,
                     )
-
-                    /*
-                     * لا نغير التاريخ.
-                     * التاريخ يبقى كما اختاره المستخدم.
-                     */
                   }}
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
                 >
@@ -1971,7 +2025,6 @@ export function DashboardView() {
                   التاريخ
                 </label>
 
-                {/* التاريخ الطبيعي */}
                 <input
                   type="date"
                   value={
@@ -2093,7 +2146,6 @@ export function DashboardView() {
           </CardHeader>
 
           <CardContent>
-            {/* Summary */}
             <div className="rounded-xl border bg-muted/20 p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -2101,7 +2153,7 @@ export function DashboardView() {
                   'lesson' ? (
                     <>
                       <p className="text-sm text-muted-foreground">
-                        نسبة الحضور اليوم
+                        نسبة الحضور
                       </p>
 
                       <p className="mt-1 text-3xl font-bold">
@@ -2117,9 +2169,20 @@ export function DashboardView() {
                         }{' '}
                         حاضر من أصل{' '}
                         {
-                          stats.assignedCount
+                          attendanceRecordedCount
                         }{' '}
-                        موزعين في الدورة
+                        مسجل حضور
+                        {stats.assignedCount >
+                          0 && (
+                          <>
+                            {' '}
+                            من أصل{' '}
+                            {
+                              stats.assignedCount
+                            }{' '}
+                            موزعين في الدورة
+                          </>
+                        )}
                       </p>
                     </>
                   ) : (
