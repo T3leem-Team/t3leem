@@ -1,65 +1,186 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Loader2, Save, Settings2 } from 'lucide-react'
+import {
+  Check,
+  Loader2,
+  Save,
+  Settings2,
+} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
+const CURRENT_YEAR_KEY =
+  'allow_add_to_current_year'
+
+const ARCHIVE_KEY =
+  'allow_add_to_archive'
+
 export default function KeysPage() {
-  const [allowAddToCurrentYear, setAllowAddToCurrentYear] = useState(false)
-  const [allowAddToArchive, setAllowAddToArchive] = useState(false)
+  const [allowAddToCurrentYear, setAllowAddToCurrentYear] =
+    useState(false)
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [allowAddToArchive, setAllowAddToArchive] =
+    useState(false)
 
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] =
+    useState(true)
 
-  useEffect(() => {
-    loadKeys()
-  }, [])
+  const [saving, setSaving] =
+    useState(false)
+
+  const [error, setError] =
+    useState<string | null>(null)
+
+  const [success, setSuccess] =
+    useState(false)
 
   const loadKeys = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const { data, error } = await supabase
-        .from('system_keys')
-        .select('key_name, enabled')
-        .in('key_name', [
-          'allow_add_to_current_year',
-          'allow_add_to_archive',
-        ])
+      const {
+        data: {
+          session,
+        },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error(
+          'لم يتم العثور على جلسة تسجيل الدخول.'
+        )
+      }
+
+      const { data, error } =
+        await supabase
+          .from('system_keys')
+          .select(
+            'key_name, enabled'
+          )
+          .in('key_name', [
+            CURRENT_YEAR_KEY,
+            ARCHIVE_KEY,
+          ])
 
       if (error) {
         throw error
       }
 
-      for (const row of data ?? []) {
-        if (row.key_name === 'allow_add_to_current_year') {
-          setAllowAddToCurrentYear(Boolean(row.enabled))
-        }
+      console.log(
+        'SYSTEM KEYS LOADED:',
+        data
+      )
 
-        if (row.key_name === 'allow_add_to_archive') {
-          setAllowAddToArchive(Boolean(row.enabled))
-        }
-      }
+      const currentYear =
+        data?.find(
+          (row) =>
+            row.key_name ===
+            CURRENT_YEAR_KEY
+        )
+
+      const archive =
+        data?.find(
+          (row) =>
+            row.key_name ===
+            ARCHIVE_KEY
+        )
+
+      setAllowAddToCurrentYear(
+        currentYear?.enabled === true
+      )
+
+      setAllowAddToArchive(
+        archive?.enabled === true
+      )
     } catch (error: any) {
-      console.error('load system keys error:', error)
+      console.error(
+        'load system keys error:',
+        error
+      )
 
       setError(
         `تعذر تحميل إعدادات المفاتيح: ${
-          error?.message || 'حدث خطأ غير معروف'
+          error?.message ||
+          'حدث خطأ غير معروف'
         }`
       )
     } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    loadKeys()
+  }, [])
+
+  const saveOneKey = async (
+    keyName: string,
+    enabled: boolean
+  ) => {
+    const updatedAt =
+      new Date().toISOString()
+
+    /*
+     * نستخدم UPDATE فقط.
+     *
+     * وبعدها نعمل SELECT مباشر للتأكد
+     * أن القيمة فعلاً انحفظت في قاعدة البيانات.
+     */
+    const { error: updateError } =
+      await supabase
+        .from('system_keys')
+        .update({
+          enabled,
+          updated_at: updatedAt,
+        })
+        .eq(
+          'key_name',
+          keyName
+        )
+
+    if (updateError) {
+      throw updateError
+    }
+
+    const { data, error: verifyError } =
+      await supabase
+        .from('system_keys')
+        .select(
+          'key_name, enabled'
+        )
+        .eq(
+          'key_name',
+          keyName
+        )
+        .maybeSingle()
+
+    if (verifyError) {
+      throw verifyError
+    }
+
+    if (!data) {
+      throw new Error(
+        `لم يتم العثور على المفتاح ${keyName} بعد الحفظ.`
+      )
+    }
+
+    if (data.enabled !== enabled) {
+      throw new Error(
+        `تم تنفيذ الحفظ لكن القيمة لم تثبت في قاعدة البيانات للمفتاح ${keyName}.`
+      )
+    }
+
+    return data
   }
 
   const saveKeys = async () => {
@@ -68,30 +189,24 @@ export default function KeysPage() {
     setSuccess(false)
 
     try {
-      const updates = [
-        {
-          key_name: 'allow_add_to_current_year',
-          enabled: allowAddToCurrentYear,
-        },
-        {
-          key_name: 'allow_add_to_archive',
-          enabled: allowAddToArchive,
-        },
-      ]
+      /*
+       * نحفظ المفتاحين بشكل مستقل.
+       */
+      await saveOneKey(
+        CURRENT_YEAR_KEY,
+        allowAddToCurrentYear
+      )
 
-      for (const item of updates) {
-        const { error } = await supabase
-          .from('system_keys')
-          .update({
-            enabled: item.enabled,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('key_name', item.key_name)
+      await saveOneKey(
+        ARCHIVE_KEY,
+        allowAddToArchive
+      )
 
-        if (error) {
-          throw error
-        }
-      }
+      /*
+       * بعد الحفظ نعيد القراءة من قاعدة البيانات
+       * حتى تكون الواجهة مبنية على القيمة الحقيقية.
+       */
+      await loadKeys()
 
       setSuccess(true)
 
@@ -99,13 +214,23 @@ export default function KeysPage() {
         setSuccess(false)
       }, 3000)
     } catch (error: any) {
-      console.error('save system keys error:', error)
+      console.error(
+        'save system keys error:',
+        error
+      )
 
       setError(
         `تعذر حفظ إعدادات المفاتيح: ${
-          error?.message || 'حدث خطأ غير معروف'
+          error?.message ||
+          'حدث خطأ غير معروف'
         }`
       )
+
+      /*
+       * إذا فشل الحفظ نعيد قراءة القيم الحقيقية
+       * حتى لا تبقى الواجهة تعرض قيمة وهمية.
+       */
+      await loadKeys()
     } finally {
       setSaving(false)
     }
@@ -127,6 +252,7 @@ export default function KeysPage() {
       {success && (
         <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
           <Check className="size-4" />
+
           تم حفظ الإعدادات بنجاح
         </div>
       )}
@@ -135,6 +261,7 @@ export default function KeysPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings2 className="size-5" />
+
             إعدادات الاستيراد
           </CardTitle>
         </CardHeader>
@@ -143,11 +270,12 @@ export default function KeysPage() {
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="ml-2 size-5 animate-spin" />
+
               جاري تحميل الإعدادات...
             </div>
           ) : (
             <>
-              {/* إضافة للسنة الحالية */}
+              {/* السنة الحالية */}
               <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
                 <div className="space-y-1">
                   <div className="font-medium">
@@ -155,22 +283,26 @@ export default function KeysPage() {
                   </div>
 
                   <div className="text-sm text-muted-foreground">
-                    السماح بظهور خيار استيراد سجل وإضافته إلى السنة
-                    الدراسية الحالية.
+                    السماح بظهور خيار استيراد سجل وإضافته إلى السنة الدراسية الحالية.
                   </div>
                 </div>
 
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() =>
                     setAllowAddToCurrentYear(
-                      !allowAddToCurrentYear
+                      (value) => !value
                     )
                   }
                   className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                     allowAddToCurrentYear
                       ? 'bg-primary'
                       : 'bg-muted'
+                  } ${
+                    saving
+                      ? 'cursor-not-allowed opacity-60'
+                      : ''
                   }`}
                   aria-label="إضافة لهذه السنة الدراسية"
                 >
@@ -184,7 +316,7 @@ export default function KeysPage() {
                 </button>
               </div>
 
-              {/* إضافة للأرشيف */}
+              {/* الأرشيف */}
               <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
                 <div className="space-y-1">
                   <div className="font-medium">
@@ -198,13 +330,20 @@ export default function KeysPage() {
 
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() =>
-                    setAllowAddToArchive(!allowAddToArchive)
+                    setAllowAddToArchive(
+                      (value) => !value
+                    )
                   }
                   className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                     allowAddToArchive
                       ? 'bg-primary'
                       : 'bg-muted'
+                  } ${
+                    saving
+                      ? 'cursor-not-allowed opacity-60'
+                      : ''
                   }`}
                   aria-label="إضافة إلى الأرشيف"
                 >
@@ -218,7 +357,6 @@ export default function KeysPage() {
                 </button>
               </div>
 
-              {/* حفظ */}
               <div className="flex justify-end pt-2">
                 <Button
                   onClick={saveKeys}
