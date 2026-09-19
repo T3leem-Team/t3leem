@@ -1,6 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from 'react'
 import {
   AlertCircle,
   CalendarDays,
@@ -9,7 +14,9 @@ import {
   FileText,
   MessageSquareText,
   Plus,
+  Settings2,
   UserX,
+  UsersRound,
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -59,6 +66,11 @@ type SupervisionRecord = {
   note: string
   createdBy: string
   createdAt: string
+}
+
+type SupervisionSettings = {
+  allowTeacherTransfer: boolean
+  allowTeacherRemove: boolean
 }
 
 const supervisionTypes: {
@@ -130,7 +142,10 @@ function getLocalDateString() {
   const now = new Date()
 
   const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const month = String(now.getMonth() + 1).padStart(
+    2,
+    '0',
+  )
   const day = String(now.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
@@ -184,7 +199,13 @@ export function SupervisionView() {
   const [isSaving, setIsSaving] =
     useState(false)
 
+  const [isSavingSettings, setIsSavingSettings] =
+    useState(false)
+
   const [error, setError] =
+    useState('')
+
+  const [settingsMessage, setSettingsMessage] =
     useState('')
 
   const [isFormOpen, setIsFormOpen] =
@@ -205,6 +226,14 @@ export function SupervisionView() {
   const [note, setNote] =
     useState('')
 
+  const [
+    supervisionSettings,
+    setSupervisionSettings,
+  ] = useState<SupervisionSettings>({
+    allowTeacherTransfer: true,
+    allowTeacherRemove: true,
+  })
+
   const selectedCourse = useMemo(
     () =>
       courses.find(
@@ -214,20 +243,135 @@ export function SupervisionView() {
     [courses, selectedCourseId],
   )
 
-  const todayRecords = useMemo(
-    () =>
-      records.filter(
-        (record) =>
-          record.date === today,
-      ),
-    [records, today],
-  )
+  const loadSettings = async () => {
+    try {
+      const {
+        data,
+        error: settingsError,
+      } = await supabase
+        .from('supervision_settings')
+        .select(
+          'id, allow_teacher_transfer, allow_teacher_remove',
+        )
+        .eq('id', 'default')
+        .maybeSingle()
+
+      if (settingsError) {
+        throw settingsError
+      }
+
+      if (!data) {
+        const defaultSettings = {
+          id: 'default',
+          allow_teacher_transfer: true,
+          allow_teacher_remove: true,
+        }
+
+        const {
+          error: insertError,
+        } = await supabase
+          .from('supervision_settings')
+          .insert(defaultSettings)
+
+        if (insertError) {
+          throw insertError
+        }
+
+        setSupervisionSettings({
+          allowTeacherTransfer: true,
+          allowTeacherRemove: true,
+        })
+
+        return
+      }
+
+      setSupervisionSettings({
+        allowTeacherTransfer:
+          data.allow_teacher_transfer ?? true,
+        allowTeacherRemove:
+          data.allow_teacher_remove ?? true,
+      })
+    } catch (err) {
+      console.error(err)
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر تحميل صلاحيات المعلمين.',
+      )
+    }
+  }
+
+  const updateSetting = async (
+    setting:
+      | 'allowTeacherTransfer'
+      | 'allowTeacherRemove',
+    value: boolean,
+  ) => {
+    setIsSavingSettings(true)
+    setSettingsMessage('')
+    setError('')
+
+    const previousSettings =
+      supervisionSettings
+
+    setSupervisionSettings((current) => ({
+      ...current,
+      [setting]: value,
+    }))
+
+    try {
+      const payload =
+        setting === 'allowTeacherTransfer'
+          ? {
+              allow_teacher_transfer: value,
+            }
+          : {
+              allow_teacher_remove: value,
+            }
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from('supervision_settings')
+        .update(payload)
+        .eq('id', 'default')
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setSettingsMessage(
+        'تم حفظ صلاحية المعلمين.',
+      )
+
+      window.setTimeout(() => {
+        setSettingsMessage('')
+      }, 2500)
+    } catch (err) {
+      console.error(err)
+
+      setSupervisionSettings(
+        previousSettings,
+      )
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر حفظ صلاحية المعلمين.',
+      )
+    } finally {
+      setIsSavingSettings(false)
+    }
+  }
 
   const loadInitialData = async () => {
     setIsLoading(true)
     setError('')
 
     try {
+      await loadSettings()
+
       const {
         data: year,
         error: yearError,
@@ -494,7 +638,9 @@ export function SupervisionView() {
     void loadRecords(selectedCourseId)
   }, [selectedCourseId])
 
-  const openForm = (type: SupervisionType) => {
+  const openForm = (
+    type: SupervisionType,
+  ) => {
     setSelectedType(type)
     setSelectedTeacher('')
     setSelectedDate(today)
@@ -550,41 +696,56 @@ export function SupervisionView() {
         data: authData,
       } = await supabase.auth.getUser()
 
-      const authUserId = authData.user?.id
+      const authUserId =
+        authData.user?.id
 
       if (authUserId) {
         const { data: profile } =
           await supabase
             .from('user_profiles')
             .select('id')
-            .eq('auth_user_id', authUserId)
+            .eq(
+              'auth_user_id',
+              authUserId,
+            )
             .maybeSingle()
 
-        createdBy = profile?.id ?? null
+        createdBy =
+          profile?.id ?? null
       }
 
-      const { error: insertError } =
-        await supabase
-          .from('supervision_records')
-          .insert({
-            academic_year_id: academicYear.id,
-            course_id: selectedCourseId,
-            teacher_id:
-              selectedType === 'day_cancelled'
-                ? null
-                : selectedTeacher,
-            type: selectedType,
-            record_date: selectedDate,
-            reason: reason.trim(),
-            note: note.trim() || null,
-            created_by: createdBy,
-          })
+      const {
+        error: insertError,
+      } = await supabase
+        .from('supervision_records')
+        .insert({
+          academic_year_id:
+            academicYear.id,
+          course_id:
+            selectedCourseId,
+          teacher_id:
+            selectedType ===
+            'day_cancelled'
+              ? null
+              : selectedTeacher,
+          type: selectedType,
+          record_date:
+            selectedDate,
+          reason:
+            reason.trim(),
+          note:
+            note.trim() || null,
+          created_by:
+            createdBy,
+        })
 
       if (insertError) {
         throw insertError
       }
 
-      await loadRecords(selectedCourseId)
+      await loadRecords(
+        selectedCourseId,
+      )
 
       setIsFormOpen(false)
       setSelectedTeacher('')
@@ -607,7 +768,7 @@ export function SupervisionView() {
     <div className="space-y-6">
       <PageHeader
         title="إشراف الدوام والدروس"
-        description="متابعة أيام الدراسة والمعلمين وتسجيل الحالات والملاحظات الإشرافية"
+        description="إدارة حالات الدوام والدروس وصلاحيات المعلمين"
         action={
           <Button
             onClick={() => openForm('note')}
@@ -638,6 +799,7 @@ export function SupervisionView() {
         </div>
       )}
 
+      {/* السنة والدورة */}
       <Card>
         <CardContent className="p-5">
           {isLoading ? (
@@ -646,7 +808,7 @@ export function SupervisionView() {
               <div className="h-10 w-full animate-pulse rounded bg-muted" />
             </div>
           ) : (
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="grid gap-5 lg:grid-cols-2">
               <div className="flex items-start gap-3">
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <CalendarDays className="size-5" />
@@ -677,7 +839,7 @@ export function SupervisionView() {
                 </div>
               </div>
 
-              <div className="w-full lg:max-w-sm">
+              <div>
                 <label className="mb-2 block text-sm font-medium">
                   الدورة
                 </label>
@@ -711,69 +873,131 @@ export function SupervisionView() {
           )}
 
           {selectedCourse && (
-            <div className="mt-5 flex flex-col gap-4 border-t pt-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  الدورة المختارة
-                </p>
+            <div className="mt-5 border-t pt-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    الدورة المختارة
+                  </p>
 
-                <h3 className="mt-1 font-semibold">
-                  {selectedCourse.name}
-                </h3>
+                  <h3 className="mt-1 font-semibold">
+                    {selectedCourse.name}
+                  </h3>
 
-                {selectedCourse.start_date &&
-                  selectedCourse.end_date && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {formatDate(
-                        selectedCourse.start_date,
-                      )}{' '}
-                      →{' '}
-                      {formatDate(
-                        selectedCourse.end_date,
-                      )}
-                    </p>
+                  {selectedCourse.start_date &&
+                    selectedCourse.end_date && (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {formatDate(
+                          selectedCourse.start_date,
+                        )}{' '}
+                        →{' '}
+                        {formatDate(
+                          selectedCourse.end_date,
+                        )}
+                      </p>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {selectedCourse.days?.length > 0 ? (
+                    selectedCourse.days.map(
+                      (day, index) => (
+                        <Badge
+                          key={`${day}-${index}`}
+                          variant="neutral"
+                        >
+                          {day}
+                        </Badge>
+                      ),
+                    )
+                  ) : (
+                    <Badge variant="neutral">
+                      أيام الدورة غير محددة
+                    </Badge>
                   )}
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {selectedCourse.days?.length > 0 ? (
-                  selectedCourse.days.map(
-                    (day, index) => (
-                      <Badge
-                        key={`${day}-${index}`}
-                        variant="neutral"
-                      >
-                        {day}
-                      </Badge>
-                    ),
-                  )
-                ) : (
-                  <Badge variant="neutral">
-                    أيام الدورة غير محددة
-                  </Badge>
-                )}
+                </div>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div>
+      {/* صلاحيات المعلمين */}
+      <section>
+        <div className="mb-4">
+          <div className="flex items-center gap-2">
+            <Settings2 className="size-5 text-primary" />
+
+            <h2 className="text-lg font-semibold">
+              صلاحيات المعلمين
+            </h2>
+          </div>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            تحكم بما يستطيع المعلم تنفيذه على الطلاب المسجلين لديه.
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="divide-y p-0">
+            <PermissionRow
+              icon={UsersRound}
+              title="السماح بنقل الطلاب"
+              description="السماح للمعلم بنقل الطالب من معلم إلى معلم آخر."
+              enabled={
+                supervisionSettings.allowTeacherTransfer
+              }
+              disabled={isSavingSettings}
+              onChange={(value) =>
+                void updateSetting(
+                  'allowTeacherTransfer',
+                  value,
+                )
+              }
+            />
+
+            <PermissionRow
+              icon={UserX}
+              title="السماح بمسح الطلاب"
+              description="السماح للمعلم بإزالة الطالب من قائمته وإعادته إلى قائمة الطلاب القابلة للاختيار."
+              enabled={
+                supervisionSettings.allowTeacherRemove
+              }
+              disabled={isSavingSettings}
+              onChange={(value) =>
+                void updateSetting(
+                  'allowTeacherRemove',
+                  value,
+                )
+              }
+            />
+          </CardContent>
+        </Card>
+
+        {settingsMessage && (
+          <p className="mt-2 text-sm text-emerald-600">
+            {settingsMessage}
+          </p>
+        )}
+      </section>
+
+      {/* إجراءات الإشراف */}
+      <section>
         <div className="mb-4">
           <h2 className="text-lg font-semibold">
             إجراءات الإشراف
           </h2>
 
-          <p className="text-sm text-muted-foreground">
-            تسجيل الحالات المتعلقة بالدوام والدروس والمعلمين للدورة المختارة
+          <p className="mt-1 text-sm text-muted-foreground">
+            تسجيل الحالات المتعلقة بالدوام والدروس والمعلمين للدورة المختارة.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ActionCard
             icon={CalendarDays}
             title="إلغاء يوم دراسي"
-            description="إلغاء يوم كامل من الدراسة مع ذكر السبب"
+            description="إلغاء يوم كامل من الدراسة مع ذكر السبب."
             onClick={() =>
               openForm('day_cancelled')
             }
@@ -782,7 +1006,7 @@ export function SupervisionView() {
           <ActionCard
             icon={CalendarDays}
             title="إلغاء درس"
-            description="إلغاء درس معلم محدد مع استمرار بقية المعلمين"
+            description="إلغاء درس معلم محدد مع استمرار بقية المعلمين."
             onClick={() =>
               openForm('lesson_cancelled')
             }
@@ -791,7 +1015,7 @@ export function SupervisionView() {
           <ActionCard
             icon={UserX}
             title="غياب معلم"
-            description="تسجيل غياب معلم في يوم الدراسة"
+            description="تسجيل غياب معلم في يوم الدراسة."
             onClick={() =>
               openForm('teacher_absent')
             }
@@ -800,7 +1024,7 @@ export function SupervisionView() {
           <ActionCard
             icon={Clock3}
             title="تأخر معلم"
-            description="تسجيل حالة تأخر المعلم"
+            description="تسجيل حالة تأخر المعلم."
             onClick={() =>
               openForm('teacher_late')
             }
@@ -809,180 +1033,125 @@ export function SupervisionView() {
           <ActionCard
             icon={MessageSquareText}
             title="ملاحظة إشرافية"
-            description="إضافة ملاحظة أو متابعة إدارية"
+            description="إضافة ملاحظة أو متابعة إدارية."
             onClick={() =>
               openForm('note')
             }
           />
         </div>
-      </div>
+      </section>
 
-      <div>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">
-            ملخص اليوم
-          </h2>
+      {/* سجل الإشراف */}
+      <section>
+        <Card>
+          <CardContent className="p-0">
+            <div className="border-b p-5">
+              <h2 className="font-semibold">
+                سجل الإشراف
+              </h2>
 
-          <p className="text-sm text-muted-foreground">
-            السجلات الإشرافية المسجلة لهذا اليوم في الدورة المختارة
-          </p>
-        </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                جميع الحالات والملاحظات المسجلة للدورة المختارة.
+              </p>
+            </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard
-            icon={CalendarDays}
-            label="إلغاء الدروس"
-            value={
-              todayRecords.filter(
-                (record) =>
-                  record.type === 'day_cancelled' ||
-                  record.type === 'lesson_cancelled',
-              ).length
-            }
-          />
-
-          <SummaryCard
-            icon={UserX}
-            label="غياب المعلمين"
-            value={
-              todayRecords.filter(
-                (record) =>
-                  record.type === 'teacher_absent',
-              ).length
-            }
-          />
-
-          <SummaryCard
-            icon={Clock3}
-            label="تأخر المعلمين"
-            value={
-              todayRecords.filter(
-                (record) =>
-                  record.type === 'teacher_late',
-              ).length
-            }
-          />
-
-          <SummaryCard
-            icon={MessageSquareText}
-            label="الملاحظات"
-            value={
-              todayRecords.filter(
-                (record) =>
-                  record.type === 'note',
-              ).length
-            }
-          />
-        </div>
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="border-b p-5">
-            <h2 className="font-semibold">
-              سجل الإشراف
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              جميع الحالات والملاحظات المسجلة للدورة المختارة
-            </p>
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-4 p-5">
-              {Array.from({ length: 3 }).map(
-                (_, index) => (
+            {isLoading ? (
+              <div className="space-y-4 p-5">
+                {Array.from({
+                  length: 3,
+                }).map((_, index) => (
                   <div
                     key={index}
                     className="h-24 animate-pulse rounded-lg bg-muted"
                   />
-                ),
-              )}
-            </div>
-          ) : records.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-5 py-14 text-center">
-              <span className="flex size-12 items-center justify-center rounded-full bg-muted">
-                <FileText className="size-5 text-muted-foreground" />
-              </span>
+                ))}
+              </div>
+            ) : records.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-5 py-14 text-center">
+                <span className="flex size-12 items-center justify-center rounded-full bg-muted">
+                  <FileText className="size-5 text-muted-foreground" />
+                </span>
 
-              <p className="mt-4 font-medium">
-                لا توجد سجلات إشرافية
-              </p>
+                <p className="mt-4 font-medium">
+                  لا توجد سجلات إشرافية
+                </p>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                ستظهر هنا حالات الإلغاء وغياب المعلمين والملاحظات بعد تسجيلها.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {records.map((record) => {
-                const Icon =
-                  getTypeIcon(record.type)
+                <p className="mt-1 text-sm text-muted-foreground">
+                  ستظهر هنا حالات الإلغاء وغياب المعلمين والملاحظات بعد تسجيلها.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {records.map((record) => {
+                  const Icon =
+                    getTypeIcon(record.type)
 
-                return (
-                  <div
-                    key={record.id}
-                    className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between"
-                  >
-                    <div className="flex gap-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Icon className="size-5 text-muted-foreground" />
-                      </span>
+                  return (
+                    <div
+                      key={record.id}
+                      className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between"
+                    >
+                      <div className="flex gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                          <Icon className="size-5 text-muted-foreground" />
+                        </span>
 
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">
-                            {getTypeLabel(
-                              record.type,
-                            )}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">
+                              {getTypeLabel(
+                                record.type,
+                              )}
+                            </p>
+
+                            <Badge
+                              variant={getTypeBadgeVariant(
+                                record.type,
+                              )}
+                            >
+                              {formatDate(
+                                record.date,
+                              )}
+                            </Badge>
+                          </div>
+
+                          <p className="mt-1 text-sm">
+                            {record.teacher}
                           </p>
 
-                          <Badge
-                            variant={getTypeBadgeVariant(
-                              record.type,
-                            )}
-                          >
-                            {formatDate(
-                              record.date,
-                            )}
-                          </Badge>
-                        </div>
-
-                        <p className="mt-1 text-sm">
-                          {record.teacher}
-                        </p>
-
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {record.course}
-                        </p>
-
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {record.reason}
-                        </p>
-
-                        {record.note && (
-                          <p className="mt-2 rounded-md bg-muted/50 p-2 text-sm text-muted-foreground">
-                            {record.note}
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {record.course}
                           </p>
-                        )}
 
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          بواسطة: {record.createdBy}
-                          {' • '}
-                          {formatDateTime(
-                            record.createdAt,
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {record.reason}
+                          </p>
+
+                          {record.note && (
+                            <p className="mt-2 rounded-md bg-muted/50 p-2 text-sm text-muted-foreground">
+                              {record.note}
+                            </p>
                           )}
-                        </p>
+
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            بواسطة: {record.createdBy}
+                            {' • '}
+                            {formatDateTime(
+                              record.createdAt,
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
+      {/* نموذج إضافة سجل */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50">
           <button
@@ -1265,32 +1434,59 @@ function ActionCard({
   )
 }
 
-function SummaryCard({
+function PermissionRow({
   icon: Icon,
-  label,
-  value,
+  title,
+  description,
+  enabled,
+  disabled,
+  onChange,
 }: {
   icon: LucideIcon
-  label: string
-  value: number
+  title: string
+  description: string
+  enabled: boolean
+  disabled: boolean
+  onChange: (value: boolean) => void
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-5">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-          <Icon className="size-5 text-muted-foreground" />
+    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-5" />
         </span>
 
         <div>
-          <p className="text-sm text-muted-foreground">
-            {label}
+          <p className="font-medium">
+            {title}
           </p>
 
-          <p className="mt-1 text-xl font-bold tabular-nums">
-            {value}
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={disabled}
+        onClick={() => onChange(!enabled)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          enabled
+            ? 'bg-primary'
+            : 'bg-muted-foreground/30'
+        }`}
+      >
+        <span
+          className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-all ${
+            enabled
+              ? 'right-1'
+              : 'right-6'
+          }`}
+        />
+      </button>
+    </div>
   )
 }
