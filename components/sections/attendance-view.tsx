@@ -249,6 +249,173 @@ function formatDateForDisplay(
   return `${day}/${month}/${year}`
 }
 
+/**
+ * الحصول على تاريخ اليوم بصيغة YYYY-MM-DD
+ * بدون استخدام toISOString حتى لا تحصل مشكلة
+ * اختلاف المنطقة الزمنية.
+ */
+function getTodayString() {
+  const today = new Date()
+
+  return [
+    today.getFullYear(),
+    String(
+      today.getMonth() + 1,
+    ).padStart(2, '0'),
+    String(
+      today.getDate(),
+    ).padStart(2, '0'),
+  ].join('-')
+}
+
+/**
+ * يرجع رقم يوم الأسبوع:
+ *
+ * 0 = الأحد
+ * 1 = الاثنين
+ * 2 = الثلاثاء
+ * 3 = الأربعاء
+ * 4 = الخميس
+ * 5 = الجمعة
+ * 6 = السبت
+ */
+function getDayOfWeek(
+  date: string,
+) {
+  if (!date) {
+    return null
+  }
+
+  const [year, month, day] =
+    date.split('-').map(Number)
+
+  if (
+    !year ||
+    !month ||
+    !day
+  ) {
+    return null
+  }
+
+  /**
+   * نستخدم UTC هنا حتى لا يتغير اليوم
+   * بسبب المنطقة الزمنية.
+   */
+  return new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
+  ).getUTCDay()
+}
+
+/**
+ * تحويل قيمة اليوم الموجودة في courses.days
+ * إلى رقم يوم الأسبوع.
+ *
+ * يدعم:
+ * الأحد / الاثنين / ...
+ * وكذلك:
+ * Sunday / Monday / ...
+ * وكذلك الأرقام 0 - 6.
+ */
+function normalizeCourseDay(
+  value: string,
+): number | null {
+  const normalized = String(
+    value ?? '',
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+
+  if (!normalized) {
+    return null
+  }
+
+  if (/^[0-6]$/.test(normalized)) {
+    return Number(normalized)
+  }
+
+  const dayMap: Record<
+    string,
+    number
+  > = {
+    الأحد: 0,
+    الاحد: 0,
+
+    الاثنين: 1,
+    الإثنين: 1,
+    الاثنينِ: 1,
+
+    الثلاثاء: 2,
+
+    الأربعاء: 3,
+    الاربعاء: 3,
+
+    الخميس: 4,
+
+    الجمعة: 5,
+
+    السبت: 6,
+
+    sunday: 0,
+    sun: 0,
+
+    monday: 1,
+    mon: 1,
+
+    tuesday: 2,
+    tue: 2,
+
+    wednesday: 3,
+    wed: 3,
+
+    thursday: 4,
+    thu: 4,
+
+    friday: 5,
+    fri: 5,
+
+    saturday: 6,
+    sat: 6,
+  }
+
+  return (
+    dayMap[normalized] ??
+    null
+  )
+}
+
+/**
+ * هل التاريخ المحدد هو أحد أيام الدراسة للدورة؟
+ */
+function isCourseStudyDay(
+  date: string,
+  courseDays: string[],
+) {
+  const dayOfWeek =
+    getDayOfWeek(date)
+
+  if (dayOfWeek === null) {
+    return false
+  }
+
+  if (
+    !Array.isArray(courseDays) ||
+    courseDays.length === 0
+  ) {
+    return false
+  }
+
+  return courseDays.some(
+    (day) =>
+      normalizeCourseDay(day) ===
+      dayOfWeek,
+  )
+}
+
 type AttendanceViewProps = {
   currentCourse: Course | null
 
@@ -299,10 +466,6 @@ export function AttendanceView({
     setSavingKey,
   ] = useState<string | null>(null)
 
-  /*
-   * هذا فقط للتحكم في فتح خيارات الحالة
-   * بدون حذف الحالة من قاعدة البيانات.
-   */
   const [
     editingStatusKey,
     setEditingStatusKey,
@@ -320,31 +483,85 @@ export function AttendanceView({
     setSearchTerm,
   ] = useState('')
 
-  const today = new Date()
-
-  const todayString = [
-    today.getFullYear(),
-    String(
-      today.getMonth() + 1,
-    ).padStart(2, '0'),
-    String(
-      today.getDate(),
-    ).padStart(2, '0'),
-  ].join('-')
-
-  const isTodayInsideCourse =
-    todayString >=
-      (currentCourse?.startDate ||
-        '') &&
-    todayString <=
-      (currentCourse?.endDate ||
-        '')
+  /*
+   * التاريخ الافتراضي هو تاريخ اليوم نفسه.
+   *
+   * هذا مهم جدًا:
+   * إذا كانت الدورة لم تبدأ بعد،
+   * لا نرجع لأول يوم في الدورة ونعرض
+   * للمعلم شاشة تسجيل الحضور.
+   */
+  const todayString =
+    getTodayString()
 
   const activeDate =
     selectedAttendanceDate ||
-    (isTodayInsideCourse
-      ? todayString
-      : currentCourse?.startDate || '')
+    todayString
+
+  /*
+   * تحديد حالة التاريخ الحالي.
+   */
+  const dateState = useMemo(() => {
+    if (!currentCourse) {
+      return 'no-course' as const
+    }
+
+    const startDate =
+      currentCourse.startDate
+
+    const endDate =
+      currentCourse.endDate
+
+    if (
+      startDate &&
+      activeDate < startDate
+    ) {
+      return 'before-course' as const
+    }
+
+    if (
+      endDate &&
+      activeDate > endDate
+    ) {
+      return 'after-course' as const
+    }
+
+    /*
+     * التاريخ داخل فترة الدورة.
+     *
+     * الآن نتحقق من أيام الدراسة.
+     */
+    if (
+      !isCourseStudyDay(
+        activeDate,
+        currentCourse.days,
+      )
+    ) {
+      return 'no-lesson' as const
+    }
+
+    /*
+     * إذا كان اليوم هو اليوم الحالي
+     * أو تاريخًا سابقًا صحيحًا:
+     * نسمح بعرض الحضور.
+     *
+     * إذا كان التاريخ مستقبلًا داخل الدورة
+     * لكنه يوم دراسة، لا نسمح بتسجيل حضور
+     * قبل أن يأتي اليوم.
+     */
+    if (activeDate > todayString) {
+      return 'future-lesson' as const
+    }
+
+    return 'valid' as const
+  }, [
+    activeDate,
+    currentCourse,
+    todayString,
+  ])
+
+  const isAttendanceAvailable =
+    dateState === 'valid'
 
   const getRecordForStudent = (
     studentId: string,
@@ -451,6 +668,21 @@ export function AttendanceView({
       return
     }
 
+    /*
+     * حماية إضافية:
+     * حتى لو استدعى المستخدم الدالة بطريقة غير متوقعة،
+     * لا نحفظ حضورًا في يوم غير صالح.
+     */
+    if (
+      !isAttendanceAvailable ||
+      date !== activeDate
+    ) {
+      setStatusMessage(
+        'لا يمكن تسجيل الحضور في هذا اليوم.',
+      )
+      return
+    }
+
     const statusId =
       getStatusIdByName(
         attendanceStatuses,
@@ -484,9 +716,6 @@ export function AttendanceView({
 
     setSavingKey(key)
 
-    /*
-     * تحديث الواجهة مباشرة
-     */
     setLocalStatuses(
       (current) => ({
         ...current,
@@ -527,13 +756,6 @@ export function AttendanceView({
                 date,
           )
 
-        /*
-         * إذا السجل موجود:
-         * نحدثه.
-         *
-         * إذا غير موجود:
-         * ننشئ سجل جديد.
-         */
         if (existingIndex === -1) {
           return [
             ...records,
@@ -559,9 +781,6 @@ export function AttendanceView({
 
     try {
       if (existing) {
-        /*
-         * تعديل نفس سجل الحضور.
-         */
         const {
           data,
           error,
@@ -618,9 +837,6 @@ export function AttendanceView({
           )
         }
       } else {
-        /*
-         * إنشاء سجل لأول مرة.
-         */
         const {
           data,
           error,
@@ -685,10 +901,6 @@ export function AttendanceView({
         `تم حفظ حالة ${student.name}: ${statusName}`,
       )
     } catch (error: any) {
-      /*
-       * إذا فشل الحفظ:
-       * نرجع البيانات السابقة.
-       */
       setAttendanceRecords(
         previousRecords,
       )
@@ -742,10 +954,24 @@ export function AttendanceView({
       )
 
     /*
-     * إذا ما عنده حضور مسجل بعد،
-     * نخلي الملاحظة محليًا إلى أن يختار الحالة.
+     * إذا لم يوجد سجل بعد،
+     * نخزن الملاحظة محليًا فقط.
      */
     if (!existing) {
+      return
+    }
+
+    /*
+     * لا نحتاج منع تعديل ملاحظة
+     * في الأرشيف؛ الأرشيف قابل للعرض والتعديل
+     * طالما أن اليوم يوم دراسة صحيح.
+     */
+    if (
+      !isCourseStudyDay(
+        date,
+        currentCourse?.days ?? [],
+      )
+    ) {
       return
     }
 
@@ -845,233 +1071,333 @@ export function AttendanceView({
         <input
           type="date"
           value={activeDate}
-          min={currentCourse.startDate}
-          max={currentCourse.endDate}
           onChange={(event) => {
+            const nextDate =
+              event.target.value
+
             setSelectedAttendanceDate(
-              event.target.value ||
-                null,
+              nextDate || null,
             )
 
-            /*
-             * عند تغيير التاريخ:
-             * نغلق أي حالة مفتوحة للتعديل.
-             */
             setEditingStatusKey(null)
           }}
           className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
       </div>
 
-      {/* رسالة الحفظ */}
-      {statusMessage && (
-        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          {statusMessage}
+      {/* حالة التاريخ */}
+      {dateState ===
+        'before-course' && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+          <h3 className="text-lg font-semibold">
+            الدورة لم تبدأ بعد
+          </h3>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            التاريخ المحدد:{' '}
+            {formatDateForDisplay(
+              activeDate,
+            )}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            تبدأ الدورة في{' '}
+            {formatDateForDisplay(
+              currentCourse.startDate,
+            )}
+          </p>
         </div>
       )}
 
-      {/* البحث */}
-      <input
-        type="text"
-        value={searchTerm}
-        onChange={(event) =>
-          setSearchTerm(
-            event.target.value,
-          )
-        }
-        placeholder="بحث عن طالب..."
-        className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-      />
+      {dateState ===
+        'after-course' && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+          <h3 className="text-lg font-semibold">
+            انتهت الدورة
+          </h3>
 
-      {/* قائمة الطلبة */}
-      <div className="space-y-3">
-        {filteredStudents.length ===
-        0 ? (
-          <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-            لا يوجد طلبة.
+          <p className="mt-2 text-sm text-muted-foreground">
+            التاريخ المحدد:{' '}
+            {formatDateForDisplay(
+              activeDate,
+            )}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            انتهت الدورة في{' '}
+            {formatDateForDisplay(
+              currentCourse.endDate,
+            )}
+          </p>
+        </div>
+      )}
+
+      {dateState ===
+        'no-lesson' && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+          <h3 className="text-lg font-semibold">
+            لا يوجد درس في هذا اليوم
+          </h3>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            التاريخ المحدد:{' '}
+            {formatDateForDisplay(
+              activeDate,
+            )}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            هذا اليوم ليس من أيام الدراسة المحددة للدورة.
+          </p>
+        </div>
+      )}
+
+      {dateState ===
+        'future-lesson' && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+          <h3 className="text-lg font-semibold">
+            الدرس لم يبدأ بعد
+          </h3>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            التاريخ المحدد:{' '}
+            {formatDateForDisplay(
+              activeDate,
+            )}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            يمكنك الرجوع إلى الأيام السابقة لمشاهدة أرشيف الحضور.
+          </p>
+        </div>
+      )}
+
+      {/* رسالة الحفظ */}
+      {statusMessage &&
+        isAttendanceAvailable && (
+          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+            {statusMessage}
           </div>
-        ) : (
-          filteredStudents.map(
-            (student) => {
-              const key = `${activeDate}:${student.id}`
+        )}
 
-              const record =
-                getRecordForStudent(
-                  student.id,
-                  activeDate,
-                )
+      {/* محتوى الحضور فقط في يوم دراسة صحيح */}
+      {isAttendanceAvailable && (
+        <>
+          {/* البحث */}
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) =>
+              setSearchTerm(
+                event.target.value,
+              )
+            }
+            placeholder="بحث عن طالب..."
+            className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
 
-              const status =
-                getStudentStatus(
-                  student.id,
-                  activeDate,
-                )
+          {/* قائمة الطلبة */}
+          <div className="space-y-3">
+            {filteredStudents.length ===
+            0 ? (
+              <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+                لا يوجد طلبة.
+              </div>
+            ) : (
+              filteredStudents.map(
+                (student) => {
+                  const key = `${activeDate}:${student.id}`
 
-              const note =
-                record?.note ??
-                attendanceNotes[key] ??
-                ''
+                  const record =
+                    getRecordForStudent(
+                      student.id,
+                      activeDate,
+                    )
 
-              const percentage =
-                attendancePercentages[
-                  student.id
-                ] ?? 0
+                  const status =
+                    getStudentStatus(
+                      student.id,
+                      activeDate,
+                    )
 
-              const saving =
-                savingKey === key
+                  const note =
+                    record?.note ??
+                    attendanceNotes[key] ??
+                    ''
 
-              const editing =
-                editingStatusKey === key
+                  const percentage =
+                    attendancePercentages[
+                      student.id
+                    ] ?? 0
 
-              /*
-               * قبل اختيار الحالة
-               */
-              if (!status || editing) {
-                return (
-                  <div
-                    key={student.id}
-                    className="rounded-xl border bg-card p-4"
-                  >
-                    <div className="flex flex-col gap-3">
-                      <div className="font-semibold">
-                        {student.name}
-                      </div>
+                  const saving =
+                    savingKey === key
 
-                      <div className="flex flex-wrap gap-2">
-                        {attendanceStatusNames.map(
-                          (
-                            statusName,
-                          ) => {
-                            const styles =
-                              getStatusClasses(
+                  const editing =
+                    editingStatusKey === key
+
+                  /*
+                   * قبل اختيار الحالة
+                   */
+                  if (
+                    !status ||
+                    editing
+                  ) {
+                    return (
+                      <div
+                        key={student.id}
+                        className="rounded-xl border bg-card p-4"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div className="font-semibold">
+                            {
+                              student.name
+                            }
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {attendanceStatusNames.map(
+                              (
                                 statusName,
-                              )
-
-                            return (
-                              <button
-                                key={
-                                  statusName
-                                }
-                                type="button"
-                                disabled={
-                                  saving
-                                }
-                                onClick={() =>
-                                  saveAttendance(
-                                    student,
-                                    activeDate,
+                              ) => {
+                                const styles =
+                                  getStatusClasses(
                                     statusName,
                                   )
-                                }
-                                className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.normal} ${
-                                  saving
-                                    ? 'cursor-not-allowed opacity-50'
-                                    : ''
-                                }`}
-                              >
-                                {
-                                  statusName
-                                }
-                              </button>
-                            )
-                          },
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
 
-              /*
-               * بعد الاختيار:
-               * كل التفاصيل في سطر واحد.
-               */
-              const selectedStyles =
-                getStatusClasses(
-                  status,
-                )
-
-              return (
-                <div
-                  key={student.id}
-                  className="rounded-xl border bg-card px-4 py-3"
-                >
-                  <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-                    {/* اسم الطالب */}
-                    <div className="min-w-0 xl:flex-1">
-                      <div className="font-semibold">
-                        {student.name}
-                      </div>
-
-                      {student.levelName && (
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {student.levelName}
+                                return (
+                                  <button
+                                    key={
+                                      statusName
+                                    }
+                                    type="button"
+                                    disabled={
+                                      saving
+                                    }
+                                    onClick={() =>
+                                      saveAttendance(
+                                        student,
+                                        activeDate,
+                                        statusName,
+                                      )
+                                    }
+                                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.normal} ${
+                                      saving
+                                        ? 'cursor-not-allowed opacity-50'
+                                        : ''
+                                    }`}
+                                  >
+                                    {
+                                      statusName
+                                    }
+                                  </button>
+                                )
+                              },
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )
+                  }
 
-                    {/* الحالة */}
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() =>
-                        setEditingStatusKey(
-                          key,
-                        )
-                      }
-                      className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
-                        saving
-                          ? 'cursor-not-allowed opacity-50'
-                          : 'cursor-pointer'
-                      }`}
+                  /*
+                   * بعد اختيار الحالة
+                   */
+                  const selectedStyles =
+                    getStatusClasses(
+                      status,
+                    )
+
+                  return (
+                    <div
+                      key={student.id}
+                      className="rounded-xl border bg-card px-4 py-3"
                     >
-                      {status}
-                    </button>
+                      <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                        {/* اسم الطالب */}
+                        <div className="min-w-0 xl:flex-1">
+                          <div className="font-semibold">
+                            {
+                              student.name
+                            }
+                          </div>
 
-                    {/* الملاحظات */}
-                    <input
-                      type="text"
-                      value={note}
-                      onChange={(event) =>
-                        setAttendanceNotes(
-                          (current) => ({
-                            ...current,
-                            [key]:
+                          {student.levelName && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {
+                                student.levelName
+                              }
+                            </div>
+                          )}
+                        </div>
+
+                        {/* الحالة */}
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() =>
+                            setEditingStatusKey(
+                              key,
+                            )
+                          }
+                          className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
+                            saving
+                              ? 'cursor-not-allowed opacity-50'
+                              : 'cursor-pointer'
+                          }`}
+                        >
+                          {status}
+                        </button>
+
+                        {/* الملاحظات */}
+                        <input
+                          type="text"
+                          value={note}
+                          onChange={(
+                            event,
+                          ) =>
+                            setAttendanceNotes(
+                              (current) => ({
+                                ...current,
+                                [key]:
+                                  event.target
+                                    .value,
+                              }),
+                            )
+                          }
+                          onBlur={(event) =>
+                            saveNote(
+                              student,
+                              activeDate,
                               event.target
                                 .value,
-                          }),
-                        )
-                      }
-                      onBlur={(event) =>
-                        saveNote(
-                          student,
-                          activeDate,
-                          event.target
-                            .value,
-                        )
-                      }
-                      placeholder="الملاحظات"
-                      className="h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 xl:max-w-[350px]"
-                    />
+                            )
+                          }
+                          placeholder="الملاحظات"
+                          className="h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 xl:max-w-[350px]"
+                        />
 
-                    {/* نسبة الحضور */}
-                    <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
-                      <span
-                        className={`text-sm font-bold ${getPercentageClass(
-                          percentage,
-                        )}`}
-                      >
-                        {percentage}%
-                      </span>
+                        {/* نسبة الحضور */}
+                        <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
+                          <span
+                            className={`text-sm font-bold ${getPercentageClass(
+                              percentage,
+                            )}`}
+                          >
+                            {percentage}%
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )
+                },
               )
-            },
-          )
-        )}
-      </div>
+            )}
+          </div>
+        </>
+      )}
 
+      {/* فترة الدورة */}
       <p className="text-xs text-muted-foreground">
         فترة الدورة:{' '}
         {formatDateForDisplay(
