@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Check,
   Eye,
+  FileArchive,
+  FileSpreadsheet,
   Filter,
   Loader2,
   RefreshCw,
@@ -20,6 +22,9 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+
+import { EnrollmentImport } from './enrollment-import'
+import { EnrollmentArchive } from './enrollment-archive'
 
 type RegistrationRequest = {
   id: string
@@ -56,6 +61,7 @@ type RegistrationRequest = {
   verifiedPaymentAmount: number | null
   paymentRejectionReason: string
   createdAt: string
+  source: 'external' | 'import'
 }
 
 type Filters = {
@@ -116,6 +122,10 @@ function mapRequest(row: any): RegistrationRequest {
     paymentRejectionReason:
       row.payment_rejection_reason ?? '',
     createdAt: row.created_at ?? '',
+    source:
+      row.source === 'import'
+        ? 'import'
+        : 'external',
   }
 }
 
@@ -127,7 +137,9 @@ function hasNotes(request: RegistrationRequest) {
   return request.notes.trim() !== ''
 }
 
-function hasSpecialInformation(request: RegistrationRequest) {
+function hasSpecialInformation(
+  request: RegistrationRequest,
+) {
   return (
     hasHealthNotes(request) ||
     hasNotes(request)
@@ -189,6 +201,12 @@ export function EnrollmentView() {
   const [showReview, setShowReview] =
     useState(false)
 
+  const [showImport, setShowImport] =
+    useState(false)
+
+  const [showArchive, setShowArchive] =
+    useState(false)
+
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
@@ -200,6 +218,50 @@ export function EnrollmentView() {
 
   const [statusMessage, setStatusMessage] =
     useState('')
+
+  const [allowCurrentYearImport, setAllowCurrentYearImport] =
+    useState(false)
+
+  const [allowArchiveImport, setAllowArchiveImport] =
+    useState(false)
+
+  const loadImportPermissions = async () => {
+    const { data, error } = await supabase
+      .from('system_keys')
+      .select('key_name, enabled')
+      .in('key_name', [
+        'allow_add_to_current_year',
+        'allow_add_to_archive',
+      ])
+
+    if (error) {
+      console.error(
+        'system_keys error:',
+        error,
+      )
+      return
+    }
+
+    const currentYear = data?.find(
+      (item) =>
+        item.key_name ===
+        'allow_add_to_current_year',
+    )
+
+    const archive = data?.find(
+      (item) =>
+        item.key_name ===
+        'allow_add_to_archive',
+    )
+
+    setAllowCurrentYearImport(
+      currentYear?.enabled === true,
+    )
+
+    setAllowArchiveImport(
+      archive?.enabled === true,
+    )
+  }
 
   const loadRequests = async () => {
     setLoading(true)
@@ -232,7 +294,8 @@ export function EnrollmentView() {
         payment_status,
         verified_payment_amount,
         payment_rejection_reason,
-        created_at
+        created_at,
+        source
       `)
       .order('created_at', {
         ascending: false,
@@ -256,6 +319,7 @@ export function EnrollmentView() {
 
   useEffect(() => {
     loadRequests()
+    loadImportPermissions()
   }, [])
 
   const updateFilter = (
@@ -312,6 +376,14 @@ export function EnrollmentView() {
       )
     })
   }, [requests, filters])
+
+  const externalRequests = filteredRequests.filter(
+    (request) => request.source === 'external',
+  )
+
+  const importedRequests = filteredRequests.filter(
+    (request) => request.source === 'import',
+  )
 
   const pendingCount = requests.filter(
     (request) =>
@@ -392,47 +464,64 @@ export function EnrollmentView() {
         return
       }
 
-      console.log(
-        'approve_registration_request result:',
-        data,
-      )
-
       const studentId =
         data?.student_id ?? null
 
       const alreadyProcessed =
         data?.already_processed === true
 
-      setRequests((current) =>
-        current.map((item) =>
-          item.id === request.id
-            ? {
-                ...item,
-                status: 'approved',
-                processingMode: 'direct',
-                studentId:
-                  studentId ?? item.studentId,
-              }
-            : item,
-        ),
-      )
+      /*
+       * بعد نجاح الـ RPC نتأكد أن الطالب مصدره التسجيل.
+       * هذا مهم لأننا أضفنا source في جدول الطلاب.
+       */
+      if (studentId) {
+        const { error: studentUpdateError } =
+          await supabase
+            .from('students')
+            .update({
+              source: 'registration',
+            })
+            .eq('id', studentId)
 
-      setSelectedRequest((current) =>
-        current?.id === request.id
-          ? {
-              ...current,
-              status: 'approved',
-              processingMode: 'direct',
-              studentId:
-                studentId ?? current.studentId,
-            }
-          : current,
-      )
+        if (studentUpdateError) {
+          console.warn(
+            'Could not update student source:',
+            studentUpdateError,
+          )
+        }
+      }
+
+      /*
+       * الطلب المقبول لا يبقى في registration_requests.
+       * المرفوض فقط يبقى كسجل تاريخي.
+       */
+      const { error: deleteError } =
+        await supabase
+          .from('registration_requests')
+          .delete()
+          .eq('id', request.id)
+
+      if (deleteError) {
+        console.error(
+          'Could not delete approved request:',
+          deleteError,
+        )
+
+        setStatusMessage(
+          'تم إنشاء الطالب بنجاح، لكن تعذر حذف طلب التسجيل من قائمة الطلبات. سيتم إعادة المحاولة لاحقاً.',
+        )
+
+        await loadRequests()
+        return
+      }
+
+      setShowReview(false)
+      setSelectedRequest(null)
 
       setStatusMessage(
         alreadyProcessed
-          ? 'الطلب كان مرحّل مسبقاً إلى الطلاب ✅'
-          : 'تم قبول الطلب وإنشاء الطالب وربطه بالمستوى بنجاح ✅',
+          ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
+          : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
       )
 
       await loadRequests()
@@ -518,6 +607,118 @@ export function EnrollmentView() {
   const hasFilters =
     Object.values(filters).some(Boolean)
 
+  const renderTable = (
+    tableRequests: RegistrationRequest[],
+  ) => {
+    if (loading) {
+      return (
+        <tr>
+          <td
+            colSpan={6}
+            className="px-4 py-12 text-center"
+          >
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="size-5 animate-spin" />
+              جاري تحميل طلبات التسجيل...
+            </div>
+          </td>
+        </tr>
+      )
+    }
+
+    if (tableRequests.length === 0) {
+      return (
+        <tr>
+          <td
+            colSpan={6}
+            className="px-4 py-12 text-center text-muted-foreground"
+          >
+            لا توجد طلبات في هذا القسم.
+          </td>
+        </tr>
+      )
+    }
+
+    return tableRequests.map((request) => {
+      const hasHealth =
+        hasHealthNotes(request)
+
+      const hasRequestNotes =
+        hasNotes(request)
+
+      const special =
+        hasSpecialInformation(request)
+
+      return (
+        <tr
+          key={request.id}
+          className={`border-b last:border-0 transition-colors ${
+            special
+              ? 'bg-amber-50/70 hover:bg-amber-100/70'
+              : 'hover:bg-muted/30'
+          }`}
+        >
+          <td className="px-4 py-4">
+            <div className="font-medium tabular-nums">
+              {request.requestNumber ||
+                request.id}
+            </div>
+
+            {special && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {hasHealth && (
+                  <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                    🩺 معلومات صحية
+                  </span>
+                )}
+
+                {hasRequestNotes && (
+                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                    📝 ملاحظات
+                  </span>
+                )}
+              </div>
+            )}
+          </td>
+
+          <td className="px-4 py-4 font-medium">
+            {request.name}
+          </td>
+
+          <td className="px-4 py-4 tabular-nums text-muted-foreground">
+            {request.phone || '—'}
+          </td>
+
+          <td className="px-4 py-4 text-muted-foreground">
+            {formatDate(request.createdAt)}
+          </td>
+
+          <td className="px-4 py-4">
+            <StatusBadge
+              status={getStatusLabel(
+                request.status,
+              )}
+            />
+          </td>
+
+          <td className="px-4 py-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                openReview(request)
+              }
+              className="gap-2"
+            >
+              <Eye className="size-4" />
+              مراجعة
+            </Button>
+          </td>
+        </tr>
+      )
+    })
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -560,19 +761,47 @@ export function EnrollmentView() {
           )}
         </div>
 
-        <Button
-          variant="outline"
-          onClick={loadRequests}
-          disabled={loading}
-          className="gap-2"
-        >
-          <RefreshCw
-            className={`size-4 ${
-              loading ? 'animate-spin' : ''
-            }`}
-          />
-          تحديث الطلبات
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {allowCurrentYearImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowImport(true)
+              }
+              className="gap-2"
+            >
+              <FileSpreadsheet className="size-4" />
+              استيراد سجل
+            </Button>
+          )}
+
+          {allowArchiveImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowArchive(true)
+              }
+              className="gap-2"
+            >
+              <FileArchive className="size-4" />
+              استيراد للأرشيف
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            onClick={loadRequests}
+            disabled={loading}
+            className="gap-2"
+          >
+            <RefreshCw
+              className={`size-4 ${
+                loading ? 'animate-spin' : ''
+              }`}
+            />
+            تحديث الطلبات
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -691,116 +920,57 @@ export function EnrollmentView() {
               </thead>
 
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-12 text-center"
-                    >
-                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                        <Loader2 className="size-5 animate-spin" />
-                        جاري تحميل طلبات التسجيل...
-                      </div>
-                    </td>
-                  </tr>
-                ) : filteredRequests.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-12 text-center text-muted-foreground"
-                    >
-                      لا توجد طلبات مطابقة للفلاتر.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredRequests.map(
-                    (request) => {
-                      const hasHealth =
-                        hasHealthNotes(request)
-
-                      const hasRequestNotes =
-                        hasNotes(request)
-
-                      const special =
-                        hasSpecialInformation(
-                          request,
-                        )
-
-                      return (
-                        <tr
-                          key={request.id}
-                          className={`border-b last:border-0 transition-colors ${
-                            special
-                              ? 'bg-amber-50/70 hover:bg-amber-100/70'
-                              : 'hover:bg-muted/30'
-                          }`}
-                        >
-                          <td className="px-4 py-4">
-                            <div className="font-medium tabular-nums">
-                              {request.requestNumber ||
-                                request.id}
-                            </div>
-
-                            {special && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {hasHealth && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                                    🩺 معلومات صحية
-                                  </span>
-                                )}
-
-                                {hasRequestNotes && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                                    📝 ملاحظات
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 font-medium">
-                            {request.name}
-                          </td>
-
-                          <td className="px-4 py-4 tabular-nums text-muted-foreground">
-                            {request.phone || '—'}
-                          </td>
-
-                          <td className="px-4 py-4 text-muted-foreground">
-                            {formatDate(
-                              request.createdAt,
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <StatusBadge
-                              status={getStatusLabel(
-                                request.status,
-                              )}
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                openReview(request)
-                              }
-                              className="gap-2"
-                            >
-                              <Eye className="size-4" />
-                              مراجعة
-                            </Button>
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )
+                {renderTable(
+                  externalRequests,
                 )}
               </tbody>
             </table>
           </div>
+
+          {importedRequests.length > 0 && (
+            <div className="border-t">
+              <div className="flex items-center gap-2 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+                <FileSpreadsheet className="size-4" />
+                الطلبات المستوردة من Excel
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs">
+                  {importedRequests.length}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1050px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-4 py-3 text-right font-medium">
+                        رقم الطلب
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        اسم الطالب
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        رقم الجوال
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        تاريخ الاستيراد
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        الحالة
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        الإجراء
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {renderTable(
+                      importedRequests,
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {hasFilters && (
             <div className="flex items-center justify-between border-t px-4 py-3">
@@ -822,6 +992,26 @@ export function EnrollmentView() {
         </CardContent>
       </Card>
 
+      {showImport && (
+        <EnrollmentImport
+          onClose={() => {
+            setShowImport(false)
+          }}
+          onImported={async () => {
+            setShowImport(false)
+            await loadRequests()
+          }}
+        />
+      )}
+
+      {showArchive && (
+        <EnrollmentArchive
+          onClose={() =>
+            setShowArchive(false)
+          }
+        />
+      )}
+
       {showReview && selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
@@ -831,10 +1021,19 @@ export function EnrollmentView() {
                   مراجعة طلب التسجيل
                 </h2>
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedRequest.requestNumber ||
-                    selectedRequest.id}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRequest.requestNumber ||
+                      selectedRequest.id}
+                  </p>
+
+                  {selectedRequest.source ===
+                    'import' && (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                      مستورد من Excel
+                    </span>
+                  )}
+                </div>
               </div>
 
               <Button
@@ -1012,7 +1211,6 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         طريقة الدفع
                       </p>
-
                       <p className="mt-1 font-medium">
                         {
                           selectedRequest.paymentMethod
@@ -1024,7 +1222,6 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         المبلغ المدخل
                       </p>
-
                       <p className="mt-1 font-medium tabular-nums">
                         {formatAmount(
                           selectedRequest.paymentAmount,
@@ -1036,7 +1233,6 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         المرجع
                       </p>
-
                       <p className="mt-1 font-medium">
                         {selectedRequest.paymentReference ||
                           '—'}
@@ -1047,7 +1243,6 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         حالة الدفع
                       </p>
-
                       <p className="mt-1 font-medium">
                         {selectedRequest.paymentStatus ===
                         'verified'
@@ -1151,10 +1346,7 @@ export function EnrollmentView() {
                   'approved' && (
                   <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
                     <Check className="size-4" />
-
-                    {selectedRequest.studentId
-                      ? 'تم قبول الطلب وترحيله للطلاب'
-                      : 'تم قبول الطلب'}
+                    تم قبول الطلب وترحيله للطلاب
                   </div>
                 )}
               </div>
