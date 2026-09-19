@@ -229,12 +229,37 @@ export function EnrollmentView() {
     useState(true)
 
   /*
-   * تحميل صلاحيات الاستيراد
+   * قراءة مفاتيح الاستيراد
+   *
+   * مهم:
+   * ننتظر جلسة Supabase أولاً لأن system_keys
+   * تستخدم RLS على authenticated.
    */
   const loadImportPermissions = async () => {
     setPermissionsLoading(true)
 
     try {
+      const {
+        data: {
+          session,
+        },
+      } = await supabase.auth.getSession()
+
+      /*
+       * إذا لم توجد جلسة بعد، لا نعتبرها خطأ نهائياً.
+       * سنحاول مرة أخرى من خلال onAuthStateChange.
+       */
+      if (!session) {
+        console.warn(
+          'EnrollmentView: لا توجد جلسة Supabase حالياً.',
+        )
+
+        setAllowCurrentYearImport(false)
+        setAllowArchiveImport(false)
+
+        return
+      }
+
       const { data, error } = await supabase
         .from('system_keys')
         .select('key_name, enabled')
@@ -243,12 +268,9 @@ export function EnrollmentView() {
           'allow_add_to_archive',
         ])
 
-      console.log('SYSTEM KEYS DATA:', data)
-      console.log('SYSTEM KEYS ERROR:', error)
-
       if (error) {
         console.error(
-          'system_keys error:',
+          'EnrollmentView system_keys error:',
           error,
         )
 
@@ -259,24 +281,33 @@ export function EnrollmentView() {
         return
       }
 
-      const currentYear = data?.find(
-        (item) =>
-          item.key_name ===
-          'allow_add_to_current_year',
+      console.log(
+        'EnrollmentView SYSTEM KEYS:',
+        data,
       )
 
-      const archive = data?.find(
-        (item) =>
-          item.key_name ===
-          'allow_add_to_archive',
-      )
+      const currentYearEnabled =
+        data?.some(
+          (item) =>
+            item.key_name ===
+              'allow_add_to_current_year' &&
+            item.enabled === true,
+        ) ?? false
+
+      const archiveEnabled =
+        data?.some(
+          (item) =>
+            item.key_name ===
+              'allow_add_to_archive' &&
+            item.enabled === true,
+        ) ?? false
 
       setAllowCurrentYearImport(
-        currentYear?.enabled === true,
+        currentYearEnabled,
       )
 
       setAllowArchiveImport(
-        archive?.enabled === true,
+        archiveEnabled,
       )
     } catch (error) {
       console.error(
@@ -298,7 +329,6 @@ export function EnrollmentView() {
 
   const loadRequests = async () => {
     setLoading(true)
-    setStatusMessage('')
 
     const { data, error } = await supabase
       .from('registration_requests')
@@ -350,9 +380,40 @@ export function EnrollmentView() {
     setLoading(false)
   }
 
+  /*
+   * التحميل الأول
+   *
+   * ونضيف listener حتى إذا كانت جلسة Supabase
+   * لم تجهز وقت فتح الصفحة، يعاد تحميل المفاتيح
+   * فور جاهزية الجلسة.
+   */
   useEffect(() => {
-    loadRequests()
-    loadImportPermissions()
+    let mounted = true
+
+    const initialize = async () => {
+      await loadRequests()
+
+      if (mounted) {
+        await loadImportPermissions()
+      }
+    }
+
+    initialize()
+
+    const {
+      data: authListener,
+    } = supabase.auth.onAuthStateChange(
+      async () => {
+        if (!mounted) return
+
+        await loadImportPermissions()
+      },
+    )
+
+    return () => {
+      mounted = false
+      authListener.subscription.unsubscribe()
+    }
   }, [])
 
   const updateFilter = (
@@ -787,41 +848,44 @@ export function EnrollmentView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {!permissionsLoading &&
-            allowCurrentYearImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowImport(true)
-                }
-                className="gap-2"
-              >
-                <FileSpreadsheet className="size-4" />
-                استيراد سجل
-              </Button>
-            )}
+          {allowCurrentYearImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowImport(true)
+              }
+              className="gap-2"
+            >
+              <FileSpreadsheet className="size-4" />
+              استيراد سجل
+            </Button>
+          )}
 
-          {!permissionsLoading &&
-            allowArchiveImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowArchive(true)
-                }
-                className="gap-2"
-              >
-                <FileArchive className="size-4" />
-                استيراد للأرشيف
-              </Button>
-            )}
+          {allowArchiveImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowArchive(true)
+              }
+              className="gap-2"
+            >
+              <FileArchive className="size-4" />
+              استيراد للأرشيف
+            </Button>
+          )}
 
           <Button
             variant="outline"
-            onClick={() => {
-              loadRequests()
-              loadImportPermissions()
+            onClick={async () => {
+              await Promise.all([
+                loadRequests(),
+                loadImportPermissions(),
+              ])
             }}
-            disabled={loading || permissionsLoading}
+            disabled={
+              loading ||
+              permissionsLoading
+            }
             className="gap-2"
           >
             <RefreshCw
@@ -913,6 +977,7 @@ export function EnrollmentView() {
                   <th className="px-4 py-3 text-right font-medium">
                     <div className="space-y-2">
                       <div>الحالة</div>
+
                       <select
                         value={filters.status}
                         onChange={(event) =>
@@ -926,18 +991,23 @@ export function EnrollmentView() {
                         <option value="">
                           جميع الحالات
                         </option>
+
                         <option value="pending">
                           قيد المراجعة
                         </option>
+
                         <option value="under_review">
                           تحت المراجعة
                         </option>
+
                         <option value="approved">
                           مقبول
                         </option>
+
                         <option value="rejected">
                           مرفوض
                         </option>
+
                         <option value="cancelled">
                           ملغي
                         </option>
@@ -963,7 +1033,9 @@ export function EnrollmentView() {
             <div className="border-t">
               <div className="flex items-center gap-2 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
                 <FileSpreadsheet className="size-4" />
+
                 الطلبات المستوردة من Excel
+
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs">
                   {importedRequests.length}
                 </span>
@@ -976,18 +1048,23 @@ export function EnrollmentView() {
                       <th className="px-4 py-3 text-right font-medium">
                         رقم الطلب
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium">
                         اسم الطالب
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium">
                         رقم الجوال
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium">
                         تاريخ الاستيراد
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium">
                         الحالة
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium">
                         الإجراء
                       </th>
@@ -1008,6 +1085,7 @@ export function EnrollmentView() {
             <div className="flex items-center justify-between border-t px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Filter className="size-4" />
+
                 عرض {filteredRequests.length} من{' '}
                 {requests.length} طلب
               </div>
@@ -1118,6 +1196,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     اسم الطالب
                   </p>
+
                   <p className="mt-1 font-medium">
                     {selectedRequest.name ||
                       'غير مضاف'}
@@ -1128,6 +1207,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     الرقم الشخصي
                   </p>
+
                   <p className="mt-1 font-medium tabular-nums">
                     {selectedRequest.personalId ||
                       'غير مضاف'}
@@ -1138,6 +1218,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     العمر
                   </p>
+
                   <p className="mt-1 font-medium">
                     {selectedRequest.age ??
                       'غير مضاف'}
@@ -1148,6 +1229,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     الجنس
                   </p>
+
                   <p className="mt-1 font-medium">
                     {selectedRequest.gender ||
                       'غير مضاف'}
@@ -1158,6 +1240,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     رقم الجوال
                   </p>
+
                   <p className="mt-1 font-medium tabular-nums">
                     {selectedRequest.phone ||
                       'غير مضاف'}
@@ -1168,6 +1251,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     الواتساب
                   </p>
+
                   <p className="mt-1 font-medium tabular-nums">
                     {selectedRequest.whatsapp ||
                       'غير مضاف'}
@@ -1178,6 +1262,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     المستوى
                   </p>
+
                   <p className="mt-1 font-medium">
                     {selectedRequest.levelId ||
                       'غير محدد'}
@@ -1188,6 +1273,7 @@ export function EnrollmentView() {
                   <p className="text-xs text-muted-foreground">
                     تاريخ التقديم
                   </p>
+
                   <p className="mt-1 font-medium">
                     {formatDate(
                       selectedRequest.createdAt,
@@ -1243,6 +1329,7 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         طريقة الدفع
                       </p>
+
                       <p className="mt-1 font-medium">
                         {
                           selectedRequest.paymentMethod
@@ -1254,6 +1341,7 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         المبلغ المدخل
                       </p>
+
                       <p className="mt-1 font-medium tabular-nums">
                         {formatAmount(
                           selectedRequest.paymentAmount,
@@ -1265,6 +1353,7 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         المرجع
                       </p>
+
                       <p className="mt-1 font-medium">
                         {selectedRequest.paymentReference ||
                           '—'}
@@ -1275,6 +1364,7 @@ export function EnrollmentView() {
                       <p className="text-xs text-muted-foreground">
                         حالة الدفع
                       </p>
+
                       <p className="mt-1 font-medium">
                         {selectedRequest.paymentStatus ===
                         'verified'
