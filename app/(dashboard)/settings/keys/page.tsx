@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { supabase } from '@/lib/supabase'
 import { PageHeader } from '@/components/dashboard/page-header'
 
@@ -65,36 +66,37 @@ export default function KeysPage() {
     setMessage('')
 
     try {
-      const result = await supabase
-        .from('system_keys')
-        .select('key_name, enabled')
-        .in('key_name', [
-          CURRENT_YEAR_KEY,
-          ARCHIVE_KEY,
-        ])
+      const { data, error: settingsError } =
+        await supabase
+          .from('system_keys')
+          .select('key_name, enabled')
+          .in('key_name', [
+            CURRENT_YEAR_KEY,
+            ARCHIVE_KEY,
+          ])
 
-      if (result.error) {
-        throw result.error
+      if (settingsError) {
+        throw settingsError
       }
 
-      const data = (result.data ?? []) as KeyRow[]
+      const rows = (data ?? []) as KeyRow[]
 
-      const currentYear = data.find(
+      const currentYearRow = rows.find(
         (row) =>
           row.key_name === CURRENT_YEAR_KEY,
       )
 
-      const archive = data.find(
+      const archiveRow = rows.find(
         (row) =>
           row.key_name === ARCHIVE_KEY,
       )
 
       setSettings({
         allowAddToCurrentYear:
-          currentYear?.enabled ?? true,
+          currentYearRow?.enabled ?? true,
 
         allowAddToArchive:
-          archive?.enabled ?? true,
+          archiveRow?.enabled ?? true,
       })
     } catch (err) {
       setError(
@@ -117,8 +119,9 @@ export default function KeysPage() {
     setError('')
     setMessage('')
 
-    const previous = settings
+    const previousSettings = settings
 
+    // تحديث فوري للزر
     setSettings((current) => ({
       ...current,
       ...(keyName === CURRENT_YEAR_KEY
@@ -131,24 +134,17 @@ export default function KeysPage() {
     }))
 
     try {
-      const result = await supabase
-        .from('system_keys')
-        .update({
-          enabled: value,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('key_name', keyName)
-        .select('key_name, enabled')
-        .single()
+      const { error: updateError } =
+        await supabase
+          .from('system_keys')
+          .update({
+            enabled: value,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('key_name', keyName)
 
-      if (result.error) {
-        throw result.error
-      }
-
-      if (!result.data) {
-        throw new Error(
-          'لم يتم إرجاع السجل بعد الحفظ.',
-        )
+      if (updateError) {
+        throw updateError
       }
 
       setMessage('تم حفظ الإعداد بنجاح.')
@@ -157,7 +153,8 @@ export default function KeysPage() {
         setMessage('')
       }, 2500)
     } catch (err) {
-      setSettings(previous)
+      // إرجاع القيمة القديمة إذا فشل الحفظ
+      setSettings(previousSettings)
 
       setError(
         `تعذر حفظ إعداد المفاتيح: ${getSupabaseError(err)}`,
@@ -245,7 +242,8 @@ export default function KeysPage() {
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            هذه الإعدادات تحدد الأزرار التي تظهر في صفحة الطلبات.
+            هذه الإعدادات تحدد الأزرار التي تظهر في
+            صفحة الطلبات.
           </p>
         </div>
 
@@ -258,7 +256,9 @@ export default function KeysPage() {
             <PermissionRow
               title="السماح بالإضافة إلى السنة الحالية"
               description="إظهار زر استيراد السجل وإتاحة إضافة السجلات إلى السنة الدراسية الحالية."
-              enabled={settings.allowAddToCurrentYear}
+              enabled={
+                settings.allowAddToCurrentYear
+              }
               onChange={(value) =>
                 updateSetting(
                   CURRENT_YEAR_KEY,
@@ -270,7 +270,9 @@ export default function KeysPage() {
             <PermissionRow
               title="السماح بالإضافة إلى الأرشيف"
               description="إظهار زر الاستيراد إلى الأرشيف في صفحة الطلبات."
-              enabled={settings.allowAddToArchive}
+              enabled={
+                settings.allowAddToArchive
+              }
               onChange={(value) =>
                 updateSetting(
                   ARCHIVE_KEY,
