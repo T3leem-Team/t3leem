@@ -7,8 +7,11 @@ import {
   Filter,
   X,
   Pencil,
+  Download,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import * as XLSX from 'xlsx'
+
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -79,8 +82,7 @@ export function StudentsView() {
   const [currentAcademicYearName, setCurrentAcademicYearName] =
     useState('')
 
-  const [currentAnnualFee, setCurrentAnnualFee] =
-    useState(0)
+  const [currentAnnualFee, setCurrentAnnualFee] = useState(0)
 
   const [search, setSearch] = useState('')
 
@@ -477,6 +479,116 @@ export function StudentsView() {
     })
   }
 
+  /*
+   * تنزيل الطلاب كملف Excel
+   *
+   * يتم تنزيل النتائج الحالية بعد تطبيق:
+   * - البحث العام
+   * - الفلاتر
+   *
+   * ويشمل جميع البيانات المهمة للطالب،
+   * وليس فقط الأعمدة الظاهرة على الشاشة.
+   */
+  const exportStudentsToExcel = () => {
+    if (filteredStudents.length === 0) {
+      setSupabaseStatus(
+        'لا توجد بيانات لتصديرها إلى Excel'
+      )
+      return
+    }
+
+    const exportData = filteredStudents.map(
+      (student, index) => {
+        const remaining = student.feeExempt
+          ? 0
+          : Math.max(
+              Number(student.amountDue ?? 0) -
+                Number(student.amountPaid ?? 0),
+              0
+            )
+
+        return {
+          '#': index + 1,
+          'اسم الطالب': student.name ?? '',
+          'الرقم الشخصي':
+            student.personalId ?? '',
+          'الصف الأكاديمي':
+            student.grade ?? '',
+          'رقم الهاتف':
+            student.phone ?? '',
+          'رقم واتساب':
+            student.whatsapp ?? '',
+          'حالة الدفع':
+            student.paymentStatus ?? '',
+          'الرسوم السنوية':
+            Number(student.amountDue ?? 0),
+          'المدفوع':
+            Number(student.amountPaid ?? 0),
+          'المتبقي': remaining,
+          'الإعفاء':
+            student.feeExempt
+              ? 'نعم'
+              : 'لا',
+          'الملاحظات':
+            student.notes ?? '',
+          'المعلومات الصحية':
+            student.chronicDiseases ?? '',
+          'الحضور':
+            student.attendance ?? '',
+        }
+      }
+    )
+
+    const worksheet =
+      XLSX.utils.json_to_sheet(
+        exportData
+      )
+
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 35 },
+      { wch: 35 },
+      { wch: 16 },
+    ]
+
+    const workbook =
+      XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'الطلاب'
+    )
+
+    const safeYearName =
+      currentAcademicYearName
+        .replace(/[\\/:*?"<>|]/g, '-')
+        .trim()
+
+    const fileName = safeYearName
+      ? `الطلاب-${safeYearName}.xlsx`
+      : 'الطلاب.xlsx'
+
+    XLSX.writeFile(
+      workbook,
+      fileName
+    )
+
+    setSupabaseStatus(
+      `تم تنزيل ${filteredStudents.length} طالب كملف Excel ✅`
+    )
+  }
+
   const textFilter = (
     key: keyof Filters,
     placeholder: string
@@ -573,6 +685,21 @@ export function StudentsView() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={
+                  exportStudentsToExcel
+                }
+                disabled={
+                  filteredStudents.length ===
+                  0
+                }
+              >
+                <Download className="size-4" />
+                تنزيل Excel
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"
@@ -905,15 +1032,6 @@ export function StudentsView() {
               <TableBody>
                 {filteredStudents.map(
                   (student, index) => {
-                    const remaining =
-                      student.feeExempt
-                        ? 0
-                        : Math.max(
-                            student.amountDue -
-                              student.amountPaid,
-                            0
-                          )
-
                     return (
                       <TableRow
                         key={student.id}
@@ -982,32 +1100,10 @@ export function StudentsView() {
                               onClick={(event) => {
                                 event.stopPropagation()
 
-                                if (
-                                  student.paymentStatus ===
-                                  'معفي'
-                                ) {
-                                  router.push(
-                                    `/payments?student=${encodeURIComponent(
-                                      student.id
-                                    )}&return=/students`
-                                  )
-                                  return
-                                }
-
-                                if (
-                                  student.paymentStatus ===
-                                  'مدفوع بالكامل'
-                                ) {
-                                  router.push(
-                                    `/payments?student=${encodeURIComponent(
-                                      student.id
-                                    )}&return=/students`
-                                  )
-                                  return
-                                }
-
-                                openPaymentForStudent(
-                                  student.id
+                                router.push(
+                                  `/payments?student=${encodeURIComponent(
+                                    student.id
+                                  )}&return=/students`
                                 )
                               }}
                             >
@@ -1066,6 +1162,7 @@ export function StudentsView() {
                               className="max-w-[220px] truncate text-right text-sm hover:underline"
                               onClick={(event) => {
                                 event.stopPropagation()
+
                                 setNotesStudent(
                                   student
                                 )
@@ -1491,24 +1588,24 @@ export function StudentsView() {
                   )
                 } else {
                   const {
-                  data: newStudent,
-                  error,
-                } = await supabase
-                  .from('students')
-                  .insert({
-                    academic_year_id:
-                      currentAcademicYearId,
-                    name,
-                    personal_id:
-                      personalId,
-                    phone,
-                    whatsapp,
-                    notes,
-                    health_notes:
-                      chronicDiseases,
-                    status: 'نشط',
-                    fee_exempt: false,
-                  })
+                    data: newStudent,
+                    error,
+                  } = await supabase
+                    .from('students')
+                    .insert({
+                      academic_year_id:
+                        currentAcademicYearId,
+                      name,
+                      personal_id:
+                        personalId,
+                      phone,
+                      whatsapp,
+                      notes,
+                      health_notes:
+                        chronicDiseases,
+                      status: 'نشط',
+                      fee_exempt: false,
+                    })
                     .select(
                       'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
                     )
@@ -1613,37 +1710,36 @@ export function StudentsView() {
                         ? 'مدفوع جزئيًا'
                         : 'غير مدفوع'
 
-                  const mappedStudent =
-                    {
-                      id: newStudent.id,
-                      name:
-                        newStudent.name,
-                      personalId:
-                        newStudent.personal_id ??
-                        '',
-                      grade,
-                      phone:
-                        newStudent.phone ??
-                        '',
-                      whatsapp:
-                        newStudent.whatsapp ??
-                        '',
-                      paymentStatus,
-                      amountDue:
-                        currentAnnualFee,
-                      amountPaid,
-                      feeExempt:
-                        Boolean(
-                          newStudent.fee_exempt
-                        ),
-                      chronicDiseases:
-                        newStudent.health_notes ??
-                        '',
-                      notes:
-                        newStudent.notes ??
-                        '',
-                      attendance: '—',
-                    }
+                  const mappedStudent = {
+                    id: newStudent.id,
+                    name:
+                      newStudent.name,
+                    personalId:
+                      newStudent.personal_id ??
+                      '',
+                    grade,
+                    phone:
+                      newStudent.phone ??
+                      '',
+                    whatsapp:
+                      newStudent.whatsapp ??
+                      '',
+                    paymentStatus,
+                    amountDue:
+                      currentAnnualFee,
+                    amountPaid,
+                    feeExempt:
+                      Boolean(
+                        newStudent.fee_exempt
+                      ),
+                    chronicDiseases:
+                      newStudent.health_notes ??
+                      '',
+                    notes:
+                      newStudent.notes ??
+                      '',
+                    attendance: '—',
+                  }
 
                   setStudentList(
                     (current) => [
