@@ -1,5 +1,4 @@
 'use client'
-
 import { useEffect, useMemo, useState } from 'react'
 import {
   Award,
@@ -1276,6 +1275,19 @@ export default function AttendanceAwardsCalculator() {
       const worksheet =
         XLSX.utils.json_to_sheet(exportRows)
 
+      /* -----------------------------------------------------
+         Excel RTL
+
+         هذا يجعل أول عمود يظهر من اليمين
+         مثل الجدول العربي داخل النظام.
+      ----------------------------------------------------- */
+
+      worksheet['!sheetViews'] = [
+        {
+          rightToLeft: true,
+        },
+      ]
+
       worksheet['!cols'] = [
         { wch: 28 },
         { wch: 16 },
@@ -1300,7 +1312,12 @@ export default function AttendanceAwardsCalculator() {
       )
 
       const yearName =
-        selectedYear?.name
+        academicYears
+          .find(
+            (year) =>
+              year.id === selectedYearId,
+          )
+          ?.name
           ?.replace(/[\\/:*?"<>|]/g, '-')
           .trim() || 'السنة'
 
@@ -1450,8 +1467,6 @@ export default function AttendanceAwardsCalculator() {
             </div>
           </div>
 
-          {/* اختيار الدورات */}
-
           <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -1576,10 +1591,6 @@ export default function AttendanceAwardsCalculator() {
           </div>
         </CardContent>
       </Card>
-
-      {/* =====================================================
-          سياسة الاحتساب
-      ===================================================== */}
 
       <Card>
         <CardHeader>
@@ -1710,10 +1721,6 @@ export default function AttendanceAwardsCalculator() {
         </CardContent>
       </Card>
 
-      {/* =====================================================
-          شروط التكريم
-      ===================================================== */}
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1789,10 +1796,6 @@ export default function AttendanceAwardsCalculator() {
         </CardContent>
       </Card>
 
-      {/* =====================================================
-          ERROR
-      ===================================================== */}
-
       {error && (
         <Card className="border-destructive/40">
           <CardContent className="p-4">
@@ -1802,10 +1805,6 @@ export default function AttendanceAwardsCalculator() {
           </CardContent>
         </Card>
       )}
-
-      {/* =====================================================
-          CALCULATE BUTTON
-      ===================================================== */}
 
       <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1840,10 +1839,6 @@ export default function AttendanceAwardsCalculator() {
           </Button>
         </CardContent>
       </Card>
-
-      {/* =====================================================
-          RESULTS
-      ===================================================== */}
 
       {hasCalculated && (
         <Card>
@@ -1893,14 +1888,10 @@ export default function AttendanceAwardsCalculator() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* FILTER HEADER */}
-
             <div className="flex items-center gap-2 text-sm font-medium">
               <Filter className="size-4 text-primary" />
               فلترة النتائج
             </div>
-
-            {/* FILTERS */}
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <input
@@ -2044,8 +2035,6 @@ export default function AttendanceAwardsCalculator() {
                 مسح الفلاتر
               </Button>
             )}
-
-            {/* TABLE */}
 
             <div className="overflow-x-auto rounded-lg border">
               <table
