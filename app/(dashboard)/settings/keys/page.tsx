@@ -66,6 +66,28 @@ export default function KeysPage() {
     setMessage('')
 
     try {
+      // فحص جلسة المستخدم
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      console.log('SUPABASE SESSION:', session)
+      console.log(
+        'SUPABASE SESSION ERROR:',
+        sessionError,
+      )
+
+      if (sessionError) {
+        throw sessionError
+      }
+
+      if (!session) {
+        throw new Error(
+          'لا توجد جلسة تسجيل دخول في Supabase.',
+        )
+      }
+
       const { data, error: settingsError } =
         await supabase
           .from('system_keys')
@@ -79,6 +101,11 @@ export default function KeysPage() {
         throw settingsError
       }
 
+      console.log(
+        'SYSTEM KEYS FROM SUPABASE:',
+        data,
+      )
+
       const rows = (data ?? []) as KeyRow[]
 
       const currentYearRow = rows.find(
@@ -91,20 +118,19 @@ export default function KeysPage() {
           row.key_name === ARCHIVE_KEY,
       )
 
-      /*
-       * نقرأ القيمة كما هي من قاعدة البيانات.
-       *
-       * لا نستخدم ?? true هنا، لأن المفتاح إذا لم يكن
-       * موجودًا فهذا لا يعني أن الصلاحية مفعلة.
-       */
       setSettings({
         allowAddToCurrentYear:
-          currentYearRow?.enabled === true,
+          currentYearRow?.enabled ?? true,
 
         allowAddToArchive:
-          archiveRow?.enabled === true,
+          archiveRow?.enabled ?? true,
       })
     } catch (err) {
+      console.error(
+        'loadSettings error:',
+        err,
+      )
+
       setError(
         `تعذر تحميل إعدادات المفاتيح: ${getSupabaseError(err)}`,
       )
@@ -140,58 +166,87 @@ export default function KeysPage() {
     }))
 
     try {
-      /*
-       * select() مهم جدًا هنا.
-       *
-       * نريد التأكد أن Supabase أعاد الصف الذي تم تحديثه.
-       * إذا رجعت data فارغة فهذا يعني أن UPDATE لم يعدّل
-       * أي صف، وغالبًا السبب RLS أو أن المفتاح غير موجود.
-       */
+      // التأكد من وجود جلسة قبل UPDATE
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      console.log(
+        'UPDATE SESSION:',
+        session,
+      )
+
+      if (sessionError) {
+        throw sessionError
+      }
+
+      if (!session) {
+        throw new Error(
+          'لا توجد جلسة تسجيل دخول في Supabase.',
+        )
+      }
+
       const { data, error: updateError } =
         await supabase
           .from('system_keys')
           .update({
             enabled: value,
-            updated_at: new Date().toISOString(),
+            updated_at:
+              new Date().toISOString(),
           })
           .eq('key_name', keyName)
-          .select('key_name, enabled')
+          .select('key_name, enabled, updated_at')
+
+      console.log(
+        'UPDATE RESULT:',
+        data,
+      )
 
       if (updateError) {
         throw updateError
       }
 
+      // إذا لم يرجع Supabase أي صف،
+      // نعرف أن التحديث لم يحصل فعليًا.
       if (!data || data.length === 0) {
         throw new Error(
           `لم يتم تحديث المفتاح "${keyName}". تأكد من وجود المفتاح وصلاحيات UPDATE في system_keys.`,
         )
       }
 
-      const updatedRow = data[0] as KeyRow
+      // تأكيد القيمة التي رجعت من قاعدة البيانات
+      const updatedRow = data[0]
 
-      /*
-       * نتأكد أن القيمة التي رجعت من قاعدة البيانات
-       * هي نفس القيمة المطلوبة.
-       */
-      if (updatedRow.enabled !== value) {
-        throw new Error(
-          `تم تحديث المفتاح "${keyName}" ولكن القيمة المحفوظة غير مطابقة للقيمة المطلوبة.`,
-        )
-      }
+      setSettings((current) => ({
+        ...current,
+        ...(keyName === CURRENT_YEAR_KEY
+          ? {
+              allowAddToCurrentYear:
+                updatedRow.enabled === true,
+            }
+          : {
+              allowAddToArchive:
+                updatedRow.enabled === true,
+            }),
+      }))
 
-      /*
-       * إعادة تحميل الإعدادات من قاعدة البيانات بعد الحفظ.
-       * هذا يمنع بقاء الواجهة على قيمة مختلفة عن DB.
-       */
-      await loadSettings()
-
-      setMessage('تم حفظ الإعداد بنجاح.')
+      setMessage(
+        `تم ${
+          value ? 'تفعيل' : 'تعطيل'
+        } الإعداد وحفظه بنجاح.`,
+      )
 
       window.setTimeout(() => {
         setMessage('')
       }, 2500)
     } catch (err) {
-      // إرجاع القيمة القديمة في حال فشل الحفظ
+      console.error(
+        'updateSetting error:',
+        err,
+      )
+
+      // إرجاع القيمة السابقة
       setSettings(previousSettings)
 
       setError(
@@ -229,8 +284,12 @@ export default function KeysPage() {
           type="button"
           role="switch"
           aria-checked={enabled}
-          disabled={isSaving || isLoading}
-          onClick={() => onChange(!enabled)}
+          disabled={
+            isSaving || isLoading
+          }
+          onClick={() =>
+            onChange(!enabled)
+          }
           className={[
             'relative h-7 w-12 shrink-0 rounded-full transition',
             enabled
