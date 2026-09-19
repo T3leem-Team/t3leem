@@ -14,15 +14,23 @@ export async function proxy(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-            response = NextResponse.next({
-              request,
-            })
 
-            response.cookies.set(name, value, options)
-          })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(
+            ({ name, value, options }) => {
+              request.cookies.set(name, value)
+
+              response = NextResponse.next({
+                request,
+              })
+
+              response.cookies.set(
+                name,
+                value,
+                options,
+              )
+            },
+          )
         },
       },
     },
@@ -38,14 +46,19 @@ export async function proxy(request: NextRequest) {
     pathname === '/login' ||
     pathname === '/forgot-password' ||
     pathname === '/register' ||
-    pathname === '/student-status'
+    pathname === '/student-status' ||
+    pathname === '/api/auth/login'
 
   if (!user && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(
+      new URL('/login', request.url),
+    )
   }
 
   if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/', request.url))
+    return NextResponse.redirect(
+      new URL('/', request.url),
+    )
   }
 
   return response
