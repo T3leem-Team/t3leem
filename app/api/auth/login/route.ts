@@ -4,11 +4,14 @@ import { createClient } from '@supabase/supabase-js'
 
 // T3LEEM authentication route
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL!
+
 const publishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const serviceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabaseAdmin = createClient(
   supabaseUrl,
@@ -38,31 +41,37 @@ export async function POST(request: Request) {
     if (!username || !password) {
       return NextResponse.json(
         {
-          error: 'اسم المستخدم وكلمة المرور مطلوبان.',
+          error:
+            'اسم المستخدم وكلمة المرور مطلوبان.',
         },
         { status: 400 },
       )
     }
 
     /*
-     * نبحث عن حساب المستخدم باستخدام الاسم.
-     * البحث يتم على السيرفر باستخدام Service Role.
+     * البحث عن المستخدم باستخدام Service Role
      */
-    const { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          'auth_user_id, username, full_name, role, is_active',
-        )
-        .eq('username', username)
-        .maybeSingle()
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(
+        'auth_user_id, username, full_name, role, is_active',
+      )
+      .eq('username', username)
+      .maybeSingle()
 
     if (profileError) {
-      console.error('Profile lookup error:', profileError)
+      console.error(
+        'Profile lookup error:',
+        profileError,
+      )
 
       return NextResponse.json(
         {
-          error: 'حدث خطأ أثناء تسجيل الدخول.',
+          error:
+            'حدث خطأ أثناء تسجيل الدخول.',
         },
         { status: 500 },
       )
@@ -71,15 +80,15 @@ export async function POST(request: Request) {
     if (!profile || !profile.is_active) {
       return NextResponse.json(
         {
-          error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
+          error:
+            'اسم المستخدم أو كلمة المرور غير صحيحة.',
         },
         { status: 401 },
       )
     }
 
     /*
-     * نقرأ الإيميل الداخلي المرتبط بحساب Supabase Auth.
-     * الإيميل لا يتم إرساله للمتصفح.
+     * الحصول على الإيميل الداخلي لحساب Supabase Auth
      */
     const {
       data: authUser,
@@ -100,15 +109,16 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          error: 'تعذر التحقق من حساب المستخدم.',
+          error:
+            'تعذر التحقق من حساب المستخدم.',
         },
         { status: 500 },
       )
     }
 
     /*
-     * ننشئ Response من البداية حتى نتمكن
-     * من حفظ جلسة Supabase داخل Cookies.
+     * إنشاء Response واحد فقط.
+     * هذا هو الـ Response الذي ستُحفظ عليه Cookies.
      */
     const response = NextResponse.json({
       user: {
@@ -120,52 +130,78 @@ export async function POST(request: Request) {
     })
 
     /*
-     * هذا العميل يستخدم المفتاح العام لتسجيل الدخول الفعلي.
-     * Service Role لا يتم استخدامه لإنشاء جلسة المتصفح.
+     * Supabase SSR client
      */
-    const supabase = createServerClient(
-      supabaseUrl,
-      publishableKey,
-      {
-        cookies: {
-          getAll() {
-            return request.headers
-              .get('cookie')
-              ?.split('; ')
-              .filter(Boolean)
-              .map((cookie) => {
-                const index = cookie.indexOf('=')
+    const supabase =
+      createServerClient(
+        supabaseUrl,
+        publishableKey,
+        {
+          cookies: {
+            getAll() {
+              const cookieHeader =
+                request.headers.get(
+                  'cookie',
+                )
 
-                return {
-                  name:
-                    index === -1
-                      ? cookie
-                      : cookie.slice(0, index),
-                  value:
-                    index === -1
-                      ? ''
-                      : cookie.slice(index + 1),
-                }
-              }) ?? []
-          },
+              if (!cookieHeader) {
+                return []
+              }
 
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(
-              ({ name, value, options }) => {
-                response.cookies.set(
+              return cookieHeader
+                .split(';')
+                .map((cookie) => {
+                  const index =
+                    cookie.indexOf('=')
+
+                  if (index === -1) {
+                    return {
+                      name: cookie.trim(),
+                      value: '',
+                    }
+                  }
+
+                  return {
+                    name: cookie
+                      .slice(0, index)
+                      .trim(),
+
+                    value: cookie
+                      .slice(index + 1)
+                      .trim(),
+                  }
+                })
+                .filter(
+                  (cookie) =>
+                    cookie.name.length > 0,
+                )
+            },
+
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(
+                ({
                   name,
                   value,
                   options,
-                )
-              },
-            )
+                }) => {
+                  response.cookies.set(
+                    name,
+                    value,
+                    {
+                      ...options,
+                      path:
+                        options?.path ?? '/',
+                    },
+                  )
+                },
+              )
+            },
           },
         },
-      },
-    )
+      )
 
     /*
-     * تسجيل الدخول الحقيقي في Supabase Auth.
+     * تسجيل الدخول الفعلي في Supabase Auth
      */
     const {
       data: authData,
@@ -180,6 +216,11 @@ export async function POST(request: Request) {
       signInError ||
       !authData.session
     ) {
+      console.error(
+        'Supabase sign in error:',
+        signInError,
+      )
+
       return NextResponse.json(
         {
           error:
@@ -189,9 +230,39 @@ export async function POST(request: Request) {
       )
     }
 
+    /*
+     * نتأكد أن الجلسة أصبحت موجودة
+     * داخل نفس Supabase SSR client.
+     */
+    const {
+      data: {
+        user: loggedInUser,
+      },
+      error: getUserError,
+    } =
+      await supabase.auth.getUser()
+
+    if (getUserError || !loggedInUser) {
+      console.error(
+        'Session verification error:',
+        getUserError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر إنشاء جلسة تسجيل الدخول.',
+        },
+        { status: 500 },
+      )
+    }
+
     return response
   } catch (error) {
-    console.error('Login error:', error)
+    console.error(
+      'Login error:',
+      error,
+    )
 
     return NextResponse.json(
       {
@@ -202,4 +273,3 @@ export async function POST(request: Request) {
     )
   }
 }
-
