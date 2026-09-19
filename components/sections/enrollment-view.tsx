@@ -86,12 +86,6 @@ const inputClass =
 const selectClass =
   'h-9 w-full min-w-[130px] rounded-md border border-input bg-background px-2 text-xs'
 
-const CURRENT_YEAR_KEY =
-  'allow_add_to_current_year'
-
-const ARCHIVE_KEY =
-  'allow_add_to_archive'
-
 function mapRequest(row: any): RegistrationRequest {
   return {
     id: row.id ?? '',
@@ -255,122 +249,12 @@ export function EnrollmentView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  const [
-    allowCurrentYearImport,
-    setAllowCurrentYearImport,
-  ] = useState(false)
-
-  const [
-    allowArchiveImport,
-    setAllowArchiveImport,
-  ] = useState(false)
-
-  const [
-    permissionsLoading,
-    setPermissionsLoading,
-  ] = useState(true)
-
   /*
-   * تحميل مفاتيح الاستيراد
+   * تم تعطيل الاعتماد على system_keys مؤقتًا.
    *
-   * المصدر الوحيد للتحكم بالأزرار:
-   * system_keys
+   * الزران يظهران دائمًا بهدف اختبار
+   * مكونات الاستيراد نفسها.
    */
-  const loadImportPermissions =
-    async () => {
-      setPermissionsLoading(true)
-
-      try {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('system_keys')
-          .select(
-            'key_name, enabled',
-          )
-          .in('key_name', [
-            CURRENT_YEAR_KEY,
-            ARCHIVE_KEY,
-          ])
-
-        if (error) {
-          throw error
-        }
-
-        /*
-         * تشخيص مؤقت:
-         * راح تشوف النتيجة في Console
-         */
-        console.log(
-          'SYSTEM KEYS FROM SUPABASE:',
-          data,
-        )
-
-        const currentYearRow =
-          data?.find(
-            (row) =>
-              row.key_name ===
-              CURRENT_YEAR_KEY,
-          )
-
-        const archiveRow =
-          data?.find(
-            (row) =>
-              row.key_name ===
-              ARCHIVE_KEY,
-          )
-
-        const currentYearEnabled =
-          currentYearRow?.enabled === true
-
-        const archiveEnabled =
-          archiveRow?.enabled === true
-
-        console.log(
-          'IMPORT PERMISSIONS:',
-          {
-            currentYearRow,
-            archiveRow,
-            currentYearEnabled,
-            archiveEnabled,
-          },
-        )
-
-        setAllowCurrentYearImport(
-          currentYearEnabled,
-        )
-
-        setAllowArchiveImport(
-          archiveEnabled,
-        )
-      } catch (error) {
-        console.error(
-          'loadImportPermissions error:',
-          error,
-        )
-
-        setAllowCurrentYearImport(
-          false,
-        )
-
-        setAllowArchiveImport(
-          false,
-        )
-
-        setStatusMessage(
-          `تعذر تحميل إعدادات المفاتيح: ${
-            error instanceof Error
-              ? error.message
-              : 'خطأ غير معروف'
-          }`,
-        )
-      } finally {
-        setPermissionsLoading(
-          false,
-        )
-      }
-    }
 
   const loadRequests = async () => {
     setLoading(true)
@@ -438,23 +322,7 @@ export function EnrollmentView() {
   }
 
   useEffect(() => {
-    let mounted = true
-
-    const initialize =
-      async () => {
-        await Promise.all([
-          loadRequests(),
-          loadImportPermissions(),
-        ])
-
-        if (!mounted) return
-      }
-
-    initialize()
-
-    return () => {
-      mounted = false
-    }
+    loadRequests()
   }, [])
 
   const updateFilter = (
@@ -1007,56 +875,41 @@ export function EnrollmentView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {!permissionsLoading &&
-            allowCurrentYearImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowImport(
-                    true,
-                  )
-                }
-                className="gap-2"
-              >
-                <FileSpreadsheet className="size-4" />
-                استيراد سجل
-              </Button>
-            )}
+          {/* مؤقتًا: الزران لا يعتمدان على system_keys */}
 
-          {!permissionsLoading &&
-            allowArchiveImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowArchive(
-                    true,
-                  )
-                }
-                className="gap-2"
-              >
-                <FileArchive className="size-4" />
-                استيراد للأرشيف
-              </Button>
-            )}
+          <Button
+            variant="outline"
+            onClick={() =>
+              setShowImport(true)
+            }
+            className="gap-2"
+          >
+            <FileSpreadsheet className="size-4" />
+            استيراد سجل
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() =>
+              setShowArchive(true)
+            }
+            className="gap-2"
+          >
+            <FileArchive className="size-4" />
+            استيراد للأرشيف
+          </Button>
 
           <Button
             variant="outline"
             onClick={async () => {
-              await Promise.all([
-                loadRequests(),
-                loadImportPermissions(),
-              ])
+              await loadRequests()
             }}
-            disabled={
-              loading ||
-              permissionsLoading
-            }
+            disabled={loading}
             className="gap-2"
           >
             <RefreshCw
               className={`size-4 ${
-                loading ||
-                permissionsLoading
+                loading
                   ? 'animate-spin'
                   : ''
               }`}
