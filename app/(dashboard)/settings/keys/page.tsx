@@ -19,74 +19,129 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
-const ARCHIVE_KEY = 'allow_add_to_archive'
+const CURRENT_YEAR_KEY =
+  'allow_add_to_current_year'
 
-type SystemKey = {
-  key_name: string
-  enabled: boolean
+const ARCHIVE_KEY =
+  'allow_add_to_archive'
+
+type KeysSettings = {
+  allowAddToCurrentYear: boolean
+  allowAddToArchive: boolean
 }
 
 export default function KeysPage() {
-  const [allowAddToCurrentYear, setAllowAddToCurrentYear] =
+  const [settings, setSettings] =
+    useState<KeysSettings>({
+      allowAddToCurrentYear: true,
+      allowAddToArchive: true,
+    })
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const [saving, setSaving] =
     useState(false)
 
-  const [allowAddToArchive, setAllowAddToArchive] =
-    useState(false)
+  const [error, setError] =
+    useState('')
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] =
+    useState('')
 
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-
-  const loadKeys = async () => {
+  const loadSettings = async () => {
     setLoading(true)
-    setError(null)
+    setError('')
 
     try {
-      const { data, error: selectError } = await supabase
+      const {
+        data,
+        error: settingsError,
+      } = await supabase
         .from('system_keys')
-        .select('key_name, enabled')
+        .select(
+          'key_name, enabled',
+        )
         .in('key_name', [
           CURRENT_YEAR_KEY,
           ARCHIVE_KEY,
         ])
 
-      if (selectError) {
-        throw selectError
+      if (settingsError) {
+        throw settingsError
       }
 
-      console.log('SYSTEM KEYS LOADED:', data)
+      const currentYear =
+        data?.find(
+          (item) =>
+            item.key_name ===
+            CURRENT_YEAR_KEY,
+        )
 
-      const rows = (data ?? []) as SystemKey[]
+      const archive =
+        data?.find(
+          (item) =>
+            item.key_name ===
+            ARCHIVE_KEY,
+        )
 
-      const currentYear = rows.find(
-        (row) => row.key_name === CURRENT_YEAR_KEY
-      )
+      /*
+       * إذا كانت المفاتيح موجودة،
+       * نستخدم القيمة الموجودة في قاعدة البيانات.
+       *
+       * إذا لم تكن موجودة، ننشئها مفعلة.
+       */
+      if (!currentYear) {
+        const {
+          error: insertCurrentError,
+        } = await supabase
+          .from('system_keys')
+          .insert({
+            key_name:
+              CURRENT_YEAR_KEY,
+            enabled: true,
+          })
 
-      const archive = rows.find(
-        (row) => row.key_name === ARCHIVE_KEY
-      )
+        if (insertCurrentError) {
+          throw insertCurrentError
+        }
+      }
 
-      setAllowAddToCurrentYear(
-        currentYear?.enabled === true
-      )
+      if (!archive) {
+        const {
+          error: insertArchiveError,
+        } = await supabase
+          .from('system_keys')
+          .insert({
+            key_name:
+              ARCHIVE_KEY,
+            enabled: true,
+          })
 
-      setAllowAddToArchive(
-        archive?.enabled === true
-      )
-    } catch (error: any) {
+        if (insertArchiveError) {
+          throw insertArchiveError
+        }
+      }
+
+      setSettings({
+        allowAddToCurrentYear:
+          currentYear?.enabled ??
+          true,
+
+        allowAddToArchive:
+          archive?.enabled ??
+          true,
+      })
+    } catch (err) {
       console.error(
         'load system keys error:',
-        error
+        err,
       )
 
       setError(
-        `تعذر تحميل إعدادات المفاتيح: ${
-          error?.message ||
-          'حدث خطأ غير معروف'
-        }`
+        err instanceof Error
+          ? err.message
+          : 'تعذر تحميل إعدادات المفاتيح.',
       )
     } finally {
       setLoading(false)
@@ -94,90 +149,80 @@ export default function KeysPage() {
   }
 
   useEffect(() => {
-    loadKeys()
+    void loadSettings()
   }, [])
 
-  const saveOneKey = async (
-    keyName: string,
-    enabled: boolean
+  const updateSetting = async (
+    setting:
+      | 'allowAddToCurrentYear'
+      | 'allowAddToArchive',
+    value: boolean,
   ) => {
-    const updatedAt = new Date().toISOString()
-
-    const { data, error } = await supabase
-      .from('system_keys')
-      .update({
-        enabled,
-        updated_at: updatedAt,
-      })
-      .eq('key_name', keyName)
-      .select(
-        'key_name, enabled, updated_at'
-      )
-      .maybeSingle()
-
-    if (error) {
-      throw error
-    }
-
-    if (!data) {
-      throw new Error(
-        `لم يتم تحديث المفتاح "${keyName}". لم يتم العثور على السجل أو لا توجد صلاحية للتعديل.`
-      )
-    }
-
-    console.log(
-      'SYSTEM KEY SAVED:',
-      data
-    )
-
-    if (data.enabled !== enabled) {
-      throw new Error(
-        `تم تنفيذ الحفظ ولكن القيمة المحفوظة للمفتاح "${keyName}" غير مطابقة.`
-      )
-    }
-
-    return data
-  }
-
-  const saveKeys = async () => {
     setSaving(true)
-    setError(null)
-    setSuccess(false)
+    setSuccess('')
+    setError('')
+
+    const previousSettings =
+      settings
+
+    /*
+     * تحديث الواجهة مباشرة.
+     */
+    setSettings((current) => ({
+      ...current,
+      [setting]: value,
+    }))
 
     try {
-      await saveOneKey(
-        CURRENT_YEAR_KEY,
-        allowAddToCurrentYear
+      const keyName =
+        setting ===
+        'allowAddToCurrentYear'
+          ? CURRENT_YEAR_KEY
+          : ARCHIVE_KEY
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from('system_keys')
+        .update({
+          enabled: value,
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          'key_name',
+          keyName,
+        )
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setSuccess(
+        'تم حفظ إعدادات المفاتيح.',
       )
-
-      await saveOneKey(
-        ARCHIVE_KEY,
-        allowAddToArchive
-      )
-
-      // إعادة القراءة من قاعدة البيانات بعد الحفظ
-      await loadKeys()
-
-      setSuccess(true)
 
       window.setTimeout(() => {
-        setSuccess(false)
-      }, 3000)
-    } catch (error: any) {
+        setSuccess('')
+      }, 2500)
+    } catch (err) {
       console.error(
-        'save system keys error:',
-        error
+        'update system key error:',
+        err,
+      )
+
+      /*
+       * إذا فشل الحفظ نرجع القيمة القديمة.
+       */
+      setSettings(
+        previousSettings,
       )
 
       setError(
-        `تعذر حفظ إعدادات المفاتيح: ${
-          error?.message ||
-          'حدث خطأ غير معروف'
-        }`
+        err instanceof Error
+          ? err.message
+          : 'تعذر حفظ إعدادات المفاتيح.',
       )
-
-      // في حالة الخطأ، نعرض القيم الحقيقية من قاعدة البيانات
-      await loadKeys()
     } finally {
       setSaving(false)
     }
@@ -191,16 +236,16 @@ export default function KeysPage() {
       />
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
           <Check className="size-4" />
 
-          تم حفظ الإعدادات بنجاح
+          {success}
         </div>
       )}
 
@@ -213,126 +258,105 @@ export default function KeysPage() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="space-y-5">
+        <CardContent className="divide-y p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="ml-2 size-5 animate-spin" />
 
               جاري تحميل الإعدادات...
             </div>
           ) : (
             <>
-              {/* السنة الحالية */}
-              <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
-                <div className="space-y-1">
-                  <div className="font-medium">
-                    إضافة لهذه السنة الدراسية
-                  </div>
+              <PermissionRow
+                title="إضافة لهذه السنة الدراسية"
+                description="السماح بظهور خيار استيراد سجل وإضافته إلى السنة الدراسية الحالية."
+                enabled={
+                  settings.allowAddToCurrentYear
+                }
+                disabled={saving}
+                onChange={(value) =>
+                  void updateSetting(
+                    'allowAddToCurrentYear',
+                    value,
+                  )
+                }
+              />
 
-                  <div className="text-sm text-muted-foreground">
-                    السماح بظهور خيار استيراد سجل وإضافته إلى السنة الدراسية الحالية.
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() =>
-                    setAllowAddToCurrentYear(
-                      (value) => !value
-                    )
-                  }
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                    allowAddToCurrentYear
-                      ? 'bg-primary'
-                      : 'bg-muted'
-                  } ${
-                    saving
-                      ? 'cursor-not-allowed opacity-60'
-                      : ''
-                  }`}
-                  aria-label="إضافة لهذه السنة الدراسية"
-                  aria-pressed={
-                    allowAddToCurrentYear
-                  }
-                >
-                  <span
-                    className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
-                      allowAddToCurrentYear
-                        ? 'translate-x-1'
-                        : 'translate-x-6'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* الأرشيف */}
-              <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
-                <div className="space-y-1">
-                  <div className="font-medium">
-                    إضافة إلى الأرشيف
-                  </div>
-
-                  <div className="text-sm text-muted-foreground">
-                    السماح بظهور خيار استيراد سجل إلى الأرشيف.
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() =>
-                    setAllowAddToArchive(
-                      (value) => !value
-                    )
-                  }
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                    allowAddToArchive
-                      ? 'bg-primary'
-                      : 'bg-muted'
-                  } ${
-                    saving
-                      ? 'cursor-not-allowed opacity-60'
-                      : ''
-                  }`}
-                  aria-label="إضافة إلى الأرشيف"
-                  aria-pressed={
-                    allowAddToArchive
-                  }
-                >
-                  <span
-                    className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${
-                      allowAddToArchive
-                        ? 'translate-x-1'
-                        : 'translate-x-6'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <Button
-                  onClick={saveKeys}
-                  disabled={saving}
-                  className="gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      جاري الحفظ...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="size-4" />
-                      حفظ الإعدادات
-                    </>
-                  )}
-                </Button>
-              </div>
+              <PermissionRow
+                title="إضافة إلى الأرشيف"
+                description="السماح بظهور خيار استيراد سجل إلى الأرشيف."
+                enabled={
+                  settings.allowAddToArchive
+                }
+                disabled={saving}
+                onChange={(value) =>
+                  void updateSetting(
+                    'allowAddToArchive',
+                    value,
+                  )
+                }
+              />
             </>
           )}
         </CardContent>
       </Card>
+
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Save className="size-4" />
+
+        التغييرات تحفظ مباشرة عند تشغيل أو إيقاف الخيار.
+      </div>
+    </div>
+  )
+}
+
+function PermissionRow({
+  title,
+  description,
+  enabled,
+  disabled,
+  onChange,
+}: {
+  title: string
+  description: string
+  enabled: boolean
+  disabled: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-medium">
+          {title}
+        </p>
+
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        disabled={disabled}
+        onClick={() =>
+          onChange(!enabled)
+        }
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          enabled
+            ? 'bg-primary'
+            : 'bg-muted-foreground/30'
+        }`}
+      >
+        <span
+          className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-all ${
+            enabled
+              ? 'right-1'
+              : 'right-6'
+          }`}
+        />
+      </button>
     </div>
   )
 }
