@@ -225,42 +225,75 @@ export function EnrollmentView() {
   const [allowArchiveImport, setAllowArchiveImport] =
     useState(false)
 
-  const loadImportPermissions = async () => {
-    const { data, error } = await supabase
-      .from('system_keys')
-      .select('key_name, enabled')
-      .in('key_name', [
-        'allow_add_to_current_year',
-        'allow_add_to_archive',
-      ])
+  const [permissionsLoading, setPermissionsLoading] =
+    useState(true)
 
-    if (error) {
+  /*
+   * تحميل صلاحيات الاستيراد
+   */
+  const loadImportPermissions = async () => {
+    setPermissionsLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('system_keys')
+        .select('key_name, enabled')
+        .in('key_name', [
+          'allow_add_to_current_year',
+          'allow_add_to_archive',
+        ])
+
+      console.log('SYSTEM KEYS DATA:', data)
+      console.log('SYSTEM KEYS ERROR:', error)
+
+      if (error) {
+        console.error(
+          'system_keys error:',
+          error,
+        )
+
+        setStatusMessage(
+          `تعذر قراءة إعدادات الاستيراد: ${error.message}`,
+        )
+
+        return
+      }
+
+      const currentYear = data?.find(
+        (item) =>
+          item.key_name ===
+          'allow_add_to_current_year',
+      )
+
+      const archive = data?.find(
+        (item) =>
+          item.key_name ===
+          'allow_add_to_archive',
+      )
+
+      setAllowCurrentYearImport(
+        currentYear?.enabled === true,
+      )
+
+      setAllowArchiveImport(
+        archive?.enabled === true,
+      )
+    } catch (error) {
       console.error(
-        'system_keys error:',
+        'loadImportPermissions error:',
         error,
       )
-      return
+
+      setStatusMessage(
+        `تعذر قراءة إعدادات الاستيراد: ${
+          error instanceof Error
+            ? error.message
+            : 'خطأ غير معروف'
+        }`,
+      )
+    } finally {
+      setPermissionsLoading(false)
     }
-
-    const currentYear = data?.find(
-      (item) =>
-        item.key_name ===
-        'allow_add_to_current_year',
-    )
-
-    const archive = data?.find(
-      (item) =>
-        item.key_name ===
-        'allow_add_to_archive',
-    )
-
-    setAllowCurrentYearImport(
-      currentYear?.enabled === true,
-    )
-
-    setAllowArchiveImport(
-      archive?.enabled === true,
-    )
   }
 
   const loadRequests = async () => {
@@ -470,10 +503,6 @@ export function EnrollmentView() {
       const alreadyProcessed =
         data?.already_processed === true
 
-      /*
-       * بعد نجاح الـ RPC نتأكد أن الطالب مصدره التسجيل.
-       * هذا مهم لأننا أضفنا source في جدول الطلاب.
-       */
       if (studentId) {
         const { error: studentUpdateError } =
           await supabase
@@ -491,10 +520,6 @@ export function EnrollmentView() {
         }
       }
 
-      /*
-       * الطلب المقبول لا يبقى في registration_requests.
-       * المرفوض فقط يبقى كسجل تاريخي.
-       */
       const { error: deleteError } =
         await supabase
           .from('registration_requests')
@@ -762,41 +787,48 @@ export function EnrollmentView() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {allowCurrentYearImport && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                setShowImport(true)
-              }
-              className="gap-2"
-            >
-              <FileSpreadsheet className="size-4" />
-              استيراد سجل
-            </Button>
-          )}
+          {!permissionsLoading &&
+            allowCurrentYearImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowImport(true)
+                }
+                className="gap-2"
+              >
+                <FileSpreadsheet className="size-4" />
+                استيراد سجل
+              </Button>
+            )}
 
-          {allowArchiveImport && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                setShowArchive(true)
-              }
-              className="gap-2"
-            >
-              <FileArchive className="size-4" />
-              استيراد للأرشيف
-            </Button>
-          )}
+          {!permissionsLoading &&
+            allowArchiveImport && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setShowArchive(true)
+                }
+                className="gap-2"
+              >
+                <FileArchive className="size-4" />
+                استيراد للأرشيف
+              </Button>
+            )}
 
           <Button
             variant="outline"
-            onClick={loadRequests}
-            disabled={loading}
+            onClick={() => {
+              loadRequests()
+              loadImportPermissions()
+            }}
+            disabled={loading || permissionsLoading}
             className="gap-2"
           >
             <RefreshCw
               className={`size-4 ${
-                loading ? 'animate-spin' : ''
+                loading || permissionsLoading
+                  ? 'animate-spin'
+                  : ''
               }`}
             />
             تحديث الطلبات
