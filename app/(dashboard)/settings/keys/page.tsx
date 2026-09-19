@@ -1,67 +1,40 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  Check,
-  Loader2,
-  Save,
-  Settings2,
-} from 'lucide-react'
-
 import { supabase } from '@/lib/supabase'
-
 import { PageHeader } from '@/components/dashboard/page-header'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
-const CURRENT_YEAR_KEY =
-  'allow_add_to_current_year'
+const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
+const ARCHIVE_KEY = 'allow_add_to_archive'
 
-const ARCHIVE_KEY =
-  'allow_add_to_archive'
-
-type KeysSettings = {
+type KeysState = {
   allowAddToCurrentYear: boolean
   allowAddToArchive: boolean
 }
 
 export default function KeysPage() {
-  const [settings, setSettings] =
-    useState<KeysSettings>({
-      allowAddToCurrentYear: true,
-      allowAddToArchive: true,
-    })
+  const [settings, setSettings] = useState<KeysState>({
+    allowAddToCurrentYear: true,
+    allowAddToArchive: true,
+  })
 
-  const [loading, setLoading] =
-    useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
 
-  const [saving, setSaving] =
-    useState(false)
-
-  const [error, setError] =
-    useState('')
-
-  const [success, setSuccess] =
-    useState('')
+  useEffect(() => {
+    loadSettings()
+  }, [])
 
   const loadSettings = async () => {
-    setLoading(true)
+    setIsLoading(true)
     setError('')
 
     try {
-      const {
-        data,
-        error: settingsError,
-      } = await supabase
+      const { data, error: settingsError } = await supabase
         .from('system_keys')
-        .select(
-          'key_name, enabled',
-        )
+        .select('key_name, enabled')
         .in('key_name', [
           CURRENT_YEAR_KEY,
           ARCHIVE_KEY,
@@ -71,72 +44,25 @@ export default function KeysPage() {
         throw settingsError
       }
 
-      const currentYear =
-        data?.find(
-          (item) =>
-            item.key_name ===
-            CURRENT_YEAR_KEY,
-        )
+      const currentYearRow = data?.find(
+        (row) =>
+          row.key_name === CURRENT_YEAR_KEY,
+      )
 
-      const archive =
-        data?.find(
-          (item) =>
-            item.key_name ===
-            ARCHIVE_KEY,
-        )
-
-      /*
-       * إذا كانت المفاتيح موجودة،
-       * نستخدم القيمة الموجودة في قاعدة البيانات.
-       *
-       * إذا لم تكن موجودة، ننشئها مفعلة.
-       */
-      if (!currentYear) {
-        const {
-          error: insertCurrentError,
-        } = await supabase
-          .from('system_keys')
-          .insert({
-            key_name:
-              CURRENT_YEAR_KEY,
-            enabled: true,
-          })
-
-        if (insertCurrentError) {
-          throw insertCurrentError
-        }
-      }
-
-      if (!archive) {
-        const {
-          error: insertArchiveError,
-        } = await supabase
-          .from('system_keys')
-          .insert({
-            key_name:
-              ARCHIVE_KEY,
-            enabled: true,
-          })
-
-        if (insertArchiveError) {
-          throw insertArchiveError
-        }
-      }
+      const archiveRow = data?.find(
+        (row) =>
+          row.key_name === ARCHIVE_KEY,
+      )
 
       setSettings({
         allowAddToCurrentYear:
-          currentYear?.enabled ??
-          true,
+          currentYearRow?.enabled ?? true,
 
         allowAddToArchive:
-          archive?.enabled ??
-          true,
+          archiveRow?.enabled ?? true,
       })
     } catch (err) {
-      console.error(
-        'load system keys error:',
-        err,
-      )
+      console.error(err)
 
       setError(
         err instanceof Error
@@ -144,219 +70,200 @@ export default function KeysPage() {
           : 'تعذر تحميل إعدادات المفاتيح.',
       )
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  useEffect(() => {
-    void loadSettings()
-  }, [])
-
   const updateSetting = async (
-    setting:
-      | 'allowAddToCurrentYear'
-      | 'allowAddToArchive',
+    keyName:
+      | typeof CURRENT_YEAR_KEY
+      | typeof ARCHIVE_KEY,
     value: boolean,
   ) => {
-    setSaving(true)
-    setSuccess('')
+    setIsSaving(true)
+    setMessage('')
     setError('')
 
-    const previousSettings =
-      settings
+    const previousSettings = settings
 
-    /*
-     * تحديث الواجهة مباشرة.
-     */
     setSettings((current) => ({
       ...current,
-      [setting]: value,
+      ...(keyName === CURRENT_YEAR_KEY
+        ? {
+            allowAddToCurrentYear: value,
+          }
+        : {
+            allowAddToArchive: value,
+          }),
     }))
 
     try {
-      const keyName =
-        setting ===
-        'allowAddToCurrentYear'
-          ? CURRENT_YEAR_KEY
-          : ARCHIVE_KEY
-
-      const {
-        error: updateError,
-      } = await supabase
-        .from('system_keys')
-        .update({
-          enabled: value,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'key_name',
-          keyName,
-        )
+      const { data, error: updateError } =
+        await supabase
+          .from('system_keys')
+          .update({
+            enabled: value,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('key_name', keyName)
+          .select('key_name, enabled')
+          .single()
 
       if (updateError) {
         throw updateError
       }
 
-      setSuccess(
-        'تم حفظ إعدادات المفاتيح.',
-      )
+      if (!data) {
+        throw new Error(
+          'لم يتم العثور على إعداد المفاتيح المطلوب تحديثه.',
+        )
+      }
+
+      setMessage('تم حفظ الإعداد بنجاح.')
 
       window.setTimeout(() => {
-        setSuccess('')
+        setMessage('')
       }, 2500)
     } catch (err) {
-      console.error(
-        'update system key error:',
-        err,
-      )
+      console.error(err)
 
-      /*
-       * إذا فشل الحفظ نرجع القيمة القديمة.
-       */
-      setSettings(
-        previousSettings,
-      )
+      setSettings(previousSettings)
 
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر حفظ إعدادات المفاتيح.',
+          : 'تعذر حفظ إعداد المفاتيح.',
       )
     } finally {
-      setSaving(false)
+      setIsSaving(false)
     }
+  }
+
+  const PermissionRow = ({
+    title,
+    description,
+    enabled,
+    onChange,
+  }: {
+    title: string
+    description: string
+    enabled: boolean
+    onChange: (value: boolean) => void
+  }) => {
+    return (
+      <div className="flex items-center justify-between gap-4 rounded-xl border bg-white p-4">
+        <div className="min-w-0">
+          <div className="font-medium text-gray-900">
+            {title}
+          </div>
+
+          <div className="mt-1 text-sm text-gray-500">
+            {description}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          disabled={isSaving || isLoading}
+          onClick={() => onChange(!enabled)}
+          className={[
+            'relative h-7 w-12 shrink-0 rounded-full transition',
+            enabled
+              ? 'bg-emerald-600'
+              : 'bg-gray-300',
+            isSaving || isLoading
+              ? 'cursor-not-allowed opacity-60'
+              : 'cursor-pointer',
+          ].join(' ')}
+        >
+          <span
+            className={[
+              'absolute top-1 h-5 w-5 rounded-full bg-white shadow transition',
+              enabled
+                ? 'right-1'
+                : 'right-6',
+            ].join(' ')}
+          />
+        </button>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="إدارة المفاتيح"
-        description="التحكم في الخيارات المتاحة داخل نظام التسجيل والاستيراد."
+        title="إعدادات المفاتيح"
+        description="التحكم في صلاحيات الاستيراد داخل الطلبات."
       />
 
+      {message && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {message}
+        </div>
+      )}
+
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {error}
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="font-medium">
+            تعذر تحميل إعدادات المفاتيح
+          </div>
+
+          <div className="mt-1 break-words">
+            {error}
+          </div>
         </div>
       )}
 
-      {success && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          <Check className="size-4" />
+      <div className="rounded-2xl border bg-gray-50 p-4">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            صلاحيات الاستيراد
+          </h2>
 
-          {success}
+          <p className="mt-1 text-sm text-gray-500">
+            هذه الإعدادات تحدد الأزرار التي تظهر في صفحة
+            الطلبات.
+          </p>
         </div>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings2 className="size-5" />
+        {isLoading ? (
+          <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">
+            جاري تحميل الإعدادات...
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <PermissionRow
+              title="السماح بالإضافة إلى السنة الحالية"
+              description="إظهار زر استيراد السجل وإتاحة إضافة السجلات إلى السنة الدراسية الحالية."
+              enabled={
+                settings.allowAddToCurrentYear
+              }
+              onChange={(value) =>
+                updateSetting(
+                  CURRENT_YEAR_KEY,
+                  value,
+                )
+              }
+            />
 
-            إعدادات الاستيراد
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="divide-y p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="ml-2 size-5 animate-spin" />
-
-              جاري تحميل الإعدادات...
-            </div>
-          ) : (
-            <>
-              <PermissionRow
-                title="إضافة لهذه السنة الدراسية"
-                description="السماح بظهور خيار استيراد سجل وإضافته إلى السنة الدراسية الحالية."
-                enabled={
-                  settings.allowAddToCurrentYear
-                }
-                disabled={saving}
-                onChange={(value) =>
-                  void updateSetting(
-                    'allowAddToCurrentYear',
-                    value,
-                  )
-                }
-              />
-
-              <PermissionRow
-                title="إضافة إلى الأرشيف"
-                description="السماح بظهور خيار استيراد سجل إلى الأرشيف."
-                enabled={
-                  settings.allowAddToArchive
-                }
-                disabled={saving}
-                onChange={(value) =>
-                  void updateSetting(
-                    'allowAddToArchive',
-                    value,
-                  )
-                }
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Save className="size-4" />
-
-        التغييرات تحفظ مباشرة عند تشغيل أو إيقاف الخيار.
+            <PermissionRow
+              title="السماح بالإضافة إلى الأرشيف"
+              description="إظهار زر الاستيراد إلى الأرشيف في صفحة الطلبات."
+              enabled={
+                settings.allowAddToArchive
+              }
+              onChange={(value) =>
+                updateSetting(
+                  ARCHIVE_KEY,
+                  value,
+                )
+              }
+            />
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
-
-function PermissionRow({
-  title,
-  description,
-  enabled,
-  disabled,
-  onChange,
-}: {
-  title: string
-  description: string
-  enabled: boolean
-  disabled: boolean
-  onChange: (value: boolean) => void
-}) {
-  return (
-    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="font-medium">
-          {title}
-        </p>
-
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      </div>
-
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        disabled={disabled}
-        onClick={() =>
-          onChange(!enabled)
-        }
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-          enabled
-            ? 'bg-primary'
-            : 'bg-muted-foreground/30'
-        }`}
-      >
-        <span
-          className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-all ${
-            enabled
-              ? 'right-1'
-              : 'right-6'
-          }`}
-        />
-      </button>
     </div>
   )
 }
