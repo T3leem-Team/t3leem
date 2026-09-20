@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Edit3,
   Loader2,
+  Power,
   Shield,
   UserPlus,
   Users,
@@ -202,9 +203,7 @@ export default function Page() {
             fullName: fullName.trim(),
             department: department.trim() || null,
             role,
-            ...(password
-              ? { password }
-              : {}),
+            ...(password ? { password } : {}),
             permissionIds: selectedPermissions,
           }
         : {
@@ -242,6 +241,55 @@ export default function Page() {
         err instanceof Error
           ? err.message
           : 'حدث خطأ غير متوقع.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleActive = async (user: User) => {
+    const action = user.is_active ? 'تعطيل' : 'تفعيل'
+
+    const confirmed = window.confirm(
+      `هل أنت متأكد من ${action} المستخدم "${user.full_name}"؟`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          fullName: user.full_name,
+          role: user.role,
+          department: user.department,
+          isActive: !user.is_active,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ?? `تعذر ${action} المستخدم.`,
+        )
+      }
+
+      await loadUsers()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `تعذر ${action} المستخدم.`,
       )
     } finally {
       setSaving(false)
@@ -295,6 +343,7 @@ export default function Page() {
         description="إدارة حسابات المستخدمين والأدوار والصلاحيات المسموحة لهم داخل النظام."
       />
 
+      {/* الإحصائيات */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
@@ -369,6 +418,7 @@ export default function Page() {
         </Card>
       </div>
 
+      {/* نموذج الإضافة والتعديل */}
       {showForm && (
         <Card>
           <CardContent className="space-y-6 p-6">
@@ -497,6 +547,7 @@ export default function Page() {
                 </select>
               </div>
 
+              {/* الصلاحيات */}
               <div className="relative space-y-2 md:col-span-2">
                 <label className="text-sm font-medium">
                   الصلاحيات
@@ -631,6 +682,7 @@ export default function Page() {
         </Card>
       )}
 
+      {/* شريط الأدوات */}
       {!showForm && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <input
@@ -652,12 +704,14 @@ export default function Page() {
         </div>
       )}
 
+      {/* الخطأ العام */}
       {error && !showForm && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
+      {/* الجدول */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -693,7 +747,7 @@ export default function Page() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[950px] text-sm">
+              <table className="w-full min-w-[1050px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="px-5 py-4 text-right font-medium">
@@ -771,12 +825,10 @@ export default function Page() {
                                 </Badge>
                               ))}
 
-                            {user.permissionIds.length >
-                              3 && (
+                            {user.permissionIds.length > 3 && (
                               <Badge variant="neutral">
                                 +
-                                {user.permissionIds.length -
-                                  3}
+                                {user.permissionIds.length - 3}
                               </Badge>
                             )}
                           </div>
@@ -804,9 +856,30 @@ export default function Page() {
                             onClick={() =>
                               openEditForm(user)
                             }
+                            disabled={saving}
                           >
                             <Edit3 className="size-4" />
                             تعديل
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              handleToggleActive(user)
+                            }
+                            disabled={saving}
+                          >
+                            {saving ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Power className="size-4" />
+                            )}
+
+                            {user.is_active
+                              ? 'تعطيل'
+                              : 'تفعيل'}
                           </Button>
                         </div>
                       </td>
