@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 const SESSION_COOKIE = 't3leem_session_id'
 const DEVICE_COOKIE = 't3leem_device_token'
@@ -25,10 +26,29 @@ export type GuardResult = {
 
 export async function validateCurrentAccess(): Promise<GuardResult> {
   try {
+    // 1. التحقق من Supabase Auth
+    const supabase = await createSupabaseServerClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return {
+        allowed: false,
+        reason: 'not_authenticated',
+      }
+    }
+
+    // 2. قراءة Cookies المحمية
     const cookieStore = await cookies()
 
-    const sessionId = cookieStore.get(SESSION_COOKIE)?.value
-    const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
+    const sessionId =
+      cookieStore.get(SESSION_COOKIE)?.value
+
+    const deviceToken =
+      cookieStore.get(DEVICE_COOKIE)?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -37,32 +57,42 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const deviceTokenHash = await sha256(deviceToken)
+    // 3. التحقق من الجلسة
+    const { data: session, error: sessionError } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .select(
+          `
+          id,
+          auth_user_id,
+          trusted_device_id,
+          is_active,
+          expires_at
+          `,
+        )
+        .eq('id', sessionId)
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
 
-    const { data: session } = await supabaseAdmin
-      .from('active_sessions')
-      .select(
-        'id, auth_user_id, trusted_device_id, is_active, expires_at',
-      )
-      .eq('id', sessionId)
-      .maybeSingle()
-
-    if (!session || !session.is_active) {
+    if (sessionError || !session || !session.is_active) {
       return {
         allowed: false,
         reason: 'session_inactive',
       }
     }
 
+    // 4. التحقق من انتهاء الجلسة
     if (
       session.expires_at &&
-      new Date(session.expires_at).getTime() <= Date.now()
+      new Date(session.expires_at).getTime() <=
+        Date.now()
     ) {
       await supabaseAdmin
         .from('active_sessions')
         .update({
           is_active: false,
           logout_at: new Date().toISOString(),
+          last_activity_at: new Date().toISOString(),
         })
         .eq('id', session.id)
 
@@ -72,18 +102,27 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const { data: profile } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id, auth_user_id, is_active')
-      .eq('auth_user_id', session.auth_user_id)
-      .maybeSingle()
+    // 5. التحقق من المستخدم
+    const { data: profile, error: profileError } =
+      await supabaseAdmin
+        .from('user_profiles')
+        .select(
+          'id, auth_user_id, is_active',
+        )
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
 
-    if (!profile || !profile.is_active) {
+    if (
+      profileError ||
+      !profile ||
+      !profile.is_active
+    ) {
       await supabaseAdmin
         .from('active_sessions')
         .update({
           is_active: false,
           logout_at: new Date().toISOString(),
+          last_activity_at: new Date().toISOString(),
         })
         .eq('id', session.id)
 
@@ -93,20 +132,36 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const { data: device } = await supabaseAdmin
-      .from('trusted_devices')
-      .select('id, auth_user_id, status')
-      .eq('id', session.trusted_device_id)
-      .eq('auth_user_id', session.auth_user_id)
-      .eq('device_token_hash', deviceTokenHash)
-      .maybeSingle()
+    // 6. تشفير Device Token بنفس طريقة تسجيل الجهاز
+    const deviceTokenHash =
+      await sha256(deviceToken)
 
-    if (!device || device.status !== 'approved') {
+    // 7. التحقق من الجهاز
+    const { data: device, error: deviceError } =
+      await supabaseAdmin
+        .from('trusted_devices')
+        .select(
+          'id, auth_user_id, status',
+        )
+        .eq('id', session.trusted_device_id)
+        .eq('auth_user_id', user.id)
+        .eq(
+          'device_token_hash',
+          deviceTokenHash,
+        )
+        .maybeSingle()
+
+    if (
+      deviceError ||
+      !device ||
+      device.status !== 'approved'
+    ) {
       await supabaseAdmin
         .from('active_sessions')
         .update({
           is_active: false,
           logout_at: new Date().toISOString(),
+          last_activity_at: new Date().toISOString(),
         })
         .eq('id', session.id)
 
@@ -116,22 +171,27 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 8. تحديث آخر نشاط
     await supabaseAdmin
       .from('active_sessions')
       .update({
-        last_activity_at: new Date().toISOString(),
+        last_activity_at:
+          new Date().toISOString(),
       })
       .eq('id', session.id)
       .eq('is_active', true)
 
     return {
       allowed: true,
-      userId: session.auth_user_id,
+      userId: user.id,
       sessionId: session.id,
       deviceId: device.id,
     }
   } catch (error) {
-    console.error('Auth guard error:', error)
+    console.error(
+      'Auth guard error:',
+      error,
+    )
 
     return {
       allowed: false,
@@ -141,10 +201,22 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 }
 
 async function sha256(value: string) {
-  const data = new TextEncoder().encode(value)
-  const hash = await crypto.subtle.digest('SHA-256', data)
+  const data =
+    new TextEncoder().encode(value)
 
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
+  const hash =
+    await crypto.subtle.digest(
+      'SHA-256',
+      data,
+    )
+
+  return Array.from(
+    new Uint8Array(hash),
+  )
+    .map((byte) =>
+      byte
+        .toString(16)
+        .padStart(2, '0'),
+    )
     .join('')
 }
