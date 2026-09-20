@@ -37,13 +37,15 @@ type ManagementOption = {
 const quickLinks = [
   {
     title: 'التسجيل الخارجي',
-    description: 'فتح ومراجعة صفحة التسجيل الخارجي وإعداداتها.',
+    description:
+      'فتح ومراجعة صفحة التسجيل الخارجي وإعداداتها.',
     href: '/settings/registration',
     icon: ExternalLink,
   },
   {
     title: 'حالة الطلاب',
-    description: 'إدارة حالات الطلاب والبيانات المرتبطة بهم.',
+    description:
+      'إدارة حالات الطلاب والبيانات المرتبطة بهم.',
     href: '/students',
     icon: GraduationCap,
   },
@@ -52,43 +54,57 @@ const quickLinks = [
 const managementOptions: ManagementOption[] = [
   {
     title: 'إعدادات التسجيل',
-    description: 'التحكم في نموذج التسجيل الخارجي والحقول المطلوبة وطرق الدفع.',
+    description:
+      'التحكم في نموذج التسجيل الخارجي والحقول المطلوبة وطرق الدفع.',
     href: '/settings/registration',
     icon: ClipboardCheck,
   },
   {
     title: 'المستخدمون والصلاحيات',
-    description: 'إدارة المستخدمين والأدوار والصلاحيات داخل النظام.',
+    description:
+      'إدارة المستخدمين والأدوار والصلاحيات داخل النظام.',
     href: '/settings/users',
     icon: UserCog,
   },
   {
+    title: 'الأجهزة الموثوقة',
+    description:
+      'مراجعة الأجهزة الجديدة والموافقة عليها أو رفضها وإدارة الأجهزة المعتمدة.',
+    href: '/settings/trusted-devices',
+    icon: ShieldCheck,
+  },
+  {
     title: 'السنة الدراسية والدورات',
-    description: 'إدارة السنوات الدراسية والدورات ومواعيدها وأيام الدراسة.',
+    description:
+      'إدارة السنوات الدراسية والدورات ومواعيدها وأيام الدراسة.',
     href: '/settings/academic-year',
     icon: BookOpen,
   },
   {
     title: 'المعلمون',
-    description: 'إدارة بيانات المعلمين وربطهم بالدورات والطلاب.',
+    description:
+      'إدارة بيانات المعلمين وربطهم بالدورات والطلاب.',
     href: '/settings/teachers',
     icon: Users,
   },
   {
     title: 'إشراف الدوام والدروس',
-    description: 'إعدادات الحضور والدوام ومتابعة تسجيل الدروس.',
+    description:
+      'إعدادات الحضور والدوام ومتابعة تسجيل الدروس.',
     href: '/settings/supervision',
     icon: ShieldCheck,
   },
   {
     title: 'المواد الدراسية',
-    description: 'إضافة وتعديل وحذف المواد الدراسية المستخدمة في النظام.',
+    description:
+      'إضافة وتعديل وحذف المواد الدراسية المستخدمة في النظام.',
     href: '/settings/subjects',
     icon: GraduationCap,
   },
   {
     title: 'الأرشيف',
-    description: 'الوصول إلى السجلات والبيانات المؤرشفة وإدارتها.',
+    description:
+      'الوصول إلى السجلات والبيانات المؤرشفة وإدارتها.',
     href: '/settings/archive',
     icon: Archive,
   },
@@ -102,7 +118,8 @@ const managementOptions: ManagementOption[] = [
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
-    description: 'إدارة الإجراءات الحساسة التي تحتاج إلى صلاحيات خاصة.',
+    description:
+      'إدارة الإجراءات الحساسة التي تحتاج إلى صلاحيات خاصة.',
     href: '/settings/special-actions',
     icon: LockKeyhole,
   },
@@ -121,7 +138,10 @@ export function SettingsView() {
       {/* روابط سريعة */}
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-semibold">روابط سريعة</h2>
+          <h2 className="text-lg font-semibold">
+            روابط سريعة
+          </h2>
+
           <p className="text-sm text-muted-foreground">
             الوصول السريع إلى أكثر الإعدادات استخدامًا.
           </p>
@@ -135,7 +155,9 @@ export function SettingsView() {
               <Card
                 key={item.href}
                 className="cursor-pointer transition hover:shadow-md"
-                onClick={() => router.push(item.href)}
+                onClick={() =>
+                  router.push(item.href)
+                }
               >
                 <CardContent className="flex items-center gap-4 p-5">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -143,7 +165,10 @@ export function SettingsView() {
                   </div>
 
                   <div className="min-w-0">
-                    <h3 className="font-semibold">{item.title}</h3>
+                    <h3 className="font-semibold">
+                      {item.title}
+                    </h3>
+
                     <p className="mt-1 text-sm text-muted-foreground">
                       {item.description}
                     </p>
@@ -158,7 +183,10 @@ export function SettingsView() {
       {/* إعدادات الإدارة */}
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-semibold">إعدادات الإدارة</h2>
+          <h2 className="text-lg font-semibold">
+            إعدادات الإدارة
+          </h2>
+
           <p className="text-sm text-muted-foreground">
             إدارة أقسام النظام والإعدادات الداخلية.
           </p>
@@ -172,7 +200,9 @@ export function SettingsView() {
               <Card
                 key={item.href}
                 className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
-                onClick={() => router.push(item.href)}
+                onClick={() =>
+                  router.push(item.href)
+                }
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
@@ -209,10 +239,14 @@ export function SettingsView() {
           </div>
 
           <div>
-            <p className="font-medium">مفاتيح النظام</p>
+            <p className="font-medium">
+              مفاتيح النظام
+            </p>
+
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              سيتم من خلال إدارة المفاتيح التحكم في الوظائف الحساسة مثل
-              استيراد سجل الطلاب وغيرها من العمليات التي تحتاج إلى تفعيل
+              سيتم من خلال إدارة المفاتيح التحكم في
+              الوظائف الحساسة مثل استيراد سجل الطلاب
+              وغيرها من العمليات التي تحتاج إلى تفعيل
               صريح من الإدارة.
             </p>
           </div>
