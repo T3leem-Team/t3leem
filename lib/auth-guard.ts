@@ -5,6 +5,9 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 const SESSION_COOKIE = 't3leem_session_id'
 const DEVICE_COOKIE = 't3leem_device_token'
 
+const MAX_SESSION_HOURS = 4
+const IDLE_TIMEOUT_MINUTES = 30
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -26,13 +29,19 @@ export type GuardResult = {
 
 export async function validateCurrentAccess(): Promise<GuardResult> {
   try {
-    // 1. التحقق من Supabase Auth
-    const supabase = await createSupabaseServerClient()
+    /*
+     * --------------------------------------------------
+     * 1. Supabase Auth
+     * --------------------------------------------------
+     */
+    const supabase =
+      await createSupabaseServerClient()
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } =
+      await supabase.auth.getUser()
 
     if (authError || !user) {
       return {
@@ -41,14 +50,22 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 2. قراءة Cookies المحمية
+    /*
+     * --------------------------------------------------
+     * 2. Cookies
+     * --------------------------------------------------
+     */
     const cookieStore = await cookies()
 
     const sessionId =
-      cookieStore.get(SESSION_COOKIE)?.value
+      cookieStore.get(
+        SESSION_COOKIE,
+      )?.value
 
     const deviceToken =
-      cookieStore.get(DEVICE_COOKIE)?.value
+      cookieStore.get(
+        DEVICE_COOKIE,
+      )?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -57,8 +74,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 3. التحقق من الجلسة
-    const { data: session, error: sessionError } =
+    /*
+     * --------------------------------------------------
+     * 3. Active Session
+     * --------------------------------------------------
+     */
+    const {
+      data: session,
+      error: sessionError,
+    } =
       await supabaseAdmin
         .from('active_sessions')
         .select(
@@ -67,6 +91,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
           auth_user_id,
           trusted_device_id,
           is_active,
+          login_at,
+          last_activity_at,
           expires_at
           `,
         )
@@ -74,27 +100,47 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
         .eq('auth_user_id', user.id)
         .maybeSingle()
 
-    if (sessionError || !session || !session.is_active) {
+    if (
+      sessionError ||
+      !session ||
+      !session.is_active
+    ) {
       return {
         allowed: false,
         reason: 'session_inactive',
       }
     }
 
-    // 4. التحقق من انتهاء الجلسة
-    if (
-      session.expires_at &&
-      new Date(session.expires_at).getTime() <=
-        Date.now()
-    ) {
-      await supabaseAdmin
-        .from('active_sessions')
-        .update({
-          is_active: false,
-          logout_at: new Date().toISOString(),
-          last_activity_at: new Date().toISOString(),
-        })
-        .eq('id', session.id)
+    const now = Date.now()
+
+    /*
+     * --------------------------------------------------
+     * 4. الحد الأقصى للجلسة: 4 ساعات
+     * --------------------------------------------------
+     */
+    const maxSessionExpiry =
+      new Date(session.login_at).getTime() +
+      MAX_SESSION_HOURS *
+        60 *
+        60 *
+        1000
+
+    const databaseExpiry =
+      session.expires_at
+        ? new Date(
+            session.expires_at,
+          ).getTime()
+        : maxSessionExpiry
+
+    const finalExpiry = Math.min(
+      maxSessionExpiry,
+      databaseExpiry,
+    )
+
+    if (now >= finalExpiry) {
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -102,14 +148,57 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 5. التحقق من المستخدم
-    const { data: profile, error: profileError } =
+    /*
+     * --------------------------------------------------
+     * 5. انتهاء الخمول: 30 دقيقة
+     *
+     * مهم:
+     * هذا Guard لا يعتبر نفسه نشاطًا.
+     * last_activity_at يتحدث فقط من نشاط المستخدم الحقيقي.
+     * --------------------------------------------------
+     */
+    const lastActivity =
+      new Date(
+        session.last_activity_at,
+      ).getTime()
+
+    const idleTimeout =
+      IDLE_TIMEOUT_MINUTES *
+      60 *
+      1000
+
+    if (
+      now - lastActivity >=
+      idleTimeout
+    ) {
+      await closeSession(
+        session.id,
+      )
+
+      return {
+        allowed: false,
+        reason: 'idle_timeout',
+      }
+    }
+
+    /*
+     * --------------------------------------------------
+     * 6. المستخدم
+     * --------------------------------------------------
+     */
+    const {
+      data: profile,
+      error: profileError,
+    } =
       await supabaseAdmin
         .from('user_profiles')
         .select(
           'id, auth_user_id, is_active',
         )
-        .eq('auth_user_id', user.id)
+        .eq(
+          'auth_user_id',
+          user.id,
+        )
         .maybeSingle()
 
     if (
@@ -117,14 +206,9 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       !profile ||
       !profile.is_active
     ) {
-      await supabaseAdmin
-        .from('active_sessions')
-        .update({
-          is_active: false,
-          logout_at: new Date().toISOString(),
-          last_activity_at: new Date().toISOString(),
-        })
-        .eq('id', session.id)
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -132,19 +216,33 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 6. تشفير Device Token بنفس طريقة تسجيل الجهاز
+    /*
+     * --------------------------------------------------
+     * 7. الجهاز الموثوق
+     * --------------------------------------------------
+     */
     const deviceTokenHash =
-      await sha256(deviceToken)
+      await sha256(
+        deviceToken,
+      )
 
-    // 7. التحقق من الجهاز
-    const { data: device, error: deviceError } =
+    const {
+      data: device,
+      error: deviceError,
+    } =
       await supabaseAdmin
         .from('trusted_devices')
         .select(
           'id, auth_user_id, status',
         )
-        .eq('id', session.trusted_device_id)
-        .eq('auth_user_id', user.id)
+        .eq(
+          'id',
+          session.trusted_device_id,
+        )
+        .eq(
+          'auth_user_id',
+          user.id,
+        )
         .eq(
           'device_token_hash',
           deviceTokenHash,
@@ -156,14 +254,9 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       !device ||
       device.status !== 'approved'
     ) {
-      await supabaseAdmin
-        .from('active_sessions')
-        .update({
-          is_active: false,
-          logout_at: new Date().toISOString(),
-          last_activity_at: new Date().toISOString(),
-        })
-        .eq('id', session.id)
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -171,16 +264,13 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 8. تحديث آخر نشاط
-    await supabaseAdmin
-      .from('active_sessions')
-      .update({
-        last_activity_at:
-          new Date().toISOString(),
-      })
-      .eq('id', session.id)
-      .eq('is_active', true)
-
+    /*
+     * --------------------------------------------------
+     * 8. السماح
+     *
+     * لا نحدث last_activity_at هنا.
+     * --------------------------------------------------
+     */
     return {
       allowed: true,
       userId: user.id,
@@ -200,9 +290,36 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
   }
 }
 
-async function sha256(value: string) {
+/*
+ * إغلاق الجلسة
+ */
+async function closeSession(
+  sessionId: string,
+) {
+  const now =
+    new Date().toISOString()
+
+  await supabaseAdmin
+    .from('active_sessions')
+    .update({
+      is_active: false,
+      logout_at: now,
+      last_activity_at: now,
+    })
+    .eq('id', sessionId)
+    .eq('is_active', true)
+}
+
+/*
+ * SHA-256
+ */
+async function sha256(
+  value: string,
+) {
   const data =
-    new TextEncoder().encode(value)
+    new TextEncoder().encode(
+      value,
+    )
 
   const hash =
     await crypto.subtle.digest(
