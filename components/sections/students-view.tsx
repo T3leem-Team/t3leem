@@ -40,6 +40,8 @@ import {
   type StudentCourseStatus,
 } from './student-details'
 
+import { StudentForm } from './student-form'
+
 type Filters = {
   name: string
   personalId: string
@@ -248,8 +250,7 @@ function isCourseStudyDay(
 
   return courseDays.some(
     (day) =>
-      normalizeArabicDay(day) ===
-      currentDay
+      normalizeArabicDay(day) === currentDay
   )
 }
 
@@ -756,8 +757,11 @@ export function StudentsView() {
         return
       }
 
+      let studentsData: any[] | null =
+        null
+
       const {
-        data: studentsData,
+        data: loadedStudents,
         error: studentsError,
       } = await supabase
         .from('students')
@@ -768,13 +772,15 @@ export function StudentsView() {
           ascending: false,
         })
 
+      studentsData =
+        loadedStudents
+
       if (studentsError) {
         /*
          * بعض قواعد البيانات القديمة قد لا تحتوي
          * على جميع الحقول الإضافية.
          *
-         * نعيد الاستعلام بالحقول الأساسية
-         * إذا فشل الاستعلام الموسع.
+         * نعيد الاستعلام بالحقول الأساسية.
          */
         const {
           data: fallbackStudents,
@@ -796,11 +802,8 @@ export function StudentsView() {
           return
         }
 
-        if (fallbackStudents) {
-          ;(
-            studentsData as any
-          )
-        }
+        studentsData =
+          fallbackStudents
       }
 
       const {
@@ -863,12 +866,6 @@ export function StudentsView() {
           })
         )
 
-      /*
-       * أسماء المعلمين.
-       *
-       * إذا لم يكن جدول المعلمين متاحًا من خلال
-       * الاستعلام الحالي، لا نوقف صفحة الطلاب.
-       */
       const teacherNames =
         new Map<string, string>()
 
@@ -910,12 +907,6 @@ export function StudentsView() {
         }
       }
 
-      /*
-       * حالات الحضور.
-       *
-       * الجدول المستخدم في نظام الحضور:
-       * attendance_statuses
-       */
       let loadedAttendanceStatuses: AttendanceStatus[] =
         []
 
@@ -957,12 +948,6 @@ export function StudentsView() {
         loadedAttendanceStatuses
       )
 
-      /*
-       * سجلات الحضور الفعلية.
-       *
-       * نقرأ كل دورات السنة الحالية،
-       * وبعدها نربط السجلات بالطالب والدورة.
-       */
       let attendanceRows: AttendanceRecord[] =
         []
 
@@ -1184,56 +1169,79 @@ export function StudentsView() {
 
             return {
               id: student.id,
+
               studentId:
                 student.student_id ??
                 '',
+
               name:
                 student.name ?? '',
+
               personalId:
                 student.personal_id ??
                 '',
+
               gender:
                 student.gender ?? '',
+
               age:
                 student.age ?? null,
+
               grade:
                 enrollmentMap.get(
                   student.id
                 ) ?? '',
+
               phone:
                 student.phone ?? '',
+
               whatsapp:
                 student.whatsapp ??
                 '',
+
               status:
                 student.status ??
                 '',
+
               paymentStatus,
+
               amountDue:
                 annualFee,
+
               amountPaid,
+
               feeExempt,
+
               chronicDiseases:
                 student.health_notes ??
                 '',
+
               notes:
                 student.notes ?? '',
+
               source:
                 student.source ??
                 '',
+
               createdAt:
                 student.created_at ??
                 '',
+
               updatedAt:
                 student.updated_at ??
                 '',
+
               academicYearId:
                 student.academic_year_id ??
                 currentYear.id,
+
               attendance:
                 currentStatus,
+
               courseStatuses,
+
               attendanceSummaries,
+
               attendanceRecords:
                 studentAttendanceRecords,
             }
@@ -1639,6 +1647,13 @@ export function StudentsView() {
               'تاريخ الإضافة':
                 student.createdAt ??
                 '',
+
+              'آخر تحديث':
+                student.updatedAt ??
+                '',
+
+              'السنة الدراسية':
+                currentAcademicYearName,
             }
 
             ;(
@@ -2615,876 +2630,43 @@ export function StudentsView() {
       />
 
       {isAddStudentOpen && (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            aria-label="إغلاق"
-            className="absolute inset-0 bg-black/40"
-            onClick={
-              closeStudentDrawer
-            }
-          />
-
-          <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  {editingStudent
-                    ? 'تعديل بيانات الطالب'
-                    : 'إضافة طالب'}
-                </h2>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {editingStudent
-                    ? 'تعديل بيانات الطالب الأساسية'
-                    : 'إدخال بيانات الطالب الأساسية'}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={
-                  closeStudentDrawer
-                }
-                className="rounded-md p-2 hover:bg-muted"
-                aria-label="إغلاق"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <form
-              key={
-                editingStudent?.id ??
-                'new'
-              }
-              onSubmit={async (
-                e
-              ) => {
-                e.preventDefault()
-
-                const form =
-                  e.currentTarget
-
-                const data =
-                  new FormData(
-                    form
-                  )
-
-                const name =
-                  String(
-                    data.get(
-                      'name'
-                    ) || ''
-                  ).trim()
-
-                const personalId =
-                  String(
-                    data.get(
-                      'personalId'
-                    ) || ''
-                  ).trim()
-
-                const grade =
-                  String(
-                    data.get(
-                      'grade'
-                    ) || ''
-                  )
-
-                const phone =
-                  String(
-                    data.get(
-                      'phone'
-                    ) || ''
-                  ).trim()
-
-                const whatsapp =
-                  String(
-                    data.get(
-                      'whatsapp'
-                    ) || ''
-                  ).trim()
-
-                const chronicDiseases =
-                  String(
-                    data.get(
-                      'chronicDiseases'
-                    ) || ''
-                  ).trim()
-
-                const amountPaid =
-                  Number(
-                    data.get(
-                      'amountPaid'
-                    ) || 0
-                  )
-
-                const notes =
-                  String(
-                    data.get(
-                      'notes'
-                    ) || ''
-                  ).trim()
-
-                if (
-                  !name ||
-                  !personalId ||
-                  !grade
-                ) {
-                  return
-                }
-
-                if (
-                  !Number.isFinite(
-                    amountPaid
-                  ) ||
-                  amountPaid < 0
-                ) {
-                  setSupabaseStatus(
-                    'خطأ: المبلغ المدفوع غير صحيح'
-                  )
-                  return
-                }
-
-                if (
-                  !currentAcademicYearId
-                ) {
-                  setSupabaseStatus(
-                    'خطأ: لا توجد سنة دراسية حالية مفعلة'
-                  )
-                  return
-                }
-
-                const selectedLevel =
-                  academicLevels.find(
-                    (level) =>
-                      level.name ===
-                      grade
-                  )
-
-                if (
-                  !selectedLevel
-                ) {
-                  setSupabaseStatus(
-                    'خطأ: الصف الأكاديمي المحدد غير موجود'
-                  )
-                  return
-                }
-
-                if (
-                  !editingStudent &&
-                  amountPaid >
-                    currentAnnualFee &&
-                  currentAnnualFee >
-                    0
-                ) {
-                  setSupabaseStatus(
-                    `خطأ: المبلغ المدفوع لا يمكن أن يتجاوز الرسوم السنوية (${currentAnnualFee.toFixed(
-                      3
-                    )} د.ب)`
-                  )
-                  return
-                }
-
-                if (
-                  editingStudent
-                ) {
-                  const {
-                    data:
-                      updatedStudent,
-                    error,
-                  } =
-                    await supabase
-                      .from(
-                        'students'
-                      )
-                      .update({
-                        name,
-                        personal_id:
-                          personalId,
-                        phone,
-                        whatsapp,
-                        notes,
-                        health_notes:
-                          chronicDiseases,
-                      })
-                      .eq(
-                        'id',
-                        editingStudent.id
-                      )
-                      .select(
-                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
-                      )
-                      .single()
-
-                  if (error) {
-                    setSupabaseStatus(
-                      `خطأ في تعديل الطالب: ${error.message}`
-                    )
-                    return
-                  }
-
-                  const {
-                    data:
-                      existingEnrollment,
-                    error:
-                      enrollmentLookupError,
-                  } =
-                    await supabase
-                      .from(
-                        'enrollments'
-                      )
-                      .select(
-                        'id'
-                      )
-                      .eq(
-                        'student_id',
-                        editingStudent.id
-                      )
-                      .eq(
-                        'academic_year_id',
-                        currentAcademicYearId
-                      )
-                      .maybeSingle()
-
-                  if (
-                    enrollmentLookupError
-                  ) {
-                    setSupabaseStatus(
-                      `خطأ في قراءة ربط الصف الأكاديمي: ${enrollmentLookupError.message}`
-                    )
-                    return
-                  }
-
-                  if (
-                    existingEnrollment
-                  ) {
-                    const {
-                      error:
-                        enrollmentUpdateError,
-                    } =
-                      await supabase
-                        .from(
-                          'enrollments'
-                        )
-                        .update({
-                          level_id:
-                            selectedLevel.id,
-                          status:
-                            'نشط',
-                        })
-                        .eq(
-                          'id',
-                          existingEnrollment.id
-                        )
-
-                    if (
-                      enrollmentUpdateError
-                    ) {
-                      setSupabaseStatus(
-                        `خطأ في تعديل الصف الأكاديمي: ${enrollmentUpdateError.message}`
-                      )
-                      return
-                    }
-                  } else {
-                    const {
-                      error:
-                        enrollmentInsertError,
-                    } =
-                      await supabase
-                        .from(
-                          'enrollments'
-                        )
-                        .insert({
-                          student_id:
-                            editingStudent.id,
-                          academic_year_id:
-                            currentAcademicYearId,
-                          level_id:
-                            selectedLevel.id,
-                          class_id:
-                            null,
-                          status:
-                            'نشط',
-                        })
-
-                    if (
-                      enrollmentInsertError
-                    ) {
-                      setSupabaseStatus(
-                        `خطأ في ربط الصف الأكاديمي: ${enrollmentInsertError.message}`
-                      )
-                      return
-                    }
-                  }
-
-                  setStudentList(
-                    (current) =>
-                      current.map(
-                        (
-                          student
-                        ) =>
-                          student.id ===
-                          editingStudent.id
-                            ? {
-                                ...student,
-                                name:
-                                  updatedStudent.name,
-                                personalId:
-                                  updatedStudent.personal_id ??
-                                  '',
-                                phone:
-                                  updatedStudent.phone ??
-                                  '',
-                                whatsapp:
-                                  updatedStudent.whatsapp ??
-                                  '',
-                                chronicDiseases:
-                                  updatedStudent.health_notes ??
-                                  '',
-                                notes:
-                                  updatedStudent.notes ??
-                                  '',
-                                grade,
-                                feeExempt:
-                                  Boolean(
-                                    updatedStudent.fee_exempt
-                                  ),
-                              }
-                            : student
-                      )
-                  )
-
-                  setSupabaseStatus(
-                    'تم تعديل الطالب وربط الصف الأكاديمي في Supabase ✅'
-                  )
-                } else {
-                  const {
-                    data:
-                      newStudent,
-                    error,
-                  } =
-                    await supabase
-                      .from(
-                        'students'
-                      )
-                      .insert({
-                        academic_year_id:
-                          currentAcademicYearId,
-                        name,
-                        personal_id:
-                          personalId,
-                        phone,
-                        whatsapp,
-                        notes,
-                        health_notes:
-                          chronicDiseases,
-                        status:
-                          'نشط',
-                        fee_exempt:
-                          false,
-                      })
-                      .select(
-                        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
-                      )
-                      .single()
-
-                  if (error) {
-                    setSupabaseStatus(
-                      `خطأ في حفظ الطالب: ${error.message}`
-                    )
-                    return
-                  }
-
-                  const {
-                    error:
-                      enrollmentError,
-                  } =
-                    await supabase
-                      .from(
-                        'enrollments'
-                      )
-                      .insert({
-                        student_id:
-                          newStudent.id,
-                        academic_year_id:
-                          currentAcademicYearId,
-                        level_id:
-                          selectedLevel.id,
-                        class_id:
-                          null,
-                        status:
-                          'نشط',
-                        })
-
-                  if (
-                    enrollmentError
-                  ) {
-                    await supabase
-                      .from(
-                        'students'
-                      )
-                      .delete()
-                      .eq(
-                        'id',
-                        newStudent.id
-                      )
-
-                    setSupabaseStatus(
-                      `خطأ في ربط الصف الأكاديمي: ${enrollmentError.message}`
-                    )
-                    return
-                  }
-
-                  if (
-                    amountPaid >
-                    0
-                  ) {
-                    const {
-                      error:
-                        paymentError,
-                    } =
-                      await supabase
-                        .from(
-                          'payments'
-                        )
-                        .insert({
-                          student_id:
-                            newStudent.id,
-                          academic_year_id:
-                            currentAcademicYearId,
-                          amount:
-                            amountPaid,
-                          payment_method:
-                            'نقدي',
-                          payment_date:
-                            new Date()
-                              .toISOString()
-                              .slice(
-                                0,
-                                10
-                              ),
-                        })
-
-                    if (
-                      paymentError
-                    ) {
-                      await supabase
-                        .from(
-                          'enrollments'
-                        )
-                        .delete()
-                        .eq(
-                          'student_id',
-                          newStudent.id
-                        )
-                        .eq(
-                          'academic_year_id',
-                          currentAcademicYearId
-                        )
-
-                      await supabase
-                        .from(
-                          'students'
-                        )
-                        .delete()
-                        .eq(
-                          'id',
-                          newStudent.id
-                        )
-
-                      setSupabaseStatus(
-                        `خطأ في حفظ الدفعة الأولى: ${paymentError.message}`
-                      )
-                      return
-                    }
-                  }
-
-                  const paymentStatus =
-                    amountPaid >=
-                      currentAnnualFee &&
-                    currentAnnualFee >
-                      0
-                      ? 'مدفوع بالكامل'
-                      : amountPaid >
-                          0
-                        ? 'مدفوع جزئيًا'
-                        : 'غير مدفوع'
-
-                  const mappedStudent =
-                    {
-                      id: newStudent.id,
-                      studentId:
-                        newStudent.student_id ??
-                        '',
-                      name:
-                        newStudent.name,
-                      personalId:
-                        newStudent.personal_id ??
-                        '',
-                      gender: '',
-                      age: null,
-                      grade,
-                      phone:
-                        newStudent.phone ??
-                        '',
-                      whatsapp:
-                        newStudent.whatsapp ??
-                        '',
-                      status:
-                        newStudent.status ??
-                        'نشط',
-                      source: '',
-                      createdAt:
-                        new Date().toISOString(),
-                      updatedAt:
-                        '',
-                      academicYearId:
-                        currentAcademicYearId,
-                      paymentStatus,
-                      amountDue:
-                        currentAnnualFee,
-                      amountPaid,
-                      feeExempt:
-                        Boolean(
-                          newStudent.fee_exempt
-                        ),
-                      chronicDiseases:
-                        newStudent.health_notes ??
-                        '',
-                      notes:
-                        newStudent.notes ??
-                        '',
-                      attendance:
-                        currentCourse
-                          ? 'لم يحضر'
-                          : 'لم يحضر',
-                      courseStatuses:
-                        courses.map(
-                          (
-                            course
-                          ) => ({
-                            courseId:
-                              course.id,
-                            courseName:
-                              course.name,
-                            startDate:
-                              course.start_date,
-                            endDate:
-                              course.end_date,
-                            status:
-                              getCourseStatus(
-                                course,
-                                newStudent.id,
-                                [],
-                                getTodayString()
-                              ),
-                          })
-                        ),
-                      attendanceSummaries:
-                        courses.map(
-                          (course) =>
-                            calculateAttendanceSummary(
-                              newStudent.id,
-                              course,
-                              [],
-                              attendanceStatuses,
-                              '',
-                              getTodayString()
-                            )
-                        ),
-                      attendanceRecords:
-                        [],
-                    }
-
-                  setStudentList(
-                    (current) => [
-                      mappedStudent,
-                      ...current,
-                    ]
-                  )
-
-                  setSupabaseStatus(
-                    amountPaid >
-                      0
-                      ? 'تم حفظ الطالب والدفعة الأولى وربط الصف الأكاديمي في Supabase ✅'
-                      : 'تم حفظ الطالب وربط الصف الأكاديمي في Supabase ✅'
-                  )
-                }
-
-                closeStudentDrawer()
-                form.reset()
-              }}
-            >
-              <div className="space-y-6 p-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className="mb-2 block text-sm font-medium">
-                      اسم الطالب
-                    </label>
-
-                    <input
-                      name="name"
-                      type="text"
-                      required
-                      defaultValue={
-                        editingStudent?.name ??
-                        ''
-                      }
-                      placeholder="أدخل اسم الطالب"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      الرقم الشخصي
-                    </label>
-
-                    <input
-                      name="personalId"
-                      type="text"
-                      required
-                      defaultValue={
-                        editingStudent?.personalId ??
-                        ''
-                      }
-                      placeholder="أدخل الرقم الشخصي"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      الصف الأكاديمي
-                    </label>
-
-                    <select
-                      name="grade"
-                      required
-                      defaultValue={
-                        editingStudent?.grade ??
-                        ''
-                      }
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    >
-                      <option value="">
-                        اختر الصف
-                      </option>
-
-                      {academicLevels.map(
-                        (
-                          level
-                        ) => (
-                          <option
-                            key={
-                              level.id
-                            }
-                            value={
-                              level.name
-                            }
-                          >
-                            {
-                              level.name
-                            }
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      رقم الهاتف
-                    </label>
-
-                    <input
-                      name="phone"
-                      type="tel"
-                      defaultValue={
-                        editingStudent?.phone ??
-                        ''
-                      }
-                      placeholder="مثال: 33xxxxxx"
-                      dir="ltr"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      رقم واتساب
-                    </label>
-
-                    <input
-                      name="whatsapp"
-                      type="tel"
-                      defaultValue={
-                        editingStudent?.whatsapp ??
-                        ''
-                      }
-                      placeholder="مثال: 33xxxxxx"
-                      dir="ltr"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t pt-5">
-                  <h3 className="mb-4 text-sm font-semibold">
-                    المعلومات الصحية
-                  </h3>
-
-                  <label className="mb-2 block text-sm font-medium">
-                    الأمراض المزمنة
-                  </label>
-
-                  <input
-                    name="chronicDiseases"
-                    type="text"
-                    defaultValue={
-                      editingStudent?.chronicDiseases ??
-                      ''
-                    }
-                    placeholder="لا يوجد"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                  />
-                </div>
-
-                <div className="border-t pt-5">
-                  <h3 className="mb-4 text-sm font-semibold">
-                    المعلومات المالية
-                  </h3>
-
-                  <div className="rounded-md border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium">
-                          الرسوم السنوية
-                        </p>
-
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          حسب السنة الدراسية الحالية:{' '}
-                          {
-                            currentAcademicYearName
-                          }
-                        </p>
-                      </div>
-
-                      <div className="text-lg font-semibold">
-                        {currentAnnualFee.toLocaleString(
-                          'ar-BH',
-                          {
-                            minimumFractionDigits: 3,
-                            maximumFractionDigits: 3,
-                          }
-                        )}{' '}
-                        د.ب
-                      </div>
-                    </div>
-                  </div>
-
-                  {!editingStudent ? (
-                    <>
-                      <div className="mt-4">
-                        <label className="mb-2 block text-sm font-medium">
-                          الدفعة الأولى
-                        </label>
-
-                        <input
-                          name="amountPaid"
-                          type="number"
-                          min="0"
-                          max={
-                            currentAnnualFee >
-                            0
-                              ? currentAnnualFee
-                              : undefined
-                          }
-                          step="0.001"
-                          defaultValue="0"
-                          placeholder="0"
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                        />
-                      </div>
-
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        يمكنك تسجيل الدفعة الأولى مع إضافة الطالب. سيتم حفظها كدفعة فعلية، ويمكن إضافة الدفعات اللاحقة من قسم المدفوعات.
-                      </p>
-                    </>
-                  ) : (
-                    <div className="mt-4 rounded-md border bg-muted/30 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium">
-                            المدفوع حتى الآن
-                          </p>
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            لتسجيل دفعة جديدة استخدم حالة الدفع من قائمة الطلاب.
-                          </p>
-                        </div>
-
-                        <div className="text-lg font-semibold">
-                          {Number(
-                            editingStudent?.amountPaid ??
-                              0
-                          ).toLocaleString(
-                            'ar-BH',
-                            {
-                              minimumFractionDigits: 3,
-                              maximumFractionDigits: 3,
-                            }
-                          )}{' '}
-                          د.ب
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t pt-5">
-                  <label className="mb-2 block text-sm font-medium">
-                    ملاحظات
-                  </label>
-
-                  <textarea
-                    name="notes"
-                    defaultValue={
-                      editingStudent?.notes ??
-                      ''
-                    }
-                    placeholder="أدخل أي ملاحظات إضافية..."
-                    rows={4}
-                    className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
-                <Button
-                  type="submit"
-                  className="flex-1"
-                >
-                  {editingStudent
-                    ? 'حفظ التعديلات'
-                    : 'حفظ الطالب'}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={
-                    closeStudentDrawer
-                  }
-                >
-                  إلغاء
-                </Button>
-              </div>
-            </form>
-          </aside>
-        </div>
+        <StudentForm
+          editingStudent={
+            editingStudent ?? null
+          }
+          academicLevels={
+            academicLevels
+          }
+          currentAcademicYearId={
+            currentAcademicYearId
+          }
+          currentAcademicYearName={
+            currentAcademicYearName
+          }
+          currentAnnualFee={
+            currentAnnualFee
+          }
+          currentCourse={
+            courses.find(
+              (course) =>
+                course.id ===
+                currentCourseId
+            ) ?? null
+          }
+          courses={courses}
+          attendanceStatuses={
+            attendanceStatuses
+          }
+          closeStudentDrawer={
+            closeStudentDrawer
+          }
+          setSupabaseStatus={
+            setSupabaseStatus
+          }
+          setStudentList={
+            setStudentList
+          }
+        />
       )}
     </div>
   )
