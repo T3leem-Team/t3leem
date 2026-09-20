@@ -22,9 +22,12 @@ export function SessionHeartbeat() {
         )
 
         if (!response.ok && !stopped) {
-          router.replace(
-            '/login?reason=session_expired',
-          )
+          await fetch('/api/auth/force-logout', {
+            method: 'POST',
+            cache: 'no-store',
+          })
+
+          router.replace('/login')
           router.refresh()
         }
       } catch {
