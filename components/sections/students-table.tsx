@@ -2,9 +2,10 @@
 
 import {
   Filter,
-  X,
+  Settings2,
 } from 'lucide-react'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import {
@@ -103,7 +104,6 @@ type Props = {
   onOpenAttendance: (
     student: StudentTableStudent
   ) => void
-  onOpenColumns: () => void
 }
 
 const standardColumns = [
@@ -247,6 +247,9 @@ export function StudentsTable({
 }: Props) {
   const router = useRouter()
 
+  const [showColumnCustomization, setShowColumnCustomization] =
+    useState(false)
+
   const textFilter = (
     key: keyof StudentTableFilters,
     placeholder = 'بحث'
@@ -279,78 +282,140 @@ export function StudentsTable({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md border bg-muted/30 p-3">
-        <div className="mb-2 text-sm font-semibold">
+
+      {/* زر تخصيص الأعمدة */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() =>
+            setShowColumnCustomization(
+              (current) => !current
+            )
+          }
+          className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted"
+        >
+          <Settings2 className="size-4" />
+
           تخصيص الأعمدة
-        </div>
+        </button>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {baseColumns.map((column) => (
-            <label
-              key={column.key}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-            >
-              <input
-                type="checkbox"
-                checked={Boolean(
-                  visibleColumns[column.key]
-                )}
-                onChange={() =>
-                  onToggleColumn(column.key)
-                }
-              />
-
-              {column.label}
-            </label>
-          ))}
-
-          <div className="col-span-full mt-2 border-t pt-3">
-            <div className="mb-2 text-xs font-semibold text-muted-foreground">
-              بيانات الطالب
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {standardColumns.map(
-                (column) => (
-                  <label
-                    key={column.key}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(
-                        visibleColumns[
-                          column.key
-                        ]
-                      )}
-                      onChange={() =>
-                        onToggleColumn(
-                          column.key
-                        )
-                      }
-                    />
-
-                    {column.label}
-                  </label>
-                )
-              )}
-            </div>
+      {/* خيارات تخصيص الأعمدة - مخفية افتراضيًا */}
+      {showColumnCustomization && (
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="mb-3 text-sm font-semibold">
+            تخصيص الأعمدة
           </div>
 
-          {dynamicFields.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {baseColumns.map((column) => (
+              <label
+                key={column.key}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(
+                    visibleColumns[column.key]
+                  )}
+                  onChange={() =>
+                    onToggleColumn(
+                      column.key
+                    )
+                  }
+                />
+
+                {column.label}
+              </label>
+            ))}
+
             <div className="col-span-full mt-2 border-t pt-3">
               <div className="mb-2 text-xs font-semibold text-muted-foreground">
-                حقول التسجيل الإضافية
+                بيانات الطالب
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {dynamicFields.map(
-                  (field) => {
-                    const key = `dynamic-${field.id}`
+                {standardColumns.map(
+                  (column) => (
+                    <label
+                      key={column.key}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(
+                          visibleColumns[
+                            column.key
+                          ]
+                        )}
+                        onChange={() =>
+                          onToggleColumn(
+                            column.key
+                          )
+                        }
+                      />
+
+                      {column.label}
+                    </label>
+                  )
+                )}
+              </div>
+            </div>
+
+            {dynamicFields.length > 0 && (
+              <div className="col-span-full mt-2 border-t pt-3">
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">
+                  حقول التسجيل الإضافية
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {dynamicFields.map(
+                    (field) => {
+                      const key =
+                        `dynamic-${field.id}`
+
+                      return (
+                        <label
+                          key={field.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(
+                              visibleColumns[
+                                key
+                              ]
+                            )}
+                            onChange={() =>
+                              onToggleColumn(
+                                key
+                              )
+                            }
+                          />
+
+                          {field.name}
+                        </label>
+                      )
+                    }
+                  )}
+                </div>
+              </div>
+            )}
+
+            {courses.length > 0 && (
+              <div className="col-span-full mt-2 border-t pt-3">
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">
+                  دورات السنة الحالية
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {courses.map((course) => {
+                    const key =
+                      `course-${course.id}`
 
                     return (
                       <label
-                        key={field.id}
+                        key={course.id}
                         className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
                       >
                         <input
@@ -367,55 +432,22 @@ export function StudentsTable({
                           }
                         />
 
-                        {field.name}
+                        {course.name}
                       </label>
                     )
-                  }
-                )}
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {courses.length > 0 && (
-            <div className="col-span-full mt-2 border-t pt-3">
-              <div className="mb-2 text-xs font-semibold text-muted-foreground">
-                دورات السنة الحالية
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {courses.map((course) => {
-                  const key = `course-${course.id}`
-
-                  return (
-                    <label
-                      key={course.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(
-                          visibleColumns[key]
-                        )}
-                        onChange={() =>
-                          onToggleColumn(key)
-                        }
-                      />
-
-                      {course.name}
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            الحقول الإضافية مأخوذة مباشرة من حقول التسجيل
+            الموجودة في Supabase. أي حقل جديد تضيفه من إعدادات
+            التسجيل سيظهر هنا تلقائيًا.
+          </p>
         </div>
-
-        <p className="mt-3 text-xs text-muted-foreground">
-          الحقول الإضافية مأخوذة مباشرة من حقول التسجيل
-          الموجودة في Supabase. أي حقل جديد تضيفه من إعدادات
-          التسجيل سيظهر هنا تلقائيًا.
-        </p>
-      </div>
+      )}
 
       <div className="overflow-x-auto">
         <Table>
@@ -547,15 +579,19 @@ export function StudentsTable({
                     <option value="">
                       الكل
                     </option>
+
                     <option value="مدفوع بالكامل">
                       مدفوع بالكامل
                     </option>
+
                     <option value="مدفوع جزئيًا">
                       مدفوع جزئيًا
                     </option>
+
                     <option value="غير مدفوع">
                       غير مدفوع
                     </option>
+
                     <option value="معفي">
                       معفي
                     </option>
@@ -638,7 +674,8 @@ export function StudentsTable({
 
               {dynamicFields.map(
                 (field) => {
-                  const key = `dynamic-${field.id}`
+                  const key =
+                    `dynamic-${field.id}`
 
                   if (
                     !visibleColumns[key]
@@ -657,7 +694,8 @@ export function StudentsTable({
               )}
 
               {courses.map((course) => {
-                const key = `course-${course.id}`
+                const key =
+                  `course-${course.id}`
 
                 if (
                   !visibleColumns[key]
@@ -829,6 +867,7 @@ export function StudentsTable({
                               <span className="text-xs font-medium">
                                 تفاصيل
                               </span>
+
                               <StatusBadge status="مدفوع بالكامل" />
                             </span>
                           ) : student.paymentStatus ===
@@ -837,6 +876,7 @@ export function StudentsTable({
                               <span className="text-xs font-medium">
                                 متبقي
                               </span>
+
                               <StatusBadge status="مدفوع جزئيًا" />
                             </span>
                           ) : student.paymentStatus ===
@@ -845,6 +885,7 @@ export function StudentsTable({
                               <span className="text-xs font-medium">
                                 غير مدفوع
                               </span>
+
                               <StatusBadge status="غير مدفوع" />
                             </span>
                           ) : (
@@ -852,6 +893,7 @@ export function StudentsTable({
                               <span className="text-xs font-medium">
                                 معفي
                               </span>
+
                               <StatusBadge status="معفي" />
                             </span>
                           )}
@@ -985,7 +1027,8 @@ export function StudentsTable({
 
                     {dynamicFields.map(
                       (field) => {
-                        const key = `dynamic-${field.id}`
+                        const key =
+                          `dynamic-${field.id}`
 
                         if (
                           !visibleColumns[
@@ -1011,7 +1054,8 @@ export function StudentsTable({
 
                     {courses.map(
                       (course) => {
-                        const key = `course-${course.id}`
+                        const key =
+                          `course-${course.id}`
 
                         if (
                           !visibleColumns[
