@@ -20,6 +20,9 @@ const serviceRoleKey =
 const DEVICE_COOKIE =
   't3leem_device_token'
 
+const SESSION_COOKIE =
+  't3leem_session_id'
+
 const supabaseAdmin = createClient(
   supabaseUrl,
   serviceRoleKey,
@@ -786,6 +789,29 @@ export async function POST(
         console.error(
           'Active session insert error:',
           sessionError,
+        )
+      }
+
+      /*
+       * حفظ معرف الجلسة في Cookie.
+       *
+       * نحتاج هذا المعرف لاحقًا عند تسجيل الخروج
+       * حتى نغلق نفس السجل في active_sessions.
+       */
+      if (activeSession?.id) {
+        response.cookies.set(
+          SESSION_COOKIE,
+          activeSession.id,
+          {
+            httpOnly: true,
+            secure:
+              process.env.NODE_ENV ===
+              'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge:
+              60 * 60 * 24,
+          },
         )
       }
 
