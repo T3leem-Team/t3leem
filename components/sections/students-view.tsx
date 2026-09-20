@@ -73,6 +73,39 @@ type TeacherStudentAssignment = {
   student_id: string
 }
 
+type AttendanceStatus = {
+  id: string
+  name: string
+  isActive: boolean
+  sortOrder: number
+}
+
+type AttendanceRecord = {
+  id: string
+  studentId: string
+  enrollmentId: string | null
+  courseId: string
+  attendanceDate: string
+  statusId: string
+  note: string
+}
+
+type StudentAttendanceSummary = {
+  courseId: string
+  courseName: string
+  startDate: string | null
+  endDate: string | null
+  days: string[]
+  teacherName: string
+  totalDays: number
+  present: number
+  absent: number
+  late: number
+  excused: number
+  notRecorded: number
+  percentage: number
+}
+
 type BaseColumnKey =
   | 'name'
   | 'personalId'
@@ -131,14 +164,136 @@ function getTodayString() {
   const now = new Date()
 
   const year = now.getFullYear()
-  const month = String(
-    now.getMonth() + 1
-  ).padStart(2, '0')
-  const day = String(
-    now.getDate()
-  ).padStart(2, '0')
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function normalizeArabicDay(value: unknown) {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase()
+
+  const map: Record<string, string> = {
+    'الأحد': 'sunday',
+    'الاحد': 'sunday',
+    sunday: 'sunday',
+    sun: 'sunday',
+    '0': 'sunday',
+
+    'الإثنين': 'monday',
+    'الاثنين': 'monday',
+    monday: 'monday',
+    mon: 'monday',
+    '1': 'monday',
+
+    'الثلاثاء': 'tuesday',
+    tuesday: 'tuesday',
+    tue: 'tuesday',
+    '2': 'tuesday',
+
+    'الأربعاء': 'wednesday',
+    'الاربعاء': 'wednesday',
+    wednesday: 'wednesday',
+    wed: 'wednesday',
+    '3': 'wednesday',
+
+    'الخميس': 'thursday',
+    thursday: 'thursday',
+    thu: 'thursday',
+    '4': 'thursday',
+
+    'الجمعة': 'friday',
+    friday: 'friday',
+    fri: 'friday',
+    '5': 'friday',
+
+    'السبت': 'saturday',
+    saturday: 'saturday',
+    sat: 'saturday',
+    '6': 'saturday',
+  }
+
+  return map[text] ?? text
+}
+
+function getDayOfWeek(date: string) {
+  const [year, month, day] = date
+    .split('-')
+    .map(Number)
+
+  const value = new Date(
+    Date.UTC(year, month - 1, day)
+  )
+
+  return [
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+  ][value.getUTCDay()]
+}
+
+function isCourseStudyDay(
+  date: string,
+  courseDays: string[]
+) {
+  if (!courseDays.length) return false
+
+  const currentDay = getDayOfWeek(date)
+
+  return courseDays.some(
+    (day) =>
+      normalizeArabicDay(day) ===
+      currentDay
+  )
+}
+
+function getDateRange(
+  startDate: string,
+  endDate: string
+) {
+  const result: string[] = []
+
+  const [sy, sm, sd] = startDate
+    .split('-')
+    .map(Number)
+
+  const [ey, em, ed] = endDate
+    .split('-')
+    .map(Number)
+
+  const current = new Date(
+    Date.UTC(sy, sm - 1, sd)
+  )
+
+  const end = new Date(
+    Date.UTC(ey, em - 1, ed)
+  )
+
+  while (current <= end) {
+    const year = current.getUTCFullYear()
+    const month = String(
+      current.getUTCMonth() + 1
+    ).padStart(2, '0')
+    const day = String(
+      current.getUTCDate()
+    ).padStart(2, '0')
+
+    result.push(
+      `${year}-${month}-${day}`
+    )
+
+    current.setUTCDate(
+      current.getUTCDate() + 1
+    )
+  }
+
+  return result
 }
 
 function getCourseStatus(
@@ -153,10 +308,6 @@ function getCourseStatus(
       assignment.course_id === course.id
   )
 
-  /*
-   * إذا الدورة لم تبدأ بعد:
-   * لا نعتبر الطالب "لم يحضر"، بل الدورة نفسها لم تبدأ.
-   */
   if (
     course.start_date &&
     today < course.start_date
@@ -164,10 +315,6 @@ function getCourseStatus(
     return 'لم تقم الدورة حتى الآن'
   }
 
-  /*
-   * إذا الدورة بدأت وانتهت أو ما زالت قائمة،
-   * نعتمد على توزيع الطالب على معلم في هذه الدورة.
-   */
   return hasAssignment
     ? 'حاضر'
     : 'لم يحضر'
@@ -177,13 +324,6 @@ function getCurrentCourse(
   courses: Course[],
   today: string
 ) {
-  /*
-   * الدورة الحالية هي التي:
-   *
-   * start_date <= today <= end_date
-   *
-   * وإذا كانت التواريخ غير مكتملة، لا نعتمدها كدورة حالية.
-   */
   return (
     courses.find((course) => {
       if (
@@ -201,14 +341,172 @@ function getCurrentCourse(
   )
 }
 
+function getStatusName(
+  statuses: AttendanceStatus[],
+  statusId: string
+) {
+  return (
+    statuses.find(
+      (status) =>
+        status.id === statusId
+    )?.name ?? ''
+  )
+}
+
+function normalizeAttendanceStatus(
+  value: string
+) {
+  const text = value
+    .trim()
+    .toLowerCase()
+
+  if (
+    text === 'حاضر' ||
+    text === 'present'
+  ) {
+    return 'حاضر'
+  }
+
+  if (
+    text === 'غائب' ||
+    text === 'absent'
+  ) {
+    return 'غائب'
+  }
+
+  if (
+    text === 'متأخر' ||
+    text === 'متاخر' ||
+    text === 'late'
+  ) {
+    return 'متأخر'
+  }
+
+  if (
+    text === 'مستأذن' ||
+    text === 'مستاذن' ||
+    text === 'excused'
+  ) {
+    return 'مستأذن'
+  }
+
+  return ''
+}
+
+function calculateAttendanceSummary(
+  studentId: string,
+  course: Course,
+  records: AttendanceRecord[],
+  statuses: AttendanceStatus[],
+  teacherName: string,
+  today: string
+): StudentAttendanceSummary {
+  let present = 0
+  let absent = 0
+  let late = 0
+  let excused = 0
+  let notRecorded = 0
+
+  const studyDates: string[] = []
+
+  if (
+    course.start_date &&
+    course.end_date
+  ) {
+    const dates = getDateRange(
+      course.start_date,
+      course.end_date
+    )
+
+    dates.forEach((date) => {
+      if (
+        date > today ||
+        !isCourseStudyDay(
+          date,
+          course.days
+        )
+      ) {
+        return
+      }
+
+      studyDates.push(date)
+
+      const record = records.find(
+        (item) =>
+          item.studentId === studentId &&
+          item.courseId === course.id &&
+          item.attendanceDate === date
+      )
+
+      if (!record) {
+        notRecorded += 1
+        return
+      }
+
+      const status = normalizeAttendanceStatus(
+        getStatusName(
+          statuses,
+          record.statusId
+        )
+      )
+
+      if (status === 'حاضر') {
+        present += 1
+      } else if (status === 'غائب') {
+        absent += 1
+      } else if (status === 'متأخر') {
+        late += 1
+      } else if (status === 'مستأذن') {
+        excused += 1
+      } else {
+        notRecorded += 1
+      }
+    })
+  }
+
+  const counted =
+    present +
+    late +
+    absent
+
+  const percentage =
+    counted === 0
+      ? 0
+      : Math.round(
+          ((present + late) /
+            counted) *
+            100
+        )
+
+  return {
+    courseId: course.id,
+    courseName: course.name,
+    startDate: course.start_date,
+    endDate: course.end_date,
+    days: course.days,
+    teacherName,
+    totalDays: studyDates.length,
+    present,
+    absent,
+    late,
+    excused,
+    notRecorded,
+    percentage,
+  }
+}
+
 export function StudentsView() {
   const router = useRouter()
 
-  const [supabaseStatus, setSupabaseStatus] =
-    useState('جاري الاختبار...')
+  const [
+    supabaseStatus,
+    setSupabaseStatus,
+  ] = useState('جاري الاختبار...')
 
-  const [academicLevels, setAcademicLevels] =
-    useState<AcademicLevel[]>([])
+  const [
+    academicLevels,
+    setAcademicLevels,
+  ] = useState<AcademicLevel[]>([])
 
   const [
     currentAcademicYearId,
@@ -267,6 +565,11 @@ export function StudentsView() {
   ] = useState<any[]>([])
 
   const [
+    attendanceStatuses,
+    setAttendanceStatuses,
+  ] = useState<AttendanceStatus[]>([])
+
+  const [
     isAddStudentOpen,
     setIsAddStudentOpen,
   ] = useState(false)
@@ -290,7 +593,7 @@ export function StudentsView() {
     detailsMode,
     setDetailsMode,
   ] = useState<
-    'attendance' | 'notes' | null
+    'overview' | 'attendance' | 'notes' | null
   >(null)
 
   useEffect(() => {
@@ -299,9 +602,6 @@ export function StudentsView() {
         'جاري تحميل بيانات النظام...'
       )
 
-      /*
-       * السنة الدراسية الحالية
-       */
       const {
         data: currentYear,
         error: yearError,
@@ -344,9 +644,6 @@ export function StudentsView() {
         annualFee
       )
 
-      /*
-       * الصفوف
-       */
       const {
         data: levels,
         error: levelsError,
@@ -371,9 +668,6 @@ export function StudentsView() {
         levels ?? []
       )
 
-      /*
-       * الدورات
-       */
       const {
         data: coursesData,
         error: coursesError,
@@ -441,9 +735,6 @@ export function StudentsView() {
         currentCourse?.name ?? ''
       )
 
-      /*
-       * الصف الأكاديمي للطلاب
-       */
       const {
         data: enrollmentRows,
         error:
@@ -465,31 +756,53 @@ export function StudentsView() {
         return
       }
 
-      /*
-       * الطلاب
-       */
       const {
         data: studentsData,
         error: studentsError,
       } = await supabase
         .from('students')
         .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt'
+          'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, status, fee_exempt, created_at, updated_at, source, academic_year_id'
         )
         .order('created_at', {
           ascending: false,
         })
 
       if (studentsError) {
-        setSupabaseStatus(
-          `خطأ في تحميل الطلاب: ${studentsError.message}`
-        )
-        return
+        /*
+         * بعض قواعد البيانات القديمة قد لا تحتوي
+         * على جميع الحقول الإضافية.
+         *
+         * نعيد الاستعلام بالحقول الأساسية
+         * إذا فشل الاستعلام الموسع.
+         */
+        const {
+          data: fallbackStudents,
+          error:
+            fallbackStudentsError,
+        } = await supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, created_at'
+          )
+          .order('created_at', {
+            ascending: false,
+          })
+
+        if (fallbackStudentsError) {
+          setSupabaseStatus(
+            `خطأ في تحميل الطلاب: ${fallbackStudentsError.message}`
+          )
+          return
+        }
+
+        if (fallbackStudents) {
+          ;(
+            studentsData as any
+          )
+        }
       }
 
-      /*
-       * الدفعات
-       */
       const {
         data: paymentsData,
         error: paymentsError,
@@ -510,14 +823,6 @@ export function StudentsView() {
         return
       }
 
-      /*
-       * توزيع الطلاب على المعلمين
-       *
-       * هذا هو المصدر الفعلي لحالة:
-       * حاضر / لم يحضر
-       *
-       * وليس جدول attendance.
-       */
       const {
         data: assignmentsData,
         error:
@@ -558,6 +863,156 @@ export function StudentsView() {
           })
         )
 
+      /*
+       * أسماء المعلمين.
+       *
+       * إذا لم يكن جدول المعلمين متاحًا من خلال
+       * الاستعلام الحالي، لا نوقف صفحة الطلاب.
+       */
+      const teacherNames =
+        new Map<string, string>()
+
+      if (
+        assignments.length > 0
+      ) {
+        const teacherIds = Array.from(
+          new Set(
+            assignments.map(
+              (item) =>
+                item.teacher_id
+            )
+          )
+        )
+
+        const {
+          data: teachersData,
+          error: teachersError,
+        } = await supabase
+          .from('teachers')
+          .select('id, name')
+          .in(
+            'id',
+            teacherIds
+          )
+
+        if (
+          !teachersError &&
+          teachersData
+        ) {
+          teachersData.forEach(
+            (teacher) => {
+              teacherNames.set(
+                teacher.id,
+                teacher.name ?? ''
+              )
+            }
+          )
+        }
+      }
+
+      /*
+       * حالات الحضور.
+       *
+       * الجدول المستخدم في نظام الحضور:
+       * attendance_statuses
+       */
+      let loadedAttendanceStatuses: AttendanceStatus[] =
+        []
+
+      const {
+        data: statusesData,
+        error: statusesError,
+      } = await supabase
+        .from('attendance_statuses')
+        .select(
+          'id, name, is_active, sort_order'
+        )
+        .order('sort_order', {
+          ascending: true,
+        })
+
+      if (
+        !statusesError &&
+        statusesData
+      ) {
+        loadedAttendanceStatuses =
+          statusesData.map(
+            (status) => ({
+              id: status.id,
+              name: status.name,
+              isActive:
+                Boolean(
+                  status.is_active
+                ),
+              sortOrder:
+                Number(
+                  status.sort_order ??
+                    0
+                ),
+            })
+          )
+      }
+
+      setAttendanceStatuses(
+        loadedAttendanceStatuses
+      )
+
+      /*
+       * سجلات الحضور الفعلية.
+       *
+       * نقرأ كل دورات السنة الحالية،
+       * وبعدها نربط السجلات بالطالب والدورة.
+       */
+      let attendanceRows: AttendanceRecord[] =
+        []
+
+      if (
+        loadedCourses.length > 0
+      ) {
+        const {
+          data: attendanceData,
+          error: attendanceError,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
+          )
+          .in(
+            'course_id',
+            loadedCourses.map(
+              (course) => course.id
+            )
+          )
+
+        if (attendanceError) {
+          setSupabaseStatus(
+            `تنبيه: تعذر تحميل سجلات الحضور: ${attendanceError.message}`
+          )
+        } else {
+          attendanceRows =
+            (
+              attendanceData ?? []
+            ).map(
+              (record) => ({
+                id: record.id,
+                studentId:
+                  record.student_id,
+                enrollmentId:
+                  record.enrollment_id ??
+                  null,
+                courseId:
+                  record.course_id,
+                attendanceDate:
+                  record.attendance_date,
+                statusId:
+                  record.status_id,
+                note:
+                  record.note ?? '',
+              })
+            )
+        }
+      }
+
       const levelMap = new Map(
         (levels ?? []).map(
           (level) => [
@@ -568,16 +1023,21 @@ export function StudentsView() {
       )
 
       const enrollmentMap =
-        new Map(
-          (enrollmentRows ?? []).map(
-            (enrollment) => [
-              enrollment.student_id,
-              levelMap.get(
-                enrollment.level_id
-              ) ?? '',
-            ]
+        new Map<
+          string,
+          string
+        >()
+
+      ;(enrollmentRows ?? []).forEach(
+        (enrollment) => {
+          enrollmentMap.set(
+            enrollment.student_id,
+            levelMap.get(
+              enrollment.level_id
+            ) ?? ''
           )
-        )
+        }
+      )
 
       const paidMap =
         new Map<string, number>()
@@ -599,12 +1059,12 @@ export function StudentsView() {
         }
       )
 
-      /*
-       * تجهيز بيانات الطلاب
-       */
+      const rawStudents =
+        studentsData ?? []
+
       const mappedStudents =
-        (studentsData ?? []).map(
-          (student) => {
+        rawStudents.map(
+          (student: any) => {
             const amountPaid =
               paidMap.get(
                 student.id
@@ -617,15 +1077,15 @@ export function StudentsView() {
 
             const paymentStatus =
               feeExempt
-                ? ('معفي' as const)
+                ? 'معفي'
                 : amountPaid >=
                       annualFee &&
                     annualFee > 0
-                  ? ('مدفوع بالكامل' as const)
+                  ? 'مدفوع بالكامل'
                   : amountPaid >
                       0
-                    ? ('مدفوع جزئيًا' as const)
-                    : ('غير مدفوع' as const)
+                    ? 'مدفوع جزئيًا'
+                    : 'غير مدفوع'
 
             const courseStatuses =
               loadedCourses.map(
@@ -648,6 +1108,70 @@ export function StudentsView() {
                 })
               )
 
+            const attendanceSummaries =
+              loadedCourses.map(
+                (course) => {
+                  const courseAssignment =
+                    assignments.find(
+                      (assignment) =>
+                        assignment.student_id ===
+                          student.id &&
+                        assignment.course_id ===
+                          course.id
+                    )
+
+                  const teacherName =
+                    courseAssignment
+                      ? teacherNames.get(
+                          courseAssignment.teacher_id
+                        ) ?? ''
+                      : ''
+
+                  return calculateAttendanceSummary(
+                    student.id,
+                    course,
+                    attendanceRows,
+                    loadedAttendanceStatuses,
+                    teacherName,
+                    today
+                  )
+                }
+              )
+
+            const studentAttendanceRecords =
+              attendanceRows
+                .filter(
+                  (record) =>
+                    record.studentId ===
+                    student.id
+                )
+                .map(
+                  (record) => {
+                    const statusName =
+                      normalizeAttendanceStatus(
+                        getStatusName(
+                          loadedAttendanceStatuses,
+                          record.statusId
+                        )
+                      )
+
+                    return {
+                      id: record.id,
+                      studentId:
+                        record.studentId,
+                      courseId:
+                        record.courseId,
+                      attendanceDate:
+                        record.attendanceDate,
+                      status:
+                        statusName ||
+                        'غائب',
+                      note:
+                        record.note ?? '',
+                    }
+                  }
+                )
+
             const currentStatus =
               currentCourse
                 ? getCourseStatus(
@@ -660,10 +1184,18 @@ export function StudentsView() {
 
             return {
               id: student.id,
-              name: student.name,
+              studentId:
+                student.student_id ??
+                '',
+              name:
+                student.name ?? '',
               personalId:
                 student.personal_id ??
                 '',
+              gender:
+                student.gender ?? '',
+              age:
+                student.age ?? null,
               grade:
                 enrollmentMap.get(
                   student.id
@@ -672,6 +1204,9 @@ export function StudentsView() {
                 student.phone ?? '',
               whatsapp:
                 student.whatsapp ??
+                '',
+              status:
+                student.status ??
                 '',
               paymentStatus,
               amountDue:
@@ -683,9 +1218,24 @@ export function StudentsView() {
                 '',
               notes:
                 student.notes ?? '',
+              source:
+                student.source ??
+                '',
+              createdAt:
+                student.created_at ??
+                '',
+              updatedAt:
+                student.updated_at ??
+                '',
+              academicYearId:
+                student.academic_year_id ??
+                currentYear.id,
               attendance:
                 currentStatus,
               courseStatuses,
+              attendanceSummaries,
+              attendanceRecords:
+                studentAttendanceRecords,
             }
           }
         )
@@ -773,6 +1323,19 @@ export function StudentsView() {
               )
               .join(' ')
 
+          const attendanceText =
+            (
+              student.attendanceSummaries ??
+              []
+            )
+              .map(
+                (
+                  summary: StudentAttendanceSummary
+                ) =>
+                  `${summary.courseName} ${summary.percentage}% ${summary.present} ${summary.absent} ${summary.late}`
+              )
+              .join(' ')
+
           const matchesSearch =
             !query ||
             [
@@ -784,20 +1347,21 @@ export function StudentsView() {
               notesText,
               student.attendance,
               courseStatusText,
+              attendanceText,
               remaining,
             ].some(
               (value) =>
                 String(value)
                   .toLowerCase()
-                  .includes(
-                    query
-                  )
+                  .includes(query)
             )
 
           const matches = {
             name:
               !filters.name ||
-              student.name
+              String(
+                student.name ?? ''
+              )
                 .toLowerCase()
                 .includes(
                   filters.name.toLowerCase()
@@ -805,7 +1369,10 @@ export function StudentsView() {
 
             personalId:
               !filters.personalId ||
-              student.personalId.includes(
+              String(
+                student.personalId ??
+                  ''
+              ).includes(
                 filters.personalId
               ),
 
@@ -816,13 +1383,18 @@ export function StudentsView() {
 
             phone:
               !filters.phone ||
-              student.phone.includes(
+              String(
+                student.phone ?? ''
+              ).includes(
                 filters.phone
               ),
 
             whatsapp:
               !filters.whatsapp ||
-              student.whatsapp.includes(
+              String(
+                student.whatsapp ??
+                  ''
+              ).includes(
                 filters.whatsapp
               ),
 
@@ -879,7 +1451,8 @@ export function StudentsView() {
   }
 
   const openEditStudent = () => {
-    if (!selectedStudentId) return
+    if (!selectedStudentId)
+      return
 
     setEditingStudentId(
       selectedStudentId
@@ -891,6 +1464,13 @@ export function StudentsView() {
   const closeStudentDrawer = () => {
     setIsAddStudentOpen(false)
     setEditingStudentId(null)
+  }
+
+  const openStudentDetails = (
+    student: any
+  ) => {
+    setDetailsStudent(student)
+    setDetailsMode('overview')
   }
 
   const openAttendanceDetails = (
@@ -980,12 +1560,24 @@ export function StudentsView() {
               '#':
                 index + 1,
 
+              'معرف الطالب':
+                student.studentId ??
+                '',
+
               'اسم الطالب':
                 student.name ??
                 '',
 
               'الرقم الشخصي':
                 student.personalId ??
+                '',
+
+              'الجنس':
+                student.gender ??
+                '',
+
+              'العمر':
+                student.age ??
                 '',
 
               'الصف الأكاديمي':
@@ -998,6 +1590,14 @@ export function StudentsView() {
 
               'رقم واتساب':
                 student.whatsapp ??
+                '',
+
+              'الحالة':
+                student.status ??
+                '',
+
+              'المصدر':
+                student.source ??
                 '',
 
               'حالة الدفع':
@@ -1032,15 +1632,65 @@ export function StudentsView() {
                 student.chronicDiseases ??
                 '',
 
-              'الحضور':
+              'الحضور الحالي':
                 student.attendance ??
+                '',
+
+              'تاريخ الإضافة':
+                student.createdAt ??
                 '',
             }
 
-            /*
-             * Excel يحتوي جميع الدورات
-             * حتى لو كانت مخفية من الشاشة.
-             */
+            ;(
+              student.attendanceSummaries ??
+              []
+            ).forEach(
+              (
+                summary: StudentAttendanceSummary
+              ) => {
+                row[
+                  `${summary.courseName} - المعلم`
+                ] =
+                  summary.teacherName ||
+                  ''
+
+                row[
+                  `${summary.courseName} - أيام الدراسة`
+                ] =
+                  summary.totalDays
+
+                row[
+                  `${summary.courseName} - حاضر`
+                ] =
+                  summary.present
+
+                row[
+                  `${summary.courseName} - غائب`
+                ] =
+                  summary.absent
+
+                row[
+                  `${summary.courseName} - متأخر`
+                ] =
+                  summary.late
+
+                row[
+                  `${summary.courseName} - مستأذن`
+                ] =
+                  summary.excused
+
+                row[
+                  `${summary.courseName} - لم يسجل`
+                ] =
+                  summary.notRecorded
+
+                row[
+                  `${summary.courseName} - النسبة`
+                ] =
+                  `${summary.percentage}%`
+              }
+            )
+
             ;(
               student.courseStatuses ??
               []
@@ -1049,7 +1699,7 @@ export function StudentsView() {
                 course: StudentCourseStatus
               ) => {
                 row[
-                  course.courseName
+                  `${course.courseName} - الحالة`
                 ] =
                   course.status
               }
@@ -1064,37 +1714,6 @@ export function StudentsView() {
           exportData
         )
 
-      const baseWidths = [
-        6,
-        28,
-        18,
-        20,
-        16,
-        16,
-        20,
-        16,
-        16,
-        16,
-        12,
-        35,
-        35,
-        18,
-      ]
-
-      const courseWidths =
-        courses.map(
-          () => 24
-        )
-
-      worksheet['!cols'] =
-        baseWidths
-          .concat(
-            courseWidths
-          )
-          .map((wch) => ({
-            wch,
-          }))
-
       const workbook =
         XLSX.utils.book_new()
 
@@ -1103,6 +1722,25 @@ export function StudentsView() {
         worksheet,
         'الطلاب'
       )
+
+      const columnCount =
+        Object.keys(
+          exportData[0] ?? {}
+        ).length
+
+      worksheet['!cols'] =
+        Array.from(
+          {
+            length:
+              columnCount,
+          },
+          (_, index) => ({
+            wch:
+              index === 0
+                ? 6
+                : 24,
+          })
+        )
 
       const safeYearName =
         currentAcademicYearName
@@ -1123,7 +1761,7 @@ export function StudentsView() {
       )
 
       setSupabaseStatus(
-        `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع تفاصيل جميع الدورات ✅`
+        `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وتفاصيل الحضور والدورات ✅`
       )
     }
 
@@ -1720,16 +2358,11 @@ export function StudentsView() {
                         student.id
                       }
                       onClick={() =>
-                        setSelectedStudentId(
-                          student.id
+                        openStudentDetails(
+                          student
                         )
                       }
-                      className={
-                        selectedStudentId ===
-                        student.id
-                          ? 'cursor-pointer bg-muted'
-                          : 'cursor-pointer'
-                      }
+                      className="cursor-pointer"
                     >
                       <TableCell className="text-center text-muted-foreground">
                         {index + 1}
@@ -2383,7 +3016,7 @@ export function StudentsView() {
                           null,
                         status:
                           'نشط',
-                      })
+                        })
 
                   if (
                     enrollmentError
@@ -2482,11 +3115,16 @@ export function StudentsView() {
                   const mappedStudent =
                     {
                       id: newStudent.id,
+                      studentId:
+                        newStudent.student_id ??
+                        '',
                       name:
                         newStudent.name,
                       personalId:
                         newStudent.personal_id ??
                         '',
+                      gender: '',
+                      age: null,
                       grade,
                       phone:
                         newStudent.phone ??
@@ -2494,6 +3132,16 @@ export function StudentsView() {
                       whatsapp:
                         newStudent.whatsapp ??
                         '',
+                      status:
+                        newStudent.status ??
+                        'نشط',
+                      source: '',
+                      createdAt:
+                        new Date().toISOString(),
+                      updatedAt:
+                        '',
+                      academicYearId:
+                        currentAcademicYearId,
                       paymentStatus,
                       amountDue:
                         currentAnnualFee,
@@ -2534,6 +3182,20 @@ export function StudentsView() {
                               ),
                           })
                         ),
+                      attendanceSummaries:
+                        courses.map(
+                          (course) =>
+                            calculateAttendanceSummary(
+                              newStudent.id,
+                              course,
+                              [],
+                              attendanceStatuses,
+                              '',
+                              getTodayString()
+                            )
+                        ),
+                      attendanceRecords:
+                        [],
                     }
 
                   setStudentList(
