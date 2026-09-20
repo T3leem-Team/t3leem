@@ -82,6 +82,10 @@ async function getAdmin() {
   }
 }
 
+/*
+ * GET
+ * عرض الأجهزة المعلقة مع بيانات صاحب الجهاز
+ */
 export async function GET() {
   try {
     const admin = await getAdmin()
@@ -130,9 +134,86 @@ export async function GET() {
       )
     }
 
+    /*
+     * الحصول على IDs المستخدمين أصحاب الأجهزة
+     */
+    const userIds = Array.from(
+      new Set(
+        (devices ?? [])
+          .map(
+            (device) =>
+              device.auth_user_id,
+          )
+          .filter(Boolean),
+      ),
+    )
+
+    let profiles: Array<{
+      auth_user_id: string
+      username: string
+      full_name: string | null
+      role: string
+    }> = []
+
+    if (userIds.length > 0) {
+      const {
+        data: profileData,
+        error: profilesError,
+      } = await supabaseAdmin
+        .from('user_profiles')
+        .select(
+          'auth_user_id, username, full_name, role',
+        )
+        .in('auth_user_id', userIds)
+
+      if (profilesError) {
+        console.error(
+          'Device owner profiles lookup error:',
+          profilesError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل بيانات أصحاب الأجهزة.',
+            details:
+              profilesError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      profiles = profileData ?? []
+    }
+
+    /*
+     * ربط بيانات المستخدم بالجهاز
+     */
+    const devicesWithUsers =
+      (devices ?? []).map((device) => {
+        const owner = profiles.find(
+          (profile) =>
+            profile.auth_user_id ===
+            device.auth_user_id,
+        )
+
+        return {
+          ...device,
+          user: owner
+            ? {
+                username:
+                  owner.username,
+                full_name:
+                  owner.full_name,
+                role: owner.role,
+              }
+            : null,
+        }
+      })
+
     return NextResponse.json({
       success: true,
-      devices: devices ?? [],
+      devices: devicesWithUsers,
     })
   } catch (error) {
     console.error(
@@ -154,13 +235,14 @@ export async function GET() {
   }
 }
 
+/*
+ * POST
+ * الموافقة أو الرفض
+ */
 export async function POST(
   request: Request,
 ) {
   try {
-    /*
-     * 1. التحقق من أن المنفذ Admin
-     */
     const admin = await getAdmin()
 
     if (admin.error) {
@@ -169,9 +251,6 @@ export async function POST(
 
     const adminUser = admin.user
 
-    /*
-     * 2. قراءة الطلب
-     */
     const body = await request.json()
 
     const deviceId =
@@ -208,7 +287,7 @@ export async function POST(
     }
 
     /*
-     * 3. جلب الجهاز والتأكد أنه Pending
+     * جلب الجهاز والتأكد أنه Pending
      */
     const {
       data: device,
@@ -260,28 +339,30 @@ export async function POST(
     }
 
     /*
-     * 4. الموافقة
+     * الموافقة
      */
     if (action === 'approve') {
-      const { data: updatedDevice, error } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            status: 'approved',
-            approved_at:
-              new Date().toISOString(),
-            approved_by: adminUser.id,
-            rejected_at: null,
-            rejected_by: null,
-            revoked_at: null,
-            revoked_by: null,
-          })
-          .eq('id', device.id)
-          .eq('status', 'pending')
-          .select(
-            'id, auth_user_id, device_name, status, approved_at, approved_by',
-          )
-          .maybeSingle()
+      const {
+        data: updatedDevice,
+        error,
+      } = await supabaseAdmin
+        .from('trusted_devices')
+        .update({
+          status: 'approved',
+          approved_at:
+            new Date().toISOString(),
+          approved_by: adminUser.id,
+          rejected_at: null,
+          rejected_by: null,
+          revoked_at: null,
+          revoked_by: null,
+        })
+        .eq('id', device.id)
+        .eq('status', 'pending')
+        .select(
+          'id, auth_user_id, device_name, status, approved_at, approved_by',
+        )
+        .maybeSingle()
 
       if (error) {
         console.error(
@@ -310,7 +391,7 @@ export async function POST(
       }
 
       /*
-       * تسجيل الموافقة في سجل التدقيق
+       * سجل التدقيق
        */
       const { error: auditError } =
         await supabaseAdmin
@@ -319,7 +400,8 @@ export async function POST(
             auth_user_id:
               device.auth_user_id,
             trusted_device_id: device.id,
-            event_type: 'device_approved',
+            event_type:
+              'device_approved',
             success: true,
             metadata: {
               approved_by:
@@ -342,27 +424,29 @@ export async function POST(
     }
 
     /*
-     * 5. الرفض
+     * الرفض
      */
-    const { data: updatedDevice, error } =
-      await supabaseAdmin
-        .from('trusted_devices')
-        .update({
-          status: 'rejected',
-          rejected_at:
-            new Date().toISOString(),
-          rejected_by: adminUser.id,
-          approved_at: null,
-          approved_by: null,
-          revoked_at: null,
-          revoked_by: null,
-        })
-        .eq('id', device.id)
-        .eq('status', 'pending')
-        .select(
-          'id, auth_user_id, device_name, status, rejected_at, rejected_by',
-        )
-        .maybeSingle()
+    const {
+      data: updatedDevice,
+      error,
+    } = await supabaseAdmin
+      .from('trusted_devices')
+      .update({
+        status: 'rejected',
+        rejected_at:
+          new Date().toISOString(),
+        rejected_by: adminUser.id,
+        approved_at: null,
+        approved_by: null,
+        revoked_at: null,
+        revoked_by: null,
+      })
+      .eq('id', device.id)
+      .eq('status', 'pending')
+      .select(
+        'id, auth_user_id, device_name, status, rejected_at, rejected_by',
+      )
+      .maybeSingle()
 
     if (error) {
       console.error(
@@ -391,7 +475,7 @@ export async function POST(
     }
 
     /*
-     * تسجيل الرفض في سجل التدقيق
+     * سجل التدقيق
      */
     const { error: auditError } =
       await supabaseAdmin
@@ -400,10 +484,12 @@ export async function POST(
           auth_user_id:
             device.auth_user_id,
           trusted_device_id: device.id,
-          event_type: 'device_rejected',
+          event_type:
+            'device_rejected',
           success: true,
           metadata: {
-            rejected_by: adminUser.id,
+            rejected_by:
+              adminUser.id,
           },
         })
 
