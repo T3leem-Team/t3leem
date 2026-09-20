@@ -7,6 +7,7 @@ import {
   MonitorSmartphone,
   RefreshCw,
   ShieldCheck,
+  UserRound,
   X,
 } from 'lucide-react'
 
@@ -31,17 +32,18 @@ type TrustedDevice = {
   rejected_at: string | null
   revoked_at: string | null
   last_used_at: string | null
+  user: {
+    username: string
+    full_name: string | null
+    role: string
+  } | null
 }
 
 export default function TrustedDevicesPage() {
-  const [devices, setDevices] = useState<
-    TrustedDevice[]
-  >([])
-
+  const [devices, setDevices] = useState<TrustedDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] =
     useState<string | null>(null)
-
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -79,10 +81,7 @@ export default function TrustedDevicesPage() {
         'Load trusted devices error:',
         error,
       )
-
-      setError(
-        'تعذر الاتصال بالخادم.',
-      )
+      setError('تعذر الاتصال بالخادم.')
     } finally {
       setLoading(false)
     }
@@ -106,8 +105,7 @@ export default function TrustedDevicesPage() {
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             deviceId,
@@ -127,45 +125,48 @@ export default function TrustedDevicesPage() {
         return
       }
 
-      if (action === 'approve') {
-        setSuccess(
-          'تمت الموافقة على الجهاز بنجاح.',
-        )
-      } else {
-        setSuccess(
-          'تم رفض الجهاز بنجاح.',
-        )
-      }
+      setSuccess(
+        action === 'approve'
+          ? 'تمت الموافقة على الجهاز بنجاح.'
+          : 'تم رفض الجهاز بنجاح.',
+      )
 
-      /*
-       * الجهاز لم يعد Pending،
-       * لذلك نعيد تحميل القائمة.
-       */
       await loadDevices()
     } catch (error) {
       console.error(
         'Trusted device action error:',
         error,
       )
-
-      setError(
-        'تعذر الاتصال بالخادم.',
-      )
+      setError('تعذر الاتصال بالخادم.')
     } finally {
       setProcessingId(null)
     }
   }
 
-  function formatDate(
-    value: string,
-  ) {
-    return new Intl.DateTimeFormat(
-      'ar-BH',
-      {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      },
-    ).format(new Date(value))
+  function formatDate(value: string) {
+    return new Intl.DateTimeFormat('ar-BH', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value))
+  }
+
+  function getRoleName(role: string) {
+    switch (role) {
+      case 'Admin':
+        return 'مدير النظام'
+
+      case 'Supervisor':
+        return 'مشرف'
+
+      case 'Teacher':
+        return 'معلم'
+
+      case 'Payments Manager':
+        return 'مدير المدفوعات'
+
+      default:
+        return role
+    }
   }
 
   return (
@@ -180,183 +181,176 @@ export default function TrustedDevicesPage() {
           type="button"
           onClick={loadDevices}
           disabled={loading}
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
-            className={`size-4 ${
+            className={`h-4 w-4 ${
               loading ? 'animate-spin' : ''
             }`}
           />
-
           تحديث
         </button>
       </div>
 
       {error && (
-        <div
-          role="alert"
-          className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {success && (
-        <div
-          role="status"
-          className="rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary"
-        >
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
           {success}
         </div>
       )}
 
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" />
+            طلبات الأجهزة
+          </CardTitle>
 
-            <div>
-              <CardTitle>
-                طلبات الأجهزة
-              </CardTitle>
-
-              <CardDescription>
-                الأجهزة التي تنتظر موافقة الإدارة.
-              </CardDescription>
-            </div>
-          </div>
+          <CardDescription>
+            الأجهزة التي تنتظر موافقة مدير النظام.
+          </CardDescription>
         </CardHeader>
 
         <CardContent>
           {loading ? (
-            <div className="flex min-h-40 items-center justify-center">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                جارٍ تحميل الأجهزة...
-              </div>
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           ) : devices.length === 0 ? (
-            <div className="flex min-h-40 flex-col items-center justify-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <ShieldCheck className="size-6 text-muted-foreground" />
-              </div>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Check className="mb-3 h-10 w-10 text-muted-foreground" />
 
-              <p className="mt-4 font-medium">
-                لا توجد أجهزة معلقة
+              <p className="font-medium">
+                لا توجد طلبات أجهزة معلقة
               </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                لا توجد حالياً أجهزة تنتظر موافقة الإدارة.
+                جميع الأجهزة تمت معالجتها.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {devices.map((device) => {
-                const processing =
-                  processingId === device.id
-
-                return (
-                  <div
-                    key={device.id}
-                    className="rounded-xl border border-border p-4"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted">
-                          <MonitorSmartphone className="size-5 text-muted-foreground" />
+              {devices.map((device) => (
+                <div
+                  key={device.id}
+                  className="rounded-xl border p-4"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-3">
+                      {/* صاحب الطلب */}
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-lg bg-muted p-2">
+                          <UserRound className="h-5 w-5" />
                         </div>
 
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold">
-                              {device.device_name ||
-                                'جهاز غير معروف'}
-                            </h3>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            صاحب الطلب
+                          </p>
 
-                            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                              <Clock3 className="size-3" />
-                              بانتظار الموافقة
-                            </span>
-                          </div>
+                          <p className="font-semibold">
+                            {device.user?.full_name ||
+                              device.user?.username ||
+                              'مستخدم غير معروف'}
+                          </p>
 
-                          <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                            <p>
-                              معرف المستخدم:
-                              <span className="mr-1 font-mono text-xs">
-                                {device.auth_user_id}
-                              </span>
+                          {device.user?.username && (
+                            <p className="text-sm text-muted-foreground">
+                              @{device.user.username}
                             </p>
+                          )}
 
-                            <p>
-                              تاريخ الطلب:
-                              <span className="mr-1">
-                                {formatDate(
-                                  device.created_at,
-                                )}
-                              </span>
+                          {device.user?.role && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {getRoleName(
+                                device.user.role,
+                              )}
                             </p>
-
-                            {device.last_used_at && (
-                              <p>
-                                آخر استخدام:
-                                <span className="mr-1">
-                                  {formatDate(
-                                    device.last_used_at,
-                                  )}
-                                </span>
-                              </p>
-                            )}
-                          </div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex w-full gap-2 lg:w-auto">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleAction(
-                              device.id,
-                              'reject',
-                            )
-                          }
-                          disabled={processing}
-                          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-destructive/30 px-4 text-sm font-medium text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50 lg:flex-none"
-                        >
-                          {processing ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <X className="size-4" />
-                          )}
+                      {/* بيانات الجهاز */}
+                      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <MonitorSmartphone className="h-4 w-4" />
 
-                          رفض
-                        </button>
+                          <span>
+                            {device.device_name ||
+                              'جهاز جديد'}
+                          </span>
+                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleAction(
-                              device.id,
-                              'approve',
-                            )
-                          }
-                          disabled={processing}
-                          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 lg:flex-none"
-                        >
-                          {processing ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Check className="size-4" />
-                          )}
+                        <div className="flex items-center gap-2">
+                          <Clock3 className="h-4 w-4" />
 
-                          موافقة
-                        </button>
+                          <span>
+                            {formatDate(
+                              device.created_at,
+                            )}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
+                    {/* الأزرار */}
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAction(
+                            device.id,
+                            'reject',
+                          )
+                        }
+                        disabled={
+                          processingId ===
+                          device.id
+                        }
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {processingId ===
+                        device.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+
+                        رفض
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleAction(
+                            device.id,
+                            'approve',
+                          )
+                        }
+                        disabled={
+                          processingId ===
+                          device.id
+                        }
+                        className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {processingId ===
+                        device.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+
+                        موافقة
+                      </button>
+                    </div>
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
