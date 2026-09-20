@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createHash, randomBytes } from 'crypto'
+import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+
+const DEVICE_COOKIE = 't3leem_device_token'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,8 +17,6 @@ const supabaseAdmin = createClient(
   },
 )
 
-const DEVICE_COOKIE = 't3leem_device_token'
-
 function hashDeviceToken(token: string) {
   return createHash('sha256')
     .update(token)
@@ -25,7 +26,7 @@ function hashDeviceToken(token: string) {
 export async function GET() {
   try {
     /*
-     * التأكد من وجود جلسة تسجيل دخول
+     * 1. التحقق من جلسة المستخدم
      */
     const supabase =
       await createSupabaseServerClient()
@@ -46,20 +47,19 @@ export async function GET() {
     }
 
     /*
-     * قراءة Device Token من Cookie
+     * 2. قراءة Cookie الخاصة بالجهاز
      */
-    const cookieHeader =
-      (await import('next/headers')).cookies()
+    const cookieStore = await cookies()
 
-    const existingCookie =
-      cookieHeader.get(DEVICE_COOKIE)?.value
+    const existingToken =
+      cookieStore.get(DEVICE_COOKIE)?.value
 
     /*
-     * إذا كان الجهاز مسجلاً مسبقاً
+     * 3. إذا كان الجهاز موجوداً مسبقاً
      */
-    if (existingCookie) {
-      const deviceTokenHash =
-        hashDeviceToken(existingCookie)
+    if (existingToken) {
+      const tokenHash =
+        hashDeviceToken(existingToken)
 
       const { data: device, error } =
         await supabaseAdmin
@@ -69,7 +69,7 @@ export async function GET() {
           )
           .eq(
             'device_token_hash',
-            deviceTokenHash,
+            tokenHash,
           )
           .eq('auth_user_id', user.id)
           .maybeSingle()
@@ -84,19 +84,18 @@ export async function GET() {
           {
             error:
               'تعذر فحص الجهاز.',
+            details: error.message,
           },
           { status: 500 },
         )
       }
 
       if (device) {
-        /*
-         * تحديث آخر استخدام للجهاز
-         */
         await supabaseAdmin
           .from('trusted_devices')
           .update({
-            last_used_at: new Date().toISOString(),
+            last_used_at:
+              new Date().toISOString(),
           })
           .eq('id', device.id)
 
@@ -110,31 +109,29 @@ export async function GET() {
     }
 
     /*
-     * جهاز جديد:
-     * إنشاء Token عشوائي قوي
+     * 4. جهاز جديد
      */
     const deviceToken =
       randomBytes(32).toString('hex')
 
-    const deviceTokenHash =
+    const tokenHash =
       hashDeviceToken(deviceToken)
 
-    /*
-     * تسجيل الجهاز كـ Pending
-     */
-    const { data: newDevice, error: insertError } =
-      await supabaseAdmin
-        .from('trusted_devices')
-        .insert({
-          auth_user_id: user.id,
-          device_name: 'جهاز جديد',
-          device_token_hash: deviceTokenHash,
-          status: 'pending',
-        })
-        .select(
-          'id, status, device_name, created_at',
-        )
-        .single()
+    const {
+      data: newDevice,
+      error: insertError,
+    } = await supabaseAdmin
+      .from('trusted_devices')
+      .insert({
+        auth_user_id: user.id,
+        device_name: 'جهاز جديد',
+        device_token_hash: tokenHash,
+        status: 'pending',
+      })
+      .select(
+        'id, status, device_name, created_at',
+      )
+      .single()
 
     if (insertError || !newDevice) {
       console.error(
@@ -146,29 +143,38 @@ export async function GET() {
         {
           error:
             'تعذر تسجيل الجهاز الجديد.',
+          details:
+            insertError?.message ?? null,
         },
         { status: 500 },
       )
     }
 
     /*
-     * تسجيل الحدث في سجل المصادقة
+     * 5. تسجيل الحدث
      */
-    await supabaseAdmin
-      .from('auth_audit_logs')
-      .insert({
-        auth_user_id: user.id,
-        trusted_device_id: newDevice.id,
-        event_type: 'device_pending',
-        success: true,
-        user_agent: null,
-        metadata: {
-          source: 'device_check',
-        },
-      })
+    const { error: auditError } =
+      await supabaseAdmin
+        .from('auth_audit_logs')
+        .insert({
+          auth_user_id: user.id,
+          trusted_device_id: newDevice.id,
+          event_type: 'device_pending',
+          success: true,
+          metadata: {
+            source: 'device_check',
+          },
+        })
+
+    if (auditError) {
+      console.error(
+        'Audit log error:',
+        auditError,
+      )
+    }
 
     /*
-     * إنشاء Response ووضع Cookie آمن
+     * 6. حفظ Device Token في Cookie
      */
     const response = NextResponse.json({
       authenticated: true,
@@ -182,10 +188,13 @@ export async function GET() {
       deviceToken,
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure:
+          process.env.NODE_ENV ===
+          'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 60 * 60 * 24 * 365,
+        maxAge:
+          60 * 60 * 24 * 365,
       },
     )
 
@@ -200,6 +209,10 @@ export async function GET() {
       {
         error:
           'حدث خطأ أثناء فحص الجهاز.',
+        details:
+          error instanceof Error
+            ? error.message
+            : String(error),
       },
       { status: 500 },
     )
