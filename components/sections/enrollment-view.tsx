@@ -10,6 +10,7 @@ import {
   Filter,
   Loader2,
   RefreshCw,
+  Settings2,
   X,
 } from 'lucide-react'
 
@@ -77,11 +78,56 @@ type KeyRow = {
   enabled: boolean
 }
 
+type CustomField = {
+  id: string
+  name: string
+  field_type: string
+  available_in_registration: boolean
+  available_in_students: boolean
+  available_in_payments: boolean
+  sort_order: number
+  is_active: boolean
+}
+
+type CustomFieldValue = {
+  custom_field_id: string
+  record_type: string
+  record_id: string
+  value: string | null
+}
+
+type Level = {
+  id: string
+  name: string
+}
+
+type ColumnKey =
+  | 'name'
+  | 'personal_id'
+  | 'gender'
+  | 'age'
+  | 'phone'
+  | 'whatsapp'
+  | 'level'
+  | 'created_at'
+  | 'request_number'
+  | 'status'
+
+type ColumnDefinition = {
+  key: ColumnKey
+  label: string
+  defaultVisible: boolean
+  fixed?: boolean
+}
+
 const CURRENT_YEAR_KEY =
   'allow_add_to_current_year'
 
 const ARCHIVE_KEY =
   'allow_add_to_archive'
+
+const COLUMNS_STORAGE_KEY =
+  't3leem_registration_requests_columns_v1'
 
 const emptyFilters: Filters = {
   id: '',
@@ -97,6 +143,72 @@ const inputClass =
 const selectClass =
   'h-9 w-full min-w-[130px] rounded-md border border-input bg-background px-2 text-xs'
 
+const DEFAULT_COLUMNS: Record<ColumnKey, boolean> = {
+  name: true,
+  personal_id: true,
+  gender: false,
+  age: false,
+  phone: true,
+  whatsapp: true,
+  level: true,
+  created_at: false,
+  request_number: false,
+  status: true,
+}
+
+const BASE_COLUMNS: ColumnDefinition[] = [
+  {
+    key: 'name',
+    label: 'اسم الطالب',
+    defaultVisible: true,
+  },
+  {
+    key: 'personal_id',
+    label: 'الرقم الشخصي',
+    defaultVisible: true,
+  },
+  {
+    key: 'gender',
+    label: 'الجنس',
+    defaultVisible: false,
+  },
+  {
+    key: 'age',
+    label: 'العمر',
+    defaultVisible: false,
+  },
+  {
+    key: 'phone',
+    label: 'رقم الهاتف',
+    defaultVisible: true,
+  },
+  {
+    key: 'whatsapp',
+    label: 'الواتساب',
+    defaultVisible: true,
+  },
+  {
+    key: 'level',
+    label: 'المستوى',
+    defaultVisible: true,
+  },
+  {
+    key: 'created_at',
+    label: 'تاريخ التقديم',
+    defaultVisible: false,
+  },
+  {
+    key: 'request_number',
+    label: 'رقم الطلب',
+    defaultVisible: false,
+  },
+  {
+    key: 'status',
+    label: 'الحالة',
+    defaultVisible: true,
+  },
+]
+
 function mapRequest(row: any): RegistrationRequest {
   return {
     id: row.id ?? '',
@@ -108,7 +220,11 @@ function mapRequest(row: any): RegistrationRequest {
     age:
       typeof row.age === 'number'
         ? row.age
-        : null,
+        : row.age !== null &&
+            row.age !== undefined &&
+            row.age !== ''
+          ? Number(row.age)
+          : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
     levelId: row.level_id ?? null,
@@ -232,6 +348,29 @@ function formatAmount(
   return value.toFixed(3)
 }
 
+function getCustomFieldDisplayValue(
+  field: CustomField,
+  value: string | null | undefined,
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ''
+  ) {
+    return '—'
+  }
+
+  if (field.field_type === 'boolean') {
+    return value === 'true'
+      ? 'نعم'
+      : value === 'false'
+        ? 'لا'
+        : value
+  }
+
+  return value
+}
+
 export function EnrollmentView() {
   const [requests, setRequests] =
     useState<RegistrationRequest[]>([])
@@ -246,6 +385,9 @@ export function EnrollmentView() {
     useState(false)
 
   const [showArchive, setShowArchive] =
+    useState(false)
+
+  const [showColumnSettings, setShowColumnSettings] =
     useState(false)
 
   const [filters, setFilters] =
@@ -268,6 +410,86 @@ export function EnrollmentView() {
 
   const [allowArchiveImport, setAllowArchiveImport] =
     useState(false)
+
+  const [customFields, setCustomFields] =
+    useState<CustomField[]>([])
+
+  const [customFieldValues, setCustomFieldValues] =
+    useState<CustomFieldValue[]>([])
+
+  const [levels, setLevels] =
+    useState<Level[]>([])
+
+  const [visibleColumns, setVisibleColumns] =
+    useState<Record<ColumnKey, boolean>>(
+      DEFAULT_COLUMNS,
+    )
+
+  /*
+   * تحميل تخصيص الأعمدة من المتصفح.
+   *
+   * القيم الافتراضية:
+   * الاسم، الرقم الشخصي، الهاتف، الواتساب،
+   * المستوى، الحالة.
+   *
+   * الجنس والعمر والتاريخ ورقم الطلب مخفية.
+   */
+  useEffect(() => {
+    try {
+      const saved =
+        window.localStorage.getItem(
+          COLUMNS_STORAGE_KEY,
+        )
+
+      if (!saved) {
+        setVisibleColumns(
+          DEFAULT_COLUMNS,
+        )
+        return
+      }
+
+      const parsed =
+        JSON.parse(saved)
+
+      if (
+        parsed &&
+        typeof parsed === 'object'
+      ) {
+        setVisibleColumns({
+          ...DEFAULT_COLUMNS,
+          ...parsed,
+        })
+      }
+    } catch (error) {
+      console.warn(
+        'Could not load saved column settings:',
+        error,
+      )
+
+      setVisibleColumns(
+        DEFAULT_COLUMNS,
+      )
+    }
+  }, [])
+
+  /*
+   * حفظ تخصيص الأعمدة.
+   */
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COLUMNS_STORAGE_KEY,
+        JSON.stringify(
+          visibleColumns,
+        ),
+      )
+    } catch (error) {
+      console.warn(
+        'Could not save column settings:',
+        error,
+      )
+    }
+  }, [visibleColumns])
 
   const loadImportPermissions = async () => {
     setPermissionsLoading(true)
@@ -296,7 +518,8 @@ export function EnrollmentView() {
       return
     }
 
-    const rows = (data ?? []) as KeyRow[]
+    const rows =
+      (data ?? []) as KeyRow[]
 
     const currentYearRow =
       rows.find(
@@ -321,6 +544,133 @@ export function EnrollmentView() {
     )
 
     setPermissionsLoading(false)
+  }
+
+  const loadCustomFields = async () => {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('custom_fields')
+      .select(`
+        id,
+        name,
+        field_type,
+        available_in_registration,
+        available_in_students,
+        available_in_payments,
+        sort_order,
+        is_active
+      `)
+      .eq(
+        'available_in_registration',
+        true,
+      )
+      .eq(
+        'is_active',
+        true,
+      )
+      .order(
+        'sort_order',
+        {
+          ascending: true,
+        },
+      )
+      .order(
+        'created_at',
+        {
+          ascending: true,
+        },
+      )
+
+    if (error) {
+      console.error(
+        'Could not load custom fields:',
+        error,
+      )
+
+      setCustomFields([])
+
+      return
+    }
+
+    setCustomFields(
+      (data ?? []) as CustomField[],
+    )
+  }
+
+  const loadLevels = async () => {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('levels')
+      .select('id, name')
+      .order(
+        'name',
+        {
+          ascending: true,
+        },
+      )
+
+    if (error) {
+      console.warn(
+        'Could not load levels:',
+        error,
+      )
+
+      setLevels([])
+
+      return
+    }
+
+    setLevels(
+      (data ?? []) as Level[],
+    )
+  }
+
+  const loadCustomFieldValues = async (
+    requestIds: string[],
+  ) => {
+    if (requestIds.length === 0) {
+      setCustomFieldValues([])
+      return
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('custom_field_values')
+      .select(`
+        custom_field_id,
+        record_type,
+        record_id,
+        value
+      `)
+      .eq(
+        'record_type',
+        'registration_request',
+      )
+      .in(
+        'record_id',
+        requestIds,
+      )
+
+    if (error) {
+      console.warn(
+        'Could not load custom field values:',
+        error,
+      )
+
+      setCustomFieldValues([])
+
+      return
+    }
+
+    setCustomFieldValues(
+      (data ?? []) as CustomFieldValue[],
+    )
   }
 
   const loadRequests = async () => {
@@ -374,14 +724,25 @@ export function EnrollmentView() {
       )
 
       setRequests([])
+      setCustomFieldValues([])
       setLoading(false)
 
       return
     }
 
-    setRequests(
+    const mappedRequests =
       (data ?? []).map(
         mapRequest,
+      )
+
+    setRequests(
+      mappedRequests,
+    )
+
+    await loadCustomFieldValues(
+      mappedRequests.map(
+        (request) =>
+          request.id,
       ),
     )
 
@@ -393,6 +754,8 @@ export function EnrollmentView() {
       await Promise.all([
         loadRequests(),
         loadImportPermissions(),
+        loadCustomFields(),
+        loadLevels(),
       ])
     }
 
@@ -774,14 +1137,274 @@ export function EnrollmentView() {
       filters,
     ).some(Boolean)
 
+  /*
+   * الأعمدة الأساسية.
+   *
+   * # ليس عمودًا قابلًا للإخفاء.
+   * وهو مجرد تسلسل للصفوف.
+   */
+  const allBaseColumns =
+    useMemo(
+      () => BASE_COLUMNS,
+      [],
+    )
+
+  /*
+   * أي Custom Field جديد متاح في التسجيل
+   * يظهر تلقائيًا في التخصيص.
+   *
+   * لكنه لا يظهر افتراضيًا في الجدول.
+   */
+  const customColumnKeys =
+    useMemo(() => {
+      return customFields.map(
+        (field) =>
+          `custom:${field.id}`,
+      )
+    }, [customFields])
+
+  const getCustomFieldValue = (
+    requestId: string,
+    fieldId: string,
+  ) => {
+    const row =
+      customFieldValues.find(
+        (item) =>
+          item.record_id ===
+            requestId &&
+          item.custom_field_id ===
+            fieldId,
+      )
+
+    return row?.value ?? ''
+  }
+
+  const getLevelName = (
+    levelId: string | null,
+  ) => {
+    if (!levelId) {
+      return '—'
+    }
+
+    return (
+      levels.find(
+        (level) =>
+          level.id === levelId,
+      )?.name ??
+      levelId
+    )
+  }
+
+  const isCustomColumnVisible = (
+    fieldId: string,
+  ) => {
+    const key =
+      `custom:${fieldId}`
+
+    return Boolean(
+      (
+        visibleColumns as Record<
+          string,
+          boolean
+        >
+      )[key],
+    )
+  }
+
+  const setCustomColumnVisible = (
+    fieldId: string,
+    value: boolean,
+  ) => {
+    const key =
+      `custom:${fieldId}`
+
+    setVisibleColumns(
+      (current) => ({
+        ...current,
+        [key]: value,
+      }),
+    )
+  }
+
+  const toggleBaseColumn = (
+    key: ColumnKey,
+  ) => {
+    setVisibleColumns(
+      (current) => ({
+        ...current,
+        [key]: !current[key],
+      }),
+    )
+  }
+
+  const resetColumnSettings = () => {
+    const next: Record<
+      string,
+      boolean
+    > = {
+      ...DEFAULT_COLUMNS,
+    }
+
+    customColumnKeys.forEach(
+      (key) => {
+        next[key] = false
+      },
+    )
+
+    setVisibleColumns(
+      next as Record<
+        ColumnKey,
+        boolean
+      >,
+    )
+  }
+
+  /*
+   * عدد الأعمدة الظاهرة فعليًا.
+   *
+   * # + الأعمدة الأساسية + الحقول المخصصة
+   * + الإجراء.
+   */
+  const visibleBaseColumnCount =
+    allBaseColumns.filter(
+      (column) =>
+        visibleColumns[
+          column.key
+        ],
+    ).length
+
+  const visibleCustomColumnCount =
+    customFields.filter(
+      (field) =>
+        isCustomColumnVisible(
+          field.id,
+        ),
+    ).length
+
+  const renderCell = (
+    request: RegistrationRequest,
+    column: ColumnKey,
+  ) => {
+    switch (column) {
+      case 'name':
+        return (
+          <span className="font-medium">
+            {request.name ||
+              '—'}
+          </span>
+        )
+
+      case 'personal_id':
+        return (
+          <span className="tabular-nums">
+            {request.personalId ||
+              '—'}
+          </span>
+        )
+
+      case 'gender':
+        return (
+          <span>
+            {request.gender ||
+              '—'}
+          </span>
+        )
+
+      case 'age':
+        return (
+          <span>
+            {request.age ??
+              '—'}
+          </span>
+        )
+
+      case 'phone':
+        return (
+          <span className="tabular-nums">
+            {request.phone ||
+              '—'}
+          </span>
+        )
+
+      case 'whatsapp':
+        return (
+          <span className="tabular-nums">
+            {request.whatsapp ||
+              '—'}
+          </span>
+        )
+
+      case 'level':
+        return (
+          <span>
+            {getLevelName(
+              request.levelId,
+            )}
+          </span>
+        )
+
+      case 'created_at':
+        return (
+          <span>
+            {formatDate(
+              request.createdAt,
+            )}
+          </span>
+        )
+
+      case 'request_number':
+        return (
+          <span className="tabular-nums">
+            {request.requestNumber ||
+              request.id ||
+              '—'}
+          </span>
+        )
+
+      case 'status':
+        return (
+          <StatusBadge
+            status={getStatusLabel(
+              request.status,
+            )}
+          />
+        )
+
+      default:
+        return null
+    }
+  }
+
   const renderTable = (
     tableRequests: RegistrationRequest[],
   ) => {
+    const visibleColumns =
+      allBaseColumns.filter(
+        (column) =>
+          visibleColumns[
+            column.key
+          ],
+      )
+
+    const visibleCustomFields =
+      customFields.filter(
+        (field) =>
+          isCustomColumnVisible(
+            field.id,
+          ),
+      )
+
+    const totalColumns =
+      1 +
+      visibleColumns.length +
+      visibleCustomFields.length +
+      1
+
     if (loading) {
       return (
         <tr>
           <td
-            colSpan={6}
+            colSpan={totalColumns}
             className="px-4 py-12 text-center"
           >
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -800,7 +1423,7 @@ export function EnrollmentView() {
       return (
         <tr>
           <td
-            colSpan={6}
+            colSpan={totalColumns}
             className="px-4 py-12 text-center text-muted-foreground"
           >
             لا توجد طلبات في هذا القسم.
@@ -810,7 +1433,7 @@ export function EnrollmentView() {
     }
 
     return tableRequests.map(
-      (request) => {
+      (request, index) => {
         const hasHealth =
           hasHealthNotes(
             request,
@@ -833,51 +1456,86 @@ export function EnrollmentView() {
                 : 'hover:bg-muted/30'
             }`}
           >
-            <td className="px-4 py-4">
-              <div className="font-medium tabular-nums">
-                {request.requestNumber ||
-                  request.id}
-              </div>
+            {/* التسلسل */}
+            <td className="px-4 py-4 text-center text-muted-foreground tabular-nums">
+              {index + 1}
+            </td>
 
-              {special && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {hasHealth && (
-                    <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
-                      🩺 معلومات صحية
-                    </span>
+            {visibleColumns.map(
+              (column) => (
+                <td
+                  key={
+                    column.key
+                  }
+                  className={`px-4 py-4 ${
+                    column.key ===
+                    'created_at'
+                      ? 'text-muted-foreground'
+                      : ''
+                  }`}
+                >
+                  {renderCell(
+                    request,
+                    column.key,
                   )}
 
-                  {hasRequestNotes && (
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                      📝 ملاحظات
-                    </span>
+                  {column.key ===
+                    'request_number' &&
+                    special && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {hasHealth && (
+                          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                            🩺 معلومات صحية
+                          </span>
+                        )}
+
+                        {hasRequestNotes && (
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                            📝 ملاحظات
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                  {column.key ===
+                    'name' &&
+                    special && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {hasHealth && (
+                          <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+                            🩺 معلومات صحية
+                          </span>
+                        )}
+
+                        {hasRequestNotes && (
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                            📝 ملاحظات
+                          </span>
+                        )}
+                      </div>
+                    )}
+                </td>
+              ),
+            )}
+
+            {visibleCustomFields.map(
+              (field) => (
+                <td
+                  key={
+                    field.id
+                  }
+                  className="px-4 py-4"
+                >
+                  {getCustomFieldDisplayValue(
+                    field,
+                    getCustomFieldValue(
+                      request.id,
+                      field.id,
+                    ),
                   )}
-                </div>
-              )}
-            </td>
-
-            <td className="px-4 py-4 font-medium">
-              {request.name}
-            </td>
-
-            <td className="px-4 py-4 tabular-nums text-muted-foreground">
-              {request.phone ||
-                '—'}
-            </td>
-
-            <td className="px-4 py-4 text-muted-foreground">
-              {formatDate(
-                request.createdAt,
-              )}
-            </td>
-
-            <td className="px-4 py-4">
-              <StatusBadge
-                status={getStatusLabel(
-                  request.status,
-                )}
-              />
-            </td>
+                </td>
+              ),
+            )}
 
             <td className="px-4 py-4">
               <Button
@@ -979,10 +1637,25 @@ export function EnrollmentView() {
 
           <Button
             variant="outline"
+            onClick={() =>
+              setShowColumnSettings(
+                true,
+              )
+            }
+            className="gap-2"
+          >
+            <Settings2 className="size-4" />
+            تخصيص الأعمدة
+          </Button>
+
+          <Button
+            variant="outline"
             onClick={async () => {
               await Promise.all([
                 loadRequests(),
                 loadImportPermissions(),
+                loadCustomFields(),
+                loadLevels(),
               ])
             }}
             disabled={
@@ -1010,168 +1683,194 @@ export function EnrollmentView() {
             <table className="w-full min-w-[1050px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="px-4 py-3 text-right font-medium">
-                    <div className="space-y-2">
-                      <div>
-                        رقم الطلب
-                      </div>
-
-                      <input
-                        value={
-                          filters.id
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'id',
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث"
-                        className={
-                          inputClass
-                        }
-                      />
-                    </div>
+                  {/* التسلسل */}
+                  <th className="w-16 px-4 py-3 text-center font-medium">
+                    #
                   </th>
 
-                  <th className="px-4 py-3 text-right font-medium">
-                    <div className="space-y-2">
-                      <div>
-                        اسم الطالب
-                      </div>
+                  {allBaseColumns
+                    .filter(
+                      (column) =>
+                        visibleColumns[
+                          column.key
+                        ],
+                    )
+                    .map(
+                      (column) => (
+                        <th
+                          key={
+                            column.key
+                          }
+                          className="px-4 py-3 text-right font-medium"
+                        >
+                          <div className="space-y-2">
+                            <div>
+                              {
+                                column.label
+                              }
+                            </div>
 
-                      <input
-                        value={
-                          filters.name
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'name',
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث"
-                        className={
-                          inputClass
-                        }
-                      />
-                    </div>
-                  </th>
+                            {column.key ===
+                              'name' && (
+                              <input
+                                value={
+                                  filters.name
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateFilter(
+                                    'name',
+                                    event
+                                      .target
+                                      .value,
+                                  )
+                                }
+                                placeholder="بحث"
+                                className={
+                                  inputClass
+                                }
+                              />
+                            )}
 
-                  <th className="px-4 py-3 text-right font-medium">
-                    <div className="space-y-2">
-                      <div>
-                        رقم الجوال
-                      </div>
+                            {column.key ===
+                              'phone' && (
+                              <input
+                                value={
+                                  filters.phone
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateFilter(
+                                    'phone',
+                                    event
+                                      .target
+                                      .value,
+                                  )
+                                }
+                                placeholder="بحث"
+                                className={
+                                  inputClass
+                                }
+                              />
+                            )}
 
-                      <input
-                        value={
-                          filters.phone
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'phone',
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث"
-                        className={
-                          inputClass
-                        }
-                      />
-                    </div>
-                  </th>
+                            {column.key ===
+                              'request_number' && (
+                              <input
+                                value={
+                                  filters.id
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateFilter(
+                                    'id',
+                                    event
+                                      .target
+                                      .value,
+                                  )
+                                }
+                                placeholder="بحث"
+                                className={
+                                  inputClass
+                                }
+                              />
+                            )}
 
-                  <th className="px-4 py-3 text-right font-medium">
-                    <div className="space-y-2">
-                      <div>
-                        تاريخ التقديم
-                      </div>
+                            {column.key ===
+                              'created_at' && (
+                              <input
+                                value={
+                                  filters.submittedAt
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateFilter(
+                                    'submittedAt',
+                                    event
+                                      .target
+                                      .value,
+                                  )
+                                }
+                                placeholder="بحث"
+                                className={
+                                  inputClass
+                                }
+                              />
+                            )}
 
-                      <input
-                        value={
-                          filters.submittedAt
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'submittedAt',
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        placeholder="بحث"
-                        className={
-                          inputClass
-                        }
-                      />
-                    </div>
-                  </th>
+                            {column.key ===
+                              'status' && (
+                              <select
+                                value={
+                                  filters.status
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateFilter(
+                                    'status',
+                                    event
+                                      .target
+                                      .value,
+                                  )
+                                }
+                                className={
+                                  selectClass
+                                }
+                              >
+                                <option value="">
+                                  جميع الحالات
+                                </option>
 
-                  <th className="px-4 py-3 text-right font-medium">
-                    <div className="space-y-2">
-                      <div>
-                        الحالة
-                      </div>
+                                <option value="pending">
+                                  قيد المراجعة
+                                </option>
 
-                      <select
-                        value={
-                          filters.status
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          updateFilter(
-                            'status',
-                            event
-                              .target
-                              .value,
-                          )
-                        }
-                        className={
-                          selectClass
-                        }
-                      >
-                        <option value="">
-                          جميع الحالات
-                        </option>
+                                <option value="under_review">
+                                  تحت المراجعة
+                                </option>
 
-                        <option value="pending">
-                          قيد المراجعة
-                        </option>
+                                <option value="approved">
+                                  مقبول
+                                </option>
 
-                        <option value="under_review">
-                          تحت المراجعة
-                        </option>
+                                <option value="rejected">
+                                  مرفوض
+                                </option>
 
-                        <option value="approved">
-                          مقبول
-                        </option>
+                                <option value="cancelled">
+                                  ملغي
+                                </option>
+                              </select>
+                            )}
+                          </div>
+                        </th>
+                      ),
+                    )}
 
-                        <option value="rejected">
-                          مرفوض
-                        </option>
-
-                        <option value="cancelled">
-                          ملغي
-                        </option>
-                      </select>
-                    </div>
-                  </th>
+                  {customFields
+                    .filter(
+                      (field) =>
+                        isCustomColumnVisible(
+                          field.id,
+                        ),
+                    )
+                    .map(
+                      (field) => (
+                        <th
+                          key={
+                            field.id
+                          }
+                          className="px-4 py-3 text-right font-medium"
+                        >
+                          {field.name}
+                        </th>
+                      ),
+                    )}
 
                   <th className="px-4 py-3 text-right font-medium">
                     الإجراء
@@ -1206,25 +1905,53 @@ export function EnrollmentView() {
                 <table className="w-full min-w-[1050px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40">
-                      <th className="px-4 py-3 text-right font-medium">
-                        رقم الطلب
+                      <th className="w-16 px-4 py-3 text-center font-medium">
+                        #
                       </th>
 
-                      <th className="px-4 py-3 text-right font-medium">
-                        اسم الطالب
-                      </th>
+                      {allBaseColumns
+                        .filter(
+                          (column) =>
+                            visibleColumns[
+                              column.key
+                            ],
+                        )
+                        .map(
+                          (column) => (
+                            <th
+                              key={
+                                column.key
+                              }
+                              className="px-4 py-3 text-right font-medium"
+                            >
+                              {
+                                column.label
+                              }
+                            </th>
+                          ),
+                        )}
 
-                      <th className="px-4 py-3 text-right font-medium">
-                        رقم الجوال
-                      </th>
-
-                      <th className="px-4 py-3 text-right font-medium">
-                        تاريخ الاستيراد
-                      </th>
-
-                      <th className="px-4 py-3 text-right font-medium">
-                        الحالة
-                      </th>
+                      {customFields
+                        .filter(
+                          (field) =>
+                            isCustomColumnVisible(
+                              field.id,
+                            ),
+                        )
+                        .map(
+                          (field) => (
+                            <th
+                              key={
+                                field.id
+                              }
+                              className="px-4 py-3 text-right font-medium"
+                            >
+                              {
+                                field.name
+                              }
+                            </th>
+                          ),
+                        )}
 
                       <th className="px-4 py-3 text-right font-medium">
                         الإجراء
@@ -1292,6 +2019,170 @@ export function EnrollmentView() {
             )
           }
         />
+      )}
+
+      {/* تخصيص الأعمدة */}
+      {showColumnSettings && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-xl border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  تخصيص أعمدة طلبات التسجيل
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  اختر الأعمدة التي تريد ظهورها في الجدول.
+                </p>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  setShowColumnSettings(
+                    false,
+                  )
+                }
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-y-auto p-5">
+              <div className="space-y-2">
+                <div className="mb-3 text-sm font-semibold">
+                  الحقول الأساسية
+                </div>
+
+                {allBaseColumns.map(
+                  (column) => (
+                    <label
+                      key={
+                        column.key
+                      }
+                      className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
+                    >
+                      <span className="text-sm">
+                        {
+                          column.label
+                        }
+                      </span>
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          Boolean(
+                            visibleColumns[
+                              column.key
+                            ],
+                          )
+                        }
+                        onChange={() =>
+                          toggleBaseColumn(
+                            column.key,
+                          )
+                        }
+                        className="size-4"
+                      />
+                    </label>
+                  ),
+                )}
+
+                <div className="mb-3 mt-6 text-sm font-semibold">
+                  الحقول الإضافية
+                </div>
+
+                {customFields.length ===
+                0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    لا توجد حقول إضافية مضافة للتسجيل حاليًا.
+                  </div>
+                ) : (
+                  customFields.map(
+                    (field) => (
+                      <label
+                        key={
+                          field.id
+                        }
+                        className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
+                      >
+                        <div>
+                          <div className="text-sm font-medium">
+                            {
+                              field.name
+                            }
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {field.field_type ===
+                            'text'
+                              ? 'نص'
+                              : field.field_type ===
+                                  'number'
+                                ? 'رقم'
+                                : field.field_type ===
+                                    'date'
+                                  ? 'تاريخ'
+                                  : field.field_type ===
+                                      'select'
+                                    ? 'اختيار'
+                                    : field.field_type ===
+                                        'boolean'
+                                      ? 'نعم / لا'
+                                      : field.field_type ===
+                                          'textarea'
+                                        ? 'نص طويل'
+                                        : field.field_type}
+                          </div>
+                        </div>
+
+                        <input
+                          type="checkbox"
+                          checked={isCustomColumnVisible(
+                            field.id,
+                          )}
+                          onChange={(
+                            event,
+                          ) =>
+                            setCustomColumnVisible(
+                              field.id,
+                              event
+                                .target
+                                .checked,
+                            )
+                          }
+                          className="size-4"
+                        />
+                      </label>
+                    ),
+                  )
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t p-4">
+              <Button
+                variant="ghost"
+                onClick={
+                  resetColumnSettings
+                }
+              >
+                استعادة الافتراضي
+              </Button>
+
+              <Button
+                onClick={() =>
+                  setShowColumnSettings(
+                    false,
+                  )
+                }
+              >
+                تم
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showReview &&
@@ -1423,7 +2314,7 @@ export function EnrollmentView() {
 
                   <div>
                     <p className="text-xs text-muted-foreground">
-                      رقم الجوال
+                      رقم الهاتف
                     </p>
 
                     <p className="mt-1 font-medium tabular-nums">
@@ -1453,10 +2344,9 @@ export function EnrollmentView() {
                     </p>
 
                     <p className="mt-1 font-medium">
-                      {
-                        selectedRequest.levelId ||
-                        'غير محدد'
-                      }
+                      {getLevelName(
+                        selectedRequest.levelId,
+                      )}
                     </p>
                   </div>
 
@@ -1472,6 +2362,49 @@ export function EnrollmentView() {
                     </p>
                   </div>
                 </div>
+
+                {/* الحقول الإضافية */}
+                {customFields.length >
+                  0 && (
+                  <div className="rounded-lg border p-4">
+                    <p className="text-sm font-medium">
+                      الحقول الإضافية
+                    </p>
+
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      {customFields.map(
+                        (field) => {
+                          const value =
+                            getCustomFieldValue(
+                              selectedRequest.id,
+                              field.id,
+                            )
+
+                          return (
+                            <div
+                              key={
+                                field.id
+                              }
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                {
+                                  field.name
+                                }
+                              </p>
+
+                              <p className="mt-1 whitespace-pre-wrap font-medium">
+                                {getCustomFieldDisplayValue(
+                                  field,
+                                  value,
+                                )}
+                              </p>
+                            </div>
+                          )
+                        },
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-lg border p-4">
                   <p className="text-sm font-medium">
