@@ -18,7 +18,11 @@ export type StudentAttendanceRecord = {
   studentId: string
   courseId: string
   attendanceDate: string
-  status: 'حاضر' | 'غائب' | 'متأخر' | 'مستأذن'
+  status:
+    | 'حاضر'
+    | 'غائب'
+    | 'متأخر'
+    | 'مستأذن'
   note: string
 }
 
@@ -57,7 +61,8 @@ function getDayOfWeek(date: string) {
     return null
   }
 
-  const [year, month, day] = date.split('-').map(Number)
+  const [year, month, day] =
+    date.split('-').map(Number)
 
   if (!year || !month || !day) {
     return null
@@ -68,7 +73,9 @@ function getDayOfWeek(date: string) {
   ).getUTCDay()
 }
 
-function normalizeCourseDay(value: string): number | null {
+function normalizeCourseDay(
+  value: string,
+): number | null {
   const normalized = String(value ?? '')
     .trim()
     .toLowerCase()
@@ -129,7 +136,8 @@ function isCourseStudyDay(
   date: string,
   courseDays: string[],
 ) {
-  const dayOfWeek = getDayOfWeek(date)
+  const dayOfWeek =
+    getDayOfWeek(date)
 
   if (dayOfWeek === null) {
     return false
@@ -144,30 +152,45 @@ function isCourseStudyDay(
 
   return courseDays.some(
     (day) =>
-      normalizeCourseDay(day) === dayOfWeek,
+      normalizeCourseDay(day) ===
+      dayOfWeek,
   )
 }
 
-function formatDate(date: string | null) {
+function formatDate(
+  date: string | null,
+) {
   if (!date) {
     return '—'
   }
 
-  const parsed = new Date(`${date}T00:00:00`)
+  const parsed = new Date(
+    `${date}T00:00:00`,
+  )
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
     return date
   }
 
-  return parsed.toLocaleDateString('ar-BH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  return parsed.toLocaleDateString(
+    'ar-BH',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  )
 }
 
-function formatShortDate(date: string) {
-  const [year, month, day] = date.split('-')
+function formatShortDate(
+  date: string,
+) {
+  const [year, month, day] =
+    date.split('-')
 
   if (!year || !month || !day) {
     return date
@@ -176,16 +199,27 @@ function formatShortDate(date: string) {
   return `${day}/${month}/${year}`
 }
 
-function getDayName(date: string) {
-  const parsed = new Date(`${date}T00:00:00`)
+function getDayName(
+  date: string,
+) {
+  const parsed = new Date(
+    `${date}T00:00:00`,
+  )
 
-  if (Number.isNaN(parsed.getTime())) {
+  if (
+    Number.isNaN(
+      parsed.getTime(),
+    )
+  ) {
     return ''
   }
 
-  return parsed.toLocaleDateString('ar-BH', {
-    weekday: 'long',
-  })
+  return parsed.toLocaleDateString(
+    'ar-BH',
+    {
+      weekday: 'long',
+    },
+  )
 }
 
 function getStatusClasses(
@@ -206,13 +240,10 @@ function getStatusClasses(
 
     case 'لم يسجل':
       return 'bg-muted text-muted-foreground'
-  }
-}
 
-function getStatusLabel(
-  status: AttendanceDay['status'],
-) {
-  return status
+    default:
+      return 'bg-muted text-muted-foreground'
+  }
 }
 
 function buildDateRange(
@@ -221,11 +252,21 @@ function buildDateRange(
 ) {
   const dates: string[] = []
 
-  const [startYear, startMonth, startDay] =
-    startDate.split('-').map(Number)
+  const [
+    startYear,
+    startMonth,
+    startDay,
+  ] = startDate
+    .split('-')
+    .map(Number)
 
-  const [endYear, endMonth, endDay] =
-    endDate.split('-').map(Number)
+  const [
+    endYear,
+    endMonth,
+    endDay,
+  ] = endDate
+    .split('-')
+    .map(Number)
 
   if (
     !startYear ||
@@ -255,15 +296,20 @@ function buildDateRange(
   )
 
   while (current <= end) {
-    const year = current.getUTCFullYear()
+    const year =
+      current.getUTCFullYear()
+
     const month = String(
       current.getUTCMonth() + 1,
     ).padStart(2, '0')
+
     const day = String(
       current.getUTCDate(),
     ).padStart(2, '0')
 
-    dates.push(`${year}-${month}-${day}`)
+    dates.push(
+      `${year}-${month}-${day}`,
+    )
 
     current.setUTCDate(
       current.getUTCDate() + 1,
@@ -282,71 +328,78 @@ export function StudentAttendanceDetails({
 }: StudentAttendanceDetailsProps) {
   const today = getTodayString()
 
-  const attendanceDays = useMemo<AttendanceDay[]>(() => {
-    if (!course) {
-      return []
-    }
+  const attendanceDays =
+    useMemo<AttendanceDay[]>(() => {
+      if (!course) {
+        return []
+      }
 
-    if (
-      !course.startDate ||
-      !course.endDate
-    ) {
-      return []
-    }
+      if (
+        !course.startDate ||
+        !course.endDate
+      ) {
+        return []
+      }
 
-    const dates = buildDateRange(
-      course.startDate,
-      course.endDate,
-    )
-
-    return dates
-      .filter((date) => {
-        /*
-         * نعرض فقط أيام الدراسة الفعلية
-         * المحددة للدورة.
-         */
-        if (
-          !isCourseStudyDay(
-            date,
-            course.days,
-          )
-        ) {
-          return false
-        }
-
-        /*
-         * لا نعرض أيام المستقبل
-         * كتفاصيل حضور فعلية.
-         */
-        if (date > today) {
-          return false
-        }
-
-        return true
-      })
-      .map((date) => {
-        const record = records.find(
-          (item) =>
-            item.studentId === studentId &&
-            item.courseId === course.id &&
-            item.attendanceDate === date,
+      const dates =
+        buildDateRange(
+          course.startDate,
+          course.endDate,
         )
 
-        return {
-          date,
-          dayName: getDayName(date),
-          status:
-            record?.status ??
-            'لم يسجل',
-          note: record?.note ?? '',
-        }
-      })
-  }, [
-    course,
-    records,
-    studentId,
-    today,
-  ])
+      return dates
+        .filter((date) => {
+          /*
+           * فقط أيام الدراسة المحددة
+           * للدورة.
+           */
+          if (
+            !isCourseStudyDay(
+              date,
+              course.days,
+            )
+          ) {
+            return false
+          }
+
+          /*
+           * لا نعرض الأيام المستقبلية.
+           */
+          if (date > today) {
+            return false
+          }
+
+          return true
+        })
+        .map((date) => {
+          const record =
+            records.find(
+              (item) =>
+                item.studentId ===
+                  studentId &&
+                item.courseId ===
+                  course.id &&
+                item.attendanceDate ===
+                  date,
+            )
+
+          return {
+            date,
+            dayName:
+              getDayName(date),
+            status:
+              record?.status ??
+              'لم يسجل',
+            note:
+              record?.note ?? '',
+          }
+        })
+    }, [
+      course,
+      records,
+      studentId,
+      today,
+    ])
 
   const summary = useMemo(() => {
     let present = 0
@@ -380,31 +433,36 @@ export function StudentAttendanceDetails({
     }
 
     /*
-     * نفس قاعدة صفحة الحضور:
+     * قاعدة نسبة الحضور:
      *
-     * حاضر + متأخر = حضور
-     * غائب = محسوب
-     * مستأذن = لا يدخل في النسبة
-     * لم يسجل = لا يدخل في النسبة
+     * حاضر     = حضور
+     * متأخر    = حضور
+     * مستأذن   = حضور
+     * غائب     = يدخل في الحساب وليس حضورًا
+     * لم يسجل  = مستبعد من الحساب
      */
     const counted =
       present +
       late +
+      excused +
       absent
 
     const attended =
       present +
-      late
+      late +
+      excused
 
     const percentage =
       counted === 0
         ? 0
         : Math.round(
-            (attended / counted) * 100,
+            (attended / counted) *
+              100,
           )
 
     return {
-      totalDays: attendanceDays.length,
+      totalDays:
+        attendanceDays.length,
       present,
       absent,
       late,
@@ -466,7 +524,9 @@ export function StudentAttendanceDetails({
                 بداية الدورة:
               </span>{' '}
               <span className="font-medium">
-                {formatDate(course.startDate)}
+                {formatDate(
+                  course.startDate,
+                )}
               </span>
             </div>
 
@@ -475,7 +535,9 @@ export function StudentAttendanceDetails({
                 نهاية الدورة:
               </span>{' '}
               <span className="font-medium">
-                {formatDate(course.endDate)}
+                {formatDate(
+                  course.endDate,
+                )}
               </span>
             </div>
           </div>
@@ -486,36 +548,48 @@ export function StudentAttendanceDetails({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <SummaryCard
               label="أيام الدراسة"
-              value={summary.totalDays}
+              value={
+                summary.totalDays
+              }
             />
 
             <SummaryCard
               label="حاضر"
-              value={summary.present}
+              value={
+                summary.present
+              }
               valueClassName="text-emerald-600 dark:text-emerald-400"
             />
 
             <SummaryCard
               label="غائب"
-              value={summary.absent}
+              value={
+                summary.absent
+              }
               valueClassName="text-red-600 dark:text-red-400"
             />
 
             <SummaryCard
               label="متأخر"
-              value={summary.late}
+              value={
+                summary.late
+              }
               valueClassName="text-amber-600 dark:text-amber-400"
             />
 
             <SummaryCard
               label="مستأذن"
-              value={summary.excused}
+              value={
+                summary.excused
+              }
               valueClassName="text-blue-600 dark:text-blue-400"
             />
 
             <SummaryCard
               label="لم يسجل"
-              value={summary.notRecorded}
+              value={
+                summary.notRecorded
+              }
             />
           </div>
 
@@ -540,15 +614,16 @@ export function StudentAttendanceDetails({
             </div>
 
             <p className="mt-2 text-xs text-muted-foreground">
-              النسبة محسوبة من الحاضر والمتأخر والغائب فقط،
-              والمستأذن ولم يسجل لا يدخلان في الحساب.
+              النسبة محسوبة من الحاضر والمتأخر والمستأذن والغائب،
+              بينما «لم يسجل» لا يدخل في الحساب.
             </p>
           </div>
         </div>
 
         {/* Daily details */}
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          {attendanceDays.length === 0 ? (
+          {attendanceDays.length ===
+          0 ? (
             <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center">
               <p className="text-sm text-muted-foreground">
                 لا توجد أيام دراسة منتهية أو حالية لعرض حضورها.
@@ -556,45 +631,47 @@ export function StudentAttendanceDetails({
             </div>
           ) : (
             <div className="space-y-2">
-              {attendanceDays.map((day) => (
-                <div
-                  key={day.date}
-                  className="rounded-xl border bg-card p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">
-                          {formatShortDate(day.date)}
-                        </span>
+              {attendanceDays.map(
+                (day) => (
+                  <div
+                    key={day.date}
+                    className="rounded-xl border bg-card p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">
+                            {formatShortDate(
+                              day.date,
+                            )}
+                          </span>
 
-                        <span className="text-sm text-muted-foreground">
-                          {day.dayName}
-                        </span>
+                          <span className="text-sm text-muted-foreground">
+                            {day.dayName}
+                          </span>
+                        </div>
+
+                        {day.note && (
+                          <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              الملاحظة:
+                            </span>{' '}
+                            {day.note}
+                          </div>
+                        )}
                       </div>
 
-                      {day.note && (
-                        <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">
-                            الملاحظة:
-                          </span>{' '}
-                          {day.note}
-                        </div>
-                      )}
+                      <span
+                        className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${getStatusClasses(
+                          day.status,
+                        )}`}
+                      >
+                        {day.status}
+                      </span>
                     </div>
-
-                    <span
-                      className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${getStatusClasses(
-                        day.status,
-                      )}`}
-                    >
-                      {getStatusLabel(
-                        day.status,
-                      )}
-                    </span>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
         </div>
