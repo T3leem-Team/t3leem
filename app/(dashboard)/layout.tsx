@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/shell'
+import { SessionHeartbeat } from '@/components/auth/session-heartbeat'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 
 export default async function DashboardLayout({
@@ -14,8 +15,12 @@ export default async function DashboardLayout({
   }
 
   return (
-    <DashboardShell>
-      {children}
-    </DashboardShell>
+    <>
+      <SessionHeartbeat />
+
+      <DashboardShell>
+        {children}
+      </DashboardShell>
+    </>
   )
 }
