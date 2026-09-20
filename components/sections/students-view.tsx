@@ -9,10 +9,9 @@ import {
 import {
   Search,
   UserPlus,
-  Filter,
-  X,
   Pencil,
   Download,
+  X,
 } from 'lucide-react'
 
 import { useRouter } from 'next/navigation'
@@ -22,18 +21,8 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { StatusBadge } from '@/components/dashboard/status-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
 import {
   StudentDetails,
@@ -42,16 +31,15 @@ import {
 
 import { StudentForm } from './student-form'
 
-type Filters = {
-  name: string
-  personalId: string
-  grade: string
-  phone: string
-  whatsapp: string
-  paymentStatus: string
-  notes: string
-  attendance: string
-}
+import {
+  StudentsTable,
+  type StudentDynamicField,
+  type StudentTableFilters,
+  type StudentTableStudent,
+  type StudentTableCourse,
+} from './students-table'
+
+type Filters = StudentTableFilters
 
 type AcademicLevel = {
   id: string
@@ -59,13 +47,8 @@ type AcademicLevel = {
   sort_order: number
 }
 
-type Course = {
-  id: string
+type Course = StudentTableCourse & {
   academic_year_id: string
-  name: string
-  start_date: string | null
-  end_date: string | null
-  days: string[]
 }
 
 type TeacherStudentAssignment = {
@@ -108,49 +91,6 @@ type StudentAttendanceSummary = {
   percentage: number
 }
 
-type BaseColumnKey =
-  | 'name'
-  | 'personalId'
-  | 'grade'
-  | 'contact'
-  | 'paymentStatus'
-  | 'notes'
-  | 'attendance'
-
-const baseColumns: {
-  key: BaseColumnKey
-  label: string
-}[] = [
-  {
-    key: 'name',
-    label: 'اسم الطالب',
-  },
-  {
-    key: 'personalId',
-    label: 'الرقم الشخصي',
-  },
-  {
-    key: 'grade',
-    label: 'الصف الأكاديمي',
-  },
-  {
-    key: 'contact',
-    label: 'التواصل',
-  },
-  {
-    key: 'paymentStatus',
-    label: 'الدفع',
-  },
-  {
-    key: 'notes',
-    label: 'ملاحظات',
-  },
-  {
-    key: 'attendance',
-    label: 'الحضور',
-  },
-]
-
 const emptyFilters: Filters = {
   name: '',
   personalId: '',
@@ -166,8 +106,12 @@ function getTodayString() {
   const now = new Date()
 
   const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
+  const month = String(
+    now.getMonth() + 1
+  ).padStart(2, '0')
+  const day = String(
+    now.getDate()
+  ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -221,12 +165,15 @@ function normalizeArabicDay(value: unknown) {
 }
 
 function getDayOfWeek(date: string) {
-  const [year, month, day] = date
-    .split('-')
-    .map(Number)
+  const [year, month, day] =
+    date.split('-').map(Number)
 
   const value = new Date(
-    Date.UTC(year, month - 1, day)
+    Date.UTC(
+      year,
+      month - 1,
+      day
+    )
   )
 
   return [
@@ -244,13 +191,17 @@ function isCourseStudyDay(
   date: string,
   courseDays: string[]
 ) {
-  if (!courseDays.length) return false
+  if (!courseDays.length) {
+    return false
+  }
 
-  const currentDay = getDayOfWeek(date)
+  const currentDay =
+    getDayOfWeek(date)
 
   return courseDays.some(
     (day) =>
-      normalizeArabicDay(day) === currentDay
+      normalizeArabicDay(day) ===
+      currentDay
   )
 }
 
@@ -260,27 +211,36 @@ function getDateRange(
 ) {
   const result: string[] = []
 
-  const [sy, sm, sd] = startDate
-    .split('-')
-    .map(Number)
+  const [sy, sm, sd] =
+    startDate.split('-').map(Number)
 
-  const [ey, em, ed] = endDate
-    .split('-')
-    .map(Number)
+  const [ey, em, ed] =
+    endDate.split('-').map(Number)
 
   const current = new Date(
-    Date.UTC(sy, sm - 1, sd)
+    Date.UTC(
+      sy,
+      sm - 1,
+      sd
+    )
   )
 
   const end = new Date(
-    Date.UTC(ey, em - 1, ed)
+    Date.UTC(
+      ey,
+      em - 1,
+      ed
+    )
   )
 
   while (current <= end) {
-    const year = current.getUTCFullYear()
+    const year =
+      current.getUTCFullYear()
+
     const month = String(
       current.getUTCMonth() + 1
     ).padStart(2, '0')
+
     const day = String(
       current.getUTCDate()
     ).padStart(2, '0')
@@ -303,11 +263,14 @@ function getCourseStatus(
   assignments: TeacherStudentAssignment[],
   today: string
 ): StudentCourseStatus['status'] {
-  const hasAssignment = assignments.some(
-    (assignment) =>
-      assignment.student_id === studentId &&
-      assignment.course_id === course.id
-  )
+  const hasAssignment =
+    assignments.some(
+      (assignment) =>
+        assignment.student_id ===
+          studentId &&
+        assignment.course_id ===
+          course.id
+    )
 
   if (
     course.start_date &&
@@ -432,32 +395,43 @@ function calculateAttendanceSummary(
 
       studyDates.push(date)
 
-      const record = records.find(
-        (item) =>
-          item.studentId === studentId &&
-          item.courseId === course.id &&
-          item.attendanceDate === date
-      )
+      const record =
+        records.find(
+          (item) =>
+            item.studentId ===
+              studentId &&
+            item.courseId ===
+              course.id &&
+            item.attendanceDate ===
+              date
+        )
 
       if (!record) {
         notRecorded += 1
         return
       }
 
-      const status = normalizeAttendanceStatus(
-        getStatusName(
-          statuses,
-          record.statusId
+      const status =
+        normalizeAttendanceStatus(
+          getStatusName(
+            statuses,
+            record.statusId
+          )
         )
-      )
 
       if (status === 'حاضر') {
         present += 1
-      } else if (status === 'غائب') {
+      } else if (
+        status === 'غائب'
+      ) {
         absent += 1
-      } else if (status === 'متأخر') {
+      } else if (
+        status === 'متأخر'
+      ) {
         late += 1
-      } else if (status === 'مستأذن') {
+      } else if (
+        status === 'مستأذن'
+      ) {
         excused += 1
       } else {
         notRecorded += 1
@@ -486,7 +460,8 @@ function calculateAttendanceSummary(
     endDate: course.end_date,
     days: course.days,
     teacherName,
-    totalDays: studyDates.length,
+    totalDays:
+      studyDates.length,
     present,
     absent,
     late,
@@ -502,17 +477,23 @@ export function StudentsView() {
   const [
     supabaseStatus,
     setSupabaseStatus,
-  ] = useState('جاري الاختبار...')
+  ] = useState(
+    'جاري الاختبار...'
+  )
 
   const [
     academicLevels,
     setAcademicLevels,
-  ] = useState<AcademicLevel[]>([])
+  ] = useState<
+    AcademicLevel[]
+  >([])
 
   const [
     currentAcademicYearId,
     setCurrentAcademicYearId,
-  ] = useState<string | null>(null)
+  ] = useState<string | null>(
+    null
+  )
 
   const [
     currentAcademicYearName,
@@ -530,27 +511,31 @@ export function StudentsView() {
   const [
     currentCourseId,
     setCurrentCourseId,
-  ] = useState<string | null>(null)
+  ] = useState<string | null>(
+    null
+  )
 
   const [
     currentCourseName,
     setCurrentCourseName,
   ] = useState('')
 
-  const [
-    search,
-    setSearch,
-  ] = useState('')
+  const [search, setSearch] =
+    useState('')
 
   const [
     filters,
     setFilters,
-  ] = useState<Filters>(emptyFilters)
+  ] = useState<Filters>(
+    emptyFilters
+  )
 
   const [
     visibleColumns,
     setVisibleColumns,
-  ] = useState<Record<string, boolean>>({
+  ] = useState<
+    Record<string, boolean>
+  >({
     name: true,
     personalId: true,
     grade: true,
@@ -561,14 +546,25 @@ export function StudentsView() {
   })
 
   const [
+    dynamicFields,
+    setDynamicFields,
+  ] = useState<
+    StudentDynamicField[]
+  >([])
+
+  const [
     studentList,
     setStudentList,
-  ] = useState<any[]>([])
+  ] = useState<
+    StudentTableStudent[]
+  >([])
 
   const [
     attendanceStatuses,
     setAttendanceStatuses,
-  ] = useState<AttendanceStatus[]>([])
+  ] = useState<
+    AttendanceStatus[]
+  >([])
 
   const [
     isAddStudentOpen,
@@ -583,12 +579,16 @@ export function StudentsView() {
   const [
     editingStudentId,
     setEditingStudentId,
-  ] = useState<string | null>(null)
+  ] = useState<string | null>(
+    null
+  )
 
   const [
     detailsStudent,
     setDetailsStudent,
-  ] = useState<any | null>(null)
+  ] = useState<any | null>(
+    null
+  )
 
   const [
     detailsMode,
@@ -606,14 +606,21 @@ export function StudentsView() {
       const {
         data: currentYear,
         error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, annual_fee'
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+      } =
+        await supabase
+          .from('academic_years')
+          .select(
+            'id, name, annual_fee'
+          )
+          .eq(
+            'is_current',
+            true
+          )
+          .eq(
+            'is_active',
+            true
+          )
+          .maybeSingle()
 
       if (yearError) {
         setSupabaseStatus(
@@ -629,9 +636,11 @@ export function StudentsView() {
         return
       }
 
-      const annualFee = Number(
-        currentYear.annual_fee ?? 0
-      )
+      const annualFee =
+        Number(
+          currentYear.annual_fee ??
+            0
+        )
 
       setCurrentAcademicYearId(
         currentYear.id
@@ -648,15 +657,22 @@ export function StudentsView() {
       const {
         data: levels,
         error: levelsError,
-      } = await supabase
-        .from('levels')
-        .select(
-          'id, name, sort_order'
-        )
-        .eq('is_active', true)
-        .order('sort_order', {
-          ascending: true,
-        })
+      } =
+        await supabase
+          .from('levels')
+          .select(
+            'id, name, sort_order'
+          )
+          .eq(
+            'is_active',
+            true
+          )
+          .order(
+            'sort_order',
+            {
+              ascending: true,
+            }
+          )
 
       if (levelsError) {
         setSupabaseStatus(
@@ -672,19 +688,23 @@ export function StudentsView() {
       const {
         data: coursesData,
         error: coursesError,
-      } = await supabase
-        .from('courses')
-        .select(
-          'id, academic_year_id, name, start_date, end_date, days'
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id
-        )
-        .order('start_date', {
-          ascending: true,
-          nullsFirst: false,
-        })
+      } =
+        await supabase
+          .from('courses')
+          .select(
+            'id, academic_year_id, name, start_date, end_date, days'
+          )
+          .eq(
+            'academic_year_id',
+            currentYear.id
+          )
+          .order(
+            'start_date',
+            {
+              ascending: true,
+              nullsFirst: false,
+            }
+          )
 
       if (coursesError) {
         setSupabaseStatus(
@@ -694,12 +714,15 @@ export function StudentsView() {
       }
 
       const loadedCourses: Course[] =
-        (coursesData ?? []).map(
+        (
+          coursesData ?? []
+        ).map(
           (course) => ({
             id: course.id,
             academic_year_id:
               course.academic_year_id,
-            name: course.name,
+            name:
+              course.name,
             start_date:
               course.start_date ??
               null,
@@ -729,75 +752,283 @@ export function StudentsView() {
         )
 
       setCurrentCourseId(
-        currentCourse?.id ?? null
+        currentCourse?.id ??
+          null
       )
 
       setCurrentCourseName(
-        currentCourse?.name ?? ''
+        currentCourse?.name ??
+          ''
       )
 
+      /*
+       * التسجيلات الديناميكية
+       *
+       * dynamic_fields = تعريف الحقول
+       * student_dynamic_values = قيمة الحقل لكل طالب
+       */
       const {
-        data: enrollmentRows,
+        data: dynamicFieldsData,
         error:
-          enrollmentsError,
+          dynamicFieldsError,
       } = await supabase
-        .from('enrollments')
+        .from('dynamic_fields')
         .select(
-          'student_id, level_id, academic_year_id, status'
+          'id, name, field_key, field_type, is_required, show_in_registration, is_active, sort_order'
         )
         .eq(
-          'academic_year_id',
-          currentYear.id
+          'is_active',
+          true
+        )
+        .order(
+          'sort_order',
+          {
+            ascending: true,
+          }
         )
 
-      if (enrollmentsError) {
+      if (dynamicFieldsError) {
         setSupabaseStatus(
-          `خطأ في تحميل ربط الصفوف: ${enrollmentsError.message}`
+          `خطأ في تحميل حقول التسجيل: ${dynamicFieldsError.message}`
         )
         return
       }
 
-      let studentsData: any[] | null =
-        null
+      const loadedDynamicFields: StudentDynamicField[] =
+        (
+          dynamicFieldsData ??
+          []
+        ).map(
+          (field) => ({
+            id: field.id,
+            name:
+              field.name,
+            field_key:
+              field.field_key,
+            field_type:
+              field.field_type,
+            is_required:
+              Boolean(
+                field.is_required
+              ),
+            show_in_registration:
+              Boolean(
+                field.show_in_registration
+              ),
+            is_active:
+              Boolean(
+                field.is_active
+              ),
+            sort_order:
+              Number(
+                field.sort_order ??
+                  0
+              ),
+          })
+        )
+
+      setDynamicFields(
+        loadedDynamicFields
+      )
+
+      /*
+       * قيم الحقول الديناميكية
+       */
+      const {
+        data: dynamicValuesData,
+        error:
+          dynamicValuesError,
+      } = await supabase
+        .from(
+          'student_dynamic_values'
+        )
+        .select(
+          'id, student_id, field_id, value'
+        )
+
+      if (dynamicValuesError) {
+        setSupabaseStatus(
+          `خطأ في تحميل بيانات حقول الطلاب: ${dynamicValuesError.message}`
+        )
+        return
+      }
+
+      const dynamicValuesMap =
+        new Map<
+          string,
+          Record<string, string>
+        >()
+
+      ;(
+        dynamicValuesData ?? []
+      ).forEach(
+        (item) => {
+          const current =
+            dynamicValuesMap.get(
+              item.student_id
+            ) ?? {}
+
+          current[item.field_id] =
+            item.value ?? ''
+
+          dynamicValuesMap.set(
+            item.student_id,
+            current
+          )
+        }
+      )
+
+      /*
+       * enrollments
+       * نحتاج المستوى والفصل معًا.
+       */
+      const {
+        data: enrollmentRows,
+        error:
+          enrollmentsError,
+      } =
+        await supabase
+          .from(
+            'enrollments'
+          )
+          .select(
+            'student_id, level_id, class_id, academic_year_id, status'
+          )
+          .eq(
+            'academic_year_id',
+            currentYear.id
+          )
+
+      if (enrollmentsError) {
+        setSupabaseStatus(
+          `خطأ في تحميل ربط الطلاب بالصفوف: ${enrollmentsError.message}`
+        )
+        return
+      }
+
+      const {
+        data: classesData,
+        error: classesError,
+      } =
+        await supabase
+          .from('classes')
+          .select(
+            'id, name, level_id, academic_year_id'
+          )
+          .eq(
+            'academic_year_id',
+            currentYear.id
+          )
+
+      if (classesError) {
+        setSupabaseStatus(
+          `خطأ في تحميل الفصول: ${classesError.message}`
+        )
+        return
+      }
+
+      const levelMap =
+        new Map<string, string>()
+
+      ;(
+        levels ?? []
+      ).forEach((level) => {
+        levelMap.set(
+          level.id,
+          level.name
+        )
+      })
+
+      const classMap =
+        new Map<string, string>()
+
+      ;(
+        classesData ?? []
+      ).forEach((item) => {
+        classMap.set(
+          item.id,
+          item.name
+        )
+      })
+
+      const enrollmentMap =
+        new Map<
+          string,
+          {
+            levelName: string
+            className: string
+          }
+        >()
+
+      ;(
+        enrollmentRows ?? []
+      ).forEach(
+        (enrollment) => {
+          enrollmentMap.set(
+            enrollment.student_id,
+            {
+              levelName:
+                levelMap.get(
+                  enrollment.level_id
+                ) ?? '',
+              className:
+                enrollment.class_id
+                  ? classMap.get(
+                      enrollment.class_id
+                    ) ?? ''
+                  : '',
+            }
+          )
+        }
+      )
+
+      /*
+       * الطلاب
+       */
+      let studentsData:
+        | any[]
+        | null = null
 
       const {
         data: loadedStudents,
         error: studentsError,
-      } = await supabase
-        .from('students')
-        .select(
-          'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, status, fee_exempt, created_at, updated_at, source, academic_year_id'
-        )
-        .order('created_at', {
-          ascending: false,
-        })
+      } =
+        await supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, status, fee_exempt, created_at, updated_at, source, academic_year_id'
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            }
+          )
 
       studentsData =
         loadedStudents
 
       if (studentsError) {
-        /*
-         * بعض قواعد البيانات القديمة قد لا تحتوي
-         * على جميع الحقول الإضافية.
-         *
-         * نعيد الاستعلام بالحقول الأساسية.
-         */
         const {
           data: fallbackStudents,
           error:
-            fallbackStudentsError,
-        } = await supabase
-          .from('students')
-          .select(
-            'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, created_at'
-          )
-          .order('created_at', {
-            ascending: false,
-          })
+            fallbackError,
+        } =
+          await supabase
+            .from('students')
+            .select(
+              'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, created_at'
+            )
+            .order(
+              'created_at',
+              {
+                ascending: false,
+              }
+            )
 
-        if (fallbackStudentsError) {
+        if (fallbackError) {
           setSupabaseStatus(
-            `خطأ في تحميل الطلاب: ${fallbackStudentsError.message}`
+            `خطأ في تحميل الطلاب: ${fallbackError.message}`
           )
           return
         }
@@ -806,18 +1037,22 @@ export function StudentsView() {
           fallbackStudents
       }
 
+      /*
+       * المدفوعات
+       */
       const {
         data: paymentsData,
         error: paymentsError,
-      } = await supabase
-        .from('payments')
-        .select(
-          'student_id, academic_year_id, amount'
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id
-        )
+      } =
+        await supabase
+          .from('payments')
+          .select(
+            'student_id, academic_year_id, amount'
+          )
+          .eq(
+            'academic_year_id',
+            currentYear.id
+          )
 
       if (paymentsError) {
         setSupabaseStatus(
@@ -826,101 +1061,130 @@ export function StudentsView() {
         return
       }
 
-      const {
-        data: assignmentsData,
-        error:
-          assignmentsError,
-      } = await supabase
-        .from(
-          'teacher_student_assignments'
-        )
-        .select(
-          'id, course_id, teacher_id, student_id'
-        )
-        .in(
-          'course_id',
-          loadedCourses.map(
-            (course) => course.id
+      /*
+       * توزيع الطلاب على المعلمين
+       */
+      let assignments: TeacherStudentAssignment[] =
+        []
+
+      if (
+        loadedCourses.length >
+        0
+      ) {
+        const {
+          data:
+            assignmentsData,
+          error:
+            assignmentsError,
+        } =
+          await supabase
+            .from(
+              'teacher_student_assignments'
+            )
+            .select(
+              'id, course_id, teacher_id, student_id'
+            )
+            .in(
+              'course_id',
+              loadedCourses.map(
+                (course) =>
+                  course.id
+              )
+            )
+
+        if (
+          assignmentsError
+        ) {
+          setSupabaseStatus(
+            `خطأ في تحميل توزيع الطلاب على المعلمين: ${assignmentsError.message}`
           )
-        )
+          return
+        }
 
-      if (assignmentsError) {
-        setSupabaseStatus(
-          `خطأ في تحميل توزيع الطلاب على المعلمين: ${assignmentsError.message}`
-        )
-        return
+        assignments =
+          (
+            assignmentsData ??
+            []
+          ).map(
+            (assignment) => ({
+              id:
+                assignment.id,
+              course_id:
+                assignment.course_id,
+              teacher_id:
+                assignment.teacher_id,
+              student_id:
+                assignment.student_id,
+            })
+          )
       }
-
-      const assignments: TeacherStudentAssignment[] =
-        (
-          assignmentsData ?? []
-        ).map(
-          (assignment) => ({
-            id: assignment.id,
-            course_id:
-              assignment.course_id,
-            teacher_id:
-              assignment.teacher_id,
-            student_id:
-              assignment.student_id,
-          })
-        )
 
       const teacherNames =
         new Map<string, string>()
 
       if (
-        assignments.length > 0
+        assignments.length >
+        0
       ) {
-        const teacherIds = Array.from(
-          new Set(
-            assignments.map(
-              (item) =>
-                item.teacher_id
+        const teacherIds =
+          Array.from(
+            new Set(
+              assignments.map(
+                (item) =>
+                  item.teacher_id
+              )
             )
           )
-        )
 
         const {
           data: teachersData,
-          error: teachersError,
-        } = await supabase
-          .from('teachers')
-          .select('id, name')
-          .in(
-            'id',
-            teacherIds
-          )
+        } =
+          await supabase
+            .from('teachers')
+            .select(
+              'id, name'
+            )
+            .in(
+              'id',
+              teacherIds
+            )
 
-        if (
-          !teachersError &&
-          teachersData
-        ) {
-          teachersData.forEach(
-            (teacher) => {
-              teacherNames.set(
-                teacher.id,
-                teacher.name ?? ''
-              )
-            }
-          )
-        }
+        ;(
+          teachersData ?? []
+        ).forEach(
+          (teacher) => {
+            teacherNames.set(
+              teacher.id,
+              teacher.name ?? ''
+            )
+          }
+        )
       }
 
+      /*
+       * حالات الحضور
+       */
       let loadedAttendanceStatuses: AttendanceStatus[] =
         []
 
       const {
         data: statusesData,
-        error: statusesError,
-      } = await supabase
-        .from('attendance_statuses')
-        .select(
-          'id, name, is_active, sort_order'
-        )
-        .order('sort_order', {
-          ascending: true,
-        })
+        error:
+          statusesError,
+      } =
+        await supabase
+          .from(
+            'attendance_statuses'
+          )
+          .select(
+            'id, name, is_active, sort_order'
+          )
+          .order(
+            'sort_order',
+            {
+              ascending: true,
+            }
+          )
 
       if (
         !statusesError &&
@@ -929,8 +1193,10 @@ export function StudentsView() {
         loadedAttendanceStatuses =
           statusesData.map(
             (status) => ({
-              id: status.id,
-              name: status.name,
+              id:
+                status.id,
+              name:
+                status.name,
               isActive:
                 Boolean(
                   status.is_active
@@ -948,26 +1214,35 @@ export function StudentsView() {
         loadedAttendanceStatuses
       )
 
+      /*
+       * الحضور
+       */
       let attendanceRows: AttendanceRecord[] =
         []
 
       if (
-        loadedCourses.length > 0
+        loadedCourses.length >
+        0
       ) {
         const {
           data: attendanceData,
-          error: attendanceError,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
-          )
-          .in(
-            'course_id',
-            loadedCourses.map(
-              (course) => course.id
+          error:
+            attendanceError,
+        } =
+          await supabase
+            .from(
+              'attendance'
             )
-          )
+            .select(
+              'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
+            )
+            .in(
+              'course_id',
+              loadedCourses.map(
+                (course) =>
+                  course.id
+              )
+            )
 
         if (attendanceError) {
           setSupabaseStatus(
@@ -976,10 +1251,12 @@ export function StudentsView() {
         } else {
           attendanceRows =
             (
-              attendanceData ?? []
+              attendanceData ??
+              []
             ).map(
               (record) => ({
-                id: record.id,
+                id:
+                  record.id,
                 studentId:
                   record.student_id,
                 enrollmentId:
@@ -992,63 +1269,49 @@ export function StudentsView() {
                 statusId:
                   record.status_id,
                 note:
-                  record.note ?? '',
+                  record.note ??
+                  '',
               })
             )
         }
       }
 
-      const levelMap = new Map(
-        (levels ?? []).map(
-          (level) => [
-            level.id,
-            level.name,
-          ]
-        )
-      )
-
-      const enrollmentMap =
+      /*
+       * المدفوع لكل طالب
+       */
+      const paidMap =
         new Map<
           string,
-          string
+          number
         >()
 
-      ;(enrollmentRows ?? []).forEach(
-        (enrollment) => {
-          enrollmentMap.set(
-            enrollment.student_id,
-            levelMap.get(
-              enrollment.level_id
-            ) ?? ''
-          )
-        }
-      )
-
-      const paidMap =
-        new Map<string, number>()
-
-      ;(paymentsData ?? []).forEach(
+      ;(
+        paymentsData ?? []
+      ).forEach(
         (payment) => {
-          const currentPaid =
+          const current =
             paidMap.get(
               payment.student_id
             ) ?? 0
 
           paidMap.set(
             payment.student_id,
-            currentPaid +
+            current +
               Number(
-                payment.amount ?? 0
+                payment.amount ??
+                  0
               )
           )
         }
       )
 
-      const rawStudents =
-        studentsData ?? []
-
-      const mappedStudents =
-        rawStudents.map(
+      /*
+       * بناء بيانات الطلاب النهائية
+       */
+      const mappedStudents: StudentTableStudent[] =
+        (
+          studentsData ?? []
+        ).map(
           (student: any) => {
             const amountPaid =
               paidMap.get(
@@ -1071,6 +1334,11 @@ export function StudentsView() {
                       0
                     ? 'مدفوع جزئيًا'
                     : 'غير مدفوع'
+
+            const enrollment =
+              enrollmentMap.get(
+                student.id
+              )
 
             const courseStatuses =
               loadedCourses.map(
@@ -1096,19 +1364,19 @@ export function StudentsView() {
             const attendanceSummaries =
               loadedCourses.map(
                 (course) => {
-                  const courseAssignment =
+                  const assignment =
                     assignments.find(
-                      (assignment) =>
-                        assignment.student_id ===
+                      (item) =>
+                        item.student_id ===
                           student.id &&
-                        assignment.course_id ===
+                        item.course_id ===
                           course.id
                     )
 
                   const teacherName =
-                    courseAssignment
+                    assignment
                       ? teacherNames.get(
-                          courseAssignment.teacher_id
+                          assignment.teacher_id
                         ) ?? ''
                       : ''
 
@@ -1123,40 +1391,6 @@ export function StudentsView() {
                 }
               )
 
-            const studentAttendanceRecords =
-              attendanceRows
-                .filter(
-                  (record) =>
-                    record.studentId ===
-                    student.id
-                )
-                .map(
-                  (record) => {
-                    const statusName =
-                      normalizeAttendanceStatus(
-                        getStatusName(
-                          loadedAttendanceStatuses,
-                          record.statusId
-                        )
-                      )
-
-                    return {
-                      id: record.id,
-                      studentId:
-                        record.studentId,
-                      courseId:
-                        record.courseId,
-                      attendanceDate:
-                        record.attendanceDate,
-                      status:
-                        statusName ||
-                        'غائب',
-                      note:
-                        record.note ?? '',
-                    }
-                  }
-                )
-
             const currentStatus =
               currentCourse
                 ? getCourseStatus(
@@ -1168,32 +1402,40 @@ export function StudentsView() {
                 : 'لم يحضر'
 
             return {
-              id: student.id,
+              id:
+                student.id,
 
               studentId:
                 student.student_id ??
                 '',
 
               name:
-                student.name ?? '',
+                student.name ??
+                '',
 
               personalId:
                 student.personal_id ??
                 '',
 
               gender:
-                student.gender ?? '',
+                student.gender ??
+                '',
 
               age:
-                student.age ?? null,
+                student.age ??
+                null,
 
               grade:
-                enrollmentMap.get(
-                  student.id
-                ) ?? '',
+                enrollment?.levelName ??
+                '',
+
+              className:
+                enrollment?.className ??
+                '',
 
               phone:
-                student.phone ?? '',
+                student.phone ??
+                '',
 
               whatsapp:
                 student.whatsapp ??
@@ -1217,7 +1459,8 @@ export function StudentsView() {
                 '',
 
               notes:
-                student.notes ?? '',
+                student.notes ??
+                '',
 
               source:
                 student.source ??
@@ -1235,15 +1478,19 @@ export function StudentsView() {
                 student.academic_year_id ??
                 currentYear.id,
 
+              academicYearName:
+                currentYear.name ??
+                '',
+
               attendance:
                 currentStatus,
 
               courseStatuses,
 
-              attendanceSummaries,
-
-              attendanceRecords:
-                studentAttendanceRecords,
+              dynamicValues:
+                dynamicValuesMap.get(
+                  student.id
+                ) ?? {},
             }
           }
         )
@@ -1252,15 +1499,11 @@ export function StudentsView() {
         mappedStudents
       )
 
-      if (currentCourse) {
-        setSupabaseStatus(
-          `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-        )
-      } else {
-        setSupabaseStatus(
-          `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-        )
-      }
+      setSupabaseStatus(
+        currentCourse
+          ? `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+          : `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+      )
     }
 
     loadData()
@@ -1292,12 +1535,10 @@ export function StudentsView() {
               ? 0
               : Math.max(
                   Number(
-                    student.amountDue ??
-                      0
+                    student.amountDue
                   ) -
                     Number(
-                      student.amountPaid ??
-                        0
+                      student.amountPaid
                     ),
                   0
                 )
@@ -1318,29 +1559,17 @@ export function StudentsView() {
               .filter(Boolean)
               .join(' ')
 
-          const courseStatusText =
-            (
-              student.courseStatuses ??
-              []
-            )
-              .map(
-                (
-                  course: StudentCourseStatus
-                ) =>
-                  `${course.courseName} ${course.status}`
-              )
-              .join(' ')
+          const dynamicText =
+            Object.values(
+              student.dynamicValues ??
+                {}
+            ).join(' ')
 
-          const attendanceText =
-            (
-              student.attendanceSummaries ??
-              []
-            )
+          const courseStatusText =
+            student.courseStatuses
               .map(
-                (
-                  summary: StudentAttendanceSummary
-                ) =>
-                  `${summary.courseName} ${summary.percentage}% ${summary.present} ${summary.absent} ${summary.late}`
+                (course) =>
+                  `${course.courseName} ${course.status}`
               )
               .join(' ')
 
@@ -1348,18 +1577,26 @@ export function StudentsView() {
             !query ||
             [
               student.name,
+              student.studentId,
               student.personalId,
+              student.gender,
+              student.age,
               student.grade,
+              student.className,
               contactText,
+              student.status,
+              student.source,
               student.paymentStatus,
               notesText,
               student.attendance,
+              dynamicText,
               courseStatusText,
-              attendanceText,
               remaining,
             ].some(
               (value) =>
-                String(value)
+                String(
+                  value ?? ''
+                )
                   .toLowerCase()
                   .includes(query)
             )
@@ -1367,9 +1604,7 @@ export function StudentsView() {
           const matches = {
             name:
               !filters.name ||
-              String(
-                student.name ?? ''
-              )
+              student.name
                 .toLowerCase()
                 .includes(
                   filters.name.toLowerCase()
@@ -1377,10 +1612,7 @@ export function StudentsView() {
 
             personalId:
               !filters.personalId ||
-              String(
-                student.personalId ??
-                  ''
-              ).includes(
+              student.personalId.includes(
                 filters.personalId
               ),
 
@@ -1391,18 +1623,13 @@ export function StudentsView() {
 
             phone:
               !filters.phone ||
-              String(
-                student.phone ?? ''
-              ).includes(
+              student.phone.includes(
                 filters.phone
               ),
 
             whatsapp:
               !filters.whatsapp ||
-              String(
-                student.whatsapp ??
-                  ''
-              ).includes(
+              student.whatsapp.includes(
                 filters.whatsapp
               ),
 
@@ -1459,8 +1686,9 @@ export function StudentsView() {
   }
 
   const openEditStudent = () => {
-    if (!selectedStudentId)
+    if (!selectedStudentId) {
       return
+    }
 
     setEditingStudentId(
       selectedStudentId
@@ -1474,27 +1702,20 @@ export function StudentsView() {
     setEditingStudentId(null)
   }
 
-  const openStudentDetails = (
-    student: any
+  const openNotesDetails = (
+    student: StudentTableStudent
   ) => {
     setDetailsStudent(student)
-    setDetailsMode('overview')
+    setDetailsMode('notes')
   }
 
   const openAttendanceDetails = (
-    student: any
+    student: StudentTableStudent
   ) => {
     setDetailsStudent(student)
     setDetailsMode(
       'attendance'
     )
-  }
-
-  const openNotesDetails = (
-    student: any
-  ) => {
-    setDetailsStudent(student)
-    setDetailsMode('notes')
   }
 
   const closeDetails = () => {
@@ -1551,12 +1772,10 @@ export function StudentsView() {
                 ? 0
                 : Math.max(
                     Number(
-                      student.amountDue ??
-                        0
+                      student.amountDue
                     ) -
                       Number(
-                        student.amountPaid ??
-                          0
+                        student.amountPaid
                       ),
                     0
                   )
@@ -1569,60 +1788,46 @@ export function StudentsView() {
                 index + 1,
 
               'معرف الطالب':
-                student.studentId ??
-                '',
+                student.studentId,
 
               'اسم الطالب':
-                student.name ??
-                '',
+                student.name,
 
               'الرقم الشخصي':
-                student.personalId ??
-                '',
+                student.personalId,
 
               'الجنس':
-                student.gender ??
-                '',
+                student.gender,
 
               'العمر':
-                student.age ??
-                '',
+                student.age ?? '',
 
               'الصف الأكاديمي':
-                student.grade ??
-                '',
+                student.grade,
+
+              'الفصل':
+                student.className,
 
               'رقم الهاتف':
-                student.phone ??
-                '',
+                student.phone,
 
               'رقم واتساب':
-                student.whatsapp ??
-                '',
+                student.whatsapp,
 
               'الحالة':
-                student.status ??
-                '',
+                student.status,
 
-              'المصدر':
-                student.source ??
-                '',
+              'مصدر التسجيل':
+                student.source,
 
               'حالة الدفع':
-                student.paymentStatus ??
-                '',
+                student.paymentStatus,
 
               'الرسوم السنوية':
-                Number(
-                  student.amountDue ??
-                    0
-                ),
+                student.amountDue,
 
               'المدفوع':
-                Number(
-                  student.amountPaid ??
-                    0
-                ),
+                student.amountPaid,
 
               'المتبقي':
                 remaining,
@@ -1633,86 +1838,42 @@ export function StudentsView() {
                   : 'لا',
 
               'الملاحظات':
-                student.notes ??
-                '',
+                student.notes,
 
               'المعلومات الصحية':
-                student.chronicDiseases ??
-                '',
+                student.chronicDiseases,
 
               'الحضور الحالي':
-                student.attendance ??
-                '',
+                student.attendance,
 
               'تاريخ الإضافة':
-                student.createdAt ??
-                '',
+                student.createdAt,
 
               'آخر تحديث':
-                student.updatedAt ??
-                '',
+                student.updatedAt,
 
               'السنة الدراسية':
-                currentAcademicYearName,
+                student.academicYearName,
             }
 
-            ;(
-              student.attendanceSummaries ??
-              []
-            ).forEach(
-              (
-                summary: StudentAttendanceSummary
-              ) => {
-                row[
-                  `${summary.courseName} - المعلم`
-                ] =
-                  summary.teacherName ||
-                  ''
-
-                row[
-                  `${summary.courseName} - أيام الدراسة`
-                ] =
-                  summary.totalDays
-
-                row[
-                  `${summary.courseName} - حاضر`
-                ] =
-                  summary.present
-
-                row[
-                  `${summary.courseName} - غائب`
-                ] =
-                  summary.absent
-
-                row[
-                  `${summary.courseName} - متأخر`
-                ] =
-                  summary.late
-
-                row[
-                  `${summary.courseName} - مستأذن`
-                ] =
-                  summary.excused
-
-                row[
-                  `${summary.courseName} - لم يسجل`
-                ] =
-                  summary.notRecorded
-
-                row[
-                  `${summary.courseName} - النسبة`
-                ] =
-                  `${summary.percentage}%`
+            /*
+             * كل حقول التسجيل الديناميكية
+             */
+            dynamicFields.forEach(
+              (field) => {
+                row[field.name] =
+                  student
+                    .dynamicValues?.[
+                    field.id
+                  ] ?? ''
               }
             )
 
-            ;(
-              student.courseStatuses ??
-              []
-            ).forEach(
-              (
-                course: StudentCourseStatus
-              ) => {
+            /*
+             * تفاصيل الدورات
+             */
+            student.courseStatuses.forEach(
+              (course) => {
                 row[
                   `${course.courseName} - الحالة`
                 ] =
@@ -1738,17 +1899,10 @@ export function StudentsView() {
         'الطلاب'
       )
 
-      const columnCount =
+      worksheet['!cols'] =
         Object.keys(
           exportData[0] ?? {}
-        ).length
-
-      worksheet['!cols'] =
-        Array.from(
-          {
-            length:
-              columnCount,
-          },
+        ).map(
           (_, index) => ({
             wch:
               index === 0
@@ -1776,38 +1930,9 @@ export function StudentsView() {
       )
 
       setSupabaseStatus(
-        `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وتفاصيل الحضور والدورات ✅`
+        `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
       )
     }
-
-  const textFilter = (
-    key: keyof Filters,
-    placeholder: string
-  ) => (
-    <div className="relative mt-2">
-      <Filter className="absolute right-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-
-      <input
-        value={filters[key]}
-        onChange={(e) =>
-          updateFilter(
-            key,
-            e.target.value
-          )
-        }
-        placeholder={
-          placeholder
-        }
-        className="h-8 w-full min-w-[90px] rounded border bg-background px-2 pr-7 text-xs outline-none"
-      />
-    </div>
-  )
-
-  const visibleColumnCount =
-    Object.values(
-      visibleColumns
-    ).filter(Boolean).length +
-    1
 
   return (
     <div className="space-y-6">
@@ -1837,9 +1962,9 @@ export function StudentsView() {
 
             <input
               value={search}
-              onChange={(e) =>
+              onChange={(event) =>
                 setSearch(
-                  e.target.value
+                  event.target.value
                 )
               }
               placeholder="بحث عام في جميع بيانات الطلاب..."
@@ -1940,8 +2065,9 @@ export function StudentsView() {
                 onClick={async () => {
                   if (
                     !selectedStudentId
-                  )
+                  ) {
                     return
+                  }
 
                   const selected =
                     studentList.find(
@@ -1950,8 +2076,9 @@ export function StudentsView() {
                         selectedStudentId
                     )
 
-                  if (!selected)
+                  if (!selected) {
                     return
+                  }
 
                   const nextFeeExempt =
                     !selected.feeExempt
@@ -2032,8 +2159,9 @@ export function StudentsView() {
                       '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
                     )
 
-                  if (!confirmed)
+                  if (!confirmed) {
                     return
+                  }
 
                   const {
                     error,
@@ -2078,552 +2206,68 @@ export function StudentsView() {
                 <X className="size-4" />
                 مسح
               </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  document
-                    .getElementById(
-                      'student-columns-menu'
-                    )
-                    ?.classList.toggle(
-                      'hidden'
-                    )
-                }}
-              >
-                تخصيص الأعمدة
-              </Button>
             </div>
           </div>
 
-          <div
-            id="student-columns-menu"
-            className="hidden rounded-md border bg-background p-3 shadow-sm"
-          >
-            <div className="mb-2 text-sm font-semibold">
-              تخصيص الأعمدة
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {baseColumns.map(
-                (column) => (
-                  <label
-                    key={column.key}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        Boolean(
-                          visibleColumns[
-                            column.key
-                          ]
-                        )
-                      }
-                      onChange={() =>
-                        toggleColumn(
-                          column.key
-                        )
-                      }
-                    />
-
-                    {
-                      column.label
-                    }
-                  </label>
-                )
-              )}
-
-              {courses.length >
-                0 && (
-                <div className="col-span-full mt-2 border-t pt-3">
-                  <div className="mb-2 text-xs font-semibold text-muted-foreground">
-                    دورات السنة الحالية
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                    {courses.map(
-                      (course) => {
-                        const key = `course-${course.id}`
-
-                        return (
-                          <label
-                            key={
-                              course.id
-                            }
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={Boolean(
-                                visibleColumns[
-                                  key
-                                ]
-                              )}
-                              onChange={() =>
-                                toggleColumn(
-                                  key
-                                )
-                              }
-                            />
-
-                            {
-                              course.name
-                            }
-                          </label>
-                        )
-                      }
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <p className="mt-3 text-xs text-muted-foreground">
-              أعمدة الدورات مخفية افتراضيًا، ويمكن إظهار أي دورة من هنا.
-              ملف Excel يحتوي جميع الدورات دائمًا.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 text-center">
-                    #
-                  </TableHead>
-
-                  {visibleColumns.name && (
-                    <TableHead>
-                      اسم الطالب
-                      {textFilter(
-                        'name',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.personalId && (
-                    <TableHead>
-                      الرقم الشخصي
-                      {textFilter(
-                        'personalId',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.grade && (
-                    <TableHead>
-                      الصف الأكاديمي
-
-                      <select
-                        value={
-                          filters.grade
-                        }
-                        onChange={(e) =>
-                          updateFilter(
-                            'grade',
-                            e.target.value
-                          )
-                        }
-                        className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
-                      >
-                        <option value="">
-                          الكل
-                        </option>
-
-                        {academicLevels.map(
-                          (level) => (
-                            <option
-                              key={
-                                level.id
-                              }
-                              value={
-                                level.name
-                              }
-                            >
-                              {
-                                level.name
-                              }
-                            </option>
-                          )
-                        )}
-                      </select>
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.contact && (
-                    <TableHead>
-                      التواصل
-                      {textFilter(
-                        'phone',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.paymentStatus && (
-                    <TableHead>
-                      الدفع
-
-                      <select
-                        value={
-                          filters.paymentStatus
-                        }
-                        onChange={(e) =>
-                          updateFilter(
-                            'paymentStatus',
-                            e.target.value
-                          )
-                        }
-                        className="mt-2 h-8 w-full min-w-[120px] rounded border bg-background px-2 text-xs"
-                      >
-                        <option value="">
-                          الكل
-                        </option>
-
-                        <option value="مدفوع بالكامل">
-                          مدفوع بالكامل
-                        </option>
-
-                        <option value="مدفوع جزئيًا">
-                          مدفوع جزئيًا
-                        </option>
-
-                        <option value="غير مدفوع">
-                          غير مدفوع
-                        </option>
-
-                        <option value="معفي">
-                          معفي
-                        </option>
-                      </select>
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.notes && (
-                    <TableHead>
-                      ملاحظات
-                      {textFilter(
-                        'notes',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {visibleColumns.attendance && (
-                    <TableHead>
-                      <div>
-                        الحضور
-                      </div>
-
-                      {currentCourseName && (
-                        <div className="mt-1 text-[11px] font-normal text-muted-foreground">
-                          {
-                            currentCourseName
-                          }
-                        </div>
-                      )}
-
-                      {textFilter(
-                        'attendance',
-                        'بحث'
-                      )}
-                    </TableHead>
-                  )}
-
-                  {courses.map(
-                    (course) => {
-                      const key = `course-${course.id}`
-
-                      if (
-                        !visibleColumns[
-                          key
-                        ]
-                      ) {
-                        return null
-                      }
-
-                      return (
-                        <TableHead
-                          key={
-                            course.id
-                          }
-                        >
-                          {
-                            course.name
-                          }
-                        </TableHead>
-                      )
-                    }
-                  )}
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {filteredStudents.map(
-                  (
-                    student,
-                    index
-                  ) => (
-                    <TableRow
-                      key={
-                        student.id
-                      }
-                      onClick={() =>
-                        openStudentDetails(
-                          student
-                        )
-                      }
-                      className="cursor-pointer"
-                    >
-                      <TableCell className="text-center text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
-
-                      {visibleColumns.name && (
-                        <TableCell className="font-medium">
-                          {
-                            student.name
-                          }
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.personalId && (
-                        <TableCell>
-                          {
-                            student.personalId
-                          }
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.grade && (
-                        <TableCell>
-                          {student.grade ||
-                            '—'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.contact && (
-                        <TableCell
-                          dir="ltr"
-                          className="text-right"
-                        >
-                          <div className="space-y-1">
-                            <div>
-                              {student.phone ||
-                                '—'}
-                            </div>
-
-                            <div className="text-muted-foreground">
-                              {student.whatsapp
-                                ? `واتساب: ${student.whatsapp}`
-                                : 'واتساب: —'}
-                            </div>
-                          </div>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.paymentStatus && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="rounded-md px-2 py-1 transition hover:bg-muted"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
-
-                              router.push(
-                                `/payments?student=${encodeURIComponent(
-                                  student.id
-                                )}&return=/students`
-                              )
-                            }}
-                          >
-                            {student.paymentStatus ===
-                            'مدفوع بالكامل' ? (
-                              <span className="inline-flex flex-col items-center gap-1">
-                                <span className="text-xs font-medium">
-                                  تفاصيل
-                                </span>
-
-                                <StatusBadge status="مدفوع بالكامل" />
-                              </span>
-                            ) : student.paymentStatus ===
-                              'مدفوع جزئيًا' ? (
-                              <span className="inline-flex flex-col items-center gap-1">
-                                <span className="text-xs font-medium">
-                                  متبقي
-                                </span>
-
-                                <StatusBadge status="مدفوع جزئيًا" />
-                              </span>
-                            ) : student.paymentStatus ===
-                              'غير مدفوع' ? (
-                              <span className="inline-flex flex-col items-center gap-1">
-                                <span className="text-xs font-medium">
-                                  غير مدفوع
-                                </span>
-
-                                <StatusBadge status="غير مدفوع" />
-                              </span>
-                            ) : (
-                              <span className="inline-flex flex-col items-center gap-1">
-                                <span className="text-xs font-medium">
-                                  معفي
-                                </span>
-
-                                <StatusBadge status="معفي" />
-                              </span>
-                            )}
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.notes && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="max-w-[220px] truncate text-right text-sm hover:underline"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
-
-                              openNotesDetails(
-                                student
-                              )
-                            }}
-                          >
-                            {student.notes ||
-                            student.chronicDiseases
-                              ? [
-                                  student.notes,
-                                  student.chronicDiseases,
-                                ]
-                                  .filter(
-                                    Boolean
-                                  )
-                                  .join(
-                                    ' • '
-                                  )
-                              : '—'}
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.attendance && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="rounded-md px-2 py-1 transition hover:bg-muted"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
-
-                              openAttendanceDetails(
-                                student
-                              )
-                            }}
-                          >
-                            {student.attendance ===
-                            'حاضر' ? (
-                              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                                حاضر
-                              </span>
-                            ) : student.attendance ===
-                              'لم تقم الدورة حتى الآن' ? (
-                              <span className="text-amber-600 dark:text-amber-400">
-                                لم تقم الدورة حتى الآن
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                غير حاضر
-                              </span>
-                            )}
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {courses.map(
-                        (course) => {
-                          const key = `course-${course.id}`
-
-                          if (
-                            !visibleColumns[
-                              key
-                            ]
-                          ) {
-                            return null
-                          }
-
-                          const courseStatus =
-                            (
-                              student.courseStatuses ??
-                              []
-                            ).find(
-                              (
-                                item: StudentCourseStatus
-                              ) =>
-                                item.courseId ===
-                                course.id
-                            )
-
-                          return (
-                            <TableCell
-                              key={
-                                course.id
-                              }
-                            >
-                              {courseStatus?.status ===
-                              'حاضر' ? (
-                                <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                                  حاضر
-                                </span>
-                              ) : courseStatus?.status ===
-                                'لم تقم الدورة حتى الآن' ? (
-                                <span className="text-amber-600 dark:text-amber-400">
-                                  لم تقم
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  لم يحضر
-                                </span>
-                              )}
-                            </TableCell>
-                          )
-                        }
-                      )}
-                    </TableRow>
-                  )
-                )}
-
-                {filteredStudents.length ===
-                  0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={
-                        visibleColumnCount
-                      }
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      لا توجد نتائج مطابقة
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <StudentsTable
+            students={
+              filteredStudents
+            }
+            courses={
+              courses
+            }
+            dynamicFields={
+              dynamicFields
+            }
+            academicLevels={
+              academicLevels
+            }
+            filters={
+              filters
+            }
+            visibleColumns={
+              visibleColumns
+            }
+            selectedStudentId={
+              selectedStudentId
+            }
+            currentCourseName={
+              currentCourseName
+            }
+            onSelectStudent={(
+              id
+            ) => {
+              setSelectedStudentId(
+                (current) =>
+                  current === id
+                    ? ''
+                    : id
+              )
+            }}
+            onUpdateFilter={
+              updateFilter
+            }
+            onToggleColumn={
+              toggleColumn
+            }
+            onOpenNotes={
+              openNotesDetails
+            }
+            onOpenAttendance={
+              openAttendanceDetails
+            }
+            onOpenColumns={() => {}}
+          />
         </CardContent>
       </Card>
 
       <StudentDetails
-        student={detailsStudent}
-        mode={detailsMode}
+        student={
+          detailsStudent
+        }
+        mode={
+          detailsMode
+        }
         onClose={
           closeDetails
         }
@@ -2632,7 +2276,8 @@ export function StudentsView() {
       {isAddStudentOpen && (
         <StudentForm
           editingStudent={
-            editingStudent ?? null
+            editingStudent ??
+            null
           }
           academicLevels={
             academicLevels
@@ -2653,7 +2298,9 @@ export function StudentsView() {
                 currentCourseId
             ) ?? null
           }
-          courses={courses}
+          courses={
+            courses
+          }
           attendanceStatuses={
             attendanceStatuses
           }
@@ -2664,7 +2311,7 @@ export function StudentsView() {
             setSupabaseStatus
           }
           setStudentList={
-            setStudentList
+            setStudentList as any
           }
         />
       )}
