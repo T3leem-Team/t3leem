@@ -29,6 +29,12 @@ type RegistrationSettings = {
   show_personal_id: boolean
   required_personal_id: boolean
 
+  show_gender: boolean
+  required_gender: boolean
+
+  show_age: boolean
+  required_age: boolean
+
   show_phone: boolean
   required_phone: boolean
 
@@ -72,6 +78,32 @@ type PaymentMethod =
   | 'bank_transfer'
   | 'cash'
   | 'payment_link'
+
+type CustomFieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'select'
+  | 'boolean'
+  | 'textarea'
+
+type CustomFieldOption = {
+  id: string
+  custom_field_id: string
+  label: string
+  value: string
+  sort_order: number
+}
+
+type CustomField = {
+  id: string
+  name: string
+  field_type: CustomFieldType
+  sort_order: number
+  options: CustomFieldOption[]
+  is_visible: boolean
+  is_required: boolean
+}
 
 function FieldLabel({
   label,
@@ -118,6 +150,12 @@ export default function RegisterPage() {
 
   const [levels, setLevels] = useState<Level[]>([])
 
+  const [customFields, setCustomFields] =
+    useState<CustomField[]>([])
+
+  const [customFieldValues, setCustomFieldValues] =
+    useState<Record<string, string>>({})
+
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -131,6 +169,8 @@ export default function RegisterPage() {
 
   const [name, setName] = useState('')
   const [personalId, setPersonalId] = useState('')
+  const [gender, setGender] = useState('')
+  const [age, setAge] = useState('')
   const [phone, setPhone] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
   const [levelId, setLevelId] = useState('')
@@ -179,9 +219,10 @@ export default function RegisterPage() {
         return
       }
 
-      setSettings(
-        settingsResult.data as RegistrationSettings,
-      )
+      const loadedSettings =
+        settingsResult.data as RegistrationSettings
+
+      setSettings(loadedSettings)
 
       const levelsResult = await supabase
         .from('levels')
@@ -202,6 +243,152 @@ export default function RegisterPage() {
       }
 
       setLevels(levelsResult.data ?? [])
+
+      /*
+       * تحميل الحقول الإضافية المتاحة للتسجيل.
+       *
+       * availability:
+       * custom_fields.available_in_registration = true
+       *
+       * visibility:
+       * custom_field_visibility.section = registration
+       *
+       * الحقل لا يظهر إلا إذا كان is_visible = true.
+       */
+      const customFieldsResult = await supabase
+        .from('custom_fields')
+        .select(
+          'id, name, field_type, sort_order, is_active',
+        )
+        .eq('available_in_registration', true)
+        .eq('is_active', true)
+        .order('sort_order', {
+          ascending: true,
+        })
+
+      if (customFieldsResult.error) {
+        console.error(
+          'custom_fields error:',
+          customFieldsResult.error,
+        )
+
+        setErrorMessage(
+          `تعذر تحميل الحقول الإضافية: ${customFieldsResult.error.message}`,
+        )
+
+        return
+      }
+
+      const loadedCustomFields =
+        customFieldsResult.data ?? []
+
+      if (loadedCustomFields.length === 0) {
+        setCustomFields([])
+        return
+      }
+
+      const customFieldIds =
+        loadedCustomFields.map(
+          (field) => field.id,
+        )
+
+      const visibilityResult = await supabase
+        .from('custom_field_visibility')
+        .select(
+          'custom_field_id, section, is_visible, is_required, sort_order',
+        )
+        .eq('section', 'registration')
+        .in('custom_field_id', customFieldIds)
+
+      if (visibilityResult.error) {
+        console.error(
+          'custom_field_visibility error:',
+          visibilityResult.error,
+        )
+
+        setErrorMessage(
+          `تعذر تحميل إعدادات ظهور الحقول الإضافية: ${visibilityResult.error.message}`,
+        )
+
+        return
+      }
+
+      const optionsResult = await supabase
+        .from('custom_field_options')
+        .select(
+          'id, custom_field_id, label, value, sort_order',
+        )
+        .in(
+          'custom_field_id',
+          customFieldIds,
+        )
+        .order('sort_order', {
+          ascending: true,
+        })
+
+      if (optionsResult.error) {
+        console.error(
+          'custom_field_options error:',
+          optionsResult.error,
+        )
+
+        setErrorMessage(
+          `تعذر تحميل خيارات الحقول الإضافية: ${optionsResult.error.message}`,
+        )
+
+        return
+      }
+
+      const visibilityRows =
+        visibilityResult.data ?? []
+
+      const options =
+        optionsResult.data ?? []
+
+      const preparedFields: CustomField[] =
+        loadedCustomFields
+          .map((field) => {
+            const visibility =
+              visibilityRows.find(
+                (row) =>
+                  row.custom_field_id ===
+                  field.id,
+              )
+
+            const fieldOptions =
+              options.filter(
+                (option) =>
+                  option.custom_field_id ===
+                  field.id,
+              )
+
+            return {
+              id: field.id,
+              name: field.name,
+              field_type:
+                field.field_type as CustomFieldType,
+              sort_order: field.sort_order ?? 0,
+              options: fieldOptions,
+              is_visible:
+                visibility?.is_visible === true,
+              is_required:
+                visibility?.is_required === true,
+            }
+          })
+          .filter((field) => field.is_visible)
+
+      setCustomFields(preparedFields)
+
+      const initialValues: Record<
+        string,
+        string
+      > = {}
+
+      preparedFields.forEach((field) => {
+        initialValues[field.id] = ''
+      })
+
+      setCustomFieldValues(initialValues)
     } catch (error) {
       console.error(error)
 
@@ -256,32 +443,37 @@ export default function RegisterPage() {
     return methods
   }, [settings])
 
-  async function uploadPaymentProof(
-    file: File,
-    requestId: string,
+  function updateCustomFieldValue(
+    fieldId: string,
+    value: string,
   ) {
-    const extension =
-      file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    setCustomFieldValues((current) => ({
+      ...current,
+      [fieldId]: value,
+    }))
+  }
 
-    const filePath = `${requestId}.${extension}`
+  function getCustomFieldValue(
+    field: CustomField,
+  ) {
+    return customFieldValues[field.id] ?? ''
+  }
 
-    const uploadResult = await supabase.storage
-      .from('registration-proofs')
-      .upload(filePath, file, {
-        upsert: true,
-      })
+  function validateCustomFields() {
+    for (const field of customFields) {
+      if (!field.is_required) {
+        continue
+      }
 
-    if (uploadResult.error) {
-      throw new Error(
-        `تعذر رفع إثبات الدفع: ${uploadResult.error.message}`,
-      )
+      const value =
+        getCustomFieldValue(field)
+
+      if (!value.trim()) {
+        return `يرجى تعبئة حقل ${field.name}.`
+      }
     }
 
-    const publicUrlResult = supabase.storage
-      .from('registration-proofs')
-      .getPublicUrl(filePath)
-
-    return publicUrlResult.data.publicUrl
+    return ''
   }
 
   function validateForm() {
@@ -307,6 +499,37 @@ export default function RegisterPage() {
       !personalId.trim()
     ) {
       return 'يرجى إدخال الرقم الشخصي.'
+    }
+
+    if (
+      settings.show_gender &&
+      settings.required_gender &&
+      !gender
+    ) {
+      return 'يرجى اختيار الجنس.'
+    }
+
+    if (
+      settings.show_age &&
+      settings.required_age &&
+      !age.trim()
+    ) {
+      return 'يرجى إدخال العمر.'
+    }
+
+    if (
+      settings.show_age &&
+      age.trim()
+    ) {
+      const numericAge =
+        Number(age)
+
+      if (
+        !Number.isFinite(numericAge) ||
+        numericAge < 0
+      ) {
+        return 'يرجى إدخال عمر صحيح.'
+      }
     }
 
     if (
@@ -349,6 +572,13 @@ export default function RegisterPage() {
       return 'يرجى تعبئة حقل الأمراض المزمنة.'
     }
 
+    const customFieldError =
+      validateCustomFields()
+
+    if (customFieldError) {
+      return customFieldError
+    }
+
     if (settings.payment_enabled) {
       if (paymentMethods.length === 0) {
         return 'لا توجد طريقة دفع متاحة حاليًا.'
@@ -370,6 +600,87 @@ export default function RegisterPage() {
     return ''
   }
 
+  async function uploadPaymentProof(
+    file: File,
+    requestId: string,
+  ) {
+    const extension =
+      file.name.split('.').pop()?.toLowerCase() ||
+      'jpg'
+
+    const filePath =
+      `${requestId}.${extension}`
+
+    const uploadResult =
+      await supabase.storage
+        .from('registration-proofs')
+        .upload(filePath, file, {
+          upsert: true,
+        })
+
+    if (uploadResult.error) {
+      throw new Error(
+        `تعذر رفع إثبات الدفع: ${uploadResult.error.message}`,
+      )
+    }
+
+    const publicUrlResult =
+      supabase.storage
+        .from('registration-proofs')
+        .getPublicUrl(filePath)
+
+    return publicUrlResult.data.publicUrl
+  }
+
+  async function saveCustomFieldValues(
+    requestId: string,
+  ) {
+    if (customFields.length === 0) {
+      return
+    }
+
+    const rows = customFields
+      .map((field) => {
+        const rawValue =
+          customFieldValues[field.id] ?? ''
+
+        return {
+          custom_field_id: field.id,
+          record_type:
+            'registration_request',
+          record_id: requestId,
+          value:
+            rawValue.trim() || null,
+        }
+      })
+      .filter(
+        (row) =>
+          row.value !== null,
+      )
+
+    if (rows.length === 0) {
+      return
+    }
+
+    const result = await supabase
+      .from('custom_field_values')
+      .upsert(rows, {
+        onConflict:
+          'custom_field_id,record_type,record_id',
+      })
+
+    if (result.error) {
+      console.error(
+        'custom_field_values error:',
+        result.error,
+      )
+
+      throw new Error(
+        `تم إنشاء الطلب لكن تعذر حفظ الحقول الإضافية: ${result.error.message}`,
+      )
+    }
+  }
+
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
   ) {
@@ -379,7 +690,8 @@ export default function RegisterPage() {
     setSuccessMessage('')
     setRequestNumber('')
 
-    const validationError = validateForm()
+    const validationError =
+      validateForm()
 
     if (validationError) {
       setErrorMessage(validationError)
@@ -398,8 +710,6 @@ export default function RegisterPage() {
     try {
       /*
        * فحص الرقم الشخصي قبل إنشاء طلب التسجيل.
-       *
-       * يظهر Popup في منتصف الشاشة أثناء عملية الفحص.
        */
       if (
         settings.show_personal_id &&
@@ -429,11 +739,15 @@ export default function RegisterPage() {
           }
 
           const checkResult =
-            Array.isArray(personalIdCheck.data)
+            Array.isArray(
+              personalIdCheck.data,
+            )
               ? personalIdCheck.data[0]
               : personalIdCheck.data
 
-          if (checkResult?.registered) {
+          if (
+            checkResult?.registered
+          ) {
             const academicYearName =
               checkResult.academic_year_name
 
@@ -455,75 +769,93 @@ export default function RegisterPage() {
           .toString()
           .slice(-8)}`
 
-      const trackingToken = crypto.randomUUID()
+      const trackingToken =
+        crypto.randomUUID()
 
       /*
        * إنشاء الطلب عن طريق RPC.
        */
-      const rpcResult = await supabase.rpc(
-        'create_registration_request',
-        {
-          p_request_number:
-            generatedRequestNumber,
+      const rpcResult =
+        await supabase.rpc(
+          'create_registration_request',
+          {
+            p_request_number:
+              generatedRequestNumber,
 
-          p_tracking_token:
-            trackingToken,
+            p_tracking_token:
+              trackingToken,
 
-          p_name: settings.show_name
-            ? name.trim()
-            : '',
+            p_name:
+              settings.show_name
+                ? name.trim()
+                : '',
 
-          p_personal_id:
-            settings.show_personal_id
-              ? personalId.trim() || null
-              : null,
+            p_personal_id:
+              settings.show_personal_id
+                ? personalId.trim() ||
+                  null
+                : null,
 
-          p_phone:
-            settings.show_phone
-              ? phone.trim() || null
-              : null,
+            p_gender:
+              settings.show_gender
+                ? gender || null
+                : null,
 
-          p_whatsapp:
-            settings.show_whatsapp
-              ? whatsapp.trim() || null
-              : null,
+            p_age:
+              settings.show_age &&
+              age.trim()
+                ? Number(age)
+                : null,
 
-          p_level_id:
-            settings.show_level
-              ? levelId || null
-              : null,
+            p_phone:
+              settings.show_phone
+                ? phone.trim() || null
+                : null,
 
-          p_notes:
-            settings.show_notes
-              ? notes.trim() || null
-              : null,
+            p_whatsapp:
+              settings.show_whatsapp
+                ? whatsapp.trim() ||
+                  null
+                : null,
 
-          p_health_notes:
-            settings.show_health_notes
-              ? healthNotes.trim() || null
-              : null,
+            p_level_id:
+              settings.show_level
+                ? levelId || null
+                : null,
 
-          p_payment_method:
-            settings.payment_enabled
-              ? paymentMethod
-              : null,
+            p_notes:
+              settings.show_notes
+                ? notes.trim() || null
+                : null,
 
-          p_payment_amount:
-            settings.payment_enabled
-              ? settings.payment_amount
-              : null,
+            p_health_notes:
+              settings.show_health_notes
+                ? healthNotes.trim() ||
+                  null
+                : null,
 
-          p_payment_reference:
-            settings.payment_enabled
-              ? paymentReference.trim() || null
-              : null,
+            p_payment_method:
+              settings.payment_enabled
+                ? paymentMethod
+                : null,
 
-          p_payment_status:
-            settings.payment_enabled
-              ? 'pending'
-              : 'not_required',
-        },
-      )
+            p_payment_amount:
+              settings.payment_enabled
+                ? settings.payment_amount
+                : null,
+
+            p_payment_reference:
+              settings.payment_enabled
+                ? paymentReference.trim() ||
+                  null
+                : null,
+
+            p_payment_status:
+              settings.payment_enabled
+                ? 'pending'
+                : 'not_required',
+          },
+        )
 
       if (rpcResult.error) {
         console.error(
@@ -545,11 +877,12 @@ export default function RegisterPage() {
        *   tracking_token
        * }
        */
-      const createdRequest = Array.isArray(
-        rpcResult.data,
-      )
-        ? rpcResult.data[0]
-        : rpcResult.data
+      const createdRequest =
+        Array.isArray(
+          rpcResult.data,
+        )
+          ? rpcResult.data[0]
+          : rpcResult.data
 
       if (
         !createdRequest ||
@@ -559,6 +892,14 @@ export default function RegisterPage() {
           'تم إنشاء الطلب ولكن لم يتم استلام رقم الطلب من النظام.',
         )
       }
+
+      /*
+       * حفظ الحقول الإضافية المرتبطة
+       * بطلب التسجيل.
+       */
+      await saveCustomFieldValues(
+        createdRequest.id,
+      )
 
       /*
        * رفع إثبات الدفع بعد إنشاء الطلب.
@@ -610,8 +951,13 @@ export default function RegisterPage() {
         'تم إرسال طلب التسجيل بنجاح.',
       )
 
+      /*
+       * تصفير الحقول بعد نجاح التسجيل.
+       */
       setName('')
       setPersonalId('')
+      setGender('')
+      setAge('')
       setPhone('')
       setWhatsapp('')
       setLevelId('')
@@ -620,6 +966,19 @@ export default function RegisterPage() {
       setPaymentMethod(null)
       setPaymentReference('')
       setPaymentProof(null)
+
+      const emptyCustomValues: Record<
+        string,
+        string
+      > = {}
+
+      customFields.forEach((field) => {
+        emptyCustomValues[field.id] = ''
+      })
+
+      setCustomFieldValues(
+        emptyCustomValues,
+      )
 
       const fileInput =
         document.getElementById(
@@ -643,6 +1002,162 @@ export default function RegisterPage() {
     }
   }
 
+  function renderCustomField(
+    field: CustomField,
+  ) {
+    const value =
+      getCustomFieldValue(field)
+
+    const commonRequired =
+      field.is_required
+
+    if (field.field_type === 'textarea') {
+      return (
+        <div key={field.id}>
+          <FieldLabel
+            label={field.name}
+            required={commonRequired}
+          />
+
+          <Textarea
+            value={value}
+            onChange={(event) =>
+              updateCustomFieldValue(
+                field.id,
+                event.target.value,
+              )
+            }
+            required={commonRequired}
+            placeholder={`أدخل ${field.name}`}
+          />
+        </div>
+      )
+    }
+
+    if (field.field_type === 'select') {
+      return (
+        <div key={field.id}>
+          <FieldLabel
+            label={field.name}
+            required={commonRequired}
+          />
+
+          <select
+            value={value}
+            onChange={(event) =>
+              updateCustomFieldValue(
+                field.id,
+                event.target.value,
+              )
+            }
+            required={commonRequired}
+            className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="">
+              اختر {field.name}
+            </option>
+
+            {field.options.map(
+              (option) => (
+                <option
+                  key={option.id}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ),
+            )}
+          </select>
+        </div>
+      )
+    }
+
+    if (
+      field.field_type === 'boolean'
+    ) {
+      return (
+        <div
+          key={field.id}
+          className="rounded-xl border p-4"
+        >
+          <label className="flex cursor-pointer items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium">
+                {field.name}
+                {commonRequired && (
+                  <span className="mr-1 text-destructive">
+                    *
+                  </span>
+                )}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                اختر نعم أو لا
+              </p>
+            </div>
+
+            <input
+              type="checkbox"
+              checked={value === 'true'}
+              onChange={(event) =>
+                updateCustomFieldValue(
+                  field.id,
+                  event.target.checked
+                    ? 'true'
+                    : 'false',
+                )
+              }
+              className="size-5 accent-primary"
+            />
+          </label>
+        </div>
+      )
+    }
+
+    let inputType:
+      | 'text'
+      | 'number'
+      | 'date' = 'text'
+
+    if (
+      field.field_type === 'number'
+    ) {
+      inputType = 'number'
+    }
+
+    if (
+      field.field_type === 'date'
+    ) {
+      inputType = 'date'
+    }
+
+    return (
+      <div key={field.id}>
+        <FieldLabel
+          label={field.name}
+          required={commonRequired}
+        />
+
+        <Input
+          type={inputType}
+          value={value}
+          onChange={(event) =>
+            updateCustomFieldValue(
+              field.id,
+              event.target.value,
+            )
+          }
+          required={commonRequired}
+          placeholder={
+            inputType === 'text'
+              ? `أدخل ${field.name}`
+              : undefined
+          }
+        />
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-muted/30 px-4 py-10">
@@ -658,7 +1173,10 @@ export default function RegisterPage() {
     )
   }
 
-  if (errorMessage && !settings) {
+  if (
+    errorMessage &&
+    !settings
+  ) {
     return (
       <main className="min-h-screen bg-muted/30 px-4 py-10">
         <div className="mx-auto max-w-2xl">
@@ -863,6 +1381,69 @@ export default function RegisterPage() {
                   </div>
                 )}
 
+                {settings.show_gender && (
+                  <div>
+                    <FieldLabel
+                      label="الجنس"
+                      required={
+                        settings.required_gender
+                      }
+                    />
+
+                    <select
+                      value={gender}
+                      onChange={(event) =>
+                        setGender(
+                          event.target.value,
+                        )
+                      }
+                      required={
+                        settings.required_gender
+                      }
+                      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">
+                        اختر الجنس
+                      </option>
+
+                      <option value="ذكر">
+                        ذكر
+                      </option>
+
+                      <option value="أنثى">
+                        أنثى
+                      </option>
+                    </select>
+                  </div>
+                )}
+
+                {settings.show_age && (
+                  <div>
+                    <FieldLabel
+                      label="العمر"
+                      required={
+                        settings.required_age
+                      }
+                    />
+
+                    <Input
+                      type="number"
+                      min="0"
+                      max="120"
+                      value={age}
+                      onChange={(event) =>
+                        setAge(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="أدخل العمر"
+                      required={
+                        settings.required_age
+                      }
+                    />
+                  </div>
+                )}
+
                 {settings.show_phone && (
                   <div>
                     <FieldLabel
@@ -938,14 +1519,16 @@ export default function RegisterPage() {
                         اختر المستوى
                       </option>
 
-                      {levels.map((level) => (
-                        <option
-                          key={level.id}
-                          value={level.id}
-                        >
-                          {level.name}
-                        </option>
-                      ))}
+                      {levels.map(
+                        (level) => (
+                          <option
+                            key={level.id}
+                            value={level.id}
+                          >
+                            {level.name}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
                 )}
@@ -995,6 +1578,30 @@ export default function RegisterPage() {
                         settings.required_health_notes
                       }
                     />
+                  </div>
+                )}
+
+                {/* =================================================
+                    الحقول الإضافية الديناميكية
+                    ================================================= */}
+                {customFields.length > 0 && (
+                  <div className="space-y-5 border-t pt-6">
+                    <div>
+                      <h2 className="text-lg font-semibold">
+                        بيانات إضافية
+                      </h2>
+
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        يرجى تعبئة البيانات الإضافية المطلوبة.
+                      </p>
+                    </div>
+
+                    {customFields.map(
+                      (field) =>
+                        renderCustomField(
+                          field,
+                        ),
+                    )}
                   </div>
                 )}
               </div>
