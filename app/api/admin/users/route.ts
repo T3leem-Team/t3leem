@@ -85,7 +85,7 @@ async function requireAdmin() {
 
 /*
  * GET
- * عرض جميع المستخدمين
+ * عرض المستخدمين مع صلاحياتهم
  */
 export async function GET() {
   try {
@@ -137,8 +137,86 @@ export async function GET() {
       )
     }
 
+    const userIds =
+      (users ?? []).map(
+        (user) => user.id,
+      )
+
+    let userPermissions: Array<{
+      user_profile_id: string
+      permission_id: string
+    }> = []
+
+    if (userIds.length > 0) {
+      const {
+        data,
+        error:
+          permissionsError,
+      } =
+        await supabaseAdmin
+          .from('user_permissions')
+          .select(
+            'user_profile_id, permission_id',
+          )
+          .in(
+            'user_profile_id',
+            userIds,
+          )
+
+      if (permissionsError) {
+        console.error(
+          'User permissions lookup error:',
+          permissionsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل صلاحيات المستخدمين.',
+          },
+          { status: 500 },
+        )
+      }
+
+      userPermissions =
+        data ?? []
+    }
+
+    const permissionsByUser =
+      new Map<
+        string,
+        string[]
+      >()
+
+    for (const item of userPermissions) {
+      const current =
+        permissionsByUser.get(
+          item.user_profile_id,
+        ) ?? []
+
+      current.push(
+        item.permission_id,
+      )
+
+      permissionsByUser.set(
+        item.user_profile_id,
+        current,
+      )
+    }
+
+    const result =
+      (users ?? []).map(
+        (user) => ({
+          ...user,
+          permissionIds:
+            permissionsByUser.get(
+              user.id,
+            ) ?? [],
+        }),
+      )
+
     return NextResponse.json({
-      users: users ?? [],
+      users: result,
     })
   } catch (error) {
     console.error(
@@ -253,9 +331,6 @@ export async function POST(
       )
     }
 
-    /*
-     * منع تكرار اسم المستخدم.
-     */
     const {
       data: existingProfile,
     } =
@@ -278,16 +353,9 @@ export async function POST(
       )
     }
 
-    /*
-     * نستخدم Email داخليًا في Supabase Auth.
-     * المستخدم يتعامل فقط مع username.
-     */
     const email =
       `${username.toLowerCase()}@t3leem.local`
 
-    /*
-     * إنشاء حساب Auth.
-     */
     const {
       data: authData,
       error: authError,
@@ -322,9 +390,6 @@ export async function POST(
     const authUserId =
       authData.user.id
 
-    /*
-     * إنشاء user_profile.
-     */
     const {
       data: profile,
       error: profileError,
@@ -366,9 +431,6 @@ export async function POST(
         profileError,
       )
 
-      /*
-       * تنظيف حساب Auth إذا فشل إنشاء profile.
-       */
       await supabaseAdmin.auth.admin.deleteUser(
         authUserId,
       )
@@ -382,9 +444,6 @@ export async function POST(
       )
     }
 
-    /*
-     * إضافة الصلاحيات المحددة.
-     */
     if (permissionIds.length > 0) {
       const uniquePermissionIds =
         Array.from(
@@ -487,7 +546,10 @@ export async function POST(
     return NextResponse.json(
       {
         success: true,
-        user: profile,
+        user: {
+          ...profile,
+          permissionIds,
+        },
       },
       { status: 201 },
     )
