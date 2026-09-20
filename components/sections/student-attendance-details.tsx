@@ -61,8 +61,9 @@ function getDayOfWeek(date: string) {
     return null
   }
 
-  const [year, month, day] =
-    date.split('-').map(Number)
+  const [year, month, day] = date
+    .split('-')
+    .map(Number)
 
   if (!year || !month || !day) {
     return null
@@ -73,9 +74,7 @@ function getDayOfWeek(date: string) {
   ).getUTCDay()
 }
 
-function normalizeCourseDay(
-  value: string,
-): number | null {
+function normalizeCourseDay(value: string): number | null {
   const normalized = String(value ?? '')
     .trim()
     .toLowerCase()
@@ -136,8 +135,7 @@ function isCourseStudyDay(
   date: string,
   courseDays: string[],
 ) {
-  const dayOfWeek =
-    getDayOfWeek(date)
+  const dayOfWeek = getDayOfWeek(date)
 
   if (dayOfWeek === null) {
     return false
@@ -152,14 +150,11 @@ function isCourseStudyDay(
 
   return courseDays.some(
     (day) =>
-      normalizeCourseDay(day) ===
-      dayOfWeek,
+      normalizeCourseDay(day) === dayOfWeek,
   )
 }
 
-function formatDate(
-  date: string | null,
-) {
+function formatDate(date: string | null) {
   if (!date) {
     return '—'
   }
@@ -168,29 +163,19 @@ function formatDate(
     `${date}T00:00:00`,
   )
 
-  if (
-    Number.isNaN(
-      parsed.getTime(),
-    )
-  ) {
+  if (Number.isNaN(parsed.getTime())) {
     return date
   }
 
-  return parsed.toLocaleDateString(
-    'ar-BH',
-    {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    },
-  )
+  return parsed.toLocaleDateString('ar-BH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 }
 
-function formatShortDate(
-  date: string,
-) {
-  const [year, month, day] =
-    date.split('-')
+function formatShortDate(date: string) {
+  const [year, month, day] = date.split('-')
 
   if (!year || !month || !day) {
     return date
@@ -199,27 +184,18 @@ function formatShortDate(
   return `${day}/${month}/${year}`
 }
 
-function getDayName(
-  date: string,
-) {
+function getDayName(date: string) {
   const parsed = new Date(
     `${date}T00:00:00`,
   )
 
-  if (
-    Number.isNaN(
-      parsed.getTime(),
-    )
-  ) {
+  if (Number.isNaN(parsed.getTime())) {
     return ''
   }
 
-  return parsed.toLocaleDateString(
-    'ar-BH',
-    {
-      weekday: 'long',
-    },
-  )
+  return parsed.toLocaleDateString('ar-BH', {
+    weekday: 'long',
+  })
 }
 
 function getStatusClasses(
@@ -256,17 +232,13 @@ function buildDateRange(
     startYear,
     startMonth,
     startDay,
-  ] = startDate
-    .split('-')
-    .map(Number)
+  ] = startDate.split('-').map(Number)
 
   const [
     endYear,
     endMonth,
     endDay,
-  ] = endDate
-    .split('-')
-    .map(Number)
+  ] = endDate.split('-').map(Number)
 
   if (
     !startYear ||
@@ -296,8 +268,7 @@ function buildDateRange(
   )
 
   while (current <= end) {
-    const year =
-      current.getUTCFullYear()
+    const year = current.getUTCFullYear()
 
     const month = String(
       current.getUTCMonth() + 1,
@@ -341,18 +312,13 @@ export function StudentAttendanceDetails({
         return []
       }
 
-      const dates =
-        buildDateRange(
-          course.startDate,
-          course.endDate,
-        )
+      const dates = buildDateRange(
+        course.startDate,
+        course.endDate,
+      )
 
       return dates
         .filter((date) => {
-          /*
-           * فقط أيام الدراسة المحددة
-           * للدورة.
-           */
           if (
             !isCourseStudyDay(
               date,
@@ -363,7 +329,7 @@ export function StudentAttendanceDetails({
           }
 
           /*
-           * لا نعرض الأيام المستقبلية.
+           * لا نعرض أي يوم مستقبلي.
            */
           if (date > today) {
             return false
@@ -372,26 +338,19 @@ export function StudentAttendanceDetails({
           return true
         })
         .map((date) => {
-          const record =
-            records.find(
-              (item) =>
-                item.studentId ===
-                  studentId &&
-                item.courseId ===
-                  course.id &&
-                item.attendanceDate ===
-                  date,
-            )
+          const record = records.find(
+            (item) =>
+              item.studentId === studentId &&
+              item.courseId === course.id &&
+              item.attendanceDate === date,
+          )
 
           return {
             date,
-            dayName:
-              getDayName(date),
+            dayName: getDayName(date),
             status:
-              record?.status ??
-              'لم يسجل',
-            note:
-              record?.note ?? '',
+              record?.status ?? 'لم يسجل',
+            note: record?.note ?? '',
           }
         })
     }, [
@@ -433,13 +392,13 @@ export function StudentAttendanceDetails({
     }
 
     /*
-     * قاعدة نسبة الحضور:
+     * نسبة الحضور:
      *
-     * حاضر     = حضور
-     * متأخر    = حضور
-     * مستأذن   = حضور
-     * غائب     = يدخل في الحساب وليس حضورًا
-     * لم يسجل  = مستبعد من الحساب
+     * حاضر    = حضور
+     * متأخر   = حضور
+     * مستأذن  = حضور
+     * غائب    = يدخل في الحساب وليس حضورًا
+     * لم يسجل = لا يدخل في الحساب
      */
     const counted =
       present +
@@ -456,13 +415,11 @@ export function StudentAttendanceDetails({
       counted === 0
         ? 0
         : Math.round(
-            (attended / counted) *
-              100,
+            (attended / counted) * 100,
           )
 
     return {
-      totalDays:
-        attendanceDays.length,
+      totalDays: attendanceDays.length,
       present,
       absent,
       late,
@@ -480,8 +437,9 @@ export function StudentAttendanceDetails({
   return (
     <div
       dir="rtl"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex h-[100dvh] w-full items-center justify-center bg-background p-0 sm:p-4"
     >
+      {/* الخلفية */}
       <button
         type="button"
         aria-label="إغلاق"
@@ -489,11 +447,26 @@ export function StudentAttendanceDetails({
         onClick={onClose}
       />
 
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+      {/* النافذة */}
+      <div
+        className="
+          relative z-10
+          flex h-[100dvh] w-full
+          flex-col
+          overflow-hidden
+          bg-background
+          shadow-2xl
+          sm:h-auto
+          sm:max-h-[90dvh]
+          sm:max-w-4xl
+          sm:rounded-2xl
+          sm:border
+        "
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold">
+            <h2 className="text-base font-semibold sm:text-lg">
               تفاصيل حضور الطالب
             </h2>
 
@@ -501,7 +474,7 @@ export function StudentAttendanceDetails({
               {studentName}
             </p>
 
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {course.name}
             </p>
           </div>
@@ -509,24 +482,22 @@ export function StudentAttendanceDetails({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 hover:bg-muted"
+            className="shrink-0 rounded-md p-2 hover:bg-muted"
             aria-label="إغلاق"
           >
             <X className="size-5" />
           </button>
         </div>
 
-        {/* Course information */}
-        <div className="border-b bg-muted/20 px-6 py-4">
-          <div className="grid gap-3 text-sm sm:grid-cols-2">
+        {/* معلومات الدورة */}
+        <div className="shrink-0 border-b bg-muted/20 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="grid gap-2 text-sm sm:grid-cols-2 sm:gap-3">
             <div>
               <span className="text-muted-foreground">
                 بداية الدورة:
               </span>{' '}
               <span className="font-medium">
-                {formatDate(
-                  course.startDate,
-                )}
+                {formatDate(course.startDate)}
               </span>
             </div>
 
@@ -535,65 +506,51 @@ export function StudentAttendanceDetails({
                 نهاية الدورة:
               </span>{' '}
               <span className="font-medium">
-                {formatDate(
-                  course.endDate,
-                )}
+                {formatDate(course.endDate)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="border-b px-6 py-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {/* الملخص */}
+        <div className="shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <SummaryCard
               label="أيام الدراسة"
-              value={
-                summary.totalDays
-              }
+              value={summary.totalDays}
             />
 
             <SummaryCard
               label="حاضر"
-              value={
-                summary.present
-              }
+              value={summary.present}
               valueClassName="text-emerald-600 dark:text-emerald-400"
             />
 
             <SummaryCard
               label="غائب"
-              value={
-                summary.absent
-              }
+              value={summary.absent}
               valueClassName="text-red-600 dark:text-red-400"
             />
 
             <SummaryCard
               label="متأخر"
-              value={
-                summary.late
-              }
+              value={summary.late}
               valueClassName="text-amber-600 dark:text-amber-400"
             />
 
             <SummaryCard
               label="مستأذن"
-              value={
-                summary.excused
-              }
+              value={summary.excused}
               valueClassName="text-blue-600 dark:text-blue-400"
             />
 
             <SummaryCard
               label="لم يسجل"
-              value={
-                summary.notRecorded
-              }
+              value={summary.notRecorded}
             />
           </div>
 
-          <div className="mt-4 rounded-xl border bg-muted/30 p-4">
+          <div className="mt-3 rounded-xl border bg-muted/30 p-3 sm:mt-4 sm:p-4">
             <div className="flex items-center justify-between gap-4">
               <span className="text-sm text-muted-foreground">
                 نسبة الحضور
@@ -613,71 +570,76 @@ export function StudentAttendanceDetails({
               />
             </div>
 
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground sm:text-xs">
               النسبة محسوبة من الحاضر والمتأخر والمستأذن والغائب،
               بينما «لم يسجل» لا يدخل في الحساب.
             </p>
           </div>
         </div>
 
-        {/* Daily details */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          {attendanceDays.length ===
-          0 ? (
-            <div className="rounded-xl border border-dashed bg-muted/20 p-10 text-center">
+        {/* تفاصيل الأيام */}
+        <div
+          className="
+            min-h-0
+            flex-1
+            overflow-y-auto
+            overscroll-contain
+            px-4 py-4
+            [-webkit-overflow-scrolling:touch]
+            sm:px-6
+          "
+        >
+          {attendanceDays.length === 0 ? (
+            <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
               <p className="text-sm text-muted-foreground">
                 لا توجد أيام دراسة منتهية أو حالية لعرض حضورها.
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {attendanceDays.map(
-                (day) => (
-                  <div
-                    key={day.date}
-                    className="rounded-xl border bg-card p-4"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            {formatShortDate(
-                              day.date,
-                            )}
-                          </span>
+            <div className="space-y-2 pb-2">
+              {attendanceDays.map((day) => (
+                <div
+                  key={day.date}
+                  className="rounded-xl border bg-card p-3 sm:p-4"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {formatShortDate(day.date)}
+                        </span>
 
-                          <span className="text-sm text-muted-foreground">
-                            {day.dayName}
-                          </span>
-                        </div>
-
-                        {day.note && (
-                          <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                            <span className="font-medium text-foreground">
-                              الملاحظة:
-                            </span>{' '}
-                            {day.note}
-                          </div>
-                        )}
+                        <span className="text-sm text-muted-foreground">
+                          {day.dayName}
+                        </span>
                       </div>
 
-                      <span
-                        className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${getStatusClasses(
-                          day.status,
-                        )}`}
-                      >
-                        {day.status}
-                      </span>
+                      {day.note && (
+                        <div className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            الملاحظة:
+                          </span>{' '}
+                          {day.note}
+                        </div>
+                      )}
                     </div>
+
+                    <span
+                      className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${getStatusClasses(
+                        day.status,
+                      )}`}
+                    >
+                      {day.status}
+                    </span>
                   </div>
-                ),
-              )}
+                </div>
+              ))}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="border-t p-4">
+        <div className="shrink-0 border-t bg-background p-3 sm:p-4">
           <Button
             type="button"
             variant="outline"
@@ -702,13 +664,13 @@ function SummaryCard({
   valueClassName?: string
 }) {
   return (
-    <div className="rounded-xl border bg-background p-3 text-center">
-      <div className="text-xs text-muted-foreground">
+    <div className="rounded-xl border bg-background p-2.5 text-center sm:p-3">
+      <div className="text-[11px] text-muted-foreground sm:text-xs">
         {label}
       </div>
 
       <div
-        className={`mt-1 text-lg font-bold ${valueClassName}`}
+        className={`mt-1 text-base font-bold sm:text-lg ${valueClassName}`}
       >
         {value}
       </div>
