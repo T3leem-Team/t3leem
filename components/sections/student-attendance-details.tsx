@@ -319,6 +319,9 @@ export function StudentAttendanceDetails({
 
       return dates
         .filter((date) => {
+          /*
+           * فقط أيام الدراسة المحددة للدورة.
+           */
           if (
             !isCourseStudyDay(
               date,
@@ -329,7 +332,7 @@ export function StudentAttendanceDetails({
           }
 
           /*
-           * لا نعرض أي يوم مستقبلي.
+           * لا نعرض الأيام المستقبلية.
            */
           if (date > today) {
             return false
@@ -447,16 +450,17 @@ export function StudentAttendanceDetails({
         onClick={onClose}
       />
 
-      {/* النافذة */}
+      {/* النافذة كاملة وهي التي تعمل Scroll */}
       <div
         className="
           relative z-10
-          flex h-[100dvh] w-full
-          flex-col
-          overflow-hidden
+          h-[100dvh]
+          w-full
+          overflow-y-auto
+          overscroll-contain
           bg-background
           shadow-2xl
-          sm:h-auto
+          [-webkit-overflow-scrolling:touch]
           sm:max-h-[90dvh]
           sm:max-w-4xl
           sm:rounded-2xl
@@ -464,33 +468,35 @@ export function StudentAttendanceDetails({
         "
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold sm:text-lg">
-              تفاصيل حضور الطالب
-            </h2>
+        <div className="border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold sm:text-lg">
+                تفاصيل حضور الطالب
+              </h2>
 
-            <p className="mt-1 truncate text-sm text-muted-foreground">
-              {studentName}
-            </p>
+              <p className="mt-1 truncate text-sm text-muted-foreground">
+                {studentName}
+              </p>
 
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {course.name}
-            </p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {course.name}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="shrink-0 rounded-md p-2 hover:bg-muted"
+              aria-label="إغلاق"
+            >
+              <X className="size-5" />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md p-2 hover:bg-muted"
-            aria-label="إغلاق"
-          >
-            <X className="size-5" />
-          </button>
         </div>
 
         {/* معلومات الدورة */}
-        <div className="shrink-0 border-b bg-muted/20 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="border-b bg-muted/20 px-4 py-3 sm:px-6 sm:py-4">
           <div className="grid gap-2 text-sm sm:grid-cols-2 sm:gap-3">
             <div>
               <span className="text-muted-foreground">
@@ -513,7 +519,7 @@ export function StudentAttendanceDetails({
         </div>
 
         {/* الملخص */}
-        <div className="shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4">
+        <div className="border-b px-4 py-3 sm:px-6 sm:py-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <SummaryCard
               label="أيام الدراسة"
@@ -578,17 +584,7 @@ export function StudentAttendanceDetails({
         </div>
 
         {/* تفاصيل الأيام */}
-        <div
-          className="
-            min-h-0
-            flex-1
-            overflow-y-auto
-            overscroll-contain
-            px-4 py-4
-            [-webkit-overflow-scrolling:touch]
-            sm:px-6
-          "
-        >
+        <div className="px-4 py-4 sm:px-6">
           {attendanceDays.length === 0 ? (
             <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center">
               <p className="text-sm text-muted-foreground">
@@ -596,7 +592,7 @@ export function StudentAttendanceDetails({
               </p>
             </div>
           ) : (
-            <div className="space-y-2 pb-2">
+            <div className="space-y-2">
               {attendanceDays.map((day) => (
                 <div
                   key={day.date}
@@ -639,7 +635,7 @@ export function StudentAttendanceDetails({
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 border-t bg-background p-3 sm:p-4">
+        <div className="border-t bg-background p-3 sm:p-4">
           <Button
             type="button"
             variant="outline"
