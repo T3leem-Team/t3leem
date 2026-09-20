@@ -14,9 +14,6 @@ const serviceRoleKey =
 const SESSION_COOKIE =
   't3leem_session_id'
 
-const DEVICE_COOKIE =
-  't3leem_device_token'
-
 const supabaseAdmin = createClient(
   supabaseUrl,
   serviceRoleKey,
@@ -109,7 +106,7 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * إنشاء Supabase SSR client
+     * Supabase SSR Client
      * --------------------------------------------------
      */
     const response =
@@ -150,22 +147,16 @@ export async function POST(
 
                   return {
                     name: cookie
-                      .slice(
-                        0,
-                        index,
-                      )
+                      .slice(0, index)
                       .trim(),
                     value: cookie
-                      .slice(
-                        index + 1,
-                      )
+                      .slice(index + 1)
                       .trim(),
                   }
                 })
                 .filter(
                   (cookie) =>
-                    cookie.name
-                      .length > 0,
+                    cookie.name.length > 0,
                 )
             },
 
@@ -178,10 +169,6 @@ export async function POST(
                   value,
                   options,
                 }) => {
-                  /*
-                   * نحافظ على خيارات Supabase
-                   * مع إضافة حماية افتراضية للكوكيز.
-                   */
                   response.cookies.set(
                     name,
                     value,
@@ -211,7 +198,7 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * الحصول على المستخدم الحالي قبل تسجيل الخروج
+     * الحصول على المستخدم الحالي
      * --------------------------------------------------
      */
     const {
@@ -231,7 +218,7 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * إغلاق active_sessions
+     * إغلاق active session
      * --------------------------------------------------
      */
     if (sessionId) {
@@ -243,7 +230,12 @@ export async function POST(
         await supabaseAdmin
           .from('active_sessions')
           .select(
-            'id, auth_user_id, trusted_device_id, is_active',
+            `
+            id,
+            auth_user_id,
+            trusted_device_id,
+            is_active
+            `,
           )
           .eq(
             'id',
@@ -259,18 +251,18 @@ export async function POST(
       }
 
       /*
-       * نتأكد أن الجلسة تخص المستخدم الحالي
-       * قبل تعديلها.
+       * لا نسمح بإغلاق جلسة مستخدم آخر.
        */
       if (
         activeSession &&
         activeSession.is_active &&
-        (
-          !user ||
-          activeSession.auth_user_id ===
-            user.id
-        )
+        user &&
+        activeSession.auth_user_id ===
+          user.id
       ) {
+        const now =
+          new Date().toISOString()
+
         const {
           error:
             sessionUpdateError,
@@ -279,14 +271,20 @@ export async function POST(
             .from('active_sessions')
             .update({
               is_active: false,
-              logout_at:
-                new Date().toISOString(),
-              last_activity_at:
-                new Date().toISOString(),
+              logout_at: now,
+              last_activity_at: now,
             })
             .eq(
               'id',
               activeSession.id,
+            )
+            .eq(
+              'auth_user_id',
+              user.id,
+            )
+            .eq(
+              'is_active',
+              true,
             )
 
         if (sessionUpdateError) {
@@ -297,7 +295,7 @@ export async function POST(
         }
 
         /*
-         * تسجيل عملية Logout في Audit Log.
+         * Audit Log
          */
         const {
           error: auditError,
@@ -333,7 +331,7 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * تسجيل الخروج من Supabase Auth
+     * Supabase Auth Logout
      * --------------------------------------------------
      */
     const {
@@ -350,17 +348,8 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * حذف Cookie الخاصة بالجلسة
+     * حذف Session Cookie
      * --------------------------------------------------
-     *
-     * نفس خصائص الحماية المستخدمة عند إنشائها:
-     *
-     * httpOnly
-     * secure
-     * sameSite
-     * path
-     *
-     * مع maxAge = 0 للحذف.
      */
     response.cookies.set(
       SESSION_COOKIE,
@@ -377,17 +366,13 @@ export async function POST(
     )
 
     /*
-     * --------------------------------------------------
-     * ملاحظة:
+     * Device Cookie لا يتم حذفه.
      *
-     * لا نحذف Device Cookie عند Logout.
+     * Logout:
+     * إغلاق الجلسة فقط.
      *
-     * الجهاز يبقى Trusted.
-     *
-     * Logout = خروج من الجلسة
-     *
-     * Revoke = سحب الثقة من الجهاز
-     * --------------------------------------------------
+     * Revoke:
+     * سحب الثقة من الجهاز.
      */
 
     return response
@@ -397,12 +382,29 @@ export async function POST(
       error,
     )
 
-    return NextResponse.json(
+    const response =
+      NextResponse.json(
+        {
+          error:
+            'حدث خطأ أثناء تسجيل الخروج.',
+        },
+        { status: 500 },
+      )
+
+    response.cookies.set(
+      SESSION_COOKIE,
+      '',
       {
-        error:
-          'حدث خطأ أثناء تسجيل الخروج.',
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV ===
+          'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 0,
       },
-      { status: 500 },
     )
+
+    return response
   }
 }
