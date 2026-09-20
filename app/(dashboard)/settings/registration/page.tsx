@@ -1,15 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
+  CalendarDays,
+  Check,
+  ChevronDown,
   CreditCard,
   FileImage,
   Link2,
   Loader2,
+  Plus,
   Save,
   Settings2,
+  Trash2,
+  UserRound,
+  X,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -41,8 +48,8 @@ function SettingRow({
 }: SettingRowProps) {
   return (
     <div
-      className={`flex items-center justify-between gap-4 rounded-xl border p-4 ${
-        disabled ? 'opacity-60' : ''
+      className={`flex items-center justify-between gap-4 rounded-xl border p-4 transition ${
+        disabled ? 'opacity-60' : 'hover:bg-muted/20'
       }`}
     >
       <div className="min-w-0">
@@ -73,9 +80,163 @@ function SettingRow({
   )
 }
 
+type FieldControlProps = {
+  title: string
+  description: string
+  visible: boolean
+  required: boolean
+  onVisibleChange: (value: boolean) => void
+  onRequiredChange: (value: boolean) => void
+  disabled?: boolean
+}
+
+function FieldControl({
+  title,
+  description,
+  visible,
+  required,
+  onVisibleChange,
+  onRequiredChange,
+  disabled = false,
+}: FieldControlProps) {
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold">{title}</p>
+
+            <Badge variant="secondary">أساسي</Badge>
+          </div>
+
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+
+        <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-[360px]">
+          <ToggleButton
+            label="عرض الحقل"
+            checked={visible}
+            disabled={disabled}
+            onChange={onVisibleChange}
+          />
+
+          <ToggleButton
+            label="إلزامي"
+            checked={required}
+            disabled={disabled || !visible}
+            onChange={onRequiredChange}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ToggleButton({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'hover:bg-muted/50'
+      }`}
+    >
+      <span>{label}</span>
+
+      <span
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
+          checked ? 'bg-primary' : 'bg-muted-foreground/30'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'right-0.5' : 'right-4.5'
+          }`}
+        />
+      </span>
+    </button>
+  )
+}
+
+type CustomField = {
+  id: string
+  name: string
+  field_type: string
+  available_in_registration: boolean
+  available_in_students: boolean
+  available_in_payments: boolean
+  sort_order: number
+  is_active: boolean
+  visibility?: {
+    registration: {
+      is_visible: boolean
+      is_required: boolean
+      sort_order: number
+    }
+    students: {
+      is_visible: boolean
+      is_required: boolean
+      sort_order: number
+    }
+    payments: {
+      is_visible: boolean
+      is_required: boolean
+      sort_order: number
+    }
+  }
+}
+
+type FieldType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'select'
+  | 'boolean'
+  | 'textarea'
+
+const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+  text: 'نص',
+  number: 'رقم',
+  date: 'تاريخ',
+  select: 'قائمة خيارات',
+  boolean: 'نعم / لا',
+  textarea: 'نص طويل',
+}
+
+const SECTIONS = [
+  {
+    key: 'registration' as const,
+    label: 'طلبات التسجيل',
+  },
+  {
+    key: 'students' as const,
+    label: 'سجل الطلبة',
+  },
+  {
+    key: 'payments' as const,
+    label: 'المدفوعات',
+  },
+]
+
 export default function RegistrationSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingField, setSavingField] = useState(false)
 
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -87,6 +248,12 @@ export default function RegistrationSettingsPage() {
 
   const [showPersonalId, setShowPersonalId] = useState(true)
   const [requiredPersonalId, setRequiredPersonalId] = useState(true)
+
+  const [showGender, setShowGender] = useState(true)
+  const [requiredGender, setRequiredGender] = useState(true)
+
+  const [showAge, setShowAge] = useState(true)
+  const [requiredAge, setRequiredAge] = useState(true)
 
   const [showPhone, setShowPhone] = useState(true)
   const [requiredPhone, setRequiredPhone] = useState(true)
@@ -120,8 +287,32 @@ export default function RegistrationSettingsPage() {
 
   const [settingsId, setSettingsId] = useState<string | null>(null)
 
+  const [customFields, setCustomFields] = useState<CustomField[]>([])
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
+
+  const [showAddField, setShowAddField] = useState(false)
+  const [newFieldName, setNewFieldName] = useState('')
+  const [newFieldType, setNewFieldType] =
+    useState<FieldType>('text')
+
+  const [newFieldSections, setNewFieldSections] = useState({
+    registration: false,
+    students: false,
+    payments: false,
+  })
+
+  const [newFieldOptions, setNewFieldOptions] = useState<string[]>([
+    '',
+  ])
+
+  const activeCustomFields = useMemo(
+    () => customFields.filter((field) => field.is_active),
+    [customFields],
+  )
+
   useEffect(() => {
     loadSettings()
+    loadCustomFields()
   }, [])
 
   async function loadSettings() {
@@ -165,6 +356,12 @@ export default function RegistrationSettingsPage() {
     setShowPersonalId(data.show_personal_id ?? true)
     setRequiredPersonalId(data.required_personal_id ?? true)
 
+    setShowGender(data.show_gender ?? true)
+    setRequiredGender(data.required_gender ?? true)
+
+    setShowAge(data.show_age ?? true)
+    setRequiredAge(data.required_age ?? true)
+
     setShowPhone(data.show_phone ?? true)
     setRequiredPhone(data.required_phone ?? true)
 
@@ -202,10 +399,118 @@ export default function RegistrationSettingsPage() {
     setShowPaymentQr(data.show_payment_qr ?? false)
 
     setSuccessMessage(
-      'تم ربط إعدادات التسجيل بقاعدة البيانات بنجاح.',
+      'تم تحميل إعدادات التسجيل بنجاح.',
     )
 
     setLoading(false)
+  }
+
+  async function loadCustomFields() {
+    setCustomFieldsLoading(true)
+
+    const { data, error } = await supabase
+      .from('custom_fields')
+      .select(`
+        id,
+        name,
+        field_type,
+        available_in_registration,
+        available_in_students,
+        available_in_payments,
+        sort_order,
+        is_active
+      `)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error loading custom fields:', error)
+
+      setErrorMessage(
+        `تعذر تحميل الحقول الإضافية: ${error.message}`,
+      )
+
+      setCustomFieldsLoading(false)
+      return
+    }
+
+    if (!data || data.length === 0) {
+      setCustomFields([])
+      setCustomFieldsLoading(false)
+      return
+    }
+
+    const fieldIds = data.map((field) => field.id)
+
+    const { data: visibilityData, error: visibilityError } =
+      await supabase
+        .from('custom_field_visibility')
+        .select(
+          `
+          custom_field_id,
+          section,
+          is_visible,
+          is_required,
+          sort_order
+        `,
+        )
+        .in('custom_field_id', fieldIds)
+
+    if (visibilityError) {
+      console.error(
+        'Error loading custom field visibility:',
+        visibilityError,
+      )
+
+      setErrorMessage(
+        `تم تحميل الحقول ولكن تعذر تحميل إعدادات ظهورها: ${visibilityError.message}`,
+      )
+    }
+
+    const fields: CustomField[] = data.map((field) => {
+      const visibility = {
+        registration: {
+          is_visible: false,
+          is_required: false,
+          sort_order: field.sort_order,
+        },
+        students: {
+          is_visible: false,
+          is_required: false,
+          sort_order: field.sort_order,
+        },
+        payments: {
+          is_visible: false,
+          is_required: false,
+          sort_order: field.sort_order,
+        },
+      }
+
+      for (const row of visibilityData ?? []) {
+        if (row.custom_field_id !== field.id) continue
+
+        if (
+          row.section === 'registration' ||
+          row.section === 'students' ||
+          row.section === 'payments'
+        ) {
+          visibility[row.section] = {
+            is_visible: row.is_visible ?? false,
+            is_required: row.is_required ?? false,
+            sort_order:
+              row.sort_order ?? field.sort_order,
+          }
+        }
+      }
+
+      return {
+        ...field,
+        visibility,
+      }
+    })
+
+    setCustomFields(fields)
+    setCustomFieldsLoading(false)
   }
 
   async function saveSettings() {
@@ -217,25 +522,34 @@ export default function RegistrationSettingsPage() {
       registration_open: registrationOpen,
 
       show_name: showName,
-      required_name: requiredName,
+      required_name: showName && requiredName,
 
       show_personal_id: showPersonalId,
-      required_personal_id: requiredPersonalId,
+      required_personal_id:
+        showPersonalId && requiredPersonalId,
+
+      show_gender: showGender,
+      required_gender: showGender && requiredGender,
+
+      show_age: showAge,
+      required_age: showAge && requiredAge,
 
       show_phone: showPhone,
-      required_phone: requiredPhone,
+      required_phone: showPhone && requiredPhone,
 
       show_whatsapp: showWhatsapp,
-      required_whatsapp: requiredWhatsapp,
+      required_whatsapp:
+        showWhatsapp && requiredWhatsapp,
 
       show_level: showLevel,
-      required_level: requiredLevel,
+      required_level: showLevel && requiredLevel,
 
       show_notes: showNotes,
-      required_notes: requiredNotes,
+      required_notes: showNotes && requiredNotes,
 
       show_health_notes: showHealthNotes,
-      required_health_notes: requiredHealthNotes,
+      required_health_notes:
+        showHealthNotes && requiredHealthNotes,
 
       payment_enabled: paymentEnabled,
 
@@ -305,20 +619,348 @@ export default function RegistrationSettingsPage() {
     }
 
     setSuccessMessage(
-      'تم حفظ إعدادات التسجيل وربطها بقاعدة البيانات بنجاح.',
+      'تم حفظ إعدادات التسجيل بنجاح.',
     )
 
     setSaving(false)
+  }
+
+  function resetNewFieldForm() {
+    setNewFieldName('')
+    setNewFieldType('text')
+
+    setNewFieldSections({
+      registration: false,
+      students: false,
+      payments: false,
+    })
+
+    setNewFieldOptions([''])
+  }
+
+  function toggleNewFieldSection(
+    section: keyof typeof newFieldSections,
+  ) {
+    setNewFieldSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }))
+  }
+
+  function addOption() {
+    setNewFieldOptions((current) => [...current, ''])
+  }
+
+  function removeOption(index: number) {
+    setNewFieldOptions((current) =>
+      current.filter((_, optionIndex) => optionIndex !== index),
+    )
+  }
+
+  function updateOption(index: number, value: string) {
+    setNewFieldOptions((current) =>
+      current.map((option, optionIndex) =>
+        optionIndex === index ? value : option,
+      ),
+    )
+  }
+
+  async function addCustomField() {
+    const name = newFieldName.trim()
+
+    if (!name) {
+      setErrorMessage('اكتب اسم الحقل أولاً.')
+      return
+    }
+
+    const selectedSections = Object.entries(
+      newFieldSections,
+    ).filter(([, selected]) => selected)
+
+    if (selectedSections.length === 0) {
+      setErrorMessage(
+        'اختر مكاناً واحداً على الأقل لاستخدام الحقل.',
+      )
+      return
+    }
+
+    if (
+      newFieldType === 'select' &&
+      newFieldOptions.filter((option) => option.trim()).length === 0
+    ) {
+      setErrorMessage(
+        'أضف خياراً واحداً على الأقل للقائمة.',
+      )
+      return
+    }
+
+    setSavingField(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const maxSortOrder =
+      customFields.length > 0
+        ? Math.max(
+            ...customFields.map(
+              (field) => field.sort_order ?? 0,
+            ),
+          )
+        : 0
+
+    const { data: field, error: fieldError } =
+      await supabase
+        .from('custom_fields')
+        .insert({
+          name,
+          field_type: newFieldType,
+          available_in_registration:
+            newFieldSections.registration,
+          available_in_students:
+            newFieldSections.students,
+          available_in_payments:
+            newFieldSections.payments,
+          sort_order: maxSortOrder + 1,
+          is_active: true,
+        })
+        .select(
+          `
+          id,
+          name,
+          field_type,
+          available_in_registration,
+          available_in_students,
+          available_in_payments,
+          sort_order,
+          is_active
+        `,
+        )
+        .single()
+
+    if (fieldError || !field) {
+      console.error(
+        'Error creating custom field:',
+        fieldError,
+      )
+
+      setErrorMessage(
+        `تعذر إضافة الحقل: ${
+          fieldError?.message ?? 'خطأ غير معروف'
+        }`,
+      )
+
+      setSavingField(false)
+      return
+    }
+
+    if (newFieldType === 'select') {
+      const options = newFieldOptions
+        .map((option) => option.trim())
+        .filter(Boolean)
+
+      if (options.length > 0) {
+        const { error: optionsError } = await supabase
+          .from('custom_field_options')
+          .insert(
+            options.map((option, index) => ({
+              custom_field_id: field.id,
+              label: option,
+              value: option,
+              sort_order: index,
+            })),
+          )
+
+        if (optionsError) {
+          console.error(
+            'Error creating custom field options:',
+            optionsError,
+          )
+
+          await supabase
+            .from('custom_fields')
+            .delete()
+            .eq('id', field.id)
+
+          setErrorMessage(
+            `تعذر حفظ خيارات الحقل: ${optionsError.message}`,
+          )
+
+          setSavingField(false)
+          return
+        }
+      }
+    }
+
+    const visibilityRows = selectedSections.map(
+      ([section], index) => ({
+        custom_field_id: field.id,
+        section,
+        is_visible: false,
+        is_required: false,
+        sort_order: maxSortOrder + 1 + index,
+      }),
+    )
+
+    const { error: visibilityError } = await supabase
+      .from('custom_field_visibility')
+      .insert(visibilityRows)
+
+    if (visibilityError) {
+      console.error(
+        'Error creating custom field visibility:',
+        visibilityError,
+      )
+
+      await supabase
+        .from('custom_fields')
+        .delete()
+        .eq('id', field.id)
+
+      setErrorMessage(
+        `تعذر حفظ أماكن ظهور الحقل: ${visibilityError.message}`,
+      )
+
+      setSavingField(false)
+      return
+    }
+
+    resetNewFieldForm()
+    setShowAddField(false)
+
+    setSuccessMessage(
+      'تمت إضافة الحقل بنجاح. الحقل متاح في الأقسام المختارة ومخفي افتراضياً.',
+    )
+
+    await loadCustomFields()
+
+    setSavingField(false)
+  }
+
+  async function deleteCustomField(fieldId: string) {
+    const confirmed = window.confirm(
+      'هل أنت متأكد من حذف هذا الحقل؟ سيتم حذف إعداداته وقيمه المرتبطة به.',
+    )
+
+    if (!confirmed) return
+
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const { error } = await supabase
+      .from('custom_fields')
+      .delete()
+      .eq('id', fieldId)
+
+    if (error) {
+      console.error('Error deleting custom field:', error)
+
+      setErrorMessage(
+        `تعذر حذف الحقل: ${error.message}`,
+      )
+
+      return
+    }
+
+    setSuccessMessage('تم حذف الحقل بنجاح.')
+    await loadCustomFields()
+  }
+
+  async function updateCustomFieldVisibility(
+    field: CustomField,
+    section: 'registration' | 'students' | 'payments',
+    changes: {
+      is_visible?: boolean
+      is_required?: boolean
+    },
+  ) {
+    const current =
+      field.visibility?.[section] ?? {
+        is_visible: false,
+        is_required: false,
+        sort_order: field.sort_order,
+      }
+
+    const nextVisible =
+      changes.is_visible ?? current.is_visible
+
+    const nextRequired =
+      nextVisible
+        ? changes.is_required ?? current.is_required
+        : false
+
+    const { error } = await supabase
+      .from('custom_field_visibility')
+      .upsert(
+        {
+          custom_field_id: field.id,
+          section,
+          is_visible: nextVisible,
+          is_required: nextRequired,
+          sort_order: current.sort_order,
+        },
+        {
+          onConflict: 'custom_field_id,section',
+        },
+      )
+
+    if (error) {
+      console.error(
+        'Error updating custom field visibility:',
+        error,
+      )
+
+      setErrorMessage(
+        `تعذر حفظ تخصيص الحقل: ${error.message}`,
+      )
+
+      return
+    }
+
+    setCustomFields((currentFields) =>
+      currentFields.map((currentField) => {
+        if (currentField.id !== field.id) {
+          return currentField
+        }
+
+        return {
+          ...currentField,
+          visibility: {
+            ...currentField.visibility!,
+            [section]: {
+              ...currentField.visibility![section],
+              is_visible: nextVisible,
+              is_required: nextRequired,
+            },
+          },
+        }
+      }),
+    )
+  }
+
+  function sectionIsAvailable(
+    field: CustomField,
+    section:
+      | 'registration'
+      | 'students'
+      | 'payments',
+  ) {
+    if (section === 'registration') {
+      return field.available_in_registration
+    }
+
+    if (section === 'students') {
+      return field.available_in_students
+    }
+
+    return field.available_in_payments
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="إعدادات التسجيل"
-        description="التحكم في صفحة التسجيل العامة والبيانات وطرق الدفع"
+        description="التحكم في التسجيل العام وحقول التسجيل وطرق الدفع والحقول الإضافية"
       />
 
-      {/* حالة الربط */}
       {loading ? (
         <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4 text-sm">
           <Loader2 className="size-4 animate-spin" />
@@ -334,8 +976,16 @@ export default function RegistrationSettingsPage() {
       ) : null}
 
       {errorMessage && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          {errorMessage}
+        <div className="flex items-start justify-between gap-4 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <span>{errorMessage}</span>
+
+          <button
+            type="button"
+            onClick={() => setErrorMessage('')}
+            className="shrink-0"
+          >
+            <X className="size-4" />
+          </button>
         </div>
       )}
 
@@ -376,137 +1026,570 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* بيانات الطالب */}
+      {/* الحقول الأساسية */}
       <Card>
         <CardHeader>
-          <CardTitle>بيانات الطالب</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <UserRound className="size-5" />
+            الحقول الأساسية
+          </CardTitle>
+
+          <p className="text-sm leading-6 text-muted-foreground">
+            هذه الحقول جزء أساسي من نظام T3LEEM ولا تعتبر حقولاً إضافية.
+            يمكنك التحكم في ظهورها وإلزاميتها في التسجيل.
+          </p>
         </CardHeader>
 
         <CardContent className="space-y-3">
-          <SettingRow
+          <FieldControl
             title="الاسم"
-            description="إظهار اسم الطالب في نموذج التسجيل."
-            checked={showName}
-            onChange={setShowName}
+            description="اسم الطالب."
+            visible={showName}
+            required={requiredName}
+            onVisibleChange={(value) => {
+              setShowName(value)
+              if (!value) setRequiredName(false)
+            }}
+            onRequiredChange={setRequiredName}
             disabled={loading}
           />
 
-          {showName && (
-            <SettingRow
-              title="الاسم إجباري"
-              description="لا يمكن إرسال الطلب بدون الاسم."
-              checked={requiredName}
-              onChange={setRequiredName}
-              disabled={loading}
-            />
-          )}
-
-          <SettingRow
+          <FieldControl
             title="الرقم الشخصي"
-            description="إظهار الرقم الشخصي في نموذج التسجيل."
-            checked={showPersonalId}
-            onChange={setShowPersonalId}
+            description="الرقم الشخصي للطالب."
+            visible={showPersonalId}
+            required={requiredPersonalId}
+            onVisibleChange={(value) => {
+              setShowPersonalId(value)
+              if (!value) setRequiredPersonalId(false)
+            }}
+            onRequiredChange={setRequiredPersonalId}
             disabled={loading}
           />
 
-          {showPersonalId && (
-            <SettingRow
-              title="الرقم الشخصي إجباري"
-              description="لا يمكن إرسال الطلب بدون الرقم الشخصي."
-              checked={requiredPersonalId}
-              onChange={setRequiredPersonalId}
-              disabled={loading}
-            />
-          )}
+          <FieldControl
+            title="الجنس"
+            description="اختيار جنس الطالب."
+            visible={showGender}
+            required={requiredGender}
+            onVisibleChange={(value) => {
+              setShowGender(value)
+              if (!value) setRequiredGender(false)
+            }}
+            onRequiredChange={setRequiredGender}
+            disabled={loading}
+          />
 
-          <SettingRow
+          <FieldControl
+            title="العمر"
+            description="عمر الطالب."
+            visible={showAge}
+            required={requiredAge}
+            onVisibleChange={(value) => {
+              setShowAge(value)
+              if (!value) setRequiredAge(false)
+            }}
+            onRequiredChange={setRequiredAge}
+            disabled={loading}
+          />
+
+          <FieldControl
             title="رقم الاتصال"
-            description="إظهار رقم الاتصال في نموذج التسجيل."
-            checked={showPhone}
-            onChange={setShowPhone}
+            description="رقم الهاتف الأساسي."
+            visible={showPhone}
+            required={requiredPhone}
+            onVisibleChange={(value) => {
+              setShowPhone(value)
+              if (!value) setRequiredPhone(false)
+            }}
+            onRequiredChange={setRequiredPhone}
             disabled={loading}
           />
 
-          {showPhone && (
-            <SettingRow
-              title="رقم الاتصال إجباري"
-              description="لا يمكن إرسال الطلب بدون رقم الاتصال."
-              checked={requiredPhone}
-              onChange={setRequiredPhone}
-              disabled={loading}
-            />
-          )}
-
-          <SettingRow
+          <FieldControl
             title="الواتساب"
-            description="إظهار رقم الواتساب في نموذج التسجيل."
-            checked={showWhatsapp}
-            onChange={setShowWhatsapp}
+            description="رقم الواتساب."
+            visible={showWhatsapp}
+            required={requiredWhatsapp}
+            onVisibleChange={(value) => {
+              setShowWhatsapp(value)
+              if (!value) setRequiredWhatsapp(false)
+            }}
+            onRequiredChange={setRequiredWhatsapp}
             disabled={loading}
           />
 
-          {showWhatsapp && (
-            <SettingRow
-              title="الواتساب إجباري"
-              description="إجبار الطالب على إدخال رقم الواتساب."
-              checked={requiredWhatsapp}
-              onChange={setRequiredWhatsapp}
-              disabled={loading}
-            />
-          )}
-
-          <SettingRow
+          <FieldControl
             title="الصف / المستوى"
-            description="إظهار اختيار الصف أو المستوى في نموذج التسجيل."
-            checked={showLevel}
-            onChange={setShowLevel}
+            description="المستوى الدراسي الذي يريد الطالب التسجيل فيه."
+            visible={showLevel}
+            required={requiredLevel}
+            onVisibleChange={(value) => {
+              setShowLevel(value)
+              if (!value) setRequiredLevel(false)
+            }}
+            onRequiredChange={setRequiredLevel}
             disabled={loading}
           />
 
-          {showLevel && (
-            <SettingRow
-              title="الصف / المستوى إجباري"
-              description="يجب على الطالب اختيار المستوى."
-              checked={requiredLevel}
-              onChange={setRequiredLevel}
-              disabled={loading}
-            />
-          )}
-
-          <SettingRow
+          <FieldControl
             title="الملاحظات"
-            description="السماح للطالب بإضافة ملاحظات."
-            checked={showNotes}
-            onChange={setShowNotes}
+            description="ملاحظات إضافية من مقدم الطلب."
+            visible={showNotes}
+            required={requiredNotes}
+            onVisibleChange={(value) => {
+              setShowNotes(value)
+              if (!value) setRequiredNotes(false)
+            }}
+            onRequiredChange={setRequiredNotes}
             disabled={loading}
           />
 
-          {showNotes && (
-            <SettingRow
-              title="الملاحظات إجبارية"
-              description="إجبار الطالب على كتابة الملاحظات."
-              checked={requiredNotes}
-              onChange={setRequiredNotes}
-              disabled={loading}
-            />
+          <FieldControl
+            title="الأمراض المزمنة / المعلومات الصحية"
+            description="المعلومات الصحية التي يضيفها مقدم الطلب."
+            visible={showHealthNotes}
+            required={requiredHealthNotes}
+            onVisibleChange={(value) => {
+              setShowHealthNotes(value)
+              if (!value) setRequiredHealthNotes(false)
+            }}
+            onRequiredChange={setRequiredHealthNotes}
+            disabled={loading}
+          />
+        </CardContent>
+      </Card>
+
+      {/* الحقول الإضافية */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>الحقول الإضافية</CardTitle>
+
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                أضف أي معلومة جديدة بدون الحاجة إلى تعديل قاعدة البيانات
+                أو إنشاء عمود جديد كل مرة.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => {
+                setShowAddField((current) => !current)
+                setErrorMessage('')
+              }}
+            >
+              <Plus className="ml-2 size-4" />
+              إضافة حقل
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* نموذج إضافة حقل */}
+          {showAddField && (
+            <div className="rounded-2xl border-2 border-dashed p-5">
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">
+                    إضافة حقل جديد
+                  </h3>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    الحقل سيكون متاحاً في الأقسام التي تختارها،
+                    لكنه سيكون مخفياً افتراضياً.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddField(false)
+                    resetNewFieldForm()
+                  }}
+                  className="rounded-lg p-2 hover:bg-muted"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">
+                    اسم الحقل
+                  </label>
+
+                  <input
+                    type="text"
+                    value={newFieldName}
+                    onChange={(event) =>
+                      setNewFieldName(event.target.value)
+                    }
+                    placeholder="مثال: اسم ولي الأمر"
+                    className="mt-2 flex h-11 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    disabled={savingField}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">
+                    نوع الحقل
+                  </label>
+
+                  <div className="relative mt-2">
+                    <select
+                      value={newFieldType}
+                      onChange={(event) =>
+                        setNewFieldType(
+                          event.target.value as FieldType,
+                        )
+                      }
+                      className="flex h-11 w-full appearance-none rounded-xl border bg-background px-3 py-2 pl-10 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      disabled={savingField}
+                    >
+                      {Object.entries(
+                        FIELD_TYPE_LABELS,
+                      ).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <ChevronDown className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <p className="text-sm font-medium">
+                  أين تريد استخدام الحقل؟
+                </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  عند اختيار القسم، سيضاف الحقل إلى قائمة تخصيص ذلك
+                  القسم، لكنه سيبقى مخفياً حتى تقوم بتفعيله.
+                </p>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  {SECTIONS.map((section) => {
+                    const selected =
+                      newFieldSections[section.key]
+
+                    return (
+                      <button
+                        key={section.key}
+                        type="button"
+                        disabled={savingField}
+                        onClick={() =>
+                          toggleNewFieldSection(
+                            section.key,
+                          )
+                        }
+                        className={`flex items-center justify-between rounded-xl border p-4 text-right transition ${
+                          selected
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:bg-muted/40'
+                        }`}
+                      >
+                        <span>
+                          <span className="block font-medium">
+                            {section.label}
+                          </span>
+
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            متاح للتخصيص
+                          </span>
+                        </span>
+
+                        <span
+                          className={`flex size-6 items-center justify-center rounded-md border ${
+                            selected
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-muted-foreground/30'
+                          }`}
+                        >
+                          {selected && (
+                            <Check className="size-4" />
+                          )}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {newFieldType === 'select' && (
+                <div className="mt-5 rounded-xl border bg-muted/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">
+                        خيارات القائمة
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        أضف الخيارات التي سيختار منها المستخدم.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addOption}
+                      disabled={savingField}
+                    >
+                      <Plus className="ml-1 size-4" />
+                      إضافة خيار
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {newFieldOptions.map(
+                      (option, index) => (
+                        <div
+                          key={index}
+                          className="flex gap-2"
+                        >
+                          <input
+                            type="text"
+                            value={option}
+                            onChange={(event) =>
+                              updateOption(
+                                index,
+                                event.target.value,
+                              )
+                            }
+                            placeholder={`الخيار ${index + 1}`}
+                            className="flex h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            disabled={savingField}
+                          />
+
+                          {newFieldOptions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeOption(index)
+                              }
+                              disabled={savingField}
+                              className="rounded-lg border p-2 text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddField(false)
+                    resetNewFieldForm()
+                  }}
+                  disabled={savingField}
+                >
+                  إلغاء
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={addCustomField}
+                  disabled={savingField}
+                >
+                  {savingField ? (
+                    <>
+                      <Loader2 className="ml-2 size-4 animate-spin" />
+                      جاري الإضافة...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="ml-2 size-4" />
+                      إضافة الحقل
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           )}
 
-          <SettingRow
-            title="الأمراض المزمنة"
-            description="إظهار حقل الأمراض المزمنة."
-            checked={showHealthNotes}
-            onChange={setShowHealthNotes}
-            disabled={loading}
-          />
+          {customFieldsLoading ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl border p-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              جاري تحميل الحقول الإضافية...
+            </div>
+          ) : activeCustomFields.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-8 text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+                <Plus className="size-5 text-muted-foreground" />
+              </div>
 
-          {showHealthNotes && (
-            <SettingRow
-              title="الأمراض المزمنة إجبارية"
-              description="إجبار الطالب على تعبئة هذا الحقل."
-              checked={requiredHealthNotes}
-              onChange={setRequiredHealthNotes}
-              disabled={loading}
-            />
+              <p className="mt-3 font-medium">
+                لا توجد حقول إضافية
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                أضف أول حقل إضافي وسيصبح قابلاً للتخصيص في الأقسام
+                التي تختارها.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activeCustomFields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="rounded-2xl border p-5"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex size-7 items-center justify-center rounded-lg bg-muted text-xs font-semibold">
+                          {index + 1}
+                        </span>
+
+                        <h3 className="font-semibold">
+                          {field.name}
+                        </h3>
+
+                        <Badge variant="outline">
+                          {
+                            FIELD_TYPE_LABELS[
+                              field.field_type as FieldType
+                            ]
+                          }
+                        </Badge>
+
+                        <Badge variant="secondary">
+                          إضافي
+                        </Badge>
+                      </div>
+
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        اختر من الأسفل أماكن ظهور الحقل. الحقل متاح
+                        فقط في الأقسام التي تم تحديدها عند إنشائه.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() =>
+                        deleteCustomField(field.id)
+                      }
+                    >
+                      <Trash2 className="ml-2 size-4" />
+                      حذف الحقل
+                    </Button>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                    {SECTIONS.map((section) => {
+                      const available =
+                        sectionIsAvailable(
+                          field,
+                          section.key,
+                        )
+
+                      const visibility =
+                        field.visibility?.[
+                          section.key
+                        ] ?? {
+                          is_visible: false,
+                          is_required: false,
+                          sort_order: field.sort_order,
+                        }
+
+                      return (
+                        <div
+                          key={section.key}
+                          className={`rounded-xl border p-4 ${
+                            available
+                              ? 'bg-background'
+                              : 'bg-muted/30 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="font-medium">
+                                {section.label}
+                              </p>
+
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {available
+                                  ? 'متاح لهذا القسم'
+                                  : 'غير محدد لهذا القسم'}
+                              </p>
+                            </div>
+
+                            {available ? (
+                              <span className="rounded-full bg-green-500/10 px-2 py-1 text-xs text-green-700 dark:text-green-400">
+                                متاح
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                غير متاح
+                              </span>
+                            )}
+                          </div>
+
+                          {available && (
+                            <div className="mt-4 space-y-2">
+                              <ToggleButton
+                                label="عرض الحقل"
+                                checked={
+                                  visibility.is_visible
+                                }
+                                disabled={false}
+                                onChange={async (
+                                  value,
+                                ) => {
+                                  await updateCustomFieldVisibility(
+                                    field,
+                                    section.key,
+                                    {
+                                      is_visible: value,
+                                    },
+                                  )
+                                }}
+                              />
+
+                              <ToggleButton
+                                label="إلزامي"
+                                checked={
+                                  visibility.is_required
+                                }
+                                disabled={
+                                  !visibility.is_visible
+                                }
+                                onChange={async (
+                                  value,
+                                ) => {
+                                  await updateCustomFieldVisibility(
+                                    field,
+                                    section.key,
+                                    {
+                                      is_required: value,
+                                    },
+                                  )
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -555,7 +1638,9 @@ export default function RegistrationSettingsPage() {
               </div>
 
               <div className="space-y-3">
-                <p className="font-medium">طرق الدفع المتاحة</p>
+                <p className="font-medium">
+                  طرق الدفع المتاحة
+                </p>
 
                 <SettingRow
                   title="BenefitPay"
@@ -674,46 +1759,64 @@ export default function RegistrationSettingsPage() {
         </CardHeader>
 
         <CardContent>
-          <div className="rounded-xl bg-muted/50 p-4 text-sm leading-7">
-            <p>
-              التسجيل:{' '}
-              <strong>
-                {registrationOpen ? 'مفتوح' : 'مغلق'}
-              </strong>
-            </p>
-
-            <p>
-              الدفع:{' '}
-              <strong>
-                {paymentEnabled ? 'مفعل' : 'غير مفعل'}
-              </strong>
-            </p>
-
-            {paymentEnabled && paymentAmount && (
-              <p>
-                المبلغ:{' '}
-                <strong>{paymentAmount}</strong>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                التسجيل
               </p>
-            )}
 
-            <p>
-              إثبات الدفع:{' '}
-              <strong>
-                {!paymentEnabled
-                  ? 'غير متاح'
-                  : !paymentProofEnabled
+              <p className="mt-1 font-semibold">
+                {registrationOpen ? 'مفتوح' : 'مغلق'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                الدفع
+              </p>
+
+              <p className="mt-1 font-semibold">
+                {paymentEnabled ? 'مفعل' : 'غير مفعل'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                الحقول الإضافية
+              </p>
+
+              <p className="mt-1 font-semibold">
+                {activeCustomFields.length}
+              </p>
+            </div>
+          </div>
+
+          {paymentEnabled && (
+            <div className="mt-4 rounded-xl bg-muted/50 p-4 text-sm leading-7">
+              {paymentAmount && (
+                <p>
+                  مبلغ التسجيل:{' '}
+                  <strong>{paymentAmount}</strong>
+                </p>
+              )}
+
+              <p>
+                إثبات الدفع:{' '}
+                <strong>
+                  {!paymentProofEnabled
                     ? 'غير متاح'
                     : paymentProofRequired
                       ? 'إجباري'
                       : 'اختياري'}
-              </strong>
-            </p>
-          </div>
+                </strong>
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* حفظ */}
-      <div className="flex justify-end">
+      <div className="flex justify-end pb-6">
         <Button
           size="lg"
           onClick={saveSettings}
