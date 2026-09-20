@@ -14,8 +14,6 @@ import {
   X,
 } from 'lucide-react'
 
-import { useRouter } from 'next/navigation'
-
 import * as XLSX from 'xlsx'
 
 import { supabase } from '@/lib/supabase'
@@ -26,6 +24,8 @@ import { Button } from '@/components/ui/button'
 
 import {
   StudentDetails,
+  type StudentAttendanceRecord,
+  type StudentAttendanceSummary,
   type StudentCourseStatus,
 } from './student-details'
 
@@ -73,22 +73,6 @@ type AttendanceRecord = {
   attendanceDate: string
   statusId: string
   note: string
-}
-
-type StudentAttendanceSummary = {
-  courseId: string
-  courseName: string
-  startDate: string | null
-  endDate: string | null
-  days: string[]
-  teacherName: string
-  totalDays: number
-  present: number
-  absent: number
-  late: number
-  excused: number
-  notRecorded: number
-  percentage: number
 }
 
 const emptyFilters: Filters = {
@@ -319,7 +303,7 @@ function getStatusName(
 
 function normalizeAttendanceStatus(
   value: string
-) {
+): StudentAttendanceRecord['status'] | '' {
   const text = value
     .trim()
     .toLowerCase()
@@ -383,6 +367,9 @@ function calculateAttendanceSummary(
     )
 
     dates.forEach((date) => {
+      /*
+       * لا نحسب الأيام المستقبلية
+       */
       if (
         date > today ||
         !isCourseStudyDay(
@@ -406,6 +393,10 @@ function calculateAttendanceSummary(
               date
         )
 
+      /*
+       * لا يوجد سجل حضور لهذا اليوم
+       * => لم يسجل، ولا يدخل في النسبة
+       */
       if (!record) {
         notRecorded += 1
         return
@@ -434,21 +425,39 @@ function calculateAttendanceSummary(
       ) {
         excused += 1
       } else {
+        /*
+         * أي حالة غير معروفة تعامل كـ لم يسجل
+         */
         notRecorded += 1
       }
     })
   }
 
+  /*
+   * النسبة:
+   *
+   * حاضر      = حضور
+   * متأخر     = حضور
+   * مستأذن    = حضور
+   * غائب      = يدخل في الحساب كغياب
+   * لم يسجل   = لا يدخل في الحساب
+   */
   const counted =
     present +
     late +
+    excused +
     absent
+
+  const attended =
+    present +
+    late +
+    excused
 
   const percentage =
     counted === 0
       ? 0
       : Math.round(
-          ((present + late) /
+          (attended /
             counted) *
             100
         )
@@ -472,8 +481,6 @@ function calculateAttendanceSummary(
 }
 
 export function StudentsView() {
-  const router = useRouter()
-
   const [
     supabaseStatus,
     setSupabaseStatus,
@@ -763,9 +770,6 @@ export function StudentsView() {
 
       /*
        * التسجيلات الديناميكية
-       *
-       * dynamic_fields = تعريف الحقول
-       * student_dynamic_values = قيمة الحقل لكل طالب
        */
       const {
         data: dynamicFieldsData,
@@ -880,7 +884,6 @@ export function StudentsView() {
 
       /*
        * enrollments
-       * نحتاج المستوى والفصل معًا.
        */
       const {
         data: enrollmentRows,
@@ -1308,7 +1311,7 @@ export function StudentsView() {
       /*
        * بناء بيانات الطلاب النهائية
        */
-      const mappedStudents: StudentTableStudent[] =
+      const mappedStudents =
         (
           studentsData ?? []
         ).map(
@@ -1361,6 +1364,9 @@ export function StudentsView() {
                 })
               )
 
+            /*
+             * ملخص الحضور لكل دورة
+             */
             const attendanceSummaries =
               loadedCourses.map(
                 (course) => {
@@ -1390,6 +1396,58 @@ export function StudentsView() {
                   )
                 }
               )
+
+            /*
+             * سجلات الحضور الفعلية للطالب
+             *
+             * هذه التي تستخدمها النافذة الثانية
+             * لعرض:
+             * التاريخ + اليوم + الحالة
+             */
+            const attendanceRecords: StudentAttendanceRecord[] =
+              attendanceRows
+                .filter(
+                  (record) =>
+                    record.studentId ===
+                    student.id
+                )
+                .map(
+                  (record) => {
+                    const status =
+                      normalizeAttendanceStatus(
+                        getStatusName(
+                          loadedAttendanceStatuses,
+                          record.statusId
+                        )
+                      )
+
+                    if (!status) {
+                      return null
+                    }
+
+                    return {
+                      id:
+                        record.id,
+                      studentId:
+                        record.studentId,
+                      courseId:
+                        record.courseId,
+                      attendanceDate:
+                        record.attendanceDate,
+                      status,
+                      note:
+                        record.note,
+                    }
+                  }
+                )
+                .filter(
+                  (
+                    record
+                  ): record is StudentAttendanceRecord =>
+                    Boolean(
+                      record
+                    )
+                )
 
             const currentStatus =
               currentCourse
@@ -1487,6 +1545,15 @@ export function StudentsView() {
 
               courseStatuses,
 
+              /*
+               * مهم:
+               * نمرر ملخص الحضور وسجلات الحضور
+               * إلى نافذة تفاصيل الطالب
+               */
+              attendanceSummaries,
+
+              attendanceRecords,
+
               dynamicValues:
                 dynamicValuesMap.get(
                   student.id
@@ -1496,7 +1563,7 @@ export function StudentsView() {
         )
 
       setStudentList(
-        mappedStudents
+        mappedStudents as StudentTableStudent[]
       )
 
       setSupabaseStatus(
