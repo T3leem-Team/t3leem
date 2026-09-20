@@ -1,10 +1,21 @@
+import { redirect } from 'next/navigation'
 import { DashboardShell } from '@/components/dashboard/shell'
+import { validateCurrentAccess } from '@/lib/auth-guard'
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <DashboardShell>{children}</DashboardShell>
-}
+  const access = await validateCurrentAccess()
 
+  if (!access.allowed) {
+    redirect('/login?reason=session_expired')
+  }
+
+  return (
+    <DashboardShell>
+      {children}
+    </DashboardShell>
+  )
+}
