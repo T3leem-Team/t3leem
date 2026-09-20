@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+
 import {
   Table,
   TableBody,
@@ -18,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+
 import { students as fallbackStudents } from '@/lib/data'
 
 type Filters = {
@@ -79,39 +81,62 @@ export function PaymentsView() {
   const router = useRouter()
 
   const [returnPath, setReturnPath] = useState('')
-  const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(
-    null,
-  )
+  const [studentIdFromUrl, setStudentIdFromUrl] =
+    useState<string | null>(null)
 
-  const autoOpenedStudentRef = useRef<string | null>(null)
+  const autoOpenedStudentRef =
+    useRef<string | null>(null)
 
-  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const [filters, setFilters] =
+    useState<Filters>(emptyFilters)
 
-  const [studentList, setStudentList] = useState<StudentRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [studentList, setStudentList] =
+    useState<StudentRow[]>([])
 
-  const [currentAcademicYearId, setCurrentAcademicYearId] = useState<
-    string | null
-  >(null)
+  const [loading, setLoading] =
+    useState(true)
 
-  const [currentAcademicYearName, setCurrentAcademicYearName] = useState('')
-  const [currentAnnualFee, setCurrentAnnualFee] = useState(0)
+  const [currentAcademicYearId, setCurrentAcademicYearId] =
+    useState<string | null>(null)
 
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-  const [detailsStudent, setDetailsStudent] = useState<StudentRow | null>(null)
+  const [currentAcademicYearName, setCurrentAcademicYearName] =
+    useState('')
 
-  const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
-  const [savingPayment, setSavingPayment] = useState(false)
+  const [currentAnnualFee, setCurrentAnnualFee] =
+    useState(0)
+
+  const [detailsDialogOpen, setDetailsDialogOpen] =
+    useState(false)
+
+  const [detailsStudent, setDetailsStudent] =
+    useState<StudentRow | null>(null)
+
+  const [paymentHistory, setPaymentHistory] =
+    useState<PaymentRecord[]>([])
+
+  const [loadingHistory, setLoadingHistory] =
+    useState(false)
+
+  const [savingPayment, setSavingPayment] =
+    useState(false)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(
+      window.location.search,
+    )
 
-    setReturnPath(params.get('return') || '')
-    setStudentIdFromUrl(params.get('student'))
+    setReturnPath(
+      params.get('return') || '',
+    )
+
+    setStudentIdFromUrl(
+      params.get('student'),
+    )
   }, [])
 
-  const loadPayments = async (): Promise<StudentRow[]> => {
+  const loadPayments = async (): Promise<
+    StudentRow[]
+  > => {
     setLoading(true)
 
     try {
@@ -120,7 +145,9 @@ export function PaymentsView() {
         error: yearError,
       } = await supabase
         .from('academic_years')
-        .select('id, name, annual_fee')
+        .select(
+          'id, name, annual_fee',
+        )
         .eq('is_current', true)
         .eq('is_active', true)
         .maybeSingle()
@@ -141,21 +168,34 @@ export function PaymentsView() {
       const academicYear: AcademicYear = {
         id: currentYear.id,
         name: currentYear.name,
-        annual_fee: currentYear.annual_fee,
+        annual_fee:
+          currentYear.annual_fee,
       }
 
-      const annualFee = Number(academicYear.annual_fee ?? 0)
+      const annualFee = Number(
+        academicYear.annual_fee ?? 0,
+      )
 
-      setCurrentAcademicYearId(academicYear.id)
-      setCurrentAcademicYearName(academicYear.name)
-      setCurrentAnnualFee(annualFee)
+      setCurrentAcademicYearId(
+        academicYear.id,
+      )
+
+      setCurrentAcademicYearName(
+        academicYear.name,
+      )
+
+      setCurrentAnnualFee(
+        annualFee,
+      )
 
       const {
         data: students,
         error: studentsError,
       } = await supabase
         .from('students')
-        .select('id, name, personal_id, fee_exempt, created_at')
+        .select(
+          'id, name, personal_id, fee_exempt, created_at',
+        )
         .order('created_at', {
           ascending: false,
         })
@@ -169,16 +209,25 @@ export function PaymentsView() {
         error: enrollmentError,
       } = await supabase
         .from('enrollments')
-        .select('student_id, level_id')
-        .eq('academic_year_id', academicYear.id)
+        .select(
+          'student_id, level_id',
+        )
+        .eq(
+          'academic_year_id',
+          academicYear.id,
+        )
         .eq('status', 'نشط')
 
       if (enrollmentError) {
         throw enrollmentError
       }
 
-      const studentIds = (enrollments ?? [])
-        .map((item) => item.student_id)
+      const studentIds = (
+        enrollments ?? []
+      )
+        .map(
+          (item) => item.student_id,
+        )
         .filter(Boolean)
 
       let payments: Array<{
@@ -192,15 +241,24 @@ export function PaymentsView() {
           error: paymentError,
         } = await supabase
           .from('payments')
-          .select('student_id, amount')
-          .eq('academic_year_id', academicYear.id)
-          .in('student_id', studentIds)
+          .select(
+            'student_id, amount',
+          )
+          .eq(
+            'academic_year_id',
+            academicYear.id,
+          )
+          .in(
+            'student_id',
+            studentIds,
+          )
 
         if (paymentError) {
           throw paymentError
         }
 
-        payments = paymentData ?? []
+        payments =
+          paymentData ?? []
       }
 
       const {
@@ -215,84 +273,122 @@ export function PaymentsView() {
         throw levelsError
       }
 
-      const levelMap = new Map<string, string>(
-        (levels ?? []).map((level) => [
-          level.id,
-          level.name,
-        ]),
+      const levelMap =
+        new Map<string, string>(
+          (levels ?? []).map(
+            (level) => [
+              level.id,
+              level.name,
+            ],
+          ),
+        )
+
+      const enrollmentMap =
+        new Map<string, string>(
+          (enrollments ?? []).map(
+            (enrollment) => [
+              enrollment.student_id,
+              levelMap.get(
+                enrollment.level_id,
+              ) ?? 'غير محدد',
+            ],
+          ),
+        )
+
+      const paidByStudent =
+        new Map<string, number>()
+
+      payments.forEach(
+        (payment) => {
+          const current =
+            paidByStudent.get(
+              payment.student_id,
+            ) ?? 0
+
+          paidByStudent.set(
+            payment.student_id,
+            current +
+              Number(
+                payment.amount ?? 0,
+              ),
+          )
+        },
       )
 
-      const enrollmentMap = new Map<string, string>(
-        (enrollments ?? []).map((enrollment) => [
-          enrollment.student_id,
-          levelMap.get(enrollment.level_id) ?? 'غير محدد',
-        ]),
+      const mappedStudents: StudentRow[] =
+        (students ?? [])
+          .filter((student) =>
+            enrollmentMap.has(
+              student.id,
+            ),
+          )
+          .map((student) => {
+            const amountPaid =
+              paidByStudent.get(
+                student.id,
+              ) ?? 0
+
+            const feeExempt =
+              Boolean(
+                student.fee_exempt,
+              )
+
+            let paymentStatus: PaymentStatus
+
+            if (feeExempt) {
+              paymentStatus =
+                'معفي'
+            } else if (
+              annualFee > 0 &&
+              amountPaid >=
+                annualFee
+            ) {
+              paymentStatus =
+                'مدفوع بالكامل'
+            } else if (
+              amountPaid > 0
+            ) {
+              paymentStatus =
+                'مدفوع جزئياً'
+            } else {
+              paymentStatus =
+                'غير مدفوع'
+            }
+
+            return {
+              id: student.id,
+              name: student.name,
+              personalId:
+                student.personal_id ??
+                '',
+              grade:
+                enrollmentMap.get(
+                  student.id,
+                ) ?? 'غير محدد',
+              amountDue:
+                annualFee,
+              amountPaid,
+              feeExempt,
+              paymentStatus,
+            }
+          })
+
+      setStudentList(
+        mappedStudents,
       )
-
-      const paidByStudent = new Map<string, number>()
-
-      payments.forEach((payment) => {
-        const current =
-          paidByStudent.get(payment.student_id) ?? 0
-
-        paidByStudent.set(
-          payment.student_id,
-          current + Number(payment.amount ?? 0),
-        )
-      })
-
-      const mappedStudents: StudentRow[] = (students ?? [])
-        .filter((student) =>
-          enrollmentMap.has(student.id),
-        )
-        .map((student) => {
-          const amountPaid =
-            paidByStudent.get(student.id) ?? 0
-
-          const feeExempt =
-            Boolean(student.fee_exempt)
-
-          let paymentStatus: PaymentStatus
-
-          if (feeExempt) {
-            paymentStatus = 'معفي'
-          } else if (
-            annualFee > 0 &&
-            amountPaid >= annualFee
-          ) {
-            paymentStatus = 'مدفوع بالكامل'
-          } else if (amountPaid > 0) {
-            paymentStatus = 'مدفوع جزئياً'
-          } else {
-            paymentStatus = 'غير مدفوع'
-          }
-
-          return {
-            id: student.id,
-            name: student.name,
-            personalId:
-              student.personal_id ?? '',
-            grade:
-              enrollmentMap.get(student.id) ??
-              'غير محدد',
-            amountDue: annualFee,
-            amountPaid,
-            feeExempt,
-            paymentStatus,
-          }
-        })
-
-      setStudentList(mappedStudents)
 
       if (detailsStudent) {
         const updatedStudent =
           mappedStudents.find(
             (student) =>
-              student.id === detailsStudent.id,
+              student.id ===
+              detailsStudent.id,
           )
 
         if (updatedStudent) {
-          setDetailsStudent(updatedStudent)
+          setDetailsStudent(
+            updatedStudent,
+          )
         }
       }
 
@@ -304,40 +400,54 @@ export function PaymentsView() {
       )
 
       const fallback: StudentRow[] =
-        fallbackStudents.map((student: any) => {
-          const paymentStatus: PaymentStatus =
-            student.paymentStatus === 'معفي'
-              ? 'معفي'
-              : student.paymentStatus ===
-                  'مدفوع بالكامل'
-                ? 'مدفوع بالكامل'
+        fallbackStudents.map(
+          (student: any) => {
+            const paymentStatus: PaymentStatus =
+              student.paymentStatus ===
+              'معفي'
+                ? 'معفي'
                 : student.paymentStatus ===
-                    'مدفوع جزئياً'
-                  ? 'مدفوع جزئياً'
-                  : 'غير مدفوع'
+                    'مدفوع بالكامل'
+                  ? 'مدفوع بالكامل'
+                  : student.paymentStatus ===
+                      'مدفوع جزئياً'
+                    ? 'مدفوع جزئياً'
+                    : 'غير مدفوع'
 
-          return {
-            id: String(student.id),
-            name: String(student.name ?? ''),
-            personalId: String(
-              student.personalId ?? '',
-            ),
-            grade: String(
-              student.grade ?? 'غير محدد',
-            ),
-            amountDue: Number(
-              student.amountDue ?? 0,
-            ),
-            amountPaid: Number(
-              student.amountPaid ?? 0,
-            ),
-            feeExempt:
-              paymentStatus === 'معفي',
-            paymentStatus,
-          }
-        })
+            return {
+              id: String(
+                student.id,
+              ),
+              name: String(
+                student.name ?? '',
+              ),
+              personalId: String(
+                student.personalId ??
+                  '',
+              ),
+              grade: String(
+                student.grade ??
+                  'غير محدد',
+              ),
+              amountDue: Number(
+                student.amountDue ??
+                  0,
+              ),
+              amountPaid: Number(
+                student.amountPaid ??
+                  0,
+              ),
+              feeExempt:
+                paymentStatus ===
+                'معفي',
+              paymentStatus,
+            }
+          },
+        )
 
-      setStudentList(fallback)
+      setStudentList(
+        fallback,
+      )
 
       return fallback
     } finally {
@@ -360,9 +470,12 @@ export function PaymentsView() {
       return
     }
 
-    const student = studentList.find(
-      (item) => item.id === studentIdFromUrl,
-    )
+    const student =
+      studentList.find(
+        (item) =>
+          item.id ===
+          studentIdFromUrl,
+      )
 
     if (!student) {
       return
@@ -371,7 +484,9 @@ export function PaymentsView() {
     autoOpenedStudentRef.current =
       studentIdFromUrl
 
-    void openDetailsDialog(student)
+    void openDetailsDialog(
+      student,
+    )
   }, [
     loading,
     studentIdFromUrl,
@@ -394,92 +509,104 @@ export function PaymentsView() {
       Array.from(
         new Set(
           studentList.map(
-            (student) => student.grade,
+            (student) =>
+              student.grade,
           ),
         ),
       ).sort(),
     [studentList],
   )
 
-  const paymentStatuses = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          studentList.map(
-            (student) =>
-              student.paymentStatus,
+  const paymentStatuses =
+    useMemo(
+      () =>
+        Array.from(
+          new Set(
+            studentList.map(
+              (student) =>
+                student.paymentStatus,
+            ),
           ),
         ),
-      ),
-    [studentList],
-  )
+      [studentList],
+    )
 
-  const filteredStudents = useMemo(() => {
-    return studentList.filter((student) => {
-      const remaining = student.feeExempt
-        ? 0
-        : Math.max(
-            student.amountDue -
+  const filteredStudents =
+    useMemo(() => {
+      return studentList.filter(
+        (student) => {
+          const remaining =
+            student.feeExempt
+              ? 0
+              : Math.max(
+                  student.amountDue -
+                    student.amountPaid,
+                  0,
+                )
+
+          const matchesName =
+            !filters.name ||
+            student.name
+              .toLowerCase()
+              .includes(
+                filters.name.toLowerCase(),
+              )
+
+          const matchesPersonalId =
+            !filters.personalId ||
+            student.personalId.includes(
+              filters.personalId,
+            )
+
+          const matchesGrade =
+            !filters.grade ||
+            student.grade ===
+              filters.grade
+
+          const matchesDue =
+            !filters.amountDue ||
+            String(
+              student.amountDue,
+            ).includes(
+              filters.amountDue,
+            )
+
+          const matchesPaid =
+            !filters.amountPaid ||
+            String(
               student.amountPaid,
-            0,
+            ).includes(
+              filters.amountPaid,
+            )
+
+          const matchesRemaining =
+            !filters.amountRemaining ||
+            String(
+              remaining,
+            ).includes(
+              filters.amountRemaining,
+            )
+
+          const matchesStatus =
+            !filters.paymentStatus ||
+            student.paymentStatus ===
+              filters.paymentStatus
+
+          return (
+            matchesName &&
+            matchesPersonalId &&
+            matchesGrade &&
+            matchesDue &&
+            matchesPaid &&
+            matchesRemaining &&
+            matchesStatus
           )
-
-      const matchesName =
-        !filters.name ||
-        student.name
-          .toLowerCase()
-          .includes(
-            filters.name.toLowerCase(),
-          )
-
-      const matchesPersonalId =
-        !filters.personalId ||
-        student.personalId.includes(
-          filters.personalId,
-        )
-
-      const matchesGrade =
-        !filters.grade ||
-        student.grade === filters.grade
-
-      const matchesDue =
-        !filters.amountDue ||
-        String(
-          student.amountDue,
-        ).includes(
-          filters.amountDue,
-        )
-
-      const matchesPaid =
-        !filters.amountPaid ||
-        String(
-          student.amountPaid,
-        ).includes(
-          filters.amountPaid,
-        )
-
-      const matchesRemaining =
-        !filters.amountRemaining ||
-        String(remaining).includes(
-          filters.amountRemaining,
-        )
-
-      const matchesStatus =
-        !filters.paymentStatus ||
-        student.paymentStatus ===
-          filters.paymentStatus
-
-      return (
-        matchesName &&
-        matchesPersonalId &&
-        matchesGrade &&
-        matchesDue &&
-        matchesPaid &&
-        matchesRemaining &&
-        matchesStatus
+        },
       )
-    })
-  }, [studentList, filters])
+    }, [
+      studentList,
+      filters,
+    ])
 
   const totalDue =
     filteredStudents.reduce(
@@ -503,13 +630,16 @@ export function PaymentsView() {
 
   const totalExempt =
     filteredStudents.filter(
-      (student) => student.feeExempt,
+      (student) =>
+        student.feeExempt,
     ).length
 
   const collectionPercentage =
     totalDue > 0
       ? Math.round(
-          (totalPaid / totalDue) * 100,
+          (totalPaid /
+            totalDue) *
+            100,
         )
       : 0
 
@@ -525,14 +655,20 @@ export function PaymentsView() {
   const paymentStats = [
     {
       label: 'إجمالي المستحق',
-      value: formatCurrency(totalDue),
+      value:
+        formatCurrency(
+          totalDue,
+        ),
       change: `${filteredStudents.length} طالب`,
       trend: 'up' as const,
       hint: 'إجمالي الرسوم',
     },
     {
       label: 'إجمالي المدفوع',
-      value: formatCurrency(totalPaid),
+      value:
+        formatCurrency(
+          totalPaid,
+        ),
       change: `${collectionPercentage}٪`,
       trend: 'up' as const,
       hint: 'نسبة التحصيل',
@@ -540,12 +676,14 @@ export function PaymentsView() {
     {
       label: 'نسبة التحصيل',
       value: `${collectionPercentage}٪`,
-      change: formatCurrency(
-        Math.max(
-          totalDue - totalPaid,
-          0,
+      change:
+        formatCurrency(
+          Math.max(
+            totalDue -
+              totalPaid,
+            0,
+          ),
         ),
-      ),
       trend: 'down' as const,
       hint: 'المتبقي للتحصيل',
     },
@@ -570,210 +708,387 @@ export function PaymentsView() {
   const openPaymentDialog = (
     student: StudentRow,
   ) => {
-    void openDetailsDialog(student)
+    void openDetailsDialog(
+      student,
+    )
   }
 
-  const openDetailsDialog = async (
-    student: StudentRow,
-  ) => {
-    if (!currentAcademicYearId) {
-      return
-    }
-
-    setDetailsStudent(student)
-    setDetailsDialogOpen(true)
-    setLoadingHistory(true)
-    setPaymentHistory([])
-
-    try {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('payments')
-        .select(
-          'id, amount, payment_method, payment_date, reference_number, notes, created_at',
+  const openDetailsDialog =
+    async (
+      student: StudentRow,
+    ) => {
+      if (
+        !currentAcademicYearId
+      ) {
+        alert(
+          'لا توجد سنة دراسية حالية مفعلة.',
         )
-        .eq(
-          'student_id',
-          student.id,
-        )
-        .eq(
-          'academic_year_id',
-          currentAcademicYearId,
-        )
-        .order('payment_date', {
-          ascending: false,
-        })
-        .order('created_at', {
-          ascending: false,
-        })
-
-      if (error) {
-        throw error
+        return
       }
 
-      setPaymentHistory(
-        (data ?? []) as PaymentRecord[],
-      )
-    } catch (error) {
-      console.error(
-        'Failed to load payment history:',
-        error,
-      )
+      setDetailsStudent(student)
+      setDetailsDialogOpen(true)
+      setLoadingHistory(true)
+      setPaymentHistory([])
 
-      alert(
-        'تعذر تحميل سجل الدفعات.',
-      )
-    } finally {
-      setLoadingHistory(false)
-    }
-  }
-
-  const closeDetailsDialog = () => {
-    if (
-      loadingHistory ||
-      savingPayment
-    ) {
-      return
-    }
-
-    setDetailsDialogOpen(false)
-    setDetailsStudent(null)
-    setPaymentHistory([])
-
-    if (returnPath) {
-      router.push(returnPath)
-    }
-  }
-
-  const handleAddPayment = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault()
-
-    if (
-      !detailsStudent ||
-      !currentAcademicYearId
-    ) {
-      return
-    }
-
-    const studentBeingPaid =
-      detailsStudent
-
-    const studentBeingPaidId =
-      detailsStudent.id
-
-    const formData =
-      new FormData(
-        event.currentTarget,
-      )
-
-    const amount = Number(
-      formData.get('amount') || 0,
-    )
-
-    const paymentMethod =
-      String(
-        formData.get(
-          'paymentMethod',
-        ) || 'نقدي',
-      ) as PaymentMethod
-
-    const paymentDate = String(
-      formData.get(
-        'paymentDate',
-      ) || '',
-    )
-
-    const referenceNumber =
-      String(
-        formData.get(
-          'referenceNumber',
-        ) || '',
-      ).trim()
-
-    const notes = String(
-      formData.get('notes') || '',
-    ).trim()
-
-    if (!amount || amount <= 0) {
-      alert('أدخل مبلغاً صحيحاً.')
-      return
-    }
-
-    const remaining = Math.max(
-      selectedRemaining(
-        studentBeingPaid,
-      ),
-      0,
-    )
-
-    if (amount > remaining) {
-      alert(
-        'المبلغ أكبر من المبلغ المتبقي على الطالب.',
-      )
-      return
-    }
-
-    setSavingPayment(true)
-
-    try {
-      const { error } =
-        await supabase
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
           .from('payments')
-          .insert({
-            student_id:
-              studentBeingPaidId,
-            academic_year_id:
-              currentAcademicYearId,
-            amount,
-            payment_method:
-              paymentMethod,
-            payment_date:
-              paymentDate ||
-              undefined,
-            reference_number:
-              referenceNumber ||
-              null,
-            notes: notes || null,
-          })
+          .select(
+            'id, amount, payment_method, payment_date, reference_number, notes, created_at',
+          )
+          .eq(
+            'student_id',
+            student.id,
+          )
+          .eq(
+            'academic_year_id',
+            currentAcademicYearId,
+          )
+          .order(
+            'payment_date',
+            {
+              ascending: false,
+            },
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            },
+          )
 
-      if (error) {
-        throw error
-      }
+        if (error) {
+          throw error
+        }
 
-      const refreshedStudents =
-        await loadPayments()
-
-      const refreshedStudent =
-        refreshedStudents.find(
-          (student) =>
-            student.id ===
-            studentBeingPaidId,
+        setPaymentHistory(
+          (data ??
+            []) as PaymentRecord[],
+        )
+      } catch (error) {
+        console.error(
+          'Failed to load payment history:',
+          error,
         )
 
-      if (refreshedStudent) {
-        await openDetailsDialog(
-          refreshedStudent,
+        alert(
+          getSupabaseErrorMessage(
+            error,
+            'تعذر تحميل سجل الدفعات.',
+          ),
         )
+      } finally {
+        setLoadingHistory(false)
       }
-
-      event.currentTarget.reset()
-    } catch (error) {
-      console.error(
-        'Failed to add payment:',
-        error,
-      )
-
-      alert(
-        'تعذر حفظ الدفعة. حاول مرة أخرى.',
-      )
-    } finally {
-      setSavingPayment(false)
     }
-  }
+
+  const closeDetailsDialog =
+    () => {
+      if (
+        loadingHistory ||
+        savingPayment
+      ) {
+        return
+      }
+
+      setDetailsDialogOpen(false)
+      setDetailsStudent(null)
+      setPaymentHistory([])
+
+      if (returnPath) {
+        router.push(
+          returnPath,
+        )
+      }
+    }
+
+  const handleAddPayment =
+    async (
+      event: React.FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault()
+
+      if (
+        !detailsStudent ||
+        !currentAcademicYearId
+      ) {
+        alert(
+          'تعذر تحديد الطالب أو السنة الدراسية.',
+        )
+        return
+      }
+
+      const form =
+        event.currentTarget
+
+      const formData =
+        new FormData(form)
+
+      const amount = Number(
+        formData.get(
+          'amount',
+        ) || 0,
+      )
+
+      const paymentMethod =
+        String(
+          formData.get(
+            'paymentMethod',
+          ) || 'نقدي',
+        ) as PaymentMethod
+
+      const paymentDate =
+        String(
+          formData.get(
+            'paymentDate',
+          ) || '',
+        ).trim()
+
+      const referenceNumber =
+        String(
+          formData.get(
+            'referenceNumber',
+          ) || '',
+        ).trim()
+
+      const notes =
+        String(
+          formData.get(
+            'notes',
+          ) || '',
+        ).trim()
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        alert(
+          'أدخل مبلغاً صحيحاً.',
+        )
+        return
+      }
+
+      if (!paymentDate) {
+        alert(
+          'اختر تاريخ الدفع.',
+        )
+        return
+      }
+
+      const remaining =
+        selectedRemaining(
+          detailsStudent,
+        )
+
+      if (remaining <= 0) {
+        alert(
+          'لا يوجد مبلغ متبقٍ على هذا الطالب.',
+        )
+        return
+      }
+
+      if (amount > remaining) {
+        alert(
+          `المبلغ أكبر من المبلغ المتبقي. المتبقي: ${formatCurrency(
+            remaining,
+          )}`,
+        )
+        return
+      }
+
+      setSavingPayment(true)
+
+      try {
+        /*
+         * نرسل القيم المطلوبة بشكل صريح.
+         * مهم: لا نستخدم undefined لتاريخ الدفع.
+         */
+        const paymentPayload = {
+          student_id:
+            detailsStudent.id,
+
+          academic_year_id:
+            currentAcademicYearId,
+
+          amount: Number(
+            amount.toFixed(3),
+          ),
+
+          payment_method:
+            paymentMethod,
+
+          payment_date:
+            paymentDate,
+
+          reference_number:
+            referenceNumber ||
+            null,
+
+          notes:
+            notes || null,
+        }
+
+        console.log(
+          'Saving payment:',
+          paymentPayload,
+        )
+
+        const {
+          data: insertedPayment,
+          error,
+        } = await supabase
+          .from('payments')
+          .insert(
+            paymentPayload,
+          )
+          .select(
+            'id, amount, payment_method, payment_date, reference_number, notes, created_at',
+          )
+          .single()
+
+        if (error) {
+          console.error(
+            'Supabase payment insert error:',
+            error,
+          )
+
+          throw error
+        }
+
+        if (!insertedPayment) {
+          throw new Error(
+            'تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة من قاعدة البيانات.',
+          )
+        }
+
+        /*
+         * تحديث القائمة الرئيسية بعد الحفظ.
+         */
+        const refreshedStudents =
+          await loadPayments()
+
+        const refreshedStudent =
+          refreshedStudents.find(
+            (student) =>
+              student.id ===
+              detailsStudent.id,
+          )
+
+        /*
+         * تحديث سجل الدفعات داخل نفس النافذة.
+         */
+        if (
+          refreshedStudent
+        ) {
+          setDetailsStudent(
+            refreshedStudent,
+          )
+        }
+
+        /*
+         * نضيف الدفعة الجديدة مباشرة
+         * إلى السجل، ثم نعيد تحميله للتأكد
+         * من أن البيانات القادمة من Supabase صحيحة.
+         */
+        setPaymentHistory(
+          (current) => [
+            insertedPayment as PaymentRecord,
+            ...current,
+          ],
+        )
+
+        try {
+          const {
+            data: refreshedHistory,
+            error:
+              refreshedHistoryError,
+          } = await supabase
+            .from('payments')
+            .select(
+              'id, amount, payment_method, payment_date, reference_number, notes, created_at',
+            )
+            .eq(
+              'student_id',
+              detailsStudent.id,
+            )
+            .eq(
+              'academic_year_id',
+              currentAcademicYearId,
+            )
+            .order(
+              'payment_date',
+              {
+                ascending: false,
+              },
+            )
+            .order(
+              'created_at',
+              {
+                ascending: false,
+              },
+            )
+
+          if (
+            refreshedHistoryError
+          ) {
+            console.error(
+              'Failed to refresh payment history:',
+              refreshedHistoryError,
+            )
+          } else {
+            setPaymentHistory(
+              (refreshedHistory ??
+                []) as PaymentRecord[],
+            )
+          }
+        } catch (
+          historyError
+        ) {
+          console.error(
+            'Failed to refresh payment history:',
+            historyError,
+          )
+        }
+
+        form.reset()
+
+        /*
+         * نضع تاريخ اليوم مرة أخرى
+         * بعد reset.
+         */
+        const dateInput =
+          form.elements.namedItem(
+            'paymentDate',
+          ) as HTMLInputElement | null
+
+        if (dateInput) {
+          dateInput.value =
+            getToday()
+        }
+
+        alert(
+          'تم تسجيل الدفعة بنجاح.',
+        )
+      } catch (error) {
+        console.error(
+          'Failed to add payment:',
+          error,
+        )
+
+        alert(
+          getSupabaseErrorMessage(
+            error,
+            'تعذر حفظ الدفعة. تحقق من بيانات قاعدة البيانات والصلاحيات.',
+          ),
+        )
+      } finally {
+        setSavingPayment(false)
+      }
+    }
 
   return (
     <div className="space-y-6">
@@ -791,7 +1106,9 @@ export function PaymentsView() {
               </p>
 
               <p className="text-lg font-semibold">
-                {currentAcademicYearName}
+                {
+                  currentAcademicYearName
+                }
               </p>
             </div>
 
@@ -811,12 +1128,14 @@ export function PaymentsView() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {paymentStats.map((stat) => (
-          <StatCard
-            key={stat.label}
-            stat={stat}
-          />
-        ))}
+        {paymentStats.map(
+          (stat) => (
+            <StatCard
+              key={stat.label}
+              stat={stat}
+            />
+          ),
+        )}
       </div>
 
       <Card>
@@ -837,11 +1156,16 @@ export function PaymentsView() {
 
                       <input
                         type="text"
-                        value={filters.name}
-                        onChange={(event) =>
+                        value={
+                          filters.name
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'name',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -862,10 +1186,13 @@ export function PaymentsView() {
                         value={
                           filters.personalId
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'personalId',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -882,11 +1209,16 @@ export function PaymentsView() {
                       </div>
 
                       <select
-                        value={filters.grade}
-                        onChange={(event) =>
+                        value={
+                          filters.grade
+                        }
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'grade',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -897,12 +1229,20 @@ export function PaymentsView() {
                         </option>
 
                         {grades.map(
-                          (grade) => (
+                          (
+                            grade,
+                          ) => (
                             <option
-                              key={grade}
-                              value={grade}
+                              key={
+                                grade
+                              }
+                              value={
+                                grade
+                              }
                             >
-                              {grade}
+                              {
+                                grade
+                              }
                             </option>
                           ),
                         )}
@@ -922,10 +1262,13 @@ export function PaymentsView() {
                         value={
                           filters.amountPaid
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'amountPaid',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -947,10 +1290,13 @@ export function PaymentsView() {
                         value={
                           filters.amountRemaining
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'amountRemaining',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -970,10 +1316,13 @@ export function PaymentsView() {
                         value={
                           filters.paymentStatus
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event,
+                        ) =>
                           updateFilter(
                             'paymentStatus',
-                            event.target
+                            event
+                              .target
                               .value,
                           )
                         }
@@ -984,12 +1333,20 @@ export function PaymentsView() {
                         </option>
 
                         {paymentStatuses.map(
-                          (status) => (
+                          (
+                            status,
+                          ) => (
                             <option
-                              key={status}
-                              value={status}
+                              key={
+                                status
+                              }
+                              value={
+                                status
+                              }
                             >
-                              {status}
+                              {
+                                status
+                              }
                             </option>
                           ),
                         )}
@@ -1010,8 +1367,7 @@ export function PaymentsView() {
                       colSpan={8}
                       className="py-10 text-center text-muted-foreground"
                     >
-                      جاري تحميل بيانات
-                      المدفوعات
+                      جاري تحميل بيانات المدفوعات
                     </TableCell>
                   </TableRow>
                 ) : filteredStudents.length ===
@@ -1021,8 +1377,7 @@ export function PaymentsView() {
                       colSpan={8}
                       className="py-10 text-center text-muted-foreground"
                     >
-                      لا توجد نتائج مطابقة
-                      للفلاتر
+                      لا توجد نتائج مطابقة للفلاتر
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -1042,7 +1397,8 @@ export function PaymentsView() {
 
                       const canAddPayment =
                         !student.feeExempt &&
-                        remaining > 0
+                        remaining >
+                          0
 
                       return (
                         <TableRow
@@ -1051,20 +1407,29 @@ export function PaymentsView() {
                           }
                         >
                           <TableCell className="text-center text-muted-foreground">
-                            {index + 1}
+                            {
+                              index +
+                              1
+                            }
                           </TableCell>
 
                           <TableCell className="font-medium">
-                            {student.name}
+                            {
+                              student.name
+                            }
                           </TableCell>
 
                           <TableCell>
-                            {student.personalId ||
-                              '—'}
+                            {
+                              student.personalId ||
+                              '—'
+                            }
                           </TableCell>
 
                           <TableCell>
-                            {student.grade}
+                            {
+                              student.grade
+                            }
                           </TableCell>
 
                           <TableCell className="font-medium tabular-nums">
@@ -1134,7 +1499,9 @@ export function PaymentsView() {
             <div className="flex justify-end border-t px-5 py-3">
               <button
                 type="button"
-                onClick={clearFilters}
+                onClick={
+                  clearFilters
+                }
                 className="text-sm font-medium text-primary hover:underline"
               >
                 مسح جميع الفلاتر
@@ -1147,337 +1514,382 @@ export function PaymentsView() {
       {detailsDialogOpen &&
         detailsStudent && (
           <div
+            className="fixed inset-0 z-50 bg-black/40 p-0 sm:p-4"
             dir="rtl"
-            className="fixed inset-0 z-50 bg-black/40"
           >
-            <Card className="absolute inset-x-0 bottom-0 top-0 flex w-full flex-col overflow-hidden rounded-none border-0 bg-background shadow-2xl sm:inset-x-4 sm:bottom-4 sm:top-4 sm:mx-auto sm:max-w-2xl sm:rounded-2xl sm:border">
-              <CardContent className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0">
-                {/* Header */}
-                <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background p-6">
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold">
-                      تفاصيل المدفوعات
-                    </h2>
+            <div className="flex h-full w-full items-center justify-center">
+              <Card className="flex h-full max-h-full w-full flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-2xl">
+                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
 
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {detailsStudent.name}
-                    </p>
+                  {/* Header */}
+                  <div className="shrink-0 flex items-start justify-between gap-4 border-b p-4 sm:p-6">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold">
+                        تفاصيل المدفوعات
+                      </h2>
 
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      السنة الدراسية:{' '}
-                      {currentAcademicYearName}
-                    </p>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                        {
+                          detailsStudent.name
+                        }
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        السنة الدراسية:{' '}
+                        {
+                          currentAcademicYearName
+                        }
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={
+                        closeDetailsDialog
+                      }
+                      disabled={
+                        loadingHistory ||
+                        savingPayment
+                      }
+                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-muted"
+                      aria-label="إغلاق"
+                    >
+                      <X className="size-5" />
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={
-                      closeDetailsDialog
-                    }
-                    disabled={
-                      loadingHistory ||
-                      savingPayment
-                    }
-                    className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-muted"
-                    aria-label="إغلاق"
-                  >
-                    <X className="size-5" />
-                  </button>
-                </div>
-
-                {/* Financial summary */}
-                <div className="grid grid-cols-1 gap-3 border-b p-6 sm:grid-cols-3">
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      الرسوم السنوية
-                    </p>
-
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.feeExempt
-                        ? 'معفي'
-                        : formatCurrency(
-                            detailsStudent.amountDue,
-                          )}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      إجمالي المدفوع
-                    </p>
-
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.feeExempt
-                        ? '—'
-                        : formatCurrency(
-                            detailsStudent.amountPaid,
-                          )}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-muted/50 p-4">
-                    <p className="text-xs text-muted-foreground">
-                      المتبقي
-                    </p>
-
-                    <p className="mt-1 font-semibold tabular-nums">
-                      {detailsStudent.feeExempt
-                        ? '—'
-                        : formatCurrency(
-                            Math.max(
-                              detailsStudent.amountDue -
-                                detailsStudent.amountPaid,
-                              0,
-                            ),
-                          )}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Payment history */}
-                <div>
-                  <div className="flex items-center justify-between gap-3 px-6 pb-3 pt-5">
-                    <div>
-                      <h3 className="font-semibold">
-                        سجل الدفعات
-                      </h3>
-
+                  {/* Summary */}
+                  <div className="shrink-0 grid grid-cols-1 gap-3 border-b p-4 sm:grid-cols-3 sm:p-6">
+                    <div className="rounded-lg bg-muted/50 p-4">
                       <p className="text-xs text-muted-foreground">
-                        {paymentHistory.length}{' '}
-                        دفعة
+                        الرسوم السنوية
+                      </p>
+
+                      <p className="mt-1 font-semibold tabular-nums">
+                        {detailsStudent.feeExempt
+                          ? 'معفي'
+                          : formatCurrency(
+                              detailsStudent.amountDue,
+                            )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-muted/50 p-4">
+                      <p className="text-xs text-muted-foreground">
+                        إجمالي المدفوع
+                      </p>
+
+                      <p className="mt-1 font-semibold tabular-nums">
+                        {detailsStudent.feeExempt
+                          ? '—'
+                          : formatCurrency(
+                              detailsStudent.amountPaid,
+                            )}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-muted/50 p-4">
+                      <p className="text-xs text-muted-foreground">
+                        المتبقي
+                      </p>
+
+                      <p className="mt-1 font-semibold tabular-nums">
+                        {detailsStudent.feeExempt
+                          ? '—'
+                          : formatCurrency(
+                              Math.max(
+                                detailsStudent.amountDue -
+                                  detailsStudent.amountPaid,
+                                0,
+                              ),
+                            )}
                       </p>
                     </div>
                   </div>
 
-                  <div className="px-6 pb-6">
-                    {loadingHistory ? (
-                      <div className="py-10 text-center text-sm text-muted-foreground">
-                        جاري تحميل سجل
-                        الدفعات
-                      </div>
-                    ) : paymentHistory.length ===
-                      0 ? (
-                      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        لا توجد دفعات مسجلة
-                        لهذا الطالب في السنة
-                        الحالية.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {paymentHistory.map(
-                          (payment) => (
-                            <div
-                              key={
-                                payment.id
-                              }
-                              className="rounded-lg border p-4"
-                            >
-                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                <div>
-                                  <p className="text-sm text-muted-foreground">
-                                    تاريخ الدفع
-                                  </p>
+                  {/* ONE SCROLL AREA */}
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <div className="space-y-6 p-4 sm:p-6">
 
-                                  <p className="mt-1 font-medium">
-                                    {formatPaymentDate(
-                                      payment.payment_date,
-                                    )}
-                                  </p>
-                                </div>
+                      {/* Payment history */}
+                      <section>
+                        <div className="mb-3">
+                          <h3 className="font-semibold">
+                            سجل الدفعات
+                          </h3>
 
-                                <div className="text-right sm:text-left">
-                                  <p className="text-sm text-muted-foreground">
-                                    المبلغ
-                                  </p>
+                          <p className="text-xs text-muted-foreground">
+                            {
+                              paymentHistory.length
+                            }{' '}
+                            دفعة
+                          </p>
+                        </div>
 
-                                  <p className="mt-1 text-lg font-semibold tabular-nums">
-                                    {formatCurrency(
-                                      Number(
-                                        payment.amount,
-                                      ),
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
+                        {loadingHistory ? (
+                          <div className="py-10 text-center text-sm text-muted-foreground">
+                            جاري تحميل سجل الدفعات
+                          </div>
+                        ) : paymentHistory.length ===
+                          0 ? (
+                          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                            لا توجد دفعات مسجلة لهذا الطالب في السنة الحالية.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {paymentHistory.map(
+                              (
+                                payment,
+                              ) => (
+                                <div
+                                  key={
+                                    payment.id
+                                  }
+                                  className="rounded-lg border p-4"
+                                >
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                      <p className="text-sm text-muted-foreground">
+                                        تاريخ الدفع
+                                      </p>
 
-                              <div className="mt-4 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
-                                <div>
-                                  <p className="text-xs text-muted-foreground">
-                                    طريقة الدفع
-                                  </p>
+                                      <p className="mt-1 font-medium">
+                                        {formatPaymentDate(
+                                          payment.payment_date,
+                                        )}
+                                      </p>
+                                    </div>
 
-                                  <p className="mt-1 text-sm font-medium">
-                                    {
-                                      payment.payment_method
-                                    }
-                                  </p>
-                                </div>
+                                    <div className="sm:text-right">
+                                      <p className="text-sm text-muted-foreground">
+                                        المبلغ
+                                      </p>
 
-                                {payment.reference_number && (
-                                  <div>
-                                    <p className="text-xs text-muted-foreground">
-                                      رقم العملية
-                                    </p>
-
-                                    <p className="mt-1 text-sm font-medium">
-                                      {
-                                        payment.reference_number
-                                      }
-                                    </p>
+                                      <p className="mt-1 text-lg font-semibold tabular-nums">
+                                        {formatCurrency(
+                                          Number(
+                                            payment.amount,
+                                          ),
+                                        )}
+                                      </p>
+                                    </div>
                                   </div>
-                                )}
 
-                                {payment.notes && (
-                                  <div className="sm:col-span-2">
-                                    <p className="text-xs text-muted-foreground">
-                                      ملاحظات
-                                    </p>
+                                  <div className="mt-4 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
+                                    <div>
+                                      <p className="text-xs text-muted-foreground">
+                                        طريقة الدفع
+                                      </p>
 
-                                    <p className="mt-1 whitespace-pre-wrap text-sm">
-                                      {
-                                        payment.notes
-                                      }
-                                    </p>
+                                      <p className="mt-1 text-sm font-medium">
+                                        {
+                                          payment.payment_method
+                                        }
+                                      </p>
+                                    </div>
+
+                                    {payment.reference_number && (
+                                      <div>
+                                        <p className="text-xs text-muted-foreground">
+                                          رقم العملية
+                                        </p>
+
+                                        <p className="mt-1 text-sm font-medium break-words">
+                                          {
+                                            payment.reference_number
+                                          }
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {payment.notes && (
+                                      <div className="sm:col-span-2">
+                                        <p className="text-xs text-muted-foreground">
+                                          ملاحظات
+                                        </p>
+
+                                        <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                                          {
+                                            payment.notes
+                                          }
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Add payment */}
-                {!detailsStudent.feeExempt &&
-                  Math.max(
-                    detailsStudent.amountDue -
-                      detailsStudent.amountPaid,
-                    0,
-                  ) > 0 && (
-                    <div className="border-t bg-muted/20 px-6 py-5">
-                      <div className="mb-4">
-                        <h3 className="font-semibold">
-                          إضافة دفعة
-                        </h3>
-
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          يمكنك تسجيل دفعة جزئية أو تسديد المبلغ المتبقي بالكامل.
-                        </p>
-                      </div>
-
-                      <form
-                        onSubmit={
-                          handleAddPayment
-                        }
-                        className="space-y-4"
-                      >
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium">
-                            المبلغ
-                          </label>
-
-                          <input
-                            name="amount"
-                            type="number"
-                            step="0.001"
-                            min="0.001"
-                            max={Math.max(
-                              detailsStudent.amountDue -
-                                detailsStudent.amountPaid,
-                              0,
+                                </div>
+                              ),
                             )}
-                            required
-                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                          />
-                        </div>
+                          </div>
+                        )}
+                      </section>
 
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium">
-                            طريقة الدفع
-                          </label>
+                      {/* Add payment */}
+                      {!detailsStudent.feeExempt &&
+                        Math.max(
+                          detailsStudent.amountDue -
+                            detailsStudent.amountPaid,
+                          0,
+                        ) > 0 && (
+                          <section className="border-t pt-6">
+                            <div className="mb-4">
+                              <h3 className="font-semibold">
+                                إضافة دفعة
+                              </h3>
 
-                          <select
-                            name="paymentMethod"
-                            defaultValue="نقدي"
-                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                          >
-                            <option value="نقدي">
-                              نقدي
-                            </option>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                يمكنك تسجيل دفعة جزئية أو تسديد المبلغ المتبقي بالكامل.
+                              </p>
+                            </div>
 
-                            <option value="تحويل">
-                              تحويل
-                            </option>
+                            <form
+                              onSubmit={
+                                handleAddPayment
+                              }
+                              className="space-y-4"
+                            >
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium">
+                                  المبلغ
+                                </label>
 
-                            <option value="بطاقة">
-                              بطاقة
-                            </option>
-                          </select>
-                        </div>
+                                <input
+                                  name="amount"
+                                  type="number"
+                                  step="0.001"
+                                  min="0.001"
+                                  max={Math.max(
+                                    detailsStudent.amountDue -
+                                      detailsStudent.amountPaid,
+                                    0,
+                                  )}
+                                  required
+                                  disabled={
+                                    savingPayment
+                                  }
+                                  className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                                />
+                              </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium">
-                            تاريخ الدفع
-                          </label>
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium">
+                                  طريقة الدفع
+                                </label>
 
-                          <input
-                            name="paymentDate"
-                            type="date"
-                            defaultValue={getToday()}
-                            required
-                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                          />
-                        </div>
+                                <select
+                                  name="paymentMethod"
+                                  defaultValue="نقدي"
+                                  disabled={
+                                    savingPayment
+                                  }
+                                  className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                                >
+                                  <option value="نقدي">
+                                    نقدي
+                                  </option>
 
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium">
-                            رقم العملية
-                            <span className="mr-1 text-xs text-muted-foreground">
-                              اختياري
-                            </span>
-                          </label>
+                                  <option value="تحويل">
+                                    تحويل
+                                  </option>
 
-                          <input
-                            name="referenceNumber"
-                            type="text"
-                            className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
-                          />
-                        </div>
+                                  <option value="بطاقة">
+                                    بطاقة
+                                  </option>
+                                </select>
+                              </div>
 
-                        <div>
-                          <label className="mb-1.5 block text-sm font-medium">
-                            ملاحظات
-                            <span className="mr-1 text-xs text-muted-foreground">
-                              اختياري
-                            </span>
-                          </label>
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium">
+                                  تاريخ الدفع
+                                </label>
 
-                          <textarea
-                            name="notes"
-                            rows={3}
-                            className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
-                          />
-                        </div>
+                                <input
+                                  name="paymentDate"
+                                  type="date"
+                                  defaultValue={
+                                    getToday()
+                                  }
+                                  required
+                                  disabled={
+                                    savingPayment
+                                  }
+                                  className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                                />
+                              </div>
 
-                        <div className="flex justify-end gap-2 pt-2">
-                          <Button
-                            type="submit"
-                            disabled={
-                              savingPayment
-                            }
-                          >
-                            {savingPayment
-                              ? 'جاري الحفظ'
-                              : 'حفظ الدفعة'}
-                          </Button>
-                        </div>
-                      </form>
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium">
+                                  رقم العملية
+                                  <span className="mr-1 text-xs text-muted-foreground">
+                                    اختياري
+                                  </span>
+                                </label>
+
+                                <input
+                                  name="referenceNumber"
+                                  type="text"
+                                  disabled={
+                                    savingPayment
+                                  }
+                                  className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-1.5 block text-sm font-medium">
+                                  ملاحظات
+                                  <span className="mr-1 text-xs text-muted-foreground">
+                                    اختياري
+                                  </span>
+                                </label>
+
+                                <textarea
+                                  name="notes"
+                                  rows={3}
+                                  disabled={
+                                    savingPayment
+                                  }
+                                  className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                                />
+                              </div>
+
+                              <div className="flex justify-end gap-2 pt-2">
+                                <Button
+                                  type="submit"
+                                  disabled={
+                                    savingPayment
+                                  }
+                                >
+                                  {savingPayment
+                                    ? 'جاري حفظ الدفعة...'
+                                    : 'حفظ الدفعة'}
+                                </Button>
+                              </div>
+                            </form>
+                          </section>
+                        )}
                     </div>
-                  )}
-              </CardContent>
-            </Card>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="shrink-0 border-t bg-background p-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={
+                        closeDetailsDialog
+                      }
+                      disabled={
+                        loadingHistory ||
+                        savingPayment
+                      }
+                    >
+                      إغلاق
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
     </div>
@@ -1523,7 +1935,11 @@ function formatPaymentDate(
     day,
   ] = value.split('-')
 
-  if (!year || !month || !day) {
+  if (
+    !year ||
+    !month ||
+    !day
+  ) {
     return value
   }
 
@@ -1531,18 +1947,61 @@ function formatPaymentDate(
 }
 
 function getToday() {
-  const today = new Date()
+  const today =
+    new Date()
 
   const year =
     today.getFullYear()
 
-  const month = String(
-    today.getMonth() + 1,
-  ).padStart(2, '0')
+  const month =
+    String(
+      today.getMonth() + 1,
+    ).padStart(2, '0')
 
-  const day = String(
-    today.getDate(),
-  ).padStart(2, '0')
+  const day =
+    String(
+      today.getDate(),
+    ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function getSupabaseErrorMessage(
+  error: unknown,
+  fallback: string,
+) {
+  if (
+    error &&
+    typeof error === 'object'
+  ) {
+    const supabaseError =
+      error as {
+        message?: string
+        details?: string
+        hint?: string
+        code?: string
+      }
+
+    const parts = [
+      supabaseError.message,
+      supabaseError.details,
+      supabaseError.hint,
+      supabaseError.code
+        ? `Code: ${supabaseError.code}`
+        : '',
+    ].filter(Boolean)
+
+    if (parts.length > 0) {
+      return parts.join('\n')
+    }
+  }
+
+  if (
+    error instanceof Error &&
+    error.message
+  ) {
+    return error.message
+  }
+
+  return fallback
 }
