@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/require-auth'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,33 +14,26 @@ const supabaseAdmin = createClient(
 )
 
 async function getAdmin() {
-  const supabase =
-    await createSupabaseServerClient()
+  // الحماية المركزية:
+  // Auth + active session + approved device + active user
+  const { access, response } = await requireAuth()
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
+  if (response) {
     return {
-      error: NextResponse.json(
-        {
-          error:
-            'غير مصرح. يجب تسجيل الدخول أولاً.',
-        },
-        { status: 401 },
-      ),
+      error: response,
     }
   }
 
+  const userId = access!.userId
+
+  // التحقق من أن المستخدم مدير النظام
   const { data: profile, error: profileError } =
     await supabaseAdmin
       .from('user_profiles')
       .select(
         'auth_user_id, username, full_name, role, is_active',
       )
-      .eq('auth_user_id', user.id)
+      .eq('auth_user_id', userId)
       .maybeSingle()
 
   if (profileError) {
@@ -77,7 +70,7 @@ async function getAdmin() {
   }
 
   return {
-    user,
+    userId,
     profile,
   }
 }
@@ -249,7 +242,7 @@ export async function POST(
       return admin.error
     }
 
-    const adminUser = admin.user
+    const adminUserId = admin.userId
 
     const body = await request.json()
 
@@ -351,7 +344,7 @@ export async function POST(
           status: 'approved',
           approved_at:
             new Date().toISOString(),
-          approved_by: adminUser.id,
+          approved_by: adminUserId,
           rejected_at: null,
           rejected_by: null,
           revoked_at: null,
@@ -405,7 +398,7 @@ export async function POST(
             success: true,
             metadata: {
               approved_by:
-                adminUser.id,
+                adminUserId,
             },
           })
 
@@ -435,7 +428,7 @@ export async function POST(
         status: 'rejected',
         rejected_at:
           new Date().toISOString(),
-        rejected_by: adminUser.id,
+        rejected_by: adminUserId,
         approved_at: null,
         approved_by: null,
         revoked_at: null,
@@ -489,7 +482,7 @@ export async function POST(
           success: true,
           metadata: {
             rejected_by:
-              adminUser.id,
+              adminUserId,
           },
         })
 
