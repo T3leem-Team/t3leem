@@ -66,76 +66,48 @@ const roles: {
 ]
 
 export default function Page() {
-  const [users, setUsers] =
-    useState<User[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [permissions, setPermissions] = useState<Permission[]>([])
 
-  const [permissions, setPermissions] =
-    useState<Permission[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  const [loading, setLoading] =
-    useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
-  const [loadingPermissions, setLoadingPermissions] =
-    useState(true)
-
-  const [saving, setSaving] =
-    useState(false)
-
-  const [error, setError] =
-    useState('')
-
-  const [showForm, setShowForm] =
-    useState(false)
-
-  const [editingId, setEditingId] =
-    useState<string | null>(null)
-
-  const [username, setUsername] =
-    useState('')
-
-  const [fullName, setFullName] =
-    useState('')
-
-  const [department, setDepartment] =
-    useState('')
-
-  const [password, setPassword] =
-    useState('')
-
-  const [role, setRole] =
-    useState<Role>('Teacher')
+  const [username, setUsername] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [department, setDepartment] = useState('')
+  const [password, setPassword] = useState('')
+  const [role, setRole] = useState<Role>('Teacher')
 
   const [selectedPermissions, setSelectedPermissions] =
     useState<string[]>([])
 
-  const [openPermissions, setOpenPermissions] =
-    useState(false)
-
-  const [search, setSearch] =
-    useState('')
+  const [openPermissions, setOpenPermissions] = useState(false)
+  const [search, setSearch] = useState('')
 
   const loadUsers = async () => {
     try {
       setLoading(true)
       setError('')
 
-      const response =
-        await fetch('/api/admin/users', {
-          method: 'GET',
-          cache: 'no-store',
-        })
+      const response = await fetch('/api/admin/users', {
+        method: 'GET',
+        cache: 'no-store',
+      })
 
-      const data =
-        await response.json()
+      const data = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data.error ??
-            'تعذر تحميل المستخدمين.',
+          data.error ?? 'تعذر تحميل المستخدمين.',
         )
       }
 
       setUsers(data.users ?? [])
+      setPermissions(data.permissions ?? [])
     } catch (err) {
       setError(
         err instanceof Error
@@ -147,46 +119,8 @@ export default function Page() {
     }
   }
 
-  const loadPermissions = async () => {
-    try {
-      setLoadingPermissions(true)
-
-      const response =
-        await fetch(
-          '/api/admin/permissions',
-          {
-            method: 'GET',
-            cache: 'no-store',
-          },
-        )
-
-      const data =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ??
-            'تعذر تحميل الصلاحيات.',
-        )
-      }
-
-      setPermissions(
-        data.permissions ?? [],
-      )
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'تعذر تحميل الصلاحيات.',
-      )
-    } finally {
-      setLoadingPermissions(false)
-    }
-  }
-
   useEffect(() => {
     void loadUsers()
-    void loadPermissions()
   }, [])
 
   const resetForm = () => {
@@ -214,70 +148,45 @@ export default function Page() {
     setShowForm(true)
   }
 
-  const openEditForm = (
-    user: User,
-  ) => {
+  const openEditForm = (user: User) => {
     setEditingId(user.id)
     setUsername(user.username)
     setFullName(user.full_name)
-    setDepartment(
-      user.department ?? '',
-    )
+    setDepartment(user.department ?? '')
     setPassword('')
     setRole(user.role)
-    setSelectedPermissions([
-      ...user.permissionIds,
-    ])
+    setSelectedPermissions([...user.permissionIds])
     setOpenPermissions(false)
     setError('')
     setShowForm(true)
   }
 
-  const togglePermission = (
-    permissionId: string,
-  ) => {
-    setSelectedPermissions(
-      (current) =>
-        current.includes(
-          permissionId,
-        )
-          ? current.filter(
-              (id) =>
-                id !== permissionId,
-            )
-          : [
-              ...current,
-              permissionId,
-            ],
+  const togglePermission = (permissionId: string) => {
+    setSelectedPermissions((current) =>
+      current.includes(permissionId)
+        ? current.filter((id) => id !== permissionId)
+        : [...current, permissionId],
     )
   }
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!username.trim()) {
-      setError(
-        'اكتب اسم المستخدم.',
-      )
+      setError('اكتب اسم المستخدم.')
       return
     }
 
     if (!fullName.trim()) {
-      setError(
-        'اكتب الاسم الكامل.',
-      )
+      setError('اكتب الاسم الكامل.')
       return
     }
 
-    if (!password) {
-      setError(
-        'اكتب كلمة المرور.',
-      )
+    if (!editingId && !password) {
+      setError('اكتب كلمة المرور.')
       return
     }
 
-    if (password.length < 8) {
-      setError(
-        'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
-      )
+    if (password && password.length < 8) {
+      setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
       return
     }
 
@@ -285,38 +194,44 @@ export default function Page() {
       setSaving(true)
       setError('')
 
-      const response =
-        await fetch(
-          '/api/admin/users',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({
-              username:
-                username.trim(),
-              fullName:
-                fullName.trim(),
-              department:
-                department.trim() ||
-                null,
-              password,
-              role,
-              permissionIds:
-                selectedPermissions,
-            }),
-          },
-        )
+      const isEditing = editingId !== null
 
-      const data =
-        await response.json()
+      const body = isEditing
+        ? {
+            userId: editingId,
+            fullName: fullName.trim(),
+            department: department.trim() || null,
+            role,
+            ...(password
+              ? { password }
+              : {}),
+            permissionIds: selectedPermissions,
+          }
+        : {
+            username: username.trim(),
+            fullName: fullName.trim(),
+            department: department.trim() || null,
+            password,
+            role,
+            permissionIds: selectedPermissions,
+          }
+
+      const response = await fetch('/api/admin/users', {
+        method: isEditing ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+      const data = await response.json()
 
       if (!response.ok) {
         throw new Error(
           data.error ??
-            'تعذر إنشاء المستخدم.',
+            (isEditing
+              ? 'تعذر حفظ التعديلات.'
+              : 'تعذر إنشاء المستخدم.'),
         )
       }
 
@@ -326,7 +241,7 @@ export default function Page() {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر إنشاء المستخدم.',
+          : 'حدث خطأ غير متوقع.',
       )
     } finally {
       setSaving(false)
@@ -334,60 +249,43 @@ export default function Page() {
   }
 
   const selectedPermissionsLabel =
-    selectedPermissions.length ===
-    0
+    selectedPermissions.length === 0
       ? 'اختر الصلاحيات'
-      : selectedPermissions.length ===
-          permissions.length
+      : selectedPermissions.length === permissions.length
         ? 'جميع الصلاحيات'
         : `${selectedPermissions.length} صلاحية محددة`
 
-  const filteredUsers =
-    useMemo(() => {
-      const value =
-        search.trim().toLowerCase()
+  const filteredUsers = useMemo(() => {
+    const value = search.trim().toLowerCase()
 
-      if (!value) {
-        return users
-      }
+    if (!value) {
+      return users
+    }
 
-      return users.filter(
-        (user) =>
-          user.username
-            .toLowerCase()
-            .includes(value) ||
-          user.full_name
-            .toLowerCase()
-            .includes(value) ||
-          (user.department ??
-            '')
-            .toLowerCase()
-            .includes(value),
-      )
-    }, [users, search])
+    return users.filter(
+      (user) =>
+        user.username.toLowerCase().includes(value) ||
+        user.full_name.toLowerCase().includes(value) ||
+        (user.department ?? '')
+          .toLowerCase()
+          .includes(value),
+    )
+  }, [users, search])
 
-  const activeUsers =
-    users.filter(
-      (user) => user.is_active,
-    ).length
+  const activeUsers = users.filter(
+    (user) => user.is_active,
+  ).length
 
-  const inactiveUsers =
-    users.length - activeUsers
+  const inactiveUsers = users.length - activeUsers
 
-  const getRoleLabel = (
-    value: Role,
-  ) =>
+  const getRoleLabel = (value: Role) =>
     roles.find(
-      (item) =>
-        item.value === value,
+      (item) => item.value === value,
     )?.label ?? value
 
-  const getPermissionName = (
-    id: string,
-  ) =>
+  const getPermissionName = (id: string) =>
     permissions.find(
-      (permission) =>
-        permission.id === id,
+      (permission) => permission.id === id,
     )?.permission_name ?? id
 
   return (
@@ -397,7 +295,6 @@ export default function Page() {
         description="إدارة حسابات المستخدمين والأدوار والصلاحيات المسموحة لهم داخل النظام."
       />
 
-      {/* الإحصائيات */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-5">
@@ -472,7 +369,6 @@ export default function Page() {
         </Card>
       </div>
 
-      {/* نموذج الإضافة */}
       {showForm && (
         <Card>
           <CardContent className="space-y-6 p-6">
@@ -514,13 +410,9 @@ export default function Page() {
                 <input
                   value={username}
                   onChange={(event) =>
-                    setUsername(
-                      event.target.value,
-                    )
+                    setUsername(event.target.value)
                   }
-                  disabled={
-                    editingId !== null
-                  }
+                  disabled={editingId !== null}
                   placeholder="مثال: ahmed"
                   dir="ltr"
                   className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -539,9 +431,7 @@ export default function Page() {
                 <input
                   value={fullName}
                   onChange={(event) =>
-                    setFullName(
-                      event.target.value,
-                    )
+                    setFullName(event.target.value)
                   }
                   placeholder="مثال: أحمد محمد"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
@@ -556,35 +446,33 @@ export default function Page() {
                 <input
                   value={department}
                   onChange={(event) =>
-                    setDepartment(
-                      event.target.value,
-                    )
+                    setDepartment(event.target.value)
                   }
                   placeholder="اختياري"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
 
-              {!editingId && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    كلمة المرور
-                  </label>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  كلمة المرور
+                </label>
 
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) =>
-                      setPassword(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="8 أحرف على الأقل"
-                    dir="ltr"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                </div>
-              )}
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                  placeholder={
+                    editingId
+                      ? 'اتركها فارغة إذا لا تريد تغييرها'
+                      : '8 أحرف على الأقل'
+                  }
+                  dir="ltr"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
@@ -594,31 +482,21 @@ export default function Page() {
                 <select
                   value={role}
                   onChange={(event) =>
-                    setRole(
-                      event.target
-                        .value as Role,
-                    )
+                    setRole(event.target.value as Role)
                   }
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  {roles.map(
-                    (item) => (
-                      <option
-                        key={
-                          item.value
-                        }
-                        value={
-                          item.value
-                        }
-                      >
-                        {item.label}
-                      </option>
-                    ),
-                  )}
+                  {roles.map((item) => (
+                    <option
+                      key={item.value}
+                      value={item.value}
+                    >
+                      {item.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* الصلاحيات */}
               <div className="relative space-y-2 md:col-span-2">
                 <label className="text-sm font-medium">
                   الصلاحيات
@@ -626,45 +504,35 @@ export default function Page() {
 
                 <button
                   type="button"
-                  disabled={
-                    loadingPermissions
-                  }
+                  disabled={permissions.length === 0}
                   onClick={() =>
                     setOpenPermissions(
-                      (current) =>
-                        !current,
+                      (current) => !current,
                     )
                   }
                   className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
                 >
                   <span
                     className={
-                      selectedPermissions.length ===
-                      0
+                      selectedPermissions.length === 0
                         ? 'text-muted-foreground'
                         : ''
                     }
                   >
-                    {loadingPermissions
-                      ? 'جاري تحميل الصلاحيات...'
+                    {permissions.length === 0
+                      ? 'لا توجد صلاحيات متاحة'
                       : selectedPermissionsLabel}
                   </span>
 
-                  {loadingPermissions ? (
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="size-4 text-muted-foreground" />
-                  )}
+                  <ChevronDown className="size-4 text-muted-foreground" />
                 </button>
 
                 {openPermissions &&
-                  !loadingPermissions && (
+                  permissions.length > 0 && (
                     <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
                       <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
                         {permissions.map(
-                          (
-                            permission,
-                          ) => {
+                          (permission) => {
                             const selected =
                               selectedPermissions.includes(
                                 permission.id,
@@ -672,9 +540,7 @@ export default function Page() {
 
                             return (
                               <button
-                                key={
-                                  permission.id
-                                }
+                                key={permission.id}
                                 type="button"
                                 onClick={() =>
                                   togglePermission(
@@ -722,9 +588,7 @@ export default function Page() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            setOpenPermissions(
-                              false,
-                            )
+                            setOpenPermissions(false)
                           }
                         >
                           تم
@@ -751,7 +615,7 @@ export default function Page() {
 
               <Button
                 type="button"
-                onClick={handleCreate}
+                onClick={handleSave}
                 disabled={saving}
               >
                 {saving && (
@@ -767,15 +631,12 @@ export default function Page() {
         </Card>
       )}
 
-      {/* شريط الأدوات */}
       {!showForm && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <input
             value={search}
             onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
+              setSearch(event.target.value)
             }
             placeholder="بحث باسم المستخدم أو الاسم أو القسم..."
             className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
@@ -791,14 +652,12 @@ export default function Page() {
         </div>
       )}
 
-      {/* الخطأ العام */}
       {error && !showForm && (
         <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* الجدول */}
       <Card>
         <CardContent className="p-0">
           {loading ? (
@@ -806,8 +665,7 @@ export default function Page() {
               <Loader2 className="size-5 animate-spin" />
               جاري تحميل المستخدمين...
             </div>
-          ) : filteredUsers.length ===
-            0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div className="p-12 text-center">
               <Users className="mx-auto size-10 text-muted-foreground" />
 
@@ -826,9 +684,7 @@ export default function Page() {
               {users.length === 0 && (
                 <Button
                   className="mt-5"
-                  onClick={
-                    openAddForm
-                  }
+                  onClick={openAddForm}
                 >
                   <UserPlus className="size-4" />
                   إضافة مستخدم
@@ -867,123 +723,95 @@ export default function Page() {
                 </thead>
 
                 <tbody className="divide-y">
-                  {filteredUsers.map(
-                    (user) => (
-                      <tr
-                        key={user.id}
-                        className="transition-colors hover:bg-muted/20"
-                      >
-                        <td className="px-5 py-4">
-                          <div>
-                            <p className="font-medium">
-                              {
-                                user.full_name
-                              }
-                            </p>
+                  {filteredUsers.map((user) => (
+                    <tr
+                      key={user.id}
+                      className="transition-colors hover:bg-muted/20"
+                    >
+                      <td className="px-5 py-4">
+                        <div>
+                          <p className="font-medium">
+                            {user.full_name}
+                          </p>
 
-                            <p
-                              className="mt-1 text-xs text-muted-foreground"
-                              dir="ltr"
-                            >
-                              @
-                              {
-                                user.username
-                              }
-                            </p>
-                          </div>
-                        </td>
+                          <p
+                            className="mt-1 text-xs text-muted-foreground"
+                            dir="ltr"
+                          >
+                            @{user.username}
+                          </p>
+                        </div>
+                      </td>
 
-                        <td className="px-5 py-4">
-                          <Badge variant="neutral">
-                            {getRoleLabel(
-                              user.role,
-                            )}
-                          </Badge>
-                        </td>
+                      <td className="px-5 py-4">
+                        <Badge variant="neutral">
+                          {getRoleLabel(user.role)}
+                        </Badge>
+                      </td>
 
-                        <td className="px-5 py-4">
-                          {user.department ||
-                            '—'}
-                        </td>
+                      <td className="px-5 py-4">
+                        {user.department || '—'}
+                      </td>
 
-                        <td className="max-w-[360px] px-5 py-4">
-                          {user.permissionIds
-                            .length ===
-                          0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              لا توجد صلاحيات إضافية
-                            </span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {user.permissionIds
-                                .slice(
-                                  0,
-                                  3,
-                                )
-                                .map(
-                                  (
-                                    id,
-                                  ) => (
-                                    <Badge
-                                      key={
-                                        id
-                                      }
-                                      variant="neutral"
-                                    >
-                                      {getPermissionName(
-                                        id,
-                                      )}
-                                    </Badge>
-                                  ),
-                                )}
-
-                              {user.permissionIds
-                                .length >
-                                3 && (
-                                <Badge variant="neutral">
-                                  +
-                                  {user
-                                    .permissionIds
-                                    .length -
-                                    3}
+                      <td className="max-w-[360px] px-5 py-4">
+                        {user.permissionIds.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            لا توجد صلاحيات إضافية
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {user.permissionIds
+                              .slice(0, 3)
+                              .map((id) => (
+                                <Badge
+                                  key={id}
+                                  variant="neutral"
+                                >
+                                  {getPermissionName(id)}
                                 </Badge>
-                              )}
-                            </div>
-                          )}
-                        </td>
+                              ))}
 
-                        <td className="px-5 py-4">
-                          {user.is_active ? (
-                            <Badge variant="success">
-                              نشط
-                            </Badge>
-                          ) : (
-                            <Badge variant="neutral">
-                              معطل
-                            </Badge>
-                          )}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                openEditForm(
-                                  user,
-                                )
-                              }
-                            >
-                              <Edit3 className="size-4" />
-                              تعديل
-                            </Button>
+                            {user.permissionIds.length >
+                              3 && (
+                              <Badge variant="neutral">
+                                +
+                                {user.permissionIds.length -
+                                  3}
+                              </Badge>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    ),
-                  )}
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        {user.is_active ? (
+                          <Badge variant="success">
+                            نشط
+                          </Badge>
+                        ) : (
+                          <Badge variant="neutral">
+                            معطل
+                          </Badge>
+                        )}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              openEditForm(user)
+                            }
+                          >
+                            <Edit3 className="size-4" />
+                            تعديل
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
