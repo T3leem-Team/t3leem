@@ -23,6 +23,8 @@ const DEVICE_COOKIE =
 const SESSION_COOKIE =
   't3leem_session_id'
 
+const SESSION_MAX_HOURS = 4
+
 const supabaseAdmin = createClient(
   supabaseUrl,
   serviceRoleKey,
@@ -220,11 +222,6 @@ export async function POST(
      * --------------------------------------------------
      * 1. التحقق من كلمة المرور بدون حفظ Session
      * --------------------------------------------------
-     *
-     * مهم:
-     * هنا نستخدم Supabase client مستقل مع
-     * persistSession: false حتى لا ننشئ Cookie
-     * دخول في المتصفح قبل فحص الجهاز.
      */
     const passwordClient =
       createClient(
@@ -258,9 +255,6 @@ export async function POST(
         passwordError,
       )
 
-      /*
-       * تسجيل محاولة الدخول الفاشلة.
-       */
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -317,10 +311,6 @@ export async function POST(
         }
       | null = null
 
-    /*
-     * إذا كان الجهاز لديه Token سابق،
-     * نبحث عنه.
-     */
     if (existingDeviceToken) {
       const tokenHash =
         hashDeviceToken(
@@ -446,9 +436,6 @@ export async function POST(
      * --------------------------------------------------
      * 5. جهاز جديد
      * --------------------------------------------------
-     *
-     * لا يوجد Token أو الجهاز غير موجود
-     * في قاعدة البيانات.
      */
     if (!device) {
       const deviceToken =
@@ -499,9 +486,6 @@ export async function POST(
         )
       }
 
-      /*
-       * تسجيل طلب الجهاز.
-       */
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -532,13 +516,6 @@ export async function POST(
         )
       }
 
-      /*
-       * مهم:
-       * لا ننشئ Auth Session هنا.
-       *
-       * فقط نحفظ Device Token حتى يعرف
-       * النظام هذا الجهاز عند المحاولة القادمة.
-       */
       const response =
         NextResponse.json(
           {
@@ -574,15 +551,8 @@ export async function POST(
      * --------------------------------------------------
      * 6. الجهاز Approved
      * --------------------------------------------------
-     *
-     * الآن فقط ننشئ Session حقيقية
-     * في Cookies المتصفح.
      */
-
     if (device.status === 'approved') {
-      /*
-       * تحديث آخر استخدام للجهاز.
-       */
       await supabaseAdmin
         .from('trusted_devices')
         .update({
@@ -591,9 +561,6 @@ export async function POST(
         })
         .eq('id', device.id)
 
-      /*
-       * Response واحد لحفظ Supabase Auth cookies.
-       */
       const response =
         NextResponse.json({
           user: {
@@ -608,9 +575,6 @@ export async function POST(
             'approved',
         })
 
-      /*
-       * Supabase SSR client.
-       */
       const supabase =
         createServerClient(
           supabaseUrl,
@@ -653,7 +617,6 @@ export async function POST(
                             index,
                           )
                           .trim(),
-
                         value: cookie
                           .slice(
                             index + 1,
@@ -664,8 +627,7 @@ export async function POST(
                   )
                   .filter(
                     (cookie) =>
-                      cookie.name
-                        .length >
+                      cookie.name.length >
                       0,
                   )
               },
@@ -698,9 +660,6 @@ export async function POST(
 
       /*
        * إنشاء Session حقيقية.
-       *
-       * لن تحدث هذه الخطوة إلا بعد
-       * التأكد أن الجهاز Approved.
        */
       const {
         data: authData,
@@ -731,9 +690,6 @@ export async function POST(
         )
       }
 
-      /*
-       * التأكد من أن الجلسة موجودة.
-       */
       const {
         data: {
           user: loggedInUser,
@@ -761,8 +717,22 @@ export async function POST(
       }
 
       /*
-       * تسجيل الجلسة النشطة.
+       * --------------------------------------------------
+       * إنشاء active session
+       *
+       * الحد الأقصى للجلسة = 4 ساعات
+       * --------------------------------------------------
        */
+      const loginAt = new Date()
+
+      const expiresAt = new Date(
+        loginAt.getTime() +
+          SESSION_MAX_HOURS *
+            60 *
+            60 *
+            1000,
+      )
+
       const {
         data: activeSession,
         error: sessionError,
@@ -775,11 +745,12 @@ export async function POST(
             trusted_device_id:
               device.id,
             login_at:
-              new Date().toISOString(),
+              loginAt.toISOString(),
             last_activity_at:
-              new Date().toISOString(),
+              loginAt.toISOString(),
             logout_at: null,
-            expires_at: null,
+            expires_at:
+              expiresAt.toISOString(),
             is_active: true,
           })
           .select('id')
@@ -793,10 +764,7 @@ export async function POST(
       }
 
       /*
-       * حفظ معرف الجلسة في Cookie.
-       *
-       * نحتاج هذا المعرف لاحقًا عند تسجيل الخروج
-       * حتى نغلق نفس السجل في active_sessions.
+       * حفظ Session ID.
        */
       if (activeSession?.id) {
         response.cookies.set(
@@ -810,13 +778,15 @@ export async function POST(
             sameSite: 'lax',
             path: '/',
             maxAge:
-              60 * 60 * 24,
+              SESSION_MAX_HOURS *
+              60 *
+              60,
           },
         )
       }
 
       /*
-       * تسجيل نجاح الدخول.
+       * Audit Log
        */
       const { error: auditError } =
         await supabaseAdmin
@@ -839,6 +809,8 @@ export async function POST(
               active_session_id:
                 activeSession?.id ??
                 null,
+              session_expires_at:
+                expiresAt.toISOString(),
             },
           })
 
