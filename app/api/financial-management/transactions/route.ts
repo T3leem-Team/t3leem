@@ -17,9 +17,6 @@ async function checkAccess() {
   return validateDashboardSection('payments')
 }
 
-/*
- * التأكد من وجود السنة الدراسية
- */
 async function checkAcademicYear(
   academicYearId: string,
 ) {
@@ -38,9 +35,6 @@ async function checkAcademicYear(
   return data
 }
 
-/*
- * التأكد من أن العملية موجودة في نفس السنة
- */
 async function getTransaction(
   transactionId: string,
   academicYearId: string,
@@ -143,6 +137,63 @@ export async function POST(request: Request) {
 
     /*
      * ==================================================
+     * RESET
+     * مسح إعداد الإدارة المالية لهذه السنة فقط
+     *
+     * مهم:
+     * لا نحذف payments
+     * لا نحذف students
+     * لا نحذف enrollments
+     * لا نحذف registration_requests
+     * ==================================================
+     */
+
+    if (action === 'reset') {
+      /*
+       * حذف العمليات المالية لهذه السنة فقط.
+       */
+
+      const {
+        error: transactionsDeleteError,
+      } = await supabaseAdmin
+        .from('financial_transactions')
+        .delete()
+        .eq(
+          'academic_year_id',
+          academic_year_id,
+        )
+
+      if (transactionsDeleteError) {
+        throw transactionsDeleteError
+      }
+
+      /*
+       * حذف إعداد الإدارة المالية لهذه السنة فقط.
+       */
+
+      const {
+        error: settingsDeleteError,
+      } = await supabaseAdmin
+        .from('financial_settings')
+        .delete()
+        .eq(
+          'academic_year_id',
+          academic_year_id,
+        )
+
+      if (settingsDeleteError) {
+        throw settingsDeleteError
+      }
+
+      return NextResponse.json({
+        success: true,
+        message:
+          'تم مسح إعداد الإدارة المالية وعملياتها لهذه السنة فقط.',
+      })
+    }
+
+    /*
+     * ==================================================
      * INITIALIZE
      * تهيئة الإدارة المالية
      * ==================================================
@@ -180,7 +231,7 @@ export async function POST(request: Request) {
       }
 
       /*
-       * منع إعادة تهيئة نفس السنة
+       * منع إعادة تهيئة نفس السنة.
        */
 
       const { data: existing } =
@@ -204,12 +255,10 @@ export async function POST(request: Request) {
       }
 
       /*
-       * إنشاء الإعداد
+       * إنشاء إعداد الإدارة المالية.
        *
-       * مهم:
-       * الرصيد محفوظ هنا.
-       * لا ننشئ transaction افتتاحية
-       * حتى لا يتم احتساب الرصيد مرتين.
+       * الرصيد الافتتاحي محفوظ في
+       * financial_settings فقط.
        */
 
       const {
@@ -233,6 +282,314 @@ export async function POST(request: Request) {
         throw error
       }
 
+      /*
+       * --------------------------------------------------
+       * إذا كان النظام مرتبطًا بمدفوعات الطلاب
+       *
+       * نبحث عن جميع دفعات الطلاب الموجودة مسبقًا
+       * في payments لهذه السنة.
+       *
+       * لا نكرر أي دفعة موجودة مسبقًا في
+       * financial_transactions.
+       * --------------------------------------------------
+       */
+
+      if (
+        financial_mode ===
+        'student_payments'
+      ) {
+        const {
+          data: existingPayments,
+          error: existingPaymentsError,
+        } = await supabaseAdmin
+          .from('payments')
+          .select(
+            `
+            id,
+            student_id,
+            academic_year_id,
+            amount,
+            payment_method,
+            payment_date,
+            reference_number,
+            notes
+            `,
+          )
+          .eq(
+            'academic_year_id',
+            academic_year_id,
+          )
+
+        if (existingPaymentsError) {
+          /*
+           * إذا فشلت المزامنة، نحذف الإعداد
+           * حتى لا نترك النظام في حالة تهيئة
+           * ناقصة.
+           */
+
+          await supabaseAdmin
+            .from('financial_settings')
+            .delete()
+            .eq(
+              'id',
+              settings.id,
+            )
+
+          throw existingPaymentsError
+        }
+
+        if (
+          existingPayments &&
+          existingPayments.length > 0
+        ) {
+          /*
+           * جلب العمليات المالية المرتبطة
+           * بدفعات الطلاب الموجودة مسبقًا.
+           */
+
+          const {
+            data: existingFinancialTransactions,
+            error:
+              existingFinancialTransactionsError,
+          } = await supabaseAdmin
+            .from('financial_transactions')
+            .select('payment_id')
+            .eq(
+              'academic_year_id',
+              academic_year_id,
+            )
+            .eq(
+              'source_type',
+              'student_payment',
+            )
+            .not(
+              'payment_id',
+              'is',
+              null,
+            )
+
+          if (
+            existingFinancialTransactionsError
+          ) {
+            await supabaseAdmin
+              .from(
+                'financial_settings',
+              )
+              .delete()
+              .eq(
+                'id',
+                settings.id,
+              )
+
+            throw existingFinancialTransactionsError
+          }
+
+          const existingPaymentIds =
+            new Set(
+              (
+                existingFinancialTransactions ??
+                []
+              )
+                .map(
+                  (item) =>
+                    item.payment_id,
+                )
+                .filter(Boolean),
+            )
+
+          const paymentsToSync =
+            existingPayments.filter(
+              (payment) =>
+                !existingPaymentIds.has(
+                  payment.id,
+                ),
+            )
+
+          if (
+            paymentsToSync.length > 0
+          ) {
+            /*
+             * نحتاج أسماء الطلاب للعمليات
+             * حتى تظهر التفاصيل بشكل صحيح.
+             */
+
+            const studentIds =
+              Array.from(
+                new Set(
+                  paymentsToSync
+                    .map(
+                      (payment) =>
+                        payment.student_id,
+                    )
+                    .filter(Boolean),
+                ),
+              )
+
+            let studentsMap =
+              new Map<
+                string,
+                {
+                  name: string | null
+                  personal_id: string | null
+                }
+              >()
+
+            if (
+              studentIds.length > 0
+            ) {
+              const {
+                data: students,
+                error:
+                  studentsError,
+              } = await supabaseAdmin
+                .from('students')
+                .select(
+                  'id, name, personal_id',
+                )
+                .in(
+                  'id',
+                  studentIds,
+                )
+
+              if (studentsError) {
+                await supabaseAdmin
+                  .from(
+                    'financial_settings',
+                  )
+                  .delete()
+                  .eq(
+                    'id',
+                    settings.id,
+                  )
+
+                throw studentsError
+              }
+
+              studentsMap =
+                new Map(
+                  (
+                    students ??
+                    []
+                  ).map(
+                    (student) => [
+                      student.id,
+                      {
+                        name:
+                          student.name ??
+                          null,
+                        personal_id:
+                          student.personal_id ??
+                          null,
+                      },
+                    ],
+                  ),
+                )
+            }
+
+            const financialRows =
+              paymentsToSync.map(
+                (payment) => {
+                  const student =
+                    studentsMap.get(
+                      payment.student_id,
+                    )
+
+                  return {
+                    academic_year_id:
+                      academic_year_id,
+
+                    transaction_type:
+                      'in',
+
+                    amount:
+                      Number(
+                        Number(
+                          payment.amount,
+                        ).toFixed(3),
+                      ),
+
+                    adjustment_direction:
+                      null,
+
+                    source_type:
+                      'student_payment',
+
+                    source:
+                      student?.name
+                        ? `دفعة طالب - ${student.name}`
+                        : 'دفعة طالب',
+
+                    payment_id:
+                      payment.id,
+
+                    student_id:
+                      payment.student_id,
+
+                    student_request_number:
+                      student?.personal_id ??
+                      null,
+
+                    payment_method:
+                      payment.payment_method ??
+                      null,
+
+                    reference_number:
+                      payment.reference_number ??
+                      null,
+
+                    confirmation_status:
+                      'pending',
+
+                    confirmed_by:
+                      null,
+
+                    confirmed_at:
+                      null,
+
+                    note:
+                      payment.notes ??
+                      null,
+
+                    /*
+                     * لا نستخدم payment_date
+                     * كـ created_at حتى لا نغير
+                     * تاريخ إنشاء العملية.
+                     *
+                     * payment_date محفوظ في
+                     * payments ويمكن ربطه لاحقًا.
+                     */
+                  }
+                },
+              )
+
+            const {
+              error:
+                syncError,
+            } = await supabaseAdmin
+              .from(
+                'financial_transactions',
+              )
+              .insert(
+                financialRows,
+              )
+
+            if (syncError) {
+              await supabaseAdmin
+                .from(
+                  'financial_settings',
+                )
+                .delete()
+                .eq(
+                  'id',
+                  settings.id,
+                )
+
+              throw syncError
+            }
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         settings,
@@ -247,10 +604,6 @@ export async function POST(request: Request) {
      */
 
     if (action === 'create') {
-      /*
-       * نوع العملية
-       */
-
       if (
         transaction_type !== 'in' &&
         transaction_type !== 'out' &&
@@ -265,10 +618,6 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-
-      /*
-       * المبلغ
-       */
 
       const numericAmount =
         Number(amount)
@@ -288,10 +637,6 @@ export async function POST(request: Request) {
         )
       }
 
-      /*
-       * التسوية تحتاج اتجاه
-       */
-
       if (
         transaction_type ===
           'adjustment' &&
@@ -308,10 +653,6 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-
-      /*
-       * جلب إعدادات السنة
-       */
 
       const {
         data: settings,
@@ -340,20 +681,13 @@ export async function POST(request: Request) {
       }
 
       /*
-       * --------------------------------------------------
        * دفعة طالب
-       * --------------------------------------------------
        */
 
       if (
         source_type ===
         'student_payment'
       ) {
-        /*
-         * دفعات الطلاب مسموحة فقط
-         * في وضع مدفوعات الطلاب.
-         */
-
         if (
           settings.financial_mode !==
           'student_payments'
@@ -367,10 +701,6 @@ export async function POST(request: Request) {
           )
         }
 
-        /*
-         * دفعة الطالب يجب أن تكون IN
-         */
-
         if (
           transaction_type !== 'in'
         ) {
@@ -382,11 +712,6 @@ export async function POST(request: Request) {
             { status: 400 },
           )
         }
-
-        /*
-         * يجب أن يكون لدينا على الأقل
-         * معرف دفعة أو طالب.
-         */
 
         if (
           !payment_id &&
@@ -400,25 +725,53 @@ export async function POST(request: Request) {
             { status: 400 },
           )
         }
-      }
 
-      /*
-       * --------------------------------------------------
-       * تحديد حالة التأكيد
-       * --------------------------------------------------
-       */
+        /*
+         * منع إنشاء عملية مالية مكررة
+         * لنفس payment_id.
+         */
+
+        if (payment_id) {
+          const {
+            data: duplicate,
+            error:
+              duplicateError,
+          } = await supabaseAdmin
+            .from(
+              'financial_transactions',
+            )
+            .select('id')
+            .eq(
+              'academic_year_id',
+              academic_year_id,
+            )
+            .eq(
+              'payment_id',
+              payment_id,
+            )
+            .maybeSingle()
+
+          if (duplicateError) {
+            throw duplicateError
+          }
+
+          if (duplicate) {
+            return NextResponse.json(
+              {
+                error:
+                  'هذه الدفعة مرتبطة بالفعل بالإدارة المالية.',
+              },
+              { status: 409 },
+            )
+          }
+        }
+      }
 
       const confirmationStatus =
         source_type ===
         'student_payment'
           ? 'pending'
           : 'not_required'
-
-      /*
-       * --------------------------------------------------
-       * نوع المصدر
-       * --------------------------------------------------
-       */
 
       let finalSourceType =
         source_type
@@ -435,12 +788,6 @@ export async function POST(request: Request) {
             'manual'
         }
       }
-
-      /*
-       * --------------------------------------------------
-       * إنشاء العملية
-       * --------------------------------------------------
-       */
 
       const {
         data: transaction,
@@ -543,10 +890,6 @@ export async function POST(request: Request) {
         )
       }
 
-      /*
-       * يجب أن تكون دفعة طالب
-       */
-
       if (
         transaction.source_type !==
         'student_payment'
@@ -560,10 +903,6 @@ export async function POST(request: Request) {
         )
       }
 
-      /*
-       * منع إعادة التأكيد
-       */
-
       if (
         transaction.confirmation_status ===
         'confirmed'
@@ -576,10 +915,6 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-
-      /*
-       * التأكيد
-       */
 
       const confirmedAt =
         new Date().toISOString()
@@ -621,7 +956,7 @@ export async function POST(request: Request) {
     /*
      * ==================================================
      * DELETE
-     * حذف العملية المالية
+     * حذف عملية مالية واحدة
      * ==================================================
      */
 
@@ -657,11 +992,7 @@ export async function POST(request: Request) {
       }
 
       /*
-       * لا نحذف الرصيد الافتتاحي
-       * لأنه محفوظ في financial_settings.
-       *
-       * وكذلك لا نحذف دفعة الطالب الأصلية
-       * من جدول payments.
+       * لا نحذف الرصيد الافتتاحي.
        */
 
       if (
@@ -676,6 +1007,12 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
+
+      /*
+       * حذف سجل الإدارة المالية فقط.
+       *
+       * لا نحذف payment الأصلي.
+       */
 
       const { error } =
         await supabaseAdmin
