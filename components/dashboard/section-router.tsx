@@ -164,5 +164,30 @@ export function SectionRouter() {
       route.match(pathname),
     ) ?? routes[0]
 
-  return active.view()
+  return (
+  <div
+    dir="rtl"
+    className="m-6 rounded-2xl border-4 border-red-500 bg-red-50 p-10"
+  >
+    <h1 className="text-3xl font-bold text-red-700">
+      SECTION ROUTER TEST
+    </h1>
+
+    <p className="mt-4 text-lg">
+      المسار الحالي: {pathname}
+    </p>
+
+    <p className="mt-2 text-lg">
+      القسم: {currentSectionKey}
+    </p>
+
+    <button
+      type="button"
+      onClick={() => alert('BUTTON WORKS')}
+      className="mt-6 rounded-xl bg-black px-6 py-3 text-white"
+    >
+      اختبار الضغط
+    </button>
+  </div>
+)
 }
