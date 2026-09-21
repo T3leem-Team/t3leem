@@ -6,52 +6,60 @@ import { PaymentStudents } from './PaymentStudents'
 import { PaymentFinancial } from './PaymentFinancial'
 import { PaymentPersonal } from './PaymentPersonal'
 
+type PaymentSection =
+  | 'students'
+  | 'financial'
+  | 'personal'
+
 export function PaymentsView() {
-  const [active, setActive] = useState('students')
+  const [activeSection, setActiveSection] =
+    useState<PaymentSection>('students')
 
   return (
     <div dir="rtl" className="space-y-6">
 
-      <div className="flex gap-3">
+      <div className="grid gap-4 md:grid-cols-3">
+
         <button
           type="button"
-          onClick={() => setActive('students')}
-          className="rounded-lg border px-4 py-2"
+          onClick={() => setActiveSection('students')}
+          className="rounded-xl border p-5 text-right"
         >
           المدفوعات
         </button>
 
         <button
           type="button"
-          onClick={() => setActive('financial')}
-          className="rounded-lg border px-4 py-2"
+          onClick={() => setActiveSection('financial')}
+          className="rounded-xl border p-5 text-right"
         >
           إدارة المالية
         </button>
 
         <button
           type="button"
-          onClick={() => setActive('personal')}
-          className="rounded-lg border px-4 py-2"
+          onClick={() => setActiveSection('personal')}
+          className="rounded-xl border p-5 text-right"
         >
           الإدارة الشخصية
         </button>
+
       </div>
 
-      <div>
-        {active === 'students' && <PaymentStudents />}
+      <div className="min-h-[200px]">
 
-        {active === 'financial' && (
-          <div className="rounded-xl border p-8">
-            إدارة المالية تعمل
-          </div>
+        {activeSection === 'students' && (
+          <PaymentStudents />
         )}
 
-        {active === 'personal' && (
-          <div className="rounded-xl border p-8">
-            الإدارة الشخصية تعمل
-          </div>
+        {activeSection === 'financial' && (
+          <PaymentFinancial />
         )}
+
+        {activeSection === 'personal' && (
+          <PaymentPersonal />
+        )}
+
       </div>
 
     </div>
