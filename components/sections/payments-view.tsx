@@ -2,74 +2,91 @@
 
 import { useState } from 'react'
 
-type Section = 'students' | 'financial' | 'personal'
+import { PaymentStudents } from './PaymentStudents'
+import { PaymentFinancial } from './PaymentFinancial'
+import { PaymentPersonal } from './PaymentPersonal'
+
+type PaymentSection =
+  | 'students'
+  | 'financial'
+  | 'personal'
 
 export function PaymentsView() {
   const [activeSection, setActiveSection] =
-    useState<Section>('students')
+    useState<PaymentSection>('students')
 
   return (
-    <div dir="rtl" className="space-y-6 p-6">
-      <h1 className="text-2xl font-bold">
-        المدفوعات
-      </h1>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div dir="rtl" className="space-y-6">
+      {/* خيارات القسم */}
+      <div className="grid gap-4 md:grid-cols-3">
         <button
           type="button"
           onClick={() => setActiveSection('financial')}
-          className="rounded-2xl border p-6 text-right hover:bg-gray-50"
+          className={`rounded-xl border p-5 text-right transition ${
+            activeSection === 'financial'
+              ? 'border-primary bg-primary/5'
+              : 'bg-background hover:border-primary/50'
+          }`}
         >
-          <div className="text-lg font-bold">
+          <div className="text-lg font-semibold">
             إدارة المالية
           </div>
-          <div className="mt-2 text-sm text-gray-500">
-            اختبار
+
+          <div className="mt-1 text-sm text-muted-foreground">
+            إدارة أموال المدرسة والاستلام والمصروفات والتسويات.
           </div>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveSection('students')}
-          className="rounded-2xl border p-6 text-right hover:bg-gray-50"
+          className={`rounded-xl border p-5 text-right transition ${
+            activeSection === 'students'
+              ? 'border-primary bg-primary/5'
+              : 'bg-background hover:border-primary/50'
+          }`}
         >
-          <div className="text-lg font-bold">
+          <div className="text-lg font-semibold">
             المدفوعات
           </div>
-          <div className="mt-2 text-sm text-gray-500">
-            اختبار
+
+          <div className="mt-1 text-sm text-muted-foreground">
+            إدارة رسوم ومدفوعات الطلاب.
           </div>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveSection('personal')}
-          className="rounded-2xl border-2 border-red-500 p-6 text-right hover:bg-red-50"
+          className={`rounded-xl border p-5 text-right transition ${
+            activeSection === 'personal'
+              ? 'border-primary bg-primary/5'
+              : 'bg-background hover:border-primary/50'
+          }`}
         >
-          <div className="text-lg font-bold text-red-700">
+          <div className="text-lg font-semibold">
             الإدارة الشخصية
           </div>
-          <div className="mt-2 text-sm text-red-500">
-            اضغط هنا للاختبار
+
+          <div className="mt-1 text-sm text-muted-foreground">
+            الإدارة المالية الشخصية.
           </div>
         </button>
       </div>
 
-      <div className="rounded-2xl border bg-white p-8">
-        <div className="mb-4 text-sm text-gray-500">
-          القسم الحالي:
-        </div>
+      {/* محتوى القسم */}
+      <div>
+        {activeSection === 'students' && (
+          <PaymentStudents />
+        )}
 
-        <div className="text-2xl font-bold">
-          {activeSection === 'students' &&
-            'المدفوعات تعمل'}
+        {activeSection === 'financial' && (
+          <PaymentFinancial />
+        )}
 
-          {activeSection === 'financial' &&
-            'إدارة المالية تعمل'}
-
-          {activeSection === 'personal' &&
-            'الإدارة الشخصية تعمل'}
-        </div>
+        {activeSection === 'personal' && (
+          <PaymentPersonal />
+        )}
       </div>
     </div>
   )
