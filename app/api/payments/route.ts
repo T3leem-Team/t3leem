@@ -238,7 +238,10 @@ export async function POST(
         .select(
           'id, name, annual_fee',
         )
-        .eq('id', body.academic_year_id)
+        .eq(
+          'id',
+          body.academic_year_id,
+        )
         .eq('is_current', true)
         .eq('is_active', true)
         .maybeSingle()
@@ -261,7 +264,7 @@ export async function POST(
       await supabaseAdmin
         .from('students')
         .select(
-          'id, fee_exempt',
+          'id, name, personal_id, fee_exempt',
         )
         .eq(
           'id',
@@ -372,6 +375,10 @@ export async function POST(
       )
     }
 
+    /*
+     * الخطوة الأولى:
+     * حفظ الدفعة في جدول payments.
+     */
     const { data, error } =
       await supabaseAdmin
         .from('payments')
@@ -417,6 +424,124 @@ export async function POST(
 
     if (error) {
       throw error
+    }
+
+    /*
+     * الخطوة الثانية:
+     * معرفة إعداد الإدارة المالية لهذه السنة.
+     *
+     * إذا كان النظام:
+     * student_payments
+     *
+     * ننشئ عملية مالية معلقة بانتظار
+     * تأكيد استلام المبلغ.
+     *
+     * إذا كان النظام:
+     * manual
+     *
+     * لا ننشئ أي عملية مالية.
+     */
+    const {
+      data: financialSettings,
+      error: financialSettingsError,
+    } = await supabaseAdmin
+      .from('financial_settings')
+      .select(
+        'id, financial_mode',
+      )
+      .eq(
+        'academic_year_id',
+        currentYear.id,
+      )
+      .maybeSingle()
+
+    if (financialSettingsError) {
+      /*
+       * مهم:
+       * الدفعة تم حفظها بالفعل.
+       *
+       * لذلك لا نفشل عملية تسجيل الدفعة
+       * فقط لأن إعداد الإدارة المالية
+       * غير موجود أو حصل خطأ في قراءته.
+       */
+      console.error(
+        'Financial settings lookup error:',
+        financialSettingsError,
+      )
+    }
+
+    if (
+      financialSettings?.financial_mode ===
+      'student_payments'
+    ) {
+      const { error: financialTransactionError } =
+        await supabaseAdmin
+          .from('financial_transactions')
+          .insert({
+            academic_year_id:
+              currentYear.id,
+
+            transaction_type:
+              'in',
+
+            amount:
+              Number(
+                amount.toFixed(3),
+              ),
+
+            adjustment_direction:
+              null,
+
+            source_type:
+              'student_payment',
+
+            source:
+              `دفعة طالب - ${student.name}`,
+
+            payment_id:
+              data.id,
+
+            student_id:
+              student.id,
+
+            student_request_number:
+              student.personal_id ||
+              null,
+
+            payment_method:
+              paymentMethod,
+
+            reference_number:
+              body.reference_number ||
+              null,
+
+            confirmation_status:
+              'pending',
+
+            confirmed_by:
+              null,
+
+            confirmed_at:
+              null,
+
+            note:
+              body.notes ||
+              null,
+          })
+
+      if (financialTransactionError) {
+        /*
+         * الدفعة الأساسية موجودة بالفعل.
+         *
+         * نسجل الخطأ حتى نعرف أن الربط المالي
+         * لم يتم، لكن لا نرجع فشلًا للمستخدم
+         * لأن عملية payments نفسها نجحت.
+         */
+        console.error(
+          'Financial transaction creation error:',
+          financialTransactionError,
+        )
+      }
     }
 
     return NextResponse.json(
