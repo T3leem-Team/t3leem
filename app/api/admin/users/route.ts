@@ -102,7 +102,11 @@ async function requireAdmin() {
  * --------------------------------------------------
  * GET
  *
- * تحميل المستخدمين + الصلاحيات الخاصة بكل مستخدم
+ * تحميل:
+ * - المستخدمين
+ * - الصلاحيات التفصيلية
+ * - أقسام لوحة التحكم
+ * - ربط الأقسام بالمستخدمين
  * --------------------------------------------------
  */
 export async function GET() {
@@ -160,7 +164,7 @@ export async function GET() {
     }
 
     /*
-     * تحميل الصلاحيات المعرفة في النظام
+     * تحميل الصلاحيات التفصيلية
      */
     const {
       data: permissions,
@@ -200,7 +204,7 @@ export async function GET() {
     }
 
     /*
-     * تحميل ربط المستخدمين بالصلاحيات
+     * تحميل ربط المستخدمين بالصلاحيات التفصيلية
      */
     const {
       data: userPermissions,
@@ -234,40 +238,175 @@ export async function GET() {
     }
 
     /*
-     * تجهيز الصلاحيات داخل كل مستخدم
+     * تحميل أقسام لوحة التحكم الديناميكية
+     */
+    const {
+      data: dashboardSections,
+      error:
+        dashboardSectionsError,
+    } =
+      await supabaseAdmin
+        .from('dashboard_sections')
+        .select(
+          `
+          id,
+          section_key,
+          section_name,
+          description,
+          icon,
+          href,
+          sort_order,
+          is_active,
+          created_at,
+          updated_at
+          `,
+        )
+        .order(
+          'sort_order',
+          {
+            ascending: true,
+          },
+        )
+
+    if (dashboardSectionsError) {
+      console.error(
+        'Dashboard sections lookup error:',
+        dashboardSectionsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل أقسام لوحة التحكم.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * تحميل ربط المستخدمين بأقسام لوحة التحكم
+     */
+    const {
+      data: userDashboardSections,
+      error:
+        userDashboardSectionsError,
+    } =
+      await supabaseAdmin
+        .from(
+          'user_dashboard_sections',
+        )
+        .select(
+          `
+          id,
+          user_profile_id,
+          section_id,
+          created_at
+          `,
+        )
+
+    if (
+      userDashboardSectionsError
+    ) {
+      console.error(
+        'User dashboard sections lookup error:',
+        userDashboardSectionsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل أقسام لوحة التحكم للمستخدمين.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * تجهيز بيانات المستخدمين
      */
     const usersWithPermissions =
       (users ?? []).map(
         (user) => {
-          const links =
-            (userPermissions ?? []).filter(
+          /*
+           * الصلاحيات التفصيلية
+           */
+          const permissionLinks =
+            (
+              userPermissions ??
+              []
+            ).filter(
               (item) =>
                 item.user_profile_id ===
                 user.id,
             )
 
           const userPermissionIds =
-            links.map(
+            permissionLinks.map(
               (item) =>
                 item.permission_id,
             )
 
           const userPermissionDetails =
-            (permissions ?? []).filter(
+            (
+              permissions ??
+              []
+            ).filter(
               (permission) =>
                 userPermissionIds.includes(
                   permission.id,
                 ),
             )
 
+          /*
+           * أقسام لوحة التحكم
+           */
+          const sectionLinks =
+            (
+              userDashboardSections ??
+              []
+            ).filter(
+              (item) =>
+                item.user_profile_id ===
+                user.id,
+            )
+
+          const userSectionIds =
+            sectionLinks.map(
+              (item) =>
+                item.section_id,
+            )
+
+          const userSectionDetails =
+            (
+              dashboardSections ??
+              []
+            ).filter(
+              (section) =>
+                userSectionIds.includes(
+                  section.id,
+                ),
+            )
+
           return {
             ...user,
 
+            /*
+             * الصلاحيات التفصيلية
+             */
             permissionIds:
               userPermissionIds,
 
             permissions:
               userPermissionDetails,
+
+            /*
+             * صلاحيات أقسام لوحة التحكم
+             */
+            sectionIds:
+              userSectionIds,
+
+            sections:
+              userSectionDetails,
           }
         },
       )
@@ -278,6 +417,9 @@ export async function GET() {
 
       permissions:
         permissions ?? [],
+
+      dashboardSections:
+        dashboardSections ?? [],
     })
   } catch (error) {
     console.error(
@@ -352,11 +494,30 @@ export async function POST(
         ? body.department.trim()
         : null
 
+    /*
+     * الصلاحيات التفصيلية
+     */
     const permissionIds =
       Array.isArray(
         body.permissionIds,
       )
         ? body.permissionIds.filter(
+            (
+              id: unknown,
+            ): id is string =>
+              typeof id ===
+              'string',
+          )
+        : []
+
+    /*
+     * أقسام لوحة التحكم
+     */
+    const sectionIds =
+      Array.isArray(
+        body.sectionIds,
+      )
+        ? body.sectionIds.filter(
             (
               id: unknown,
             ): id is string =>
@@ -513,8 +674,6 @@ export async function POST(
 
     /*
      * إنشاء حساب Supabase Auth
-     *
-     * نستخدم البريد الحقيقي للمستخدم.
      */
     const {
       data: authData,
@@ -578,7 +737,9 @@ export async function POST(
 
           is_active:
             true,
-          updated_at: new Date().toISOString(),
+
+          updated_at:
+            new Date().toISOString(),
         })
         .select(
           `
@@ -605,10 +766,6 @@ export async function POST(
         profileError,
       )
 
-      /*
-       * تنظيف حساب Auth إذا فشل
-       * إنشاء profile
-       */
       await supabaseAdmin.auth.admin.deleteUser(
         authUserId,
       )
@@ -623,8 +780,11 @@ export async function POST(
     }
 
     /*
-     * التحقق من الصلاحيات المطلوبة
+     * --------------------------------------------------
+     * الصلاحيات التفصيلية
+     * --------------------------------------------------
      */
+
     const uniquePermissionIds =
       Array.from(
         new Set(
@@ -655,9 +815,6 @@ export async function POST(
           permissionsError,
         )
 
-        /*
-         * Rollback
-         */
         await supabaseAdmin
           .from('user_profiles')
           .delete()
@@ -679,9 +836,6 @@ export async function POST(
         )
       }
 
-      /*
-       * إضافة الصلاحيات
-       */
       if (
         validPermissions &&
         validPermissions.length >
@@ -716,9 +870,6 @@ export async function POST(
             permissionInsertError,
           )
 
-          /*
-           * Rollback
-           */
           await supabaseAdmin
             .from('user_profiles')
             .delete()
@@ -742,6 +893,149 @@ export async function POST(
       }
     }
 
+    /*
+     * --------------------------------------------------
+     * أقسام لوحة التحكم
+     * --------------------------------------------------
+     */
+
+    const uniqueSectionIds =
+      Array.from(
+        new Set(
+          sectionIds,
+        ),
+      )
+
+    let validSectionIds: string[] =
+      []
+
+    if (
+      uniqueSectionIds.length >
+      0
+    ) {
+      const {
+        data: validSections,
+        error:
+          sectionsError,
+      } =
+        await supabaseAdmin
+          .from('dashboard_sections')
+          .select('id')
+          .in(
+            'id',
+            uniqueSectionIds,
+          )
+
+      if (sectionsError) {
+        console.error(
+          'Dashboard section lookup error:',
+          sectionsError,
+        )
+
+        await supabaseAdmin
+          .from('user_permissions')
+          .delete()
+          .eq(
+            'user_profile_id',
+            profile.id,
+          )
+
+        await supabaseAdmin
+          .from('user_profiles')
+          .delete()
+          .eq(
+            'id',
+            profile.id,
+          )
+
+        await supabaseAdmin.auth.admin.deleteUser(
+          authUserId,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر التحقق من أقسام لوحة التحكم.',
+          },
+          { status: 500 },
+        )
+      }
+
+      validSectionIds =
+        (
+          validSections ??
+          []
+        ).map(
+          (section) =>
+            section.id,
+        )
+
+      if (
+        validSectionIds.length >
+        0
+      ) {
+        const rows =
+          validSectionIds.map(
+            (sectionId) => ({
+              user_profile_id:
+                profile.id,
+
+              section_id:
+                sectionId,
+            }),
+          )
+
+        const {
+          error:
+            sectionInsertError,
+        } =
+          await supabaseAdmin
+            .from(
+              'user_dashboard_sections',
+            )
+            .insert(rows)
+
+        if (
+          sectionInsertError
+        ) {
+          console.error(
+            'User dashboard sections insert error:',
+            sectionInsertError,
+          )
+
+          await supabaseAdmin
+            .from(
+              'user_permissions',
+            )
+            .delete()
+            .eq(
+              'user_profile_id',
+              profile.id,
+            )
+
+          await supabaseAdmin
+            .from('user_profiles')
+            .delete()
+            .eq(
+              'id',
+              profile.id,
+            )
+
+          await supabaseAdmin.auth.admin.deleteUser(
+            authUserId,
+          )
+
+          return NextResponse.json(
+            {
+              error:
+                'تعذر حفظ أقسام لوحة التحكم للمستخدم.',
+            },
+            { status: 500 },
+          )
+        }
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -751,6 +1045,9 @@ export async function POST(
 
           permissionIds:
             uniquePermissionIds,
+
+          sectionIds:
+            validSectionIds,
         },
       },
       { status: 201 },
@@ -776,7 +1073,8 @@ export async function POST(
  * PATCH
  *
  * تعديل المستخدم + البريد + الدور + القسم +
- * الحالة + كلمة المرور + الصلاحيات
+ * الحالة + كلمة المرور + الصلاحيات +
+ * أقسام لوحة التحكم
  * --------------------------------------------------
  */
 export async function PATCH(
@@ -837,11 +1135,30 @@ export async function PATCH(
         ? body.password
         : ''
 
+    /*
+     * الصلاحيات التفصيلية
+     */
     const permissionIds =
       Array.isArray(
         body.permissionIds,
       )
         ? body.permissionIds.filter(
+            (
+              id: unknown,
+            ): id is string =>
+              typeof id ===
+              'string',
+          )
+        : []
+
+    /*
+     * أقسام لوحة التحكم
+     */
+    const sectionIds =
+      Array.isArray(
+        body.sectionIds,
+      )
+        ? body.sectionIds.filter(
             (
               id: unknown,
             ): id is string =>
@@ -900,9 +1217,6 @@ export async function PATCH(
       )
     }
 
-    /*
-     * إذا تم إرسال البريد، نتحقق منه
-     */
     if (
       email &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
@@ -972,8 +1286,7 @@ export async function PATCH(
     }
 
     /*
-     * إذا كان البريد مختلفًا، نتحقق من عدم استخدامه
-     * لمستخدم آخر.
+     * التحقق من البريد الجديد
      */
     if (
       email &&
@@ -1180,8 +1493,11 @@ export async function PATCH(
     }
 
     /*
-     * التحقق من الصلاحيات
+     * --------------------------------------------------
+     * تحديث الصلاحيات التفصيلية
+     * --------------------------------------------------
      */
+
     const uniquePermissionIds =
       Array.from(
         new Set(
@@ -1314,14 +1630,161 @@ export async function PATCH(
       }
     }
 
+    /*
+     * --------------------------------------------------
+     * تحديث أقسام لوحة التحكم
+     * --------------------------------------------------
+     */
+
+    const uniqueSectionIds =
+      Array.from(
+        new Set(
+          sectionIds,
+        ),
+      )
+
+    let validSectionIds: string[] =
+      []
+
+    if (
+      uniqueSectionIds.length >
+      0
+    ) {
+      const {
+        data: validSections,
+        error:
+          sectionsError,
+      } =
+        await supabaseAdmin
+          .from('dashboard_sections')
+          .select('id')
+          .in(
+            'id',
+            uniqueSectionIds,
+          )
+
+      if (sectionsError) {
+        console.error(
+          'Dashboard section lookup error:',
+          sectionsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر التحقق من أقسام لوحة التحكم.',
+          },
+          { status: 500 },
+        )
+      }
+
+      validSectionIds =
+        (
+          validSections ??
+          []
+        ).map(
+          (section) =>
+            section.id,
+        )
+    }
+
+    /*
+     * حذف الأقسام القديمة
+     */
+    const {
+      error:
+        deleteSectionsError,
+    } =
+      await supabaseAdmin
+        .from(
+          'user_dashboard_sections',
+        )
+        .delete()
+        .eq(
+          'user_profile_id',
+          userId,
+        )
+
+    if (
+      deleteSectionsError
+    ) {
+      console.error(
+        'Old dashboard sections delete error:',
+        deleteSectionsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحديث أقسام لوحة التحكم للمستخدم.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * إضافة الأقسام الجديدة
+     */
+    if (
+      validSectionIds.length >
+      0
+    ) {
+      const rows =
+        validSectionIds.map(
+          (sectionId) => ({
+            user_profile_id:
+              userId,
+
+            section_id:
+              sectionId,
+          }),
+        )
+
+      const {
+        error:
+          sectionInsertError,
+      } =
+        await supabaseAdmin
+          .from(
+            'user_dashboard_sections',
+          )
+          .insert(rows)
+
+      if (
+        sectionInsertError
+      ) {
+        console.error(
+          'New dashboard sections insert error:',
+          sectionInsertError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر حفظ أقسام لوحة التحكم للمستخدم.',
+          },
+          { status: 500 },
+        )
+      }
+    }
+
     return NextResponse.json({
       success: true,
 
       user: {
         ...updatedProfile,
 
+        /*
+         * الصلاحيات التفصيلية
+         */
         permissionIds:
           validPermissionIds,
+
+        /*
+         * أقسام لوحة التحكم
+         */
+        sectionIds:
+          validSectionIds,
       },
     })
   } catch (error) {
@@ -1345,9 +1808,6 @@ export async function PATCH(
  * DELETE
  *
  * حذف المستخدم نهائيًا
- *
- * ملاحظة:
- * نمنع حذف المستخدم الحالي.
  * --------------------------------------------------
  */
 export async function DELETE(
@@ -1448,7 +1908,7 @@ export async function DELETE(
     }
 
     /*
-     * حذف الصلاحيات أولًا
+     * حذف الصلاحيات التفصيلية
      */
     const {
       error:
@@ -1476,6 +1936,40 @@ export async function DELETE(
         {
           error:
             'تعذر حذف صلاحيات المستخدم.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * حذف ربط أقسام لوحة التحكم
+     */
+    const {
+      error:
+        sectionsDeleteError,
+    } =
+      await supabaseAdmin
+        .from(
+          'user_dashboard_sections',
+        )
+        .delete()
+        .eq(
+          'user_profile_id',
+          targetUser.id,
+        )
+
+    if (
+      sectionsDeleteError
+    ) {
+      console.error(
+        'Dashboard sections delete error:',
+        sectionsDeleteError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر حذف أقسام لوحة التحكم للمستخدم.',
         },
         { status: 500 },
       )
