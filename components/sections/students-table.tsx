@@ -22,7 +22,7 @@ import type {
   StudentCourseStatus,
 } from './student-details'
 
-type StudentTableFilters = {
+export type StudentTableFilters = {
   name: string
   personalId: string
   grade: string
@@ -33,7 +33,7 @@ type StudentTableFilters = {
   attendance: string
 }
 
-type StudentDynamicField = {
+export type StudentDynamicField = {
   id: string
   name: string
   field_key: string
@@ -44,7 +44,7 @@ type StudentDynamicField = {
   sort_order: number
 }
 
-type StudentTableCourse = {
+export type StudentTableCourse = {
   id: string
   name: string
   start_date: string | null
@@ -52,7 +52,7 @@ type StudentTableCourse = {
   days: string[] | null
 }
 
-type StudentTableStudent = {
+export type StudentTableStudent = {
   id: string
   studentId: string
   name: string
@@ -171,7 +171,8 @@ function getPaymentStatusLabel(status: string) {
 
     case 'partial':
     case 'مدفوع جزئياً':
-      return 'مدفوع جزئياً'
+    case 'مدفوع جزئيًا':
+      return 'مدفوع جزئيًا'
 
     case 'unpaid':
     case 'غير مدفوع':
@@ -207,24 +208,31 @@ export function StudentsTable({
   const [paymentStudent, setPaymentStudent] =
     useState<StudentTableStudent | null>(null)
 
-  const [showAddPayment, setShowAddPayment] = useState(false)
+  const [showAddPayment, setShowAddPayment] =
+    useState(false)
 
-  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentAmount, setPaymentAmount] =
+    useState('')
 
   const [paymentMethod, setPaymentMethod] =
     useState<'نقدي' | 'تحويل' | 'بطاقة'>('نقدي')
 
-  const [paymentDate, setPaymentDate] = useState(
-    new Date().toISOString().split('T')[0]
-  )
+  const [paymentDate, setPaymentDate] =
+    useState(
+      new Date().toISOString().split('T')[0]
+    )
 
-  const [paymentReference, setPaymentReference] = useState('')
+  const [paymentReference, setPaymentReference] =
+    useState('')
 
-  const [paymentNotes, setPaymentNotes] = useState('')
+  const [paymentNotes, setPaymentNotes] =
+    useState('')
 
-  const [paymentSaving, setPaymentSaving] = useState(false)
+  const [paymentSaving, setPaymentSaving] =
+    useState(false)
 
-  const [paymentMessage, setPaymentMessage] = useState('')
+  const [paymentMessage, setPaymentMessage] =
+    useState('')
 
   const textFilter = (
     key: keyof StudentTableFilters,
@@ -236,10 +244,16 @@ export function StudentsTable({
       <input
         value={filters[key]}
         onChange={(event) =>
-          onUpdateFilter(key, event.target.value)
+          onUpdateFilter(
+            key,
+            event.target.value
+          )
         }
         placeholder={placeholder}
         className="h-7 w-full min-w-0 rounded border bg-background px-2 text-xs outline-none focus:ring-1"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
       />
     </div>
   )
@@ -248,19 +262,26 @@ export function StudentsTable({
     1 +
     Object.values(visibleColumns).filter(Boolean).length
 
-  const openPayment = (student: StudentTableStudent) => {
+  const openPayment = (
+    student: StudentTableStudent
+  ) => {
     setPaymentStudent(student)
     setShowAddPayment(false)
+
     setPaymentAmount(
       Math.max(
         0,
-        student.amountDue - student.amountPaid
+        student.amountDue -
+          student.amountPaid
       ).toFixed(3)
     )
+
     setPaymentMethod('نقدي')
+
     setPaymentDate(
       new Date().toISOString().split('T')[0]
     )
+
     setPaymentReference('')
     setPaymentNotes('')
     setPaymentMessage('')
@@ -297,48 +318,71 @@ export function StudentsTable({
       return
     }
 
+    if (!paymentStudent.academicYearId) {
+      setPaymentMessage(
+        'لا توجد سنة دراسية مرتبطة بالطالب.'
+      )
+      return
+    }
+
     setPaymentSaving(true)
     setPaymentMessage('')
 
     try {
-      const response = await fetch('/api/payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          studentId: paymentStudent.id,
-          amount,
-          method: paymentMethod,
-          paymentDate,
-          referenceNumber: paymentReference,
-          notes: paymentNotes,
-        }),
-      })
+      const response = await fetch(
+        '/api/payments',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            student_id:
+              paymentStudent.id,
 
-      const data = await response.json()
+            academic_year_id:
+              paymentStudent.academicYearId,
+
+            amount,
+
+            payment_method:
+              paymentMethod,
+
+            payment_date:
+              paymentDate,
+
+            reference_number:
+              paymentReference || null,
+
+            notes:
+              paymentNotes || null,
+          }),
+        }
+      )
+
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data?.error || 'تعذر تسجيل الدفعة'
+          data?.error ||
+            'تعذر تسجيل الدفعة'
         )
       }
 
       const newPaid =
-        paymentStudent.amountPaid + amount
-
-      const newRemaining = Math.max(
-        0,
-        paymentStudent.amountDue - newPaid
-      )
+        paymentStudent.amountPaid +
+        amount
 
       const newStatus =
         paymentStudent.feeExempt
           ? 'معفي'
-          : newPaid >= paymentStudent.amountDue
+          : newPaid >=
+              paymentStudent.amountDue
             ? 'مدفوع بالكامل'
             : newPaid > 0
-              ? 'مدفوع جزئياً'
+              ? 'مدفوع جزئيًا'
               : 'غير مدفوع'
 
       setPaymentStudent({
@@ -347,7 +391,13 @@ export function StudentsTable({
         paymentStatus: newStatus,
       })
 
-      setPaymentMessage('تم تسجيل الدفعة بنجاح')
+      setPaymentMessage(
+        'تم تسجيل الدفعة بنجاح'
+      )
+
+      setPaymentAmount('')
+      setPaymentReference('')
+      setPaymentNotes('')
 
       setTimeout(() => {
         setShowAddPayment(false)
@@ -397,24 +447,32 @@ export function StudentsTable({
                 الأعمدة الأساسية
               </div>
 
-              {baseColumns.map((column) => (
-                <label
-                  key={column.key}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      visibleColumns[column.key] !== false
-                    }
-                    onChange={() =>
-                      onToggleColumn(column.key)
-                    }
-                  />
+              {baseColumns.map(
+                (column) => (
+                  <label
+                    key={column.key}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        visibleColumns[
+                          column.key
+                        ] !== false
+                      }
+                      onChange={() =>
+                        onToggleColumn(
+                          column.key
+                        )
+                      }
+                    />
 
-                  <span>{column.label}</span>
-                </label>
-              ))}
+                    <span>
+                      {column.label}
+                    </span>
+                  </label>
+                )
+              )}
             </div>
 
             <div className="space-y-2">
@@ -422,24 +480,32 @@ export function StudentsTable({
                 الأعمدة الإضافية
               </div>
 
-              {standardColumns.map((column) => (
-                <label
-                  key={column.key}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={
-                      !!visibleColumns[column.key]
-                    }
-                    onChange={() =>
-                      onToggleColumn(column.key)
-                    }
-                  />
+              {standardColumns.map(
+                (column) => (
+                  <label
+                    key={column.key}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        !!visibleColumns[
+                          column.key
+                        ]
+                      }
+                      onChange={() =>
+                        onToggleColumn(
+                          column.key
+                        )
+                      }
+                    />
 
-                  <span>{column.label}</span>
-                </label>
-              ))}
+                    <span>
+                      {column.label}
+                    </span>
+                  </label>
+                )
+              )}
             </div>
 
             <div className="space-y-2">
@@ -448,7 +514,10 @@ export function StudentsTable({
               </div>
 
               {dynamicFields
-                .filter((field) => field.is_active)
+                .filter(
+                  (field) =>
+                    field.is_active
+                )
                 .map((field) => (
                   <label
                     key={field.id}
@@ -468,7 +537,9 @@ export function StudentsTable({
                       }
                     />
 
-                    <span>{field.name}</span>
+                    <span>
+                      {field.name}
+                    </span>
                   </label>
                 ))}
 
@@ -478,28 +549,32 @@ export function StudentsTable({
                     الدورات
                   </div>
 
-                  {courses.map((course) => (
-                    <label
-                      key={course.id}
-                      className="flex cursor-pointer items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          !!visibleColumns[
-                            `course-${course.id}`
-                          ]
-                        }
-                        onChange={() =>
-                          onToggleColumn(
-                            `course-${course.id}`
-                          )
-                        }
-                      />
+                  {courses.map(
+                    (course) => (
+                      <label
+                        key={course.id}
+                        className="flex cursor-pointer items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={
+                            !!visibleColumns[
+                              `course-${course.id}`
+                            ]
+                          }
+                          onChange={() =>
+                            onToggleColumn(
+                              `course-${course.id}`
+                            )
+                          }
+                        />
 
-                      <span>{course.name}</span>
-                    </label>
-                  ))}
+                        <span>
+                          {course.name}
+                        </span>
+                      </label>
+                    )
+                  )}
                 </>
               )}
             </div>
@@ -513,7 +588,10 @@ export function StudentsTable({
             <TableRow>
               {visibleColumns.name !== false && (
                 <TableHead className="min-w-[220px]">
-                  {textFilter('name', 'الاسم')}
+                  {textFilter(
+                    'name',
+                    'الاسم'
+                  )}
                 </TableHead>
               )}
 
@@ -555,7 +633,10 @@ export function StudentsTable({
 
               {visibleColumns.notes !== false && (
                 <TableHead className="min-w-[130px]">
-                  {textFilter('notes', 'الملاحظات')}
+                  {textFilter(
+                    'notes',
+                    'الملاحظات'
+                  )}
                 </TableHead>
               )}
 
@@ -571,10 +652,14 @@ export function StudentsTable({
               {standardColumns
                 .filter(
                   (column) =>
-                    visibleColumns[column.key]
+                    visibleColumns[
+                      column.key
+                    ]
                 )
                 .map((column) => (
-                  <TableHead key={column.key}>
+                  <TableHead
+                    key={column.key}
+                  >
                     {column.label}
                   </TableHead>
                 ))}
@@ -588,7 +673,9 @@ export function StudentsTable({
                     ]
                 )
                 .map((field) => (
-                  <TableHead key={`dynamic-${field.id}`}>
+                  <TableHead
+                    key={`dynamic-${field.id}`}
+                  >
                     {field.name}
                   </TableHead>
                 ))}
@@ -612,11 +699,12 @@ export function StudentsTable({
 
           <TableBody>
             {students.map((student) => {
-              const remaining = Math.max(
-                0,
-                student.amountDue -
-                  student.amountPaid
-              )
+              const remaining =
+                Math.max(
+                  0,
+                  student.amountDue -
+                    student.amountPaid
+                )
 
               const attendance =
                 student.attendance
@@ -625,13 +713,16 @@ export function StudentsTable({
                 <TableRow
                   key={student.id}
                   data-state={
-                    selectedStudentId === student.id
+                    selectedStudentId ===
+                    student.id
                       ? 'selected'
                       : undefined
                   }
                   className="cursor-pointer"
                   onClick={() =>
-                    onSelectStudent(student.id)
+                    onSelectStudent(
+                      student.id
+                    )
                   }
                 >
                   {visibleColumns.name !== false && (
@@ -640,25 +731,26 @@ export function StudentsTable({
                     </TableCell>
                   )}
 
-                  {visibleColumns.personalId !==
-                    false && (
+                  {visibleColumns.personalId !== false && (
                     <TableCell>
-                      {student.personalId || '-'}
+                      {student.personalId ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.grade !== false && (
                     <TableCell>
-                      {student.grade || '-'}
+                      {student.grade ||
+                        '-'}
                     </TableCell>
                   )}
 
-                  {visibleColumns.contact !==
-                    false && (
+                  {visibleColumns.contact !== false && (
                     <TableCell>
                       <div className="space-y-1 text-xs">
                         <div>
-                          {student.phone || '-'}
+                          {student.phone ||
+                            '-'}
                         </div>
 
                         {student.whatsapp && (
@@ -670,8 +762,7 @@ export function StudentsTable({
                     </TableCell>
                   )}
 
-                  {visibleColumns.paymentStatus !==
-                    false && (
+                  {visibleColumns.paymentStatus !== false && (
                     <TableCell>
                       <button
                         type="button"
@@ -679,14 +770,12 @@ export function StudentsTable({
                           event.stopPropagation()
                           openPayment(student)
                         }}
-                        className="rounded-md"
+                        className="rounded-md px-2 py-1 transition hover:bg-muted"
                       >
                         <StatusBadge
-                          status={
-                            getPaymentStatusLabel(
-                              student.paymentStatus
-                            )
-                          }
+                          status={getPaymentStatusLabel(
+                            student.paymentStatus
+                          )}
                         />
                       </button>
                     </TableCell>
@@ -698,23 +787,27 @@ export function StudentsTable({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation()
-                          onOpenNotes(student)
+                          onOpenNotes(
+                            student
+                          )
                         }}
                         className="max-w-[180px] truncate rounded px-2 py-1 text-xs hover:bg-muted"
                       >
-                        {student.notes || 'لا توجد'}
+                        {student.notes ||
+                          'لا توجد'}
                       </button>
                     </TableCell>
                   )}
 
-                  {visibleColumns.attendance !==
-                    false && (
+                  {visibleColumns.attendance !== false && (
                     <TableCell>
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation()
-                          onOpenAttendance(student)
+                          onOpenAttendance(
+                            student
+                          )
                         }}
                         className="rounded-md px-2 py-1 text-xs hover:bg-muted"
                       >
@@ -745,13 +838,15 @@ export function StudentsTable({
 
                   {visibleColumns.studentId && (
                     <TableCell>
-                      {student.studentId || '-'}
+                      {student.studentId ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.gender && (
                     <TableCell>
-                      {student.gender || '-'}
+                      {student.gender ||
+                        '-'}
                     </TableCell>
                   )}
 
@@ -763,45 +858,57 @@ export function StudentsTable({
 
                   {visibleColumns.phone && (
                     <TableCell>
-                      {student.phone || '-'}
+                      {student.phone ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.whatsapp && (
                     <TableCell>
-                      {student.whatsapp || '-'}
+                      {student.whatsapp ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.status && (
                     <TableCell>
                       <StatusBadge
-                        status={student.status || '-'}
+                        status={
+                          student.status ||
+                          '-'
+                        }
                       />
                     </TableCell>
                   )}
 
                   {visibleColumns.className && (
                     <TableCell>
-                      {student.className || '-'}
+                      {student.className ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.source && (
                     <TableCell>
-                      {getSourceLabel(student.source)}
+                      {getSourceLabel(
+                        student.source
+                      )}
                     </TableCell>
                   )}
 
                   {visibleColumns.amountDue && (
                     <TableCell>
-                      {student.amountDue.toFixed(3)}
+                      {student.amountDue.toFixed(
+                        3
+                      )}
                     </TableCell>
                   )}
 
                   {visibleColumns.amountPaid && (
                     <TableCell>
-                      {student.amountPaid.toFixed(3)}
+                      {student.amountPaid.toFixed(
+                        3
+                      )}
                     </TableCell>
                   )}
 
@@ -821,25 +928,31 @@ export function StudentsTable({
 
                   {visibleColumns.chronicDiseases && (
                     <TableCell>
-                      {student.chronicDiseases || '-'}
+                      {student.chronicDiseases ||
+                        '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.createdAt && (
                     <TableCell>
-                      {formatDate(student.createdAt)}
+                      {formatDate(
+                        student.createdAt
+                      )}
                     </TableCell>
                   )}
 
                   {visibleColumns.updatedAt && (
                     <TableCell>
-                      {formatDate(student.updatedAt)}
+                      {formatDate(
+                        student.updatedAt
+                      )}
                     </TableCell>
                   )}
 
                   {visibleColumns.academicYearName && (
                     <TableCell>
-                      {student.academicYearName || '-'}
+                      {student.academicYearName ||
+                        '-'}
                     </TableCell>
                   )}
 
@@ -853,7 +966,8 @@ export function StudentsTable({
                     )
                     .map((field) => {
                       const value =
-                        student.dynamicValues?.[
+                        student
+                          .dynamicValues?.[
                           field.field_key
                         ]
 
@@ -862,7 +976,8 @@ export function StudentsTable({
                           key={`dynamic-${field.id}`}
                         >
                           {value === null ||
-                          value === undefined ||
+                          value ===
+                            undefined ||
                           value === ''
                             ? '-'
                             : String(value)}
@@ -879,7 +994,8 @@ export function StudentsTable({
                     )
                     .map((course) => {
                       const status =
-                        student.courseStatuses?.[
+                        student
+                          .courseStatuses?.[
                           course.id
                         ]
 
@@ -898,7 +1014,9 @@ export function StudentsTable({
             {students.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={visibleColumnCount}
+                  colSpan={
+                    visibleColumnCount
+                  }
                   className="h-32 text-center text-muted-foreground"
                 >
                   لا توجد بيانات
@@ -914,13 +1032,19 @@ export function StudentsTable({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onMouseDown={(event) => {
             if (
-              event.target === event.currentTarget
+              event.target ===
+              event.currentTarget
             ) {
               closePayment()
             }
           }}
         >
-          <div className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl">
+          <div
+            className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -935,7 +1059,8 @@ export function StudentsTable({
               <button
                 type="button"
                 onClick={closePayment}
-                className="rounded-md px-2 py-1 text-sm hover:bg-muted"
+                disabled={paymentSaving}
+                className="rounded-md px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
               >
                 إغلاق
               </button>
@@ -1005,7 +1130,9 @@ export function StudentsTable({
                   <button
                     type="button"
                     onClick={() =>
-                      setShowAddPayment(true)
+                      setShowAddPayment(
+                        true
+                      )
                     }
                     disabled={
                       paymentStudent.amountPaid >=
@@ -1049,8 +1176,7 @@ export function StudentsTable({
                         value={paymentMethod}
                         onChange={(event) =>
                           setPaymentMethod(
-                            event.target
-                              .value as
+                            event.target.value as
                               | 'نقدي'
                               | 'تحويل'
                               | 'بطاقة'
@@ -1131,8 +1257,12 @@ export function StudentsTable({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={savePayment}
-                        disabled={paymentSaving}
+                        onClick={
+                          savePayment
+                        }
+                        disabled={
+                          paymentSaving
+                        }
                         className="flex-1 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
                       >
                         {paymentSaving
@@ -1143,9 +1273,13 @@ export function StudentsTable({
                       <button
                         type="button"
                         onClick={() =>
-                          setShowAddPayment(false)
+                          setShowAddPayment(
+                            false
+                          )
                         }
-                        disabled={paymentSaving}
+                        disabled={
+                          paymentSaving
+                        }
                         className="rounded-md border px-4 py-2 text-sm"
                       >
                         إلغاء
