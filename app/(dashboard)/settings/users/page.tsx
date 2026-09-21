@@ -35,7 +35,12 @@ type User = {
   is_active: boolean
   created_at: string
   updated_at: string
+
+  // الصلاحيات التفصيلية
   permissionIds: string[]
+
+  // أقسام لوحة التحكم
+  sectionIds: string[]
 }
 
 type Permission = {
@@ -43,6 +48,19 @@ type Permission = {
   permission_key: string
   permission_name: string
   description: string | null
+}
+
+type DashboardSection = {
+  id: string
+  section_key: string
+  section_name: string
+  description: string | null
+  icon: string | null
+  href: string
+  sort_order: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 const roles: {
@@ -70,6 +88,9 @@ const roles: {
 export default function Page() {
   const [users, setUsers] = useState<User[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
+  const [dashboardSections, setDashboardSections] = useState<
+    DashboardSection[]
+  >([])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -85,10 +106,17 @@ export default function Page() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('Teacher')
 
+  // الصلاحيات التفصيلية
   const [selectedPermissions, setSelectedPermissions] =
     useState<string[]>([])
 
+  // أقسام لوحة التحكم
+  const [selectedSections, setSelectedSections] =
+    useState<string[]>([])
+
   const [openPermissions, setOpenPermissions] = useState(false)
+  const [openSections, setOpenSections] = useState(false)
+
   const [search, setSearch] = useState('')
 
   const loadUsers = async () => {
@@ -111,6 +139,7 @@ export default function Page() {
 
       setUsers(data.users ?? [])
       setPermissions(data.permissions ?? [])
+      setDashboardSections(data.dashboardSections ?? [])
     } catch (err) {
       setError(
         err instanceof Error
@@ -133,45 +162,84 @@ export default function Page() {
     setDepartment('')
     setPassword('')
     setRole('Teacher')
+
     setSelectedPermissions([])
+    setSelectedSections([])
+
     setEditingId(null)
+
     setOpenPermissions(false)
+    setOpenSections(false)
+
     setShowForm(false)
   }
 
   const openAddForm = () => {
     setEditingId(null)
+
     setUsername('')
     setEmail('')
     setFullName('')
     setDepartment('')
     setPassword('')
     setRole('Teacher')
+
     setSelectedPermissions([])
+    setSelectedSections([])
+
     setOpenPermissions(false)
+    setOpenSections(false)
+
     setError('')
     setShowForm(true)
   }
 
   const openEditForm = (user: User) => {
     setEditingId(user.id)
+
     setUsername(user.username)
     setEmail(user.email ?? '')
     setFullName(user.full_name)
     setDepartment(user.department ?? '')
     setPassword('')
     setRole(user.role)
-    setSelectedPermissions([...user.permissionIds])
+
+    setSelectedPermissions([
+      ...(user.permissionIds ?? []),
+    ])
+
+    setSelectedSections([
+      ...(user.sectionIds ?? []),
+    ])
+
     setOpenPermissions(false)
+    setOpenSections(false)
+
     setError('')
     setShowForm(true)
   }
 
-  const togglePermission = (permissionId: string) => {
+  const togglePermission = (
+    permissionId: string,
+  ) => {
     setSelectedPermissions((current) =>
       current.includes(permissionId)
-        ? current.filter((id) => id !== permissionId)
+        ? current.filter(
+            (id) => id !== permissionId,
+          )
         : [...current, permissionId],
+    )
+  }
+
+  const toggleSection = (
+    sectionId: string,
+  ) => {
+    setSelectedSections((current) =>
+      current.includes(sectionId)
+        ? current.filter(
+            (id) => id !== sectionId,
+          )
+        : [...current, sectionId],
     )
   }
 
@@ -196,8 +264,13 @@ export default function Page() {
       return
     }
 
-    if (password && password.length < 8) {
-      setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+    if (
+      password &&
+      password.length < 8
+    ) {
+      setError(
+        'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
+      )
       return
     }
 
@@ -205,37 +278,73 @@ export default function Page() {
       setSaving(true)
       setError('')
 
-      const isEditing = editingId !== null
+      const isEditing =
+        editingId !== null
 
       const body = isEditing
         ? {
             userId: editingId,
-            email: email.trim().toLowerCase(),
-            fullName: fullName.trim(),
-            department: department.trim() || null,
+            email:
+              email.trim().toLowerCase(),
+            fullName:
+              fullName.trim(),
+            department:
+              department.trim() ||
+              null,
             role,
-            ...(password ? { password } : {}),
-            permissionIds: selectedPermissions,
+            ...(password
+              ? { password }
+              : {}),
+
+            // الصلاحيات التفصيلية
+            permissionIds:
+              selectedPermissions,
+
+            // أقسام لوحة التحكم
+            sectionIds:
+              selectedSections,
           }
         : {
-            username: username.trim(),
-            email: email.trim().toLowerCase(),
-            fullName: fullName.trim(),
-            department: department.trim() || null,
+            username:
+              username.trim(),
+            email:
+              email.trim().toLowerCase(),
+            fullName:
+              fullName.trim(),
+            department:
+              department.trim() ||
+              null,
             password,
             role,
-            permissionIds: selectedPermissions,
+
+            // الصلاحيات التفصيلية
+            permissionIds:
+              selectedPermissions,
+
+            // أقسام لوحة التحكم
+            sectionIds:
+              selectedSections,
           }
 
-      const response = await fetch('/api/admin/users', {
-        method: isEditing ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      })
+      const response =
+        await fetch(
+          '/api/admin/users',
+          {
+            method: isEditing
+              ? 'PATCH'
+              : 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify(
+              body,
+            ),
+          },
+        )
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -247,6 +356,7 @@ export default function Page() {
       }
 
       resetForm()
+
       await loadUsers()
     } catch (err) {
       setError(
@@ -259,12 +369,17 @@ export default function Page() {
     }
   }
 
-  const handleToggleActive = async (user: User) => {
-    const action = user.is_active ? 'تعطيل' : 'تفعيل'
+  const handleToggleActive = async (
+    user: User,
+  ) => {
+    const action = user.is_active
+      ? 'تعطيل'
+      : 'تفعيل'
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من ${action} المستخدم "${user.full_name}"؟`,
-    )
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من ${action} المستخدم "${user.full_name}"؟`,
+      )
 
     if (!confirmed) {
       return
@@ -274,27 +389,44 @@ export default function Page() {
       setSaving(true)
       setError('')
 
-      const response = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          email: user.email,
-          fullName: user.full_name,
-          role: user.role,
-          department: user.department,
-          isActive: !user.is_active,
-          permissionIds: user.permissionIds,
-        }),
-      })
+      const response =
+        await fetch(
+          '/api/admin/users',
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              email: user.email,
+              fullName:
+                user.full_name,
+              role: user.role,
+              department:
+                user.department,
+              isActive:
+                !user.is_active,
 
-      const data = await response.json()
+              // نحافظ على صلاحياته الحالية
+              permissionIds:
+                user.permissionIds,
+
+              // ونحافظ على أقسامه الحالية
+              sectionIds:
+                user.sectionIds,
+            }),
+          },
+        )
+
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data.error ?? `تعذر ${action} المستخدم.`,
+          data.error ??
+            `تعذر ${action} المستخدم.`,
         )
       }
 
@@ -310,15 +442,34 @@ export default function Page() {
     }
   }
 
+  const selectedSectionsLabel =
+    selectedSections.length === 0
+      ? 'اختر أقسام لوحة التحكم'
+      : selectedSections.length ===
+          dashboardSections.filter(
+            (section) =>
+              section.is_active,
+          ).length
+        ? 'جميع الأقسام'
+        : `${selectedSections.length} قسم محدد`
+
   const selectedPermissionsLabel =
     selectedPermissions.length === 0
       ? 'اختر الصلاحيات'
-      : selectedPermissions.length === permissions.length
+      : selectedPermissions.length ===
+          permissions.length
         ? 'جميع الصلاحيات'
         : `${selectedPermissions.length} صلاحية محددة`
 
+  const activeDashboardSections =
+    dashboardSections.filter(
+      (section) =>
+        section.is_active,
+    )
+
   const filteredUsers = useMemo(() => {
-    const value = search.trim().toLowerCase()
+    const value =
+      search.trim().toLowerCase()
 
     if (!value) {
       return users
@@ -326,36 +477,58 @@ export default function Page() {
 
     return users.filter(
       (user) =>
-        user.username.toLowerCase().includes(value) ||
-        user.full_name.toLowerCase().includes(value) ||
-        (user.email ?? '').toLowerCase().includes(value) ||
+        user.username
+          .toLowerCase()
+          .includes(value) ||
+        user.full_name
+          .toLowerCase()
+          .includes(value) ||
+        (user.email ?? '')
+          .toLowerCase()
+          .includes(value) ||
         (user.department ?? '')
           .toLowerCase()
           .includes(value),
     )
   }, [users, search])
 
-  const activeUsers = users.filter(
-    (user) => user.is_active,
-  ).length
+  const activeUsers =
+    users.filter(
+      (user) => user.is_active,
+    ).length
 
-  const inactiveUsers = users.length - activeUsers
+  const inactiveUsers =
+    users.length - activeUsers
 
-  const getRoleLabel = (value: Role) =>
+  const getRoleLabel = (
+    value: Role,
+  ) =>
     roles.find(
-      (item) => item.value === value,
+      (item) =>
+        item.value === value,
     )?.label ?? value
 
-  const getPermissionName = (id: string) =>
+  const getPermissionName = (
+    id: string,
+  ) =>
     permissions.find(
-      (permission) => permission.id === id,
+      (permission) =>
+        permission.id === id,
     )?.permission_name ?? id
+
+  const getSectionName = (
+    id: string,
+  ) =>
+    dashboardSections.find(
+      (section) =>
+        section.id === id,
+    )?.section_name ?? id
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="المستخدمون والصلاحيات"
-        description="إدارة حسابات المستخدمين والأدوار والصلاحيات المسموحة لهم داخل النظام."
+        description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
       />
 
       {/* الإحصائيات */}
@@ -422,7 +595,7 @@ export default function Page() {
 
             <div>
               <p className="text-sm text-muted-foreground">
-                الصلاحيات المتاحة
+                الصلاحيات التفصيلية
               </p>
 
               <p className="mt-1 text-2xl font-bold">
@@ -446,7 +619,7 @@ export default function Page() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  حدد بيانات المستخدم والدور والصلاحيات.
+                  حدد بيانات المستخدم والدور وأقسام النظام والصلاحيات التفصيلية.
                 </p>
               </div>
 
@@ -475,9 +648,13 @@ export default function Page() {
                 <input
                   value={username}
                   onChange={(event) =>
-                    setUsername(event.target.value)
+                    setUsername(
+                      event.target.value,
+                    )
                   }
-                  disabled={editingId !== null}
+                  disabled={
+                    editingId !== null
+                  }
                   placeholder="مثال: ahmed"
                   dir="ltr"
                   className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -497,7 +674,9 @@ export default function Page() {
                   type="email"
                   value={email}
                   onChange={(event) =>
-                    setEmail(event.target.value)
+                    setEmail(
+                      event.target.value,
+                    )
                   }
                   placeholder="example@email.com"
                   dir="ltr"
@@ -517,7 +696,9 @@ export default function Page() {
                 <input
                   value={fullName}
                   onChange={(event) =>
-                    setFullName(event.target.value)
+                    setFullName(
+                      event.target.value,
+                    )
                   }
                   placeholder="مثال: أحمد محمد"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
@@ -532,7 +713,9 @@ export default function Page() {
                 <input
                   value={department}
                   onChange={(event) =>
-                    setDepartment(event.target.value)
+                    setDepartment(
+                      event.target.value,
+                    )
                   }
                   placeholder="اختياري"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
@@ -548,7 +731,9 @@ export default function Page() {
                   type="password"
                   value={password}
                   onChange={(event) =>
-                    setPassword(event.target.value)
+                    setPassword(
+                      event.target.value,
+                    )
                   }
                   placeholder={
                     editingId
@@ -568,45 +753,177 @@ export default function Page() {
                 <select
                   value={role}
                   onChange={(event) =>
-                    setRole(event.target.value as Role)
+                    setRole(
+                      event.target
+                        .value as Role,
+                    )
                   }
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 >
-                  {roles.map((item) => (
-                    <option
-                      key={item.value}
-                      value={item.value}
-                    >
-                      {item.label}
-                    </option>
-                  ))}
+                  {roles.map(
+                    (item) => (
+                      <option
+                        key={
+                          item.value
+                        }
+                        value={
+                          item.value
+                        }
+                      >
+                        {item.label}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
 
-              {/* الصلاحيات */}
+              {/* أقسام لوحة التحكم */}
               <div className="relative space-y-2 md:col-span-2">
                 <label className="text-sm font-medium">
-                  الصلاحيات
+                  أقسام لوحة التحكم
                 </label>
 
                 <button
                   type="button"
-                  disabled={permissions.length === 0}
+                  disabled={
+                    activeDashboardSections.length ===
+                    0
+                  }
                   onClick={() =>
-                    setOpenPermissions(
-                      (current) => !current,
+                    setOpenSections(
+                      (current) =>
+                        !current,
                     )
                   }
                   className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
                 >
                   <span
                     className={
-                      selectedPermissions.length === 0
+                      selectedSections.length ===
+                      0
                         ? 'text-muted-foreground'
                         : ''
                     }
                   >
-                    {permissions.length === 0
+                    {activeDashboardSections.length ===
+                    0
+                      ? 'لا توجد أقسام متاحة'
+                      : selectedSectionsLabel}
+                  </span>
+
+                  <ChevronDown className="size-4 text-muted-foreground" />
+                </button>
+
+                {openSections &&
+                  activeDashboardSections.length >
+                    0 && (
+                    <div className="absolute right-0 top-full z-[60] mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
+                      <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                        {activeDashboardSections.map(
+                          (section) => {
+                            const selected =
+                              selectedSections.includes(
+                                section.id,
+                              )
+
+                            return (
+                              <button
+                                key={
+                                  section.id
+                                }
+                                type="button"
+                                onClick={() =>
+                                  toggleSection(
+                                    section.id,
+                                  )
+                                }
+                                className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
+                              >
+                                <span
+                                  className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                    selected
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-muted-foreground/40'
+                                  }`}
+                                >
+                                  {selected && (
+                                    <Check className="size-3" />
+                                  )}
+                                </span>
+
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-medium">
+                                    {
+                                      section.section_name
+                                    }
+                                  </span>
+
+                                  {section.description && (
+                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                      {
+                                        section.description
+                                      }
+                                    </span>
+                                  )}
+                                </span>
+                              </button>
+                            )
+                          },
+                        )}
+                      </div>
+
+                      <div className="mt-3 flex justify-end border-t pt-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setOpenSections(
+                              false,
+                            )
+                          }
+                        >
+                          تم
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                <p className="text-xs text-muted-foreground">
+                  تحدد هذه الأقسام الصفحات الرئيسية التي يستطيع المستخدم الوصول إليها.
+                </p>
+              </div>
+
+              {/* الصلاحيات التفصيلية */}
+              <div className="relative space-y-2 md:col-span-2">
+                <label className="text-sm font-medium">
+                  الصلاحيات التفصيلية
+                </label>
+
+                <button
+                  type="button"
+                  disabled={
+                    permissions.length ===
+                    0
+                  }
+                  onClick={() =>
+                    setOpenPermissions(
+                      (current) =>
+                        !current,
+                    )
+                  }
+                  className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
+                >
+                  <span
+                    className={
+                      selectedPermissions.length ===
+                      0
+                        ? 'text-muted-foreground'
+                        : ''
+                    }
+                  >
+                    {permissions.length ===
+                    0
                       ? 'لا توجد صلاحيات متاحة'
                       : selectedPermissionsLabel}
                   </span>
@@ -615,11 +932,14 @@ export default function Page() {
                 </button>
 
                 {openPermissions &&
-                  permissions.length > 0 && (
+                  permissions.length >
+                    0 && (
                     <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
                       <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
                         {permissions.map(
-                          (permission) => {
+                          (
+                            permission,
+                          ) => {
                             const selected =
                               selectedPermissions.includes(
                                 permission.id,
@@ -627,7 +947,9 @@ export default function Page() {
 
                             return (
                               <button
-                                key={permission.id}
+                                key={
+                                  permission.id
+                                }
                                 type="button"
                                 onClick={() =>
                                   togglePermission(
@@ -675,7 +997,9 @@ export default function Page() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            setOpenPermissions(false)
+                            setOpenPermissions(
+                              false,
+                            )
                           }
                         >
                           تم
@@ -685,7 +1009,7 @@ export default function Page() {
                   )}
 
                 <p className="text-xs text-muted-foreground">
-                  الصلاحيات تحدد العمليات التي يستطيع المستخدم تنفيذها.
+                  تحدد العمليات التي يستطيع المستخدم تنفيذها داخل الأقسام المسموحة له.
                 </p>
               </div>
             </div>
@@ -724,7 +1048,9 @@ export default function Page() {
           <input
             value={search}
             onChange={(event) =>
-              setSearch(event.target.value)
+              setSearch(
+                event.target.value,
+              )
             }
             placeholder="بحث باسم المستخدم أو الاسم أو البريد أو القسم..."
             className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
@@ -755,26 +1081,32 @@ export default function Page() {
               <Loader2 className="size-5 animate-spin" />
               جاري تحميل المستخدمين...
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : filteredUsers.length ===
+            0 ? (
             <div className="p-12 text-center">
               <Users className="mx-auto size-10 text-muted-foreground" />
 
               <h3 className="mt-4 font-semibold">
-                {users.length === 0
+                {users.length ===
+                0
                   ? 'لا يوجد مستخدمون'
                   : 'لا توجد نتائج'}
               </h3>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                {users.length === 0
+                {users.length ===
+                0
                   ? 'اضغط على إضافة مستخدم لإنشاء أول حساب.'
                   : 'جرب البحث باستخدام كلمة مختلفة.'}
               </p>
 
-              {users.length === 0 && (
+              {users.length ===
+                0 && (
                 <Button
                   className="mt-5"
-                  onClick={openAddForm}
+                  onClick={
+                    openAddForm
+                  }
                 >
                   <UserPlus className="size-4" />
                   إضافة مستخدم
@@ -783,7 +1115,7 @@ export default function Page() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1200px] text-sm">
+              <table className="w-full min-w-[1350px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="px-5 py-4 text-right font-medium">
@@ -803,7 +1135,11 @@ export default function Page() {
                     </th>
 
                     <th className="px-5 py-4 text-right font-medium">
-                      الصلاحيات
+                      أقسام لوحة التحكم
+                    </th>
+
+                    <th className="px-5 py-4 text-right font-medium">
+                      الصلاحيات التفصيلية
                     </th>
 
                     <th className="px-5 py-4 text-right font-medium">
@@ -817,123 +1153,218 @@ export default function Page() {
                 </thead>
 
                 <tbody className="divide-y">
-                  {filteredUsers.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="transition-colors hover:bg-muted/20"
-                    >
-                      <td className="px-5 py-4">
-                        <div>
-                          <p className="font-medium">
-                            {user.full_name}
-                          </p>
+                  {filteredUsers.map(
+                    (user) => (
+                      <tr
+                        key={
+                          user.id
+                        }
+                        className="transition-colors hover:bg-muted/20"
+                      >
+                        <td className="px-5 py-4">
+                          <div>
+                            <p className="font-medium">
+                              {
+                                user.full_name
+                              }
+                            </p>
 
-                          <p
-                            className="mt-1 text-xs text-muted-foreground"
+                            <p
+                              className="mt-1 text-xs text-muted-foreground"
+                              dir="ltr"
+                            >
+                              @
+                              {
+                                user.username
+                              }
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className="text-sm"
                             dir="ltr"
                           >
-                            @{user.username}
-                          </p>
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <span
-                          className="text-sm"
-                          dir="ltr"
-                        >
-                          {user.email || '—'}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <Badge variant="neutral">
-                          {getRoleLabel(user.role)}
-                        </Badge>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        {user.department || '—'}
-                      </td>
-
-                      <td className="max-w-[360px] px-5 py-4">
-                        {user.permissionIds.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">
-                            لا توجد صلاحيات إضافية
+                            {user.email ||
+                              '—'}
                           </span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {user.permissionIds
-                              .slice(0, 3)
-                              .map((id) => (
-                                <Badge
-                                  key={id}
-                                  variant="neutral"
-                                >
-                                  {getPermissionName(id)}
-                                </Badge>
-                              ))}
+                        </td>
 
-                            {user.permissionIds.length > 3 && (
-                              <Badge variant="neutral">
-                                +
-                                {user.permissionIds.length - 3}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        {user.is_active ? (
-                          <Badge variant="success">
-                            نشط
-                          </Badge>
-                        ) : (
+                        <td className="px-5 py-4">
                           <Badge variant="neutral">
-                            معطل
-                          </Badge>
-                        )}
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              openEditForm(user)
-                            }
-                            disabled={saving}
-                          >
-                            <Edit3 className="size-4" />
-                            تعديل
-                          </Button>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              handleToggleActive(user)
-                            }
-                            disabled={saving}
-                          >
-                            {saving ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              <Power className="size-4" />
+                            {getRoleLabel(
+                              user.role,
                             )}
+                          </Badge>
+                        </td>
 
-                            {user.is_active
-                              ? 'تعطيل'
-                              : 'تفعيل'}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-5 py-4">
+                          {user.department ||
+                            '—'}
+                        </td>
+
+                        {/* أقسام لوحة التحكم */}
+                        <td className="max-w-[360px] px-5 py-4">
+                          {(
+                            user.sectionIds ??
+                            []
+                          ).length ===
+                          0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              لا توجد أقسام
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {(
+                                user.sectionIds ??
+                                []
+                              )
+                                .slice(
+                                  0,
+                                  3,
+                                )
+                                .map(
+                                  (
+                                    id,
+                                  ) => (
+                                    <Badge
+                                      key={
+                                        id
+                                      }
+                                      variant="neutral"
+                                    >
+                                      {getSectionName(
+                                        id,
+                                      )}
+                                    </Badge>
+                                  ),
+                                )}
+
+                              {(
+                                user.sectionIds ??
+                                []
+                              ).length >
+                                3 && (
+                                <Badge variant="neutral">
+                                  +
+                                  {(
+                                    user.sectionIds ??
+                                    []
+                                  ).length -
+                                    3}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* الصلاحيات التفصيلية */}
+                        <td className="max-w-[360px] px-5 py-4">
+                          {user.permissionIds
+                            .length ===
+                          0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              لا توجد صلاحيات إضافية
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {user.permissionIds
+                                .slice(
+                                  0,
+                                  3,
+                                )
+                                .map(
+                                  (
+                                    id,
+                                  ) => (
+                                    <Badge
+                                      key={
+                                        id
+                                      }
+                                      variant="neutral"
+                                    >
+                                      {getPermissionName(
+                                        id,
+                                      )}
+                                    </Badge>
+                                  ),
+                                )}
+
+                              {user.permissionIds
+                                .length >
+                                3 && (
+                                <Badge variant="neutral">
+                                  +
+                                  {user
+                                    .permissionIds
+                                    .length -
+                                    3}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          {user.is_active ? (
+                            <Badge variant="success">
+                              نشط
+                            </Badge>
+                          ) : (
+                            <Badge variant="neutral">
+                              معطل
+                            </Badge>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                openEditForm(
+                                  user,
+                                )
+                              }
+                              disabled={
+                                saving
+                              }
+                            >
+                              <Edit3 className="size-4" />
+                              تعديل
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleToggleActive(
+                                  user,
+                                )
+                              }
+                              disabled={
+                                saving
+                              }
+                            >
+                              {saving ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Power className="size-4" />
+                              )}
+
+                              {user.is_active
+                                ? 'تعطيل'
+                                : 'تفعيل'}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>
