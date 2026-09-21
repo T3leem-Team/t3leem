@@ -21,89 +21,25 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('id, is_active')
+    .select('id, auth_user_id, username, full_name, role, is_active')
     .eq('auth_user_id', access.userId)
     .maybeSingle()
 
-  if (profileError) {
-    console.error('dashboard-sections profile error:', profileError)
-
-    return NextResponse.json(
-      { error: 'تعذر تحميل بيانات المستخدم' },
-      { status: 500 },
-    )
-  }
-
-  if (!profile || !profile.is_active) {
-    return NextResponse.json(
-      { error: 'الحساب غير نشط' },
-      { status: 403 },
-    )
-  }
-
   const { data: userSections, error: userSectionsError } = await supabase
     .from('user_dashboard_sections')
-    .select('section_id')
-    .eq('user_profile_id', profile.id)
+    .select('id, user_profile_id, section_id')
+    .eq(
+      'user_profile_id',
+      'df39e205-dcc6-4c36-b9eb-80a6b617ac98',
+    )
 
-  if (userSectionsError) {
-    console.error(
-      'dashboard-sections user mapping error:',
+  return NextResponse.json({
+    debug: {
+      authUserId: access.userId,
+      profile,
+      profileError,
+      userSections,
       userSectionsError,
-    )
-
-    return NextResponse.json(
-      { error: 'تعذر تحميل صلاحيات أقسام النظام' },
-      { status: 500 },
-    )
-  }
-
-  const sectionIds = (userSections ?? []).map(
-    (item) => item.section_id,
-  )
-
-  if (sectionIds.length === 0) {
-    return NextResponse.json(
-      { sections: [] },
-      {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      },
-    )
-  }
-
-  const { data: sections, error: sectionsError } = await supabase
-    .from('dashboard_sections')
-    .select(
-      'id, section_key, section_name, description, icon, href, sort_order, is_active',
-    )
-    .in('id', sectionIds)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-
-  if (sectionsError) {
-    console.error(
-      'dashboard-sections data error:',
-      sectionsError,
-    )
-
-    return NextResponse.json(
-      { error: 'تعذر تحميل أقسام النظام' },
-      { status: 500 },
-    )
-  }
-
-  return NextResponse.json(
-    {
-      sections: sections ?? [],
     },
-    {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-      },
-    },
-  )
+  })
 }
