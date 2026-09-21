@@ -28,6 +28,7 @@ type User = {
   id: string
   auth_user_id: string
   username: string
+  email: string | null
   full_name: string
   role: Role
   department: string | null
@@ -78,6 +79,7 @@ export default function Page() {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [department, setDepartment] = useState('')
   const [password, setPassword] = useState('')
@@ -126,6 +128,7 @@ export default function Page() {
 
   const resetForm = () => {
     setUsername('')
+    setEmail('')
     setFullName('')
     setDepartment('')
     setPassword('')
@@ -139,6 +142,7 @@ export default function Page() {
   const openAddForm = () => {
     setEditingId(null)
     setUsername('')
+    setEmail('')
     setFullName('')
     setDepartment('')
     setPassword('')
@@ -152,6 +156,7 @@ export default function Page() {
   const openEditForm = (user: User) => {
     setEditingId(user.id)
     setUsername(user.username)
+    setEmail(user.email ?? '')
     setFullName(user.full_name)
     setDepartment(user.department ?? '')
     setPassword('')
@@ -173,6 +178,11 @@ export default function Page() {
   const handleSave = async () => {
     if (!username.trim()) {
       setError('اكتب اسم المستخدم.')
+      return
+    }
+
+    if (!email.trim()) {
+      setError('اكتب البريد الإلكتروني.')
       return
     }
 
@@ -200,6 +210,7 @@ export default function Page() {
       const body = isEditing
         ? {
             userId: editingId,
+            email: email.trim().toLowerCase(),
             fullName: fullName.trim(),
             department: department.trim() || null,
             role,
@@ -208,6 +219,7 @@ export default function Page() {
           }
         : {
             username: username.trim(),
+            email: email.trim().toLowerCase(),
             fullName: fullName.trim(),
             department: department.trim() || null,
             password,
@@ -269,10 +281,12 @@ export default function Page() {
         },
         body: JSON.stringify({
           userId: user.id,
+          email: user.email,
           fullName: user.full_name,
           role: user.role,
           department: user.department,
           isActive: !user.is_active,
+          permissionIds: user.permissionIds,
         }),
       })
 
@@ -314,6 +328,7 @@ export default function Page() {
       (user) =>
         user.username.toLowerCase().includes(value) ||
         user.full_name.toLowerCase().includes(value) ||
+        (user.email ?? '').toLowerCase().includes(value) ||
         (user.department ?? '')
           .toLowerCase()
           .includes(value),
@@ -470,6 +485,27 @@ export default function Page() {
 
                 <p className="text-xs text-muted-foreground">
                   يستخدم لتسجيل الدخول إلى النظام.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  البريد الإلكتروني
+                </label>
+
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                  placeholder="example@email.com"
+                  dir="ltr"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  يستخدم لاستعادة كلمة المرور.
                 </p>
               </div>
 
@@ -690,7 +726,7 @@ export default function Page() {
             onChange={(event) =>
               setSearch(event.target.value)
             }
-            placeholder="بحث باسم المستخدم أو الاسم أو القسم..."
+            placeholder="بحث باسم المستخدم أو الاسم أو البريد أو القسم..."
             className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
           />
 
@@ -747,11 +783,15 @@ export default function Page() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-sm">
+              <table className="w-full min-w-[1200px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="px-5 py-4 text-right font-medium">
                       المستخدم
+                    </th>
+
+                    <th className="px-5 py-4 text-right font-medium">
+                      البريد الإلكتروني
                     </th>
 
                     <th className="px-5 py-4 text-right font-medium">
@@ -795,6 +835,15 @@ export default function Page() {
                             @{user.username}
                           </p>
                         </div>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className="text-sm"
+                          dir="ltr"
+                        >
+                          {user.email || '—'}
+                        </span>
                       </td>
 
                       <td className="px-5 py-4">
