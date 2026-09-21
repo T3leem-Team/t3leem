@@ -3,17 +3,6 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
-type DashboardSection = {
-  id: string
-  section_key: string
-  section_name: string
-  description: string | null
-  icon: string | null
-  href: string
-  sort_order: number
-  is_active: boolean
-}
-
 export async function GET() {
   const { access, response } = await requireAuth()
 
@@ -32,7 +21,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('id, role, is_active')
+    .select('id, is_active')
     .eq('auth_user_id', access.userId)
     .maybeSingle()
 
@@ -52,25 +41,16 @@ export async function GET() {
     )
   }
 
-  const { data, error } = await supabase
+  const { data: userSections, error: userSectionsError } = await supabase
     .from('user_dashboard_sections')
-    .select(`
-      section_id,
-      dashboard_sections (
-        id,
-        section_key,
-        section_name,
-        description,
-        icon,
-        href,
-        sort_order,
-        is_active
-      )
-    `)
+    .select('section_id')
     .eq('user_profile_id', profile.id)
 
-  if (error) {
-    console.error('dashboard-sections query error:', error)
+  if (userSectionsError) {
+    console.error(
+      'dashboard-sections user mapping error:',
+      userSectionsError,
+    )
 
     return NextResponse.json(
       { error: 'تعذر تحميل صلاحيات أقسام النظام' },
@@ -78,36 +58,46 @@ export async function GET() {
     )
   }
 
-  const sections: DashboardSection[] = []
+  const sectionIds = (userSections ?? []).map(
+    (item) => item.section_id,
+  )
 
-  for (const item of data ?? []) {
-    const section = item.dashboard_sections
-
-    if (!section) {
-      continue
-    }
-
-    if (Array.isArray(section)) {
-      for (const row of section) {
-        if (row && row.is_active) {
-          sections.push(row as DashboardSection)
-        }
-      }
-    } else {
-      if (section.is_active) {
-        sections.push(section as DashboardSection)
-      }
-    }
+  if (sectionIds.length === 0) {
+    return NextResponse.json(
+      { sections: [] },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      },
+    )
   }
 
-  sections.sort(
-    (a: DashboardSection, b: DashboardSection) =>
-      a.sort_order - b.sort_order,
-  )
+  const { data: sections, error: sectionsError } = await supabase
+    .from('dashboard_sections')
+    .select(
+      'id, section_key, section_name, description, icon, href, sort_order, is_active',
+    )
+    .in('id', sectionIds)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+
+  if (sectionsError) {
+    console.error(
+      'dashboard-sections data error:',
+      sectionsError,
+    )
+
+    return NextResponse.json(
+      { error: 'تعذر تحميل أقسام النظام' },
+      { status: 500 },
+    )
+  }
 
   return NextResponse.json(
     {
-      sections,
+      sections: sections ?? [],
     },
     {
       status: 200,
