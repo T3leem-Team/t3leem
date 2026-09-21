@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X, Eye } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { StatCard } from '@/components/dashboard/stat-card'
@@ -134,27 +133,35 @@ export function PaymentsView() {
     )
   }, [])
 
-  const loadPayments = async (): Promise<
-    StudentRow[]
-  > => {
+  const loadPayments = async (): Promise<StudentRow[]> => {
     setLoading(true)
 
     try {
-      const {
-        data: currentYear,
-        error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, annual_fee',
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+      const response = await fetch(
+        '/api/payments',
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+      )
 
-      if (yearError) {
-        throw yearError
+      if (!response.ok) {
+        const data = await response
+          .json()
+          .catch(() => null)
+
+        throw new Error(
+          data?.error ||
+            'تعذر تحميل بيانات المدفوعات.',
+        )
       }
+
+      const data = await response.json()
+
+      const currentYear:
+        | AcademicYear
+        | null =
+        data.academicYear ?? null
 
       if (!currentYear) {
         setStudentList([])
@@ -165,118 +172,38 @@ export function PaymentsView() {
         return []
       }
 
-      const academicYear: AcademicYear = {
-        id: currentYear.id,
-        name: currentYear.name,
-        annual_fee:
-          currentYear.annual_fee,
-      }
-
       const annualFee = Number(
-        academicYear.annual_fee ?? 0,
+        currentYear.annual_fee ?? 0,
       )
 
       setCurrentAcademicYearId(
-        academicYear.id,
+        currentYear.id,
       )
 
       setCurrentAcademicYearName(
-        academicYear.name,
+        currentYear.name,
       )
 
       setCurrentAnnualFee(
         annualFee,
       )
 
-      const {
-        data: students,
-        error: studentsError,
-      } = await supabase
-        .from('students')
-        .select(
-          'id, name, personal_id, fee_exempt, created_at',
-        )
-        .order('created_at', {
-          ascending: false,
-        })
+      const students =
+        data.students ?? []
 
-      if (studentsError) {
-        throw studentsError
-      }
+      const enrollments =
+        data.enrollments ?? []
 
-      const {
-        data: enrollments,
-        error: enrollmentError,
-      } = await supabase
-        .from('enrollments')
-        .select(
-          'student_id, level_id',
-        )
-        .eq(
-          'academic_year_id',
-          academicYear.id,
-        )
-        .eq('status', 'نشط')
+      const payments =
+        data.payments ?? []
 
-      if (enrollmentError) {
-        throw enrollmentError
-      }
-
-      const studentIds = (
-        enrollments ?? []
-      )
-        .map(
-          (item) => item.student_id,
-        )
-        .filter(Boolean)
-
-      let payments: Array<{
-        student_id: string
-        amount: number | null
-      }> = []
-
-      if (studentIds.length > 0) {
-        const {
-          data: paymentData,
-          error: paymentError,
-        } = await supabase
-          .from('payments')
-          .select(
-            'student_id, amount',
-          )
-          .eq(
-            'academic_year_id',
-            academicYear.id,
-          )
-          .in(
-            'student_id',
-            studentIds,
-          )
-
-        if (paymentError) {
-          throw paymentError
-        }
-
-        payments =
-          paymentData ?? []
-      }
-
-      const {
-        data: levels,
-        error: levelsError,
-      } = await supabase
-        .from('levels')
-        .select('id, name')
-        .eq('is_active', true)
-
-      if (levelsError) {
-        throw levelsError
-      }
+      const levels =
+        data.levels ?? []
 
       const levelMap =
         new Map<string, string>(
-          (levels ?? []).map(
-            (level) => [
+          levels.map(
+            (level: any) => [
               level.id,
               level.name,
             ],
@@ -285,8 +212,8 @@ export function PaymentsView() {
 
       const enrollmentMap =
         new Map<string, string>(
-          (enrollments ?? []).map(
-            (enrollment) => [
+          enrollments.map(
+            (enrollment: any) => [
               enrollment.student_id,
               levelMap.get(
                 enrollment.level_id,
@@ -299,7 +226,7 @@ export function PaymentsView() {
         new Map<string, number>()
 
       payments.forEach(
-        (payment) => {
+        (payment: any) => {
           const current =
             paidByStudent.get(
               payment.student_id,
@@ -315,14 +242,15 @@ export function PaymentsView() {
         },
       )
 
-      const mappedStudents: StudentRow[] =
-        (students ?? [])
-          .filter((student) =>
+      const mappedStudents:
+        StudentRow[] =
+        students
+          .filter((student: any) =>
             enrollmentMap.has(
               student.id,
             ),
           )
-          .map((student) => {
+          .map((student: any) => {
             const amountPaid =
               paidByStudent.get(
                 student.id,
@@ -333,7 +261,8 @@ export function PaymentsView() {
                 student.fee_exempt,
               )
 
-            let paymentStatus: PaymentStatus
+            let paymentStatus:
+              PaymentStatus
 
             if (feeExempt) {
               paymentStatus =
@@ -399,10 +328,12 @@ export function PaymentsView() {
         error,
       )
 
-      const fallback: StudentRow[] =
+      const fallback:
+        StudentRow[] =
         fallbackStudents.map(
           (student: any) => {
-            const paymentStatus: PaymentStatus =
+            const paymentStatus:
+              PaymentStatus =
               student.paymentStatus ===
               'معفي'
                 ? 'معفي'
@@ -732,41 +663,33 @@ export function PaymentsView() {
       setPaymentHistory([])
 
       try {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('payments')
-          .select(
-            'id, amount, payment_method, payment_date, reference_number, notes, created_at',
-          )
-          .eq(
-            'student_id',
-            student.id,
-          )
-          .eq(
-            'academic_year_id',
-            currentAcademicYearId,
-          )
-          .order(
-            'payment_date',
+        const response =
+          await fetch(
+            `/api/payments/history?studentId=${encodeURIComponent(
+              student.id,
+            )}&academicYearId=${encodeURIComponent(
+              currentAcademicYearId,
+            )}`,
             {
-              ascending: false,
-            },
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
+              method: 'GET',
+              cache: 'no-store',
             },
           )
 
-        if (error) {
-          throw error
+        const data =
+          await response
+            .json()
+            .catch(() => null)
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              'تعذر تحميل سجل الدفعات.',
+          )
         }
 
         setPaymentHistory(
-          (data ??
+          (data?.payments ??
             []) as PaymentRecord[],
         )
       } catch (error) {
@@ -776,7 +699,7 @@ export function PaymentsView() {
         )
 
         alert(
-          getSupabaseErrorMessage(
+          getErrorMessage(
             error,
             'تعذر تحميل سجل الدفعات.',
           ),
@@ -928,36 +851,39 @@ export function PaymentsView() {
             notes || null,
         }
 
-        console.log(
-          'Saving payment:',
-          paymentPayload,
-        )
-
-        const {
-          data: insertedPayment,
-          error,
-        } = await supabase
-          .from('payments')
-          .insert(
-            paymentPayload,
-          )
-          .select(
-            'id, amount, payment_method, payment_date, reference_number, notes, created_at',
-          )
-          .single()
-
-        if (error) {
-          console.error(
-            'Supabase payment insert error:',
-            error,
+        const response =
+          await fetch(
+            '/api/payments',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body: JSON.stringify(
+                paymentPayload,
+              ),
+            },
           )
 
-          throw error
+        const data =
+          await response
+            .json()
+            .catch(() => null)
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              'تعذر حفظ الدفعة.',
+          )
         }
+
+        const insertedPayment =
+          data?.payment
 
         if (!insertedPayment) {
           throw new Error(
-            'تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة من قاعدة البيانات.',
+            'تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة.',
           )
         }
 
@@ -979,54 +905,30 @@ export function PaymentsView() {
           )
         }
 
-        setPaymentHistory(
-          (current) => [
-            insertedPayment as PaymentRecord,
-            ...current,
-          ],
-        )
-
         try {
-          const {
-            data: refreshedHistory,
-            error:
-              refreshedHistoryError,
-          } = await supabase
-            .from('payments')
-            .select(
-              'id, amount, payment_method, payment_date, reference_number, notes, created_at',
-            )
-            .eq(
-              'student_id',
-              detailsStudent.id,
-            )
-            .eq(
-              'academic_year_id',
-              currentAcademicYearId,
-            )
-            .order(
-              'payment_date',
+          const historyResponse =
+            await fetch(
+              `/api/payments/history?studentId=${encodeURIComponent(
+                detailsStudent.id,
+              )}&academicYearId=${encodeURIComponent(
+                currentAcademicYearId,
+              )}`,
               {
-                ascending: false,
+                method: 'GET',
+                cache: 'no-store',
               },
             )
-            .order(
-              'created_at',
-              {
-                ascending: false,
-              },
-            )
+
+          const historyData =
+            await historyResponse
+              .json()
+              .catch(() => null)
 
           if (
-            refreshedHistoryError
+            historyResponse.ok
           ) {
-            console.error(
-              'Failed to refresh payment history:',
-              refreshedHistoryError,
-            )
-          } else {
             setPaymentHistory(
-              (refreshedHistory ??
+              (historyData?.payments ??
                 []) as PaymentRecord[],
             )
           }
@@ -1061,9 +963,9 @@ export function PaymentsView() {
         )
 
         alert(
-          getSupabaseErrorMessage(
+          getErrorMessage(
             error,
-            'تعذر حفظ الدفعة. تحقق من بيانات قاعدة البيانات والصلاحيات.',
+            'تعذر حفظ الدفعة.',
           ),
         )
       } finally {
@@ -1494,12 +1396,6 @@ export function PaymentsView() {
 
       {detailsDialogOpen &&
         detailsStudent && (
-          /*
-           * مهم:
-           * هنا صار السكرول على النافذة كاملة.
-           * لا يوجد max-height أو overflow-y-auto
-           * داخل Card.
-           */
           <div
             className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-0 sm:p-4"
             dir="rtl"
@@ -1508,7 +1404,6 @@ export function PaymentsView() {
               <Card className="my-0 w-full rounded-none sm:my-4 sm:max-w-2xl sm:rounded-2xl">
                 <CardContent className="p-0">
 
-                  {/* Header */}
                   <div className="flex items-start justify-between gap-4 border-b p-4 sm:p-6">
                     <div className="min-w-0">
                       <h2 className="text-lg font-semibold">
@@ -1545,7 +1440,6 @@ export function PaymentsView() {
                     </button>
                   </div>
 
-                  {/* Summary */}
                   <div className="grid grid-cols-1 gap-3 border-b p-4 sm:grid-cols-3 sm:p-6">
                     <div className="rounded-lg bg-muted/50 p-4">
                       <p className="text-xs text-muted-foreground">
@@ -1594,11 +1488,8 @@ export function PaymentsView() {
                     </div>
                   </div>
 
-                  {/* Payment history + Add payment
-                      نفس الصفحة ونفس السكرول */}
                   <div className="space-y-6 p-4 sm:p-6">
 
-                    {/* Payment history */}
                     <section>
                       <div className="mb-3">
                         <h3 className="font-semibold">
@@ -1710,7 +1601,6 @@ export function PaymentsView() {
                       )}
                     </section>
 
-                    {/* Add payment */}
                     {!detailsStudent.feeExempt &&
                       Math.max(
                         detailsStudent.amountDue -
@@ -1856,7 +1746,6 @@ export function PaymentsView() {
                       )}
                   </div>
 
-                  {/* Footer */}
                   <div className="border-t bg-background p-4">
                     <Button
                       type="button"
@@ -1952,7 +1841,7 @@ function getToday() {
   return `${year}-${month}-${day}`
 }
 
-function getSupabaseErrorMessage(
+function getErrorMessage(
   error: unknown,
   fallback: string,
 ) {
@@ -1960,25 +1849,13 @@ function getSupabaseErrorMessage(
     error &&
     typeof error === 'object'
   ) {
-    const supabaseError =
+    const apiError =
       error as {
         message?: string
-        details?: string
-        hint?: string
-        code?: string
       }
 
-    const parts = [
-      supabaseError.message,
-      supabaseError.details,
-      supabaseError.hint,
-      supabaseError.code
-        ? `Code: ${supabaseError.code}`
-        : '',
-    ].filter(Boolean)
-
-    if (parts.length > 0) {
-      return parts.join('\n')
+    if (apiError.message) {
+      return apiError.message
     }
   }
 
