@@ -11,8 +11,7 @@ const publishableKey =
 const serviceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-const SESSION_COOKIE =
-  't3leem_session_id'
+const SESSION_COOKIE = 't3leem_session_id'
 
 const supabaseAdmin = createClient(
   supabaseUrl,
@@ -39,8 +38,7 @@ function getCookie(
   const cookies = cookieHeader
     .split(';')
     .map((cookie) => {
-      const index =
-        cookie.indexOf('=')
+      const index = cookie.indexOf('=')
 
       if (index === -1) {
         return {
@@ -50,28 +48,21 @@ function getCookie(
       }
 
       return {
-        name: cookie
-          .slice(0, index)
-          .trim(),
-        value: cookie
-          .slice(index + 1)
-          .trim(),
+        name: cookie.slice(0, index).trim(),
+        value: cookie.slice(index + 1).trim(),
       }
     })
 
   return (
     cookies.find(
-      (cookie) =>
-        cookie.name === cookieName,
+      (cookie) => cookie.name === cookieName,
     )?.value ?? null
   )
 }
 
 function getIpAddress(request: Request) {
   const forwardedFor =
-    request.headers.get(
-      'x-forwarded-for',
-    )
+    request.headers.get('x-forwarded-for')
 
   if (forwardedFor) {
     return forwardedFor
@@ -80,9 +71,7 @@ function getIpAddress(request: Request) {
   }
 
   return (
-    request.headers.get(
-      'x-real-ip',
-    ) ?? null
+    request.headers.get('x-real-ip') ?? null
   )
 }
 
@@ -90,30 +79,30 @@ export async function POST(
   request: Request,
 ) {
   try {
-    const sessionId =
-      getCookie(
-        request,
-        SESSION_COOKIE,
-      )
+    const sessionId = getCookie(
+      request,
+      SESSION_COOKIE,
+    )
 
-    const ipAddress =
-      getIpAddress(request)
+    const ipAddress = getIpAddress(request)
 
     const userAgent =
-      request.headers.get(
-        'user-agent',
-      ) ?? null
+      request.headers.get('user-agent') ?? null
+
+    /*
+     * --------------------------------------------------
+     * إنشاء Response من البداية
+     * --------------------------------------------------
+     */
+    const response = NextResponse.json({
+      success: true,
+    })
 
     /*
      * --------------------------------------------------
      * Supabase SSR Client
      * --------------------------------------------------
      */
-    const response =
-      NextResponse.json({
-        success: true,
-      })
-
     const supabase =
       createServerClient(
         supabaseUrl,
@@ -122,9 +111,7 @@ export async function POST(
           cookies: {
             getAll() {
               const cookieHeader =
-                request.headers.get(
-                  'cookie',
-                )
+                request.headers.get('cookie')
 
               if (!cookieHeader) {
                 return []
@@ -139,8 +126,7 @@ export async function POST(
 
                   if (index === -1) {
                     return {
-                      name:
-                        cookie.trim(),
+                      name: cookie.trim(),
                       value: '',
                     }
                   }
@@ -160,9 +146,7 @@ export async function POST(
                 )
             },
 
-            setAll(
-              cookiesToSet,
-            ) {
+            setAll(cookiesToSet) {
               cookiesToSet.forEach(
                 ({
                   name,
@@ -185,8 +169,7 @@ export async function POST(
                         options?.sameSite ??
                         'lax',
                       path:
-                        options?.path ??
-                        '/',
+                        options?.path ?? '/',
                     },
                   )
                 },
@@ -198,16 +181,15 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * الحصول على المستخدم الحالي
+     * التحقق من المستخدم الحالي
+     *
+     * هذا الجزء أمني ولا يتم حذفه.
      * --------------------------------------------------
      */
     const {
-      data: {
-        user,
-      },
+      data: { user },
       error: userError,
-    } =
-      await supabase.auth.getUser()
+    } = await supabase.auth.getUser()
 
     if (userError) {
       console.error(
@@ -219,29 +201,26 @@ export async function POST(
     /*
      * --------------------------------------------------
      * إغلاق active session
+     *
+     * نتحقق من ملكية الجلسة قبل تحديثها.
      * --------------------------------------------------
      */
-    if (sessionId) {
+    if (sessionId && user) {
       const {
         data: activeSession,
-        error:
-          sessionLookupError,
-      } =
-        await supabaseAdmin
-          .from('active_sessions')
-          .select(
-            `
-            id,
-            auth_user_id,
-            trusted_device_id,
-            is_active
-            `,
-          )
-          .eq(
-            'id',
-            sessionId,
-          )
-          .maybeSingle()
+        error: sessionLookupError,
+      } = await supabaseAdmin
+        .from('active_sessions')
+        .select(
+          `
+          id,
+          auth_user_id,
+          trusted_device_id,
+          is_active
+          `,
+        )
+        .eq('id', sessionId)
+        .maybeSingle()
 
       if (sessionLookupError) {
         console.error(
@@ -251,41 +230,35 @@ export async function POST(
       }
 
       /*
-       * لا نسمح بإغلاق جلسة مستخدم آخر.
+       * لا يمكن للمستخدم إغلاق جلسة مستخدم آخر.
        */
       if (
         activeSession &&
         activeSession.is_active &&
-        user &&
-        activeSession.auth_user_id ===
-          user.id
+        activeSession.auth_user_id === user.id
       ) {
         const now =
           new Date().toISOString()
 
+        /*
+         * --------------------------------------------------
+         * إغلاق الجلسة
+         *
+         * هذه العملية أساسية، لذلك ننتظرها.
+         * --------------------------------------------------
+         */
         const {
-          error:
-            sessionUpdateError,
-        } =
-          await supabaseAdmin
-            .from('active_sessions')
-            .update({
-              is_active: false,
-              logout_at: now,
-              last_activity_at: now,
-            })
-            .eq(
-              'id',
-              activeSession.id,
-            )
-            .eq(
-              'auth_user_id',
-              user.id,
-            )
-            .eq(
-              'is_active',
-              true,
-            )
+          error: sessionUpdateError,
+        } = await supabaseAdmin
+          .from('active_sessions')
+          .update({
+            is_active: false,
+            logout_at: now,
+            last_activity_at: now,
+          })
+          .eq('id', activeSession.id)
+          .eq('auth_user_id', user.id)
+          .eq('is_active', true)
 
         if (sessionUpdateError) {
           console.error(
@@ -295,49 +268,49 @@ export async function POST(
         }
 
         /*
+         * --------------------------------------------------
          * Audit Log
+         *
+         * لا نسمح بتعطيل تسجيل الخروج بسبب فشل الـ audit.
+         * --------------------------------------------------
          */
-        const {
-          error: auditError,
-        } =
-          await supabaseAdmin
-            .from('auth_audit_logs')
-            .insert({
-              auth_user_id:
-                activeSession.auth_user_id,
-              trusted_device_id:
-                activeSession.trusted_device_id,
-              event_type:
-                'logout',
-              success: true,
-              ip_address:
-                ipAddress,
-              user_agent:
-                userAgent,
-              metadata: {
-                active_session_id:
-                  activeSession.id,
-              },
-            })
-
-        if (auditError) {
-          console.error(
-            'Logout audit error:',
-            auditError,
-          )
-        }
+        void supabaseAdmin
+          .from('auth_audit_logs')
+          .insert({
+            auth_user_id:
+              activeSession.auth_user_id,
+            trusted_device_id:
+              activeSession.trusted_device_id,
+            event_type: 'logout',
+            success: true,
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            metadata: {
+              active_session_id:
+                activeSession.id,
+            },
+          })
+          .then(({ error }) => {
+            if (error) {
+              console.error(
+                'Logout audit error:',
+                error,
+              )
+            }
+          })
       }
     }
 
     /*
      * --------------------------------------------------
      * Supabase Auth Logout
+     *
+     * مهم أمنيًا ولا يتم حذفه.
      * --------------------------------------------------
      */
     const {
       error: signOutError,
-    } =
-      await supabase.auth.signOut()
+    } = await supabase.auth.signOut()
 
     if (signOutError) {
       console.error(
@@ -348,7 +321,9 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * حذف Session Cookie
+     * حذف Session Cookie فقط
+     *
+     * Device Cookie يبقى كما هو.
      * --------------------------------------------------
      */
     response.cookies.set(
@@ -365,16 +340,6 @@ export async function POST(
       },
     )
 
-    /*
-     * Device Cookie لا يتم حذفه.
-     *
-     * Logout:
-     * إغلاق الجلسة فقط.
-     *
-     * Revoke:
-     * سحب الثقة من الجهاز.
-     */
-
     return response
   } catch (error) {
     console.error(
@@ -382,6 +347,10 @@ export async function POST(
       error,
     )
 
+    /*
+     * حتى في حالة الخطأ:
+     * Session Cookie يتم حذفه.
+     */
     const response =
       NextResponse.json(
         {
