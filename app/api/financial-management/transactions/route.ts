@@ -17,11 +17,60 @@ async function checkAccess() {
   return validateDashboardSection('payments')
 }
 
+/*
+ * التأكد من وجود السنة الدراسية
+ */
+async function checkAcademicYear(
+  academicYearId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from('academic_years')
+    .select(
+      'id, name, is_current, is_active',
+    )
+    .eq('id', academicYearId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+/*
+ * التأكد من أن العملية موجودة في نفس السنة
+ */
+async function getTransaction(
+  transactionId: string,
+  academicYearId: string,
+) {
+  const { data, error } =
+    await supabaseAdmin
+      .from('financial_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .eq('academic_year_id', academicYearId)
+      .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 /**
- * إنشاء إعداد الإدارة المالية للسنة الدراسية
+ * الإدارة المالية
  */
 export async function POST(request: Request) {
   try {
+    /*
+     * --------------------------------------------------
+     * الصلاحية
+     * --------------------------------------------------
+     */
+
     const access = await checkAccess()
 
     if (!access.allowed) {
@@ -36,6 +85,7 @@ export async function POST(request: Request) {
     const {
       action,
       academic_year_id,
+
       financial_mode,
       opening_balance,
       opening_source,
@@ -54,43 +104,93 @@ export async function POST(request: Request) {
       adjustment_direction,
     } = body
 
+    /*
+     * --------------------------------------------------
+     * السنة الدراسية مطلوبة
+     * --------------------------------------------------
+     */
+
     if (!academic_year_id) {
       return NextResponse.json(
-        { error: 'السنة الدراسية مطلوبة' },
+        {
+          error:
+            'السنة الدراسية مطلوبة',
+        },
         { status: 400 },
       )
     }
 
     /*
      * --------------------------------------------------
-     * إنشاء إعداد السنة المالية
+     * التأكد من السنة
      * --------------------------------------------------
      */
+
+    const academicYear =
+      await checkAcademicYear(
+        academic_year_id,
+      )
+
+    if (!academicYear) {
+      return NextResponse.json(
+        {
+          error:
+            'السنة الدراسية غير موجودة',
+        },
+        { status: 404 },
+      )
+    }
+
+    /*
+     * ==================================================
+     * INITIALIZE
+     * تهيئة الإدارة المالية
+     * ==================================================
+     */
+
     if (action === 'initialize') {
       if (
-        financial_mode !== 'student_payments' &&
+        financial_mode !==
+          'student_payments' &&
         financial_mode !== 'manual'
       ) {
         return NextResponse.json(
-          { error: 'نوع النظام المالي غير صحيح' },
+          {
+            error:
+              'نوع النظام المالي غير صحيح',
+          },
           { status: 400 },
         )
       }
 
-      const balance = Number(opening_balance ?? 0)
+      const balance =
+        Number(opening_balance ?? 0)
 
-      if (balance < 0) {
+      if (
+        !Number.isFinite(balance) ||
+        balance < 0
+      ) {
         return NextResponse.json(
-          { error: 'الرصيد الافتتاحي لا يمكن أن يكون سالبًا' },
+          {
+            error:
+              'الرصيد الافتتاحي غير صحيح',
+          },
           { status: 400 },
         )
       }
+
+      /*
+       * منع إعادة تهيئة نفس السنة
+       */
 
       const { data: existing } =
         await supabaseAdmin
           .from('financial_settings')
           .select('id')
-          .eq('academic_year_id', academic_year_id)
+          .eq(
+            'academic_year_id',
+            academic_year_id,
+          )
           .maybeSingle()
 
       if (existing) {
@@ -103,56 +203,34 @@ export async function POST(request: Request) {
         )
       }
 
-      const { data: settings, error } =
-        await supabaseAdmin
-          .from('financial_settings')
-          .insert({
-            academic_year_id,
-            financial_mode,
-            opening_balance: balance,
-            opening_source:
-              opening_source || null,
-            opening_note:
-              opening_note || null,
-          })
-          .select()
-          .single()
+      /*
+       * إنشاء الإعداد
+       *
+       * مهم:
+       * الرصيد محفوظ هنا.
+       * لا ننشئ transaction افتتاحية
+       * حتى لا يتم احتساب الرصيد مرتين.
+       */
+
+      const {
+        data: settings,
+        error,
+      } = await supabaseAdmin
+        .from('financial_settings')
+        .insert({
+          academic_year_id,
+          financial_mode,
+          opening_balance: balance,
+          opening_source:
+            opening_source || null,
+          opening_note:
+            opening_note || null,
+        })
+        .select()
+        .single()
 
       if (error) {
         throw error
-      }
-
-      /*
-       * إذا كان هناك رصيد افتتاحي،
-       * نسجله أيضًا كعملية مالية حتى يظهر
-       * في السجل والتقارير وExcel.
-       */
-      if (balance > 0) {
-        const { error: transactionError } =
-          await supabaseAdmin
-            .from('financial_transactions')
-            .insert({
-              academic_year_id,
-              transaction_type: 'in',
-              amount: balance,
-              source_type: 'opening',
-              source:
-                opening_source || 'الرصيد الافتتاحي',
-              note: opening_note || null,
-              confirmation_status: 'not_required',
-            })
-
-        if (transactionError) {
-          /*
-           * لا نترك إعدادًا بدون العملية الافتتاحية
-           */
-          await supabaseAdmin
-            .from('financial_settings')
-            .delete()
-            .eq('id', settings.id)
-
-          throw transactionError
-        }
       }
 
       return NextResponse.json({
@@ -162,51 +240,94 @@ export async function POST(request: Request) {
     }
 
     /*
-     * --------------------------------------------------
+     * ==================================================
+     * CREATE
      * إضافة عملية مالية
-     * --------------------------------------------------
+     * ==================================================
      */
+
     if (action === 'create') {
+      /*
+       * نوع العملية
+       */
+
       if (
         transaction_type !== 'in' &&
         transaction_type !== 'out' &&
-        transaction_type !== 'adjustment'
+        transaction_type !==
+          'adjustment'
       ) {
         return NextResponse.json(
-          { error: 'نوع العملية غير صحيح' },
+          {
+            error:
+              'نوع العملية غير صحيح',
+          },
           { status: 400 },
         )
       }
 
-      const numericAmount = Number(amount)
+      /*
+       * المبلغ
+       */
+
+      const numericAmount =
+        Number(amount)
 
       if (
-        !Number.isFinite(numericAmount) ||
+        !Number.isFinite(
+          numericAmount,
+        ) ||
         numericAmount <= 0
       ) {
         return NextResponse.json(
-          { error: 'المبلغ يجب أن يكون أكبر من صفر' },
+          {
+            error:
+              'المبلغ يجب أن يكون أكبر من صفر',
+          },
           { status: 400 },
         )
       }
+
+      /*
+       * التسوية تحتاج اتجاه
+       */
 
       if (
-        transaction_type === 'adjustment' &&
-        adjustment_direction !== 'plus' &&
-        adjustment_direction !== 'minus'
+        transaction_type ===
+          'adjustment' &&
+        adjustment_direction !==
+          'plus' &&
+        adjustment_direction !==
+          'minus'
       ) {
         return NextResponse.json(
-          { error: 'اتجاه التسوية مطلوب' },
+          {
+            error:
+              'اتجاه التسوية مطلوب',
+          },
           { status: 400 },
         )
       }
 
-      const { data: settings } =
-        await supabaseAdmin
-          .from('financial_settings')
-          .select('*')
-          .eq('academic_year_id', academic_year_id)
-          .maybeSingle()
+      /*
+       * جلب إعدادات السنة
+       */
+
+      const {
+        data: settings,
+        error: settingsError,
+      } = await supabaseAdmin
+        .from('financial_settings')
+        .select('*')
+        .eq(
+          'academic_year_id',
+          academic_year_id,
+        )
+        .maybeSingle()
+
+      if (settingsError) {
+        throw settingsError
+      }
 
       if (!settings) {
         return NextResponse.json(
@@ -219,65 +340,160 @@ export async function POST(request: Request) {
       }
 
       /*
-       * عمليات IN المرتبطة بالطلاب:
-       * يجب أن تكون في نظام مدفوعات الطلاب.
+       * --------------------------------------------------
+       * دفعة طالب
+       * --------------------------------------------------
        */
+
       if (
-        transaction_type === 'in' &&
-        source_type === 'student_payment' &&
-        settings.financial_mode !== 'student_payments'
+        source_type ===
+        'student_payment'
       ) {
-        return NextResponse.json(
-          {
-            error:
-              'النظام المالي الحالي هو الإدخال اليدوي',
-          },
-          { status: 400 },
-        )
+        /*
+         * دفعات الطلاب مسموحة فقط
+         * في وضع مدفوعات الطلاب.
+         */
+
+        if (
+          settings.financial_mode !==
+          'student_payments'
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'النظام المالي الحالي هو الإدخال اليدوي',
+            },
+            { status: 400 },
+          )
+        }
+
+        /*
+         * دفعة الطالب يجب أن تكون IN
+         */
+
+        if (
+          transaction_type !== 'in'
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'دفعات الطلاب يجب أن تكون إيرادًا',
+            },
+            { status: 400 },
+          )
+        }
+
+        /*
+         * يجب أن يكون لدينا على الأقل
+         * معرف دفعة أو طالب.
+         */
+
+        if (
+          !payment_id &&
+          !student_id
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'يجب ربط دفعة الطالب بمعرف الدفعة أو الطالب',
+            },
+            { status: 400 },
+          )
+        }
       }
 
       /*
-       * إذا كانت العملية مرتبطة بدفعة طالب،
-       * تكون بانتظار التأكيد.
+       * --------------------------------------------------
+       * تحديد حالة التأكيد
+       * --------------------------------------------------
        */
+
       const confirmationStatus =
-        source_type === 'student_payment'
+        source_type ===
+        'student_payment'
           ? 'pending'
           : 'not_required'
 
-      const { data: transaction, error } =
-        await supabaseAdmin
-          .from('financial_transactions')
-          .insert({
-            academic_year_id,
-            transaction_type,
-            amount: numericAmount,
-            adjustment_direction:
-              transaction_type === 'adjustment'
-                ? adjustment_direction
-                : null,
-            source_type:
-              source_type ||
-              (
-                transaction_type === 'adjustment'
-                  ? 'adjustment'
-                  : 'manual'
-              ),
-            source: source || null,
-            payment_id: payment_id || null,
-            student_id: student_id || null,
-            student_request_number:
-              student_request_number || null,
-            payment_method:
-              payment_method || null,
-            reference_number:
-              reference_number || null,
-            confirmation_status:
-              confirmationStatus,
-            note: note || null,
-          })
-          .select()
-          .single()
+      /*
+       * --------------------------------------------------
+       * نوع المصدر
+       * --------------------------------------------------
+       */
+
+      let finalSourceType =
+        source_type
+
+      if (!finalSourceType) {
+        if (
+          transaction_type ===
+          'adjustment'
+        ) {
+          finalSourceType =
+            'adjustment'
+        } else {
+          finalSourceType =
+            'manual'
+        }
+      }
+
+      /*
+       * --------------------------------------------------
+       * إنشاء العملية
+       * --------------------------------------------------
+       */
+
+      const {
+        data: transaction,
+        error,
+      } = await supabaseAdmin
+        .from('financial_transactions')
+        .insert({
+          academic_year_id,
+
+          transaction_type,
+
+          amount: numericAmount,
+
+          adjustment_direction:
+            transaction_type ===
+            'adjustment'
+              ? adjustment_direction
+              : null,
+
+          source_type:
+            finalSourceType,
+
+          source:
+            source || null,
+
+          payment_id:
+            payment_id || null,
+
+          student_id:
+            student_id || null,
+
+          student_request_number:
+            student_request_number ||
+            null,
+
+          payment_method:
+            payment_method || null,
+
+          reference_number:
+            reference_number || null,
+
+          confirmation_status:
+            confirmationStatus,
+
+          confirmed_by: null,
+
+          confirmed_at: null,
+
+          note:
+            note || null,
+        })
+        .select()
+        .single()
 
       if (error) {
         throw error
@@ -290,30 +506,46 @@ export async function POST(request: Request) {
     }
 
     /*
-     * --------------------------------------------------
-     * تأكيد استلام دفعة طالب
-     * --------------------------------------------------
+     * ==================================================
+     * CONFIRM
+     * تأكيد استلام دفعة الطالب
+     * ==================================================
      */
+
     if (action === 'confirm') {
-      const { transaction_id } = body
+      const {
+        transaction_id,
+      } = body
 
       if (!transaction_id) {
         return NextResponse.json(
-          { error: 'معرف العملية مطلوب' },
+          {
+            error:
+              'معرف العملية مطلوب',
+          },
           { status: 400 },
         )
       }
 
-      const { data: transaction, error: fetchError } =
-        await supabaseAdmin
-          .from('financial_transactions')
-          .select('*')
-          .eq('id', transaction_id)
-          .single()
+      const transaction =
+        await getTransaction(
+          transaction_id,
+          academic_year_id,
+        )
 
-      if (fetchError) {
-        throw fetchError
+      if (!transaction) {
+        return NextResponse.json(
+          {
+            error:
+              'العملية غير موجودة',
+          },
+          { status: 404 },
+        )
       }
+
+      /*
+       * يجب أن تكون دفعة طالب
+       */
 
       if (
         transaction.source_type !==
@@ -328,34 +560,53 @@ export async function POST(request: Request) {
         )
       }
 
+      /*
+       * منع إعادة التأكيد
+       */
+
       if (
         transaction.confirmation_status ===
         'confirmed'
       ) {
         return NextResponse.json(
           {
-            error: 'تم تأكيد العملية مسبقًا',
+            error:
+              'تم تأكيد العملية مسبقًا',
           },
           { status: 400 },
         )
       }
 
       /*
-       * نحاول معرفة المستخدم الحالي من جلسة التطبيق.
-       * إذا لم يتوفر ID نتركه null بدل اختلاق مستخدم.
+       * التأكيد
        */
-      const confirmedAt = new Date().toISOString()
 
-      const { data: updated, error } =
-        await supabaseAdmin
-          .from('financial_transactions')
-          .update({
-            confirmation_status: 'confirmed',
-            confirmed_at: confirmedAt,
-          })
-          .eq('id', transaction_id)
-          .select()
-          .single()
+      const confirmedAt =
+        new Date().toISOString()
+
+      const {
+        data: updated,
+        error,
+      } = await supabaseAdmin
+        .from(
+          'financial_transactions',
+        )
+        .update({
+          confirmation_status:
+            'confirmed',
+          confirmed_at:
+            confirmedAt,
+        })
+        .eq(
+          'id',
+          transaction_id,
+        )
+        .eq(
+          'academic_year_id',
+          academic_year_id,
+        )
+        .select()
+        .single()
 
       if (error) {
         throw error
@@ -368,40 +619,78 @@ export async function POST(request: Request) {
     }
 
     /*
-     * --------------------------------------------------
-     * حذف عملية
-     * --------------------------------------------------
+     * ==================================================
+     * DELETE
+     * حذف العملية المالية
+     * ==================================================
      */
+
     if (action === 'delete') {
-      const { transaction_id } = body
+      const {
+        transaction_id,
+      } = body
 
       if (!transaction_id) {
         return NextResponse.json(
-          { error: 'معرف العملية مطلوب' },
+          {
+            error:
+              'معرف العملية مطلوب',
+          },
           { status: 400 },
         )
       }
 
-      const { data: transaction, error: fetchError } =
-        await supabaseAdmin
-          .from('financial_transactions')
-          .select('*')
-          .eq('id', transaction_id)
-          .single()
+      const transaction =
+        await getTransaction(
+          transaction_id,
+          academic_year_id,
+        )
 
-      if (fetchError) {
-        throw fetchError
+      if (!transaction) {
+        return NextResponse.json(
+          {
+            error:
+              'العملية غير موجودة',
+          },
+          { status: 404 },
+        )
       }
 
       /*
-       * لا نحذف دفعة الطالب نفسها.
-       * نحذف سجلها المالي فقط.
+       * لا نحذف الرصيد الافتتاحي
+       * لأنه محفوظ في financial_settings.
+       *
+       * وكذلك لا نحذف دفعة الطالب الأصلية
+       * من جدول payments.
        */
+
+      if (
+        transaction.source_type ===
+        'opening'
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'لا يمكن حذف الرصيد الافتتاحي من سجل العمليات',
+          },
+          { status: 400 },
+        )
+      }
+
       const { error } =
         await supabaseAdmin
-          .from('financial_transactions')
+          .from(
+            'financial_transactions',
+          )
           .delete()
-          .eq('id', transaction_id)
+          .eq(
+            'id',
+            transaction_id,
+          )
+          .eq(
+            'academic_year_id',
+            academic_year_id,
+          )
 
       if (error) {
         throw error
@@ -409,13 +698,21 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        deleted_id: transaction.id,
+        deleted_id:
+          transaction.id,
       })
     }
 
+    /*
+     * --------------------------------------------------
+     * إجراء غير معروف
+     * --------------------------------------------------
+     */
+
     return NextResponse.json(
       {
-        error: 'الإجراء غير معروف',
+        error:
+          'الإجراء غير معروف',
       },
       { status: 400 },
     )
