@@ -254,8 +254,8 @@ export function PaymentPersonal() {
   }
 
   useEffect(() => {
-    loadCycles()
-  }, [])
+  setLoading(false)
+}, [])
 
   async function createCycle() {
     if (!cycleName.trim()) {
