@@ -578,6 +578,7 @@ export async function POST(
 
           is_active:
             true,
+          updated_at: new Date().toISOString(),
         })
         .select(
           `
