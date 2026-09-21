@@ -7,12 +7,39 @@ import { Card, CardContent } from '@/components/ui/card'
 
 import { PaymentStudents } from './PaymentStudents'
 import { PaymentFinancial } from './PaymentFinancial'
-import { PaymentPersonal } from './PaymentPersonal'
 
 type PaymentSection =
   | 'financial'
   | 'students'
   | 'personal'
+
+function PaymentPersonalTest() {
+  return (
+    <div
+      dir="rtl"
+      className="rounded-2xl border-2 border-red-500 bg-red-50 p-10"
+    >
+      <h2 className="text-2xl font-bold text-red-700">
+        الإدارة الشخصية تعمل
+      </h2>
+
+      <p className="mt-3 text-red-600">
+        هذا اختبار مباشر داخل payments-view.tsx
+      </p>
+
+      <div className="mt-6 rounded-xl bg-white p-5 shadow-sm">
+        <div className="text-sm font-semibold text-slate-700">
+          إذا ظهر هذا المربع
+        </div>
+
+        <div className="mt-2 text-sm text-slate-500">
+          فهذا يعني أن المشكلة ليست في زر الإدارة الشخصية،
+          وإنما في ملف PaymentPersonal.tsx أو استيراده.
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function PaymentsView() {
   const [activeSection, setActiveSection] =
@@ -58,7 +85,7 @@ export function PaymentsView() {
               onClick={() =>
                 setActiveSection(section.id)
               }
-              className="text-right"
+              className="w-full text-right"
             >
               <Card
                 className={
@@ -91,7 +118,7 @@ export function PaymentsView() {
       )}
 
       {activeSection === 'personal' && (
-        <PaymentPersonal />
+        <PaymentPersonalTest />
       )}
     </div>
   )
