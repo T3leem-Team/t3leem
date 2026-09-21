@@ -387,6 +387,11 @@ function getLessonDateStatus(
 export function DashboardView() {
   const router = useRouter()
 
+  const [
+    checkingAccess,
+    setCheckingAccess,
+  ] = useState(true)
+
   const [loading, setLoading] =
     useState(true)
 
@@ -486,6 +491,86 @@ export function DashboardView() {
         selectedDate,
       ],
     )
+
+  /*
+   * التحقق من صلاحية المستخدم للوصول
+   * إلى لوحة المعلومات.
+   *
+   * إذا لم تكن dashboard ضمن أقسامه المسموحة،
+   * يتم تحويله مباشرة إلى أول قسم مسموح له.
+   */
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkDashboardAccess() {
+      try {
+        const response = await fetch(
+          '/api/auth/dashboard-sections',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
+
+        if (!response.ok) {
+          router.replace('/login')
+          return
+        }
+
+        const data = await response.json()
+
+        const sections = Array.isArray(
+          data.sections,
+        )
+          ? data.sections
+          : []
+
+        const hasDashboard =
+          sections.some(
+            (section: {
+              section_key?: string
+            }) =>
+              section.section_key ===
+              'dashboard',
+          )
+
+        if (hasDashboard) {
+          if (!cancelled) {
+            setCheckingAccess(false)
+          }
+
+          return
+        }
+
+        const firstAllowedSection =
+          sections[0]
+
+        if (
+          firstAllowedSection?.href
+        ) {
+          router.replace(
+            firstAllowedSection.href,
+          )
+          return
+        }
+
+        router.replace('/login')
+      } catch (error) {
+        console.error(
+          'Dashboard access check error:',
+          error,
+        )
+
+        router.replace('/login')
+      }
+    }
+
+    void checkDashboardAccess()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   /*
    * قراءة الحضور من Supabase.
@@ -1194,8 +1279,15 @@ export function DashboardView() {
     )
 
   useEffect(() => {
+    if (checkingAccess) {
+      return
+    }
+
     void loadData()
-  }, [loadData])
+  }, [
+    checkingAccess,
+    loadData,
+  ])
 
   /*
    * عند تغيير الدورة أو التاريخ:
@@ -1501,203 +1593,197 @@ export function DashboardView() {
       : 0
 
   const teacherAttendanceDetails =
-  useMemo<TeacherAttendanceDetail[]>(
-    () => {
-      if (
-        !selectedCourseId ||
-        lessonDateStatus !== 'lesson'
-      ) {
-        return []
-      }
+    useMemo<TeacherAttendanceDetail[]>(
+      () => {
+        if (
+          !selectedCourseId ||
+          lessonDateStatus !== 'lesson'
+        ) {
+          return []
+        }
 
-      const normalizedCourseId =
-        normalizeId(selectedCourseId)
+        const normalizedCourseId =
+          normalizeId(selectedCourseId)
 
-      /*
-       * جميع المعلمين المسجلين في الدورة.
-       *
-       * نأخذهم من course_teachers أولاً،
-       * ونضيف أي معلم موجود في assignments
-       * حتى لا يختفي أحد من التفاصيل.
-       */
-      const courseTeacherRows =
-        courseTeachers.filter(
-          (item) =>
-            normalizeId(
-              item.courseId,
-            ) === normalizedCourseId,
-        )
-
-      const assignmentRows =
-        assignments.filter(
-          (item) =>
-            normalizeId(
-              item.courseId,
-            ) === normalizedCourseId,
-        )
-
-      const teacherIds =
-        Array.from(
-          new Set([
-            ...courseTeacherRows.map(
-              (item) =>
-                normalizeId(
-                  item.teacherId,
-                ),
-            ),
-            ...assignmentRows.map(
-              (item) =>
-                normalizeId(
-                  item.teacherId,
-                ),
-            ),
-          ]),
-        ).filter(Boolean)
-
-      return teacherIds.map(
-        (teacherId) => {
-          const teacher =
-            teachers.find(
-              (item) =>
-                normalizeId(
-                  item.id,
-                ) === teacherId,
-            )
-
-          /*
-           * الطلاب الموزعون على هذا المعلم
-           * في الدورة الحالية.
-           */
-          const teacherStudentIds =
-            new Set(
-              assignmentRows
-                .filter(
-                  (item) =>
-                    normalizeId(
-                      item.teacherId,
-                    ) === teacherId,
-                )
-                .map(
-                  (item) =>
-                    normalizeId(
-                      item.studentId,
-                    ),
-                )
-                .filter(Boolean),
-            )
-
-          const studentCount =
-            teacherStudentIds.size
-
-          /*
-           * سجلات الحضور لهذا المعلم فقط.
-           */
-          const teacherRecords =
-            selectedDateRecords.filter(
-              (record) =>
-                teacherStudentIds.has(
-                  normalizeId(
-                    record.studentId,
-                  ),
-                ),
-            )
-
-          /*
-           * نضمن عدم احتساب الطالب أكثر
-           * من مرة في حالة وجود سجل مكرر.
-           */
-          const seenStudents =
-            new Set<string>()
-
-          let presentCount = 0
-
-          for (const record of teacherRecords) {
-            const studentId =
+        /*
+         * جميع المعلمين المسجلين في الدورة.
+         *
+         * نأخذهم من course_teachers أولاً،
+         * ونضيف أي معلم موجود في assignments
+         * حتى لا يختفي أحد من التفاصيل.
+         */
+        const courseTeacherRows =
+          courseTeachers.filter(
+            (item) =>
               normalizeId(
-                record.studentId,
+                item.courseId,
+              ) === normalizedCourseId,
+          )
+
+        const assignmentRows =
+          assignments.filter(
+            (item) =>
+              normalizeId(
+                item.courseId,
+              ) === normalizedCourseId,
+          )
+
+        const teacherIds =
+          Array.from(
+            new Set([
+              ...courseTeacherRows.map(
+                (item) =>
+                  normalizeId(
+                    item.teacherId,
+                  ),
+              ),
+              ...assignmentRows.map(
+                (item) =>
+                  normalizeId(
+                    item.teacherId,
+                  ),
+              ),
+            ]),
+          ).filter(Boolean)
+
+        return teacherIds.map(
+          (teacherId) => {
+            const teacher =
+              teachers.find(
+                (item) =>
+                  normalizeId(
+                    item.id,
+                  ) === teacherId,
               )
-
-            if (
-              !studentId ||
-              seenStudents.has(
-                studentId,
-              )
-            ) {
-              continue
-            }
-
-            seenStudents.add(
-              studentId,
-            )
-
-            const statusName =
-              statusMap.get(
-                normalizeId(
-                  record.statusId,
-                ),
-              ) ?? ''
-
-            if (
-              isPresentStatus(
-                statusName,
-              )
-            ) {
-              presentCount += 1
-            }
-          }
-
-          /*
-           * هذا هو الفرق المهم:
-           *
-           * recordedCount = عدد الطلاب الذين
-           * لديهم سجل حضور فعلي.
-           */
-          const recordedCount =
-            seenStudents.size
-
-          /*
-           * إذا المعلم عنده طلاب لكن لم يسجل
-           * لأي واحد منهم، نرسل percentage = null
-           * حتى تعرض الواجهة "لم يسجل".
-           */
-          const percentage =
-            recordedCount === 0
-              ? null
-              : Math.round(
-                  (presentCount /
-                    studentCount) *
-                    100,
-                )
-
-          return {
-            teacherId,
-            teacherName:
-              teacher?.name ??
-              'معلم غير معروف',
-            studentCount,
-            presentCount,
-            percentage,
 
             /*
-             * نحتاج هذه القيمة في
-             * AttendanceDetails لعرض:
-             * "لم يسجل"
+             * الطلاب الموزعون على هذا المعلم
+             * في الدورة الحالية.
              */
-            recordedCount,
-          } as TeacherAttendanceDetail
-        },
-      )
-    },
-    [
-      courseTeachers,
-      assignments,
-      teachers,
-      selectedCourseId,
-      selectedDateRecords,
-      statusMap,
-      lessonDateStatus,
-    ],
-  )
+            const teacherStudentIds =
+              new Set(
+                assignmentRows
+                  .filter(
+                    (item) =>
+                      normalizeId(
+                        item.teacherId,
+                      ) === teacherId,
+                  )
+                  .map(
+                    (item) =>
+                      normalizeId(
+                        item.studentId,
+                      ),
+                  )
+                  .filter(Boolean),
+              )
+
+            const studentCount =
+              teacherStudentIds.size
+
+            /*
+             * سجلات الحضور لهذا المعلم فقط.
+             */
+            const teacherRecords =
+              selectedDateRecords.filter(
+                (record) =>
+                  teacherStudentIds.has(
+                    normalizeId(
+                      record.studentId,
+                    ),
+                  ),
+              )
+
+            /*
+             * نضمن عدم احتساب الطالب أكثر
+             * من مرة في حالة وجود سجل مكرر.
+             */
+            const seenStudents =
+              new Set<string>()
+
+            let presentCount = 0
+
+            for (const record of teacherRecords) {
+              const studentId =
+                normalizeId(
+                  record.studentId,
+                )
+
+              if (
+                !studentId ||
+                seenStudents.has(
+                  studentId,
+                )
+              ) {
+                continue
+              }
+
+              seenStudents.add(
+                studentId,
+              )
+
+              const statusName =
+                statusMap.get(
+                  normalizeId(
+                    record.statusId,
+                  ),
+                ) ?? ''
+
+              if (
+                isPresentStatus(
+                  statusName,
+                )
+              ) {
+                presentCount += 1
+              }
+            }
+
+            /*
+             * هذا هو الفرق المهم:
+             *
+             * recordedCount = عدد الطلاب الذين
+             * لديهم سجل حضور فعلي.
+             */
+            const recordedCount =
+              seenStudents.size
+
+            /*
+             * إذا المعلم عنده طلاب لكن لم يسجل
+             * لأي واحد منهم، نرسل percentage = null
+             * حتى تعرض الواجهة "لم يسجل".
+             */
+            const percentage =
+              recordedCount === 0
+                ? null
+                : Math.round(
+                    (presentCount /
+                      studentCount) *
+                      100,
+                  )
+
+            return {
+              teacherId,
+              teacherName:
+                teacher?.name ??
+                'معلم غير معروف',
+              studentCount,
+              presentCount,
+              percentage,
+              recordedCount,
+            } as TeacherAttendanceDetail
+          },
+        )
+      },
+      [
+        courseTeachers,
+        assignments,
+        teachers,
+        selectedCourseId,
+        selectedDateRecords,
+        statusMap,
+        lessonDateStatus,
+      ],
+    )
 
   const attendanceItems =
     useMemo(
@@ -2011,12 +2097,12 @@ export function DashboardView() {
       teachers,
     ])
 
-  if (loading) {
+  if (checkingAccess || loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <RefreshCw className="size-4 animate-spin" />
-          جاري تحميل لوحة التحكم...
+          جاري تحميل لوحة المعلومات...
         </div>
       </div>
     )
@@ -2032,7 +2118,7 @@ export function DashboardView() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              لوحة التحكم
+              لوحة المعلومات
             </h1>
 
             <p className="mt-1 text-sm text-muted-foreground">
