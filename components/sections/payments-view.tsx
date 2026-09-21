@@ -6,88 +6,54 @@ import { PaymentStudents } from './PaymentStudents'
 import { PaymentFinancial } from './PaymentFinancial'
 import { PaymentPersonal } from './PaymentPersonal'
 
-type PaymentSection =
-  | 'students'
-  | 'financial'
-  | 'personal'
-
 export function PaymentsView() {
-  const [activeSection, setActiveSection] =
-    useState<PaymentSection>('students')
+  const [active, setActive] = useState('students')
 
   return (
     <div dir="rtl" className="space-y-6">
-      {/* خيارات القسم */}
-      <div className="grid gap-4 md:grid-cols-3">
+
+      <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => setActiveSection('financial')}
-          className={`rounded-xl border p-5 text-right transition ${
-            activeSection === 'financial'
-              ? 'border-primary bg-primary/5'
-              : 'bg-background hover:border-primary/50'
-          }`}
+          onClick={() => setActive('students')}
+          className="rounded-lg border px-4 py-2"
         >
-          <div className="text-lg font-semibold">
-            إدارة المالية
-          </div>
-
-          <div className="mt-1 text-sm text-muted-foreground">
-            إدارة أموال المدرسة والاستلام والمصروفات والتسويات.
-          </div>
+          المدفوعات
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveSection('students')}
-          className={`rounded-xl border p-5 text-right transition ${
-            activeSection === 'students'
-              ? 'border-primary bg-primary/5'
-              : 'bg-background hover:border-primary/50'
-          }`}
+          onClick={() => setActive('financial')}
+          className="rounded-lg border px-4 py-2"
         >
-          <div className="text-lg font-semibold">
-            المدفوعات
-          </div>
-
-          <div className="mt-1 text-sm text-muted-foreground">
-            إدارة رسوم ومدفوعات الطلاب.
-          </div>
+          إدارة المالية
         </button>
 
         <button
           type="button"
-          onClick={() => setActiveSection('personal')}
-          className={`rounded-xl border p-5 text-right transition ${
-            activeSection === 'personal'
-              ? 'border-primary bg-primary/5'
-              : 'bg-background hover:border-primary/50'
-          }`}
+          onClick={() => setActive('personal')}
+          className="rounded-lg border px-4 py-2"
         >
-          <div className="text-lg font-semibold">
-            الإدارة الشخصية
-          </div>
-
-          <div className="mt-1 text-sm text-muted-foreground">
-            الإدارة المالية الشخصية.
-          </div>
+          الإدارة الشخصية
         </button>
       </div>
 
-      {/* محتوى القسم */}
       <div>
-        {activeSection === 'students' && (
-          <PaymentStudents />
+        {active === 'students' && <PaymentStudents />}
+
+        {active === 'financial' && (
+          <div className="rounded-xl border p-8">
+            إدارة المالية تعمل
+          </div>
         )}
 
-        {activeSection === 'financial' && (
-          <PaymentFinancial />
-        )}
-
-        {activeSection === 'personal' && (
-          <PaymentPersonal />
+        {active === 'personal' && (
+          <div className="rounded-xl border p-8">
+            الإدارة الشخصية تعمل
+          </div>
         )}
       </div>
+
     </div>
   )
 }
