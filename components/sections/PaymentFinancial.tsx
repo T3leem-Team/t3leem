@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
-  ChevronDown,
   Download,
   Loader2,
   Plus,
@@ -11,6 +10,7 @@ import {
   Trash2,
   Wallet,
   X,
+  RotateCcw,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -73,6 +73,7 @@ type ModalType =
   | 'transaction'
   | 'details'
   | 'delete'
+  | 'reset'
 
 type AcademicYear = {
   id: string
@@ -84,13 +85,52 @@ type AcademicYear = {
   annual_fee: number
 }
 
+type StudentPaymentRow = {
+  studentId: string
+  name: string
+  personalId: string | null
+  feeExempt: boolean
+  annualFee: number
+  paidAmount: number
+  remaining: number
+  status:
+    | 'paid'
+    | 'partial'
+    | 'exempt'
+    | 'unpaid'
+  latestPaymentMethod: string | null
+  latestPaymentDate: string | null
+  latestPaymentId: string | null
+  latestTransaction: Transaction | null
+  pendingCount: number
+}
+
+type StudentRecord = {
+  id: string
+  name: string | null
+  personal_id: string | null
+  fee_exempt: boolean | null
+}
+
+type PaymentRecord = {
+  id: string
+  student_id: string
+  amount: number
+  payment_method: string | null
+  payment_date: string | null
+  reference_number: string | null
+  notes: string | null
+}
+
 const money = (value: number) =>
   new Intl.NumberFormat('ar-BH', {
     minimumFractionDigits: 3,
     maximumFractionDigits: 3,
-  }).format(value)
+  }).format(Number(value || 0))
 
-const formatDate = (value: string | null | undefined) => {
+const formatDate = (
+  value: string | null | undefined
+) => {
   if (!value) return '-'
 
   return new Intl.DateTimeFormat('ar-BH', {
@@ -104,7 +144,9 @@ const formatDate = (value: string | null | undefined) => {
   }).format(new Date(value))
 }
 
-const formatDateOnly = (value: string | null | undefined) => {
+const formatDateOnly = (
+  value: string | null | undefined
+) => {
   if (!value) return '-'
 
   return new Intl.DateTimeFormat('ar-BH', {
@@ -126,6 +168,9 @@ export function PaymentFinancial() {
   const [transactions, setTransactions] =
     useState<Transaction[]>([])
 
+  const [studentPayments, setStudentPayments] =
+    useState<StudentPaymentRow[]>([])
+
   const [summary, setSummary] = useState<Summary>({
     openingBalance: 0,
     balance: 0,
@@ -143,14 +188,18 @@ export function PaymentFinancial() {
   const [modal, setModal] =
     useState<ModalType>('none')
 
-  const [selectedTransaction, setSelectedTransaction] =
-    useState<Transaction | null>(null)
+  const [
+    selectedTransaction,
+    setSelectedTransaction,
+  ] = useState<Transaction | null>(null)
 
   const [selectedDeleteId, setSelectedDeleteId] =
     useState<string | null>(null)
 
-  const [initializeMode, setInitializeMode] =
-    useState<FinancialMode>('manual')
+  const [
+    initializeMode,
+    setInitializeMode,
+  ] = useState<FinancialMode>('manual')
 
   const [openingBalance, setOpeningBalance] =
     useState('')
@@ -161,20 +210,28 @@ export function PaymentFinancial() {
   const [openingNote, setOpeningNote] =
     useState('')
 
-  const [transactionType, setTransactionType] =
-    useState<TransactionType>('in')
+  const [
+    transactionType,
+    setTransactionType,
+  ] = useState<TransactionType>('in')
 
-  const [transactionAmount, setTransactionAmount] =
-    useState('')
+  const [
+    transactionAmount,
+    setTransactionAmount,
+  ] = useState('')
 
-  const [transactionSource, setTransactionSource] =
-    useState('')
+  const [
+    transactionSource,
+    setTransactionSource,
+  ] = useState('')
 
   const [transactionNote, setTransactionNote] =
     useState('')
 
-  const [adjustmentDirection, setAdjustmentDirection] =
-    useState<AdjustmentDirection>('plus')
+  const [
+    adjustmentDirection,
+    setAdjustmentDirection,
+  ] = useState<AdjustmentDirection>('plus')
 
   const [refreshing, setRefreshing] =
     useState(false)
@@ -186,21 +243,24 @@ export function PaymentFinancial() {
    */
 
   const loadAcademicYear = async () => {
-    const { data, error: yearError } = await supabase
-      .from('academic_years')
-      .select(
-        'id, name, start_date, end_date, is_current, is_active, annual_fee'
-      )
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
+    const { data, error: yearError } =
+      await supabase
+        .from('academic_years')
+        .select(
+          'id, name, start_date, end_date, is_current, is_active, annual_fee'
+        )
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .maybeSingle()
 
     if (yearError) {
       throw new Error(yearError.message)
     }
 
     if (!data) {
-      throw new Error('لا توجد سنة دراسية حالية في النظام')
+      throw new Error(
+        'لا توجد سنة دراسية حالية في النظام'
+      )
     }
 
     setAcademicYear(data)
@@ -236,7 +296,8 @@ export function PaymentFinancial() {
 
     if (!response.ok) {
       throw new Error(
-        result?.error || 'تعذر تحميل الإدارة المالية'
+        result?.error ||
+          'تعذر تحميل الإدارة المالية'
       )
     }
 
@@ -258,7 +319,219 @@ export function PaymentFinancial() {
 
   /*
    * ---------------------------------------------------------
-   * التحميل الأول
+   * تحميل طلاب السنة ودفعاتهم
+   * ---------------------------------------------------------
+   */
+
+  const loadStudentPayments = async (
+    yearId?: string
+  ) => {
+    const id = yearId || academicYear?.id
+
+    if (!id) return
+
+    const {
+      data: enrollments,
+      error: enrollmentsError,
+    } = await supabase
+      .from('enrollments')
+      .select('student_id')
+      .eq('academic_year_id', id)
+
+    if (enrollmentsError) {
+      throw new Error(enrollmentsError.message)
+    }
+
+    const studentIds = Array.from(
+      new Set(
+        (enrollments || [])
+          .map((item) => item.student_id)
+          .filter(Boolean)
+      )
+    )
+
+    if (studentIds.length === 0) {
+      setStudentPayments([])
+      return
+    }
+
+    const [
+      { data: students, error: studentsError },
+      { data: payments, error: paymentsError },
+    ] = await Promise.all([
+      supabase
+        .from('students')
+        .select(
+          'id, name, personal_id, fee_exempt'
+        )
+        .in('id', studentIds),
+
+      supabase
+        .from('payments')
+        .select(
+          'id, student_id, amount, payment_method, payment_date, reference_number, notes'
+        )
+        .eq('academic_year_id', id)
+        .in('student_id', studentIds)
+        .order('payment_date', {
+          ascending: false,
+        }),
+    ])
+
+    if (studentsError) {
+      throw new Error(studentsError.message)
+    }
+
+    if (paymentsError) {
+      throw new Error(paymentsError.message)
+    }
+
+    const studentRecords =
+      (students || []) as StudentRecord[]
+
+    const paymentRecords =
+      (payments || []) as PaymentRecord[]
+
+    const paymentsByStudent = new Map<
+      string,
+      PaymentRecord[]
+    >()
+
+    for (const payment of paymentRecords) {
+      const current =
+        paymentsByStudent.get(
+          payment.student_id
+        ) || []
+
+      current.push(payment)
+
+      paymentsByStudent.set(
+        payment.student_id,
+        current
+      )
+    }
+
+    const transactionsByPaymentId =
+      new Map<string, Transaction>()
+
+    for (const transaction of transactions) {
+      if (transaction.payment_id) {
+        transactionsByPaymentId.set(
+          transaction.payment_id,
+          transaction
+        )
+      }
+    }
+
+    const rows: StudentPaymentRow[] =
+      studentRecords.map((student) => {
+        const studentPaymentRows =
+          paymentsByStudent.get(student.id) ||
+          []
+
+        const paidAmount =
+          studentPaymentRows.reduce(
+            (total, payment) =>
+              total + Number(payment.amount || 0),
+            0
+          )
+
+        const feeExempt =
+          Boolean(student.fee_exempt)
+
+        const annualFee = Number(
+          academicYear?.annual_fee || 0
+        )
+
+        let status:
+          | 'paid'
+          | 'partial'
+          | 'exempt'
+          | 'unpaid'
+
+        if (feeExempt) {
+          status = 'exempt'
+        } else if (
+          annualFee > 0 &&
+          paidAmount >= annualFee
+        ) {
+          status = 'paid'
+        } else if (paidAmount > 0) {
+          status = 'partial'
+        } else {
+          status = 'unpaid'
+        }
+
+        const latestPayment =
+          studentPaymentRows[0] || null
+
+        const pendingCount =
+          studentPaymentRows.filter(
+            (payment) =>
+              transactionsByPaymentId.get(
+                payment.id
+              )?.confirmation_status ===
+              'pending'
+          ).length
+
+        const latestTransaction =
+          latestPayment
+            ? transactionsByPaymentId.get(
+                latestPayment.id
+              ) || null
+            : null
+
+        return {
+          studentId: student.id,
+          name:
+            student.name ||
+            'بدون اسم',
+          personalId:
+            student.personal_id || null,
+          feeExempt,
+          annualFee,
+          paidAmount,
+          remaining: feeExempt
+            ? 0
+            : Math.max(
+                annualFee - paidAmount,
+                0
+              ),
+          status,
+          latestPaymentMethod:
+            latestPayment?.payment_method ||
+            null,
+          latestPaymentDate:
+            latestPayment?.payment_date ||
+            null,
+          latestPaymentId:
+            latestPayment?.id || null,
+          latestTransaction,
+          pendingCount,
+        }
+      })
+
+    /*
+     * نعرض فقط:
+     * - المدفوع جزئيًا
+     * - المدفوع بالكامل
+     * - المعفي
+     *
+     * أما غير المدفوع فلا يدخل في جدول الدفعات المالية.
+     */
+    setStudentPayments(
+      rows.filter(
+        (row) =>
+          row.status === 'partial' ||
+          row.status === 'paid' ||
+          row.status === 'exempt'
+      )
+    )
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * التحميل الكامل
    * ---------------------------------------------------------
    */
 
@@ -270,6 +543,12 @@ export function PaymentFinancial() {
       const year = await loadAcademicYear()
 
       await loadFinancialData(year.id)
+
+      /*
+       * بيانات الطلاب مهمة في وضع مدفوعات الطلاب.
+       * نحملها أيضًا عند وجود إعداد مالي.
+       */
+      await loadStudentPayments(year.id)
     } catch (err) {
       setError(
         err instanceof Error
@@ -299,6 +578,7 @@ export function PaymentFinancial() {
       const year = await loadAcademicYear()
 
       await loadFinancialData(year.id)
+      await loadStudentPayments(year.id)
     } catch (err) {
       setError(
         err instanceof Error
@@ -318,14 +598,23 @@ export function PaymentFinancial() {
 
   const initializeFinancial = async () => {
     if (!academicYear) {
-      setError('لم يتم العثور على السنة الدراسية الحالية')
+      setError(
+        'لم يتم العثور على السنة الدراسية الحالية'
+      )
       return
     }
 
-    const amount = Number(openingBalance || 0)
+    const amount = Number(
+      openingBalance || 0
+    )
 
-    if (amount < 0) {
-      setError('الرصيد الافتتاحي لا يمكن أن يكون سالباً')
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      setError(
+        'الرصيد الافتتاحي لا يمكن أن يكون سالباً'
+      )
       return
     }
 
@@ -342,8 +631,10 @@ export function PaymentFinancial() {
           },
           body: JSON.stringify({
             action: 'initialize',
-            academic_year_id: academicYear.id,
-            financial_mode: initializeMode,
+            academic_year_id:
+              academicYear.id,
+            financial_mode:
+              initializeMode,
             opening_balance: amount,
             opening_source:
               openingSource.trim() || null,
@@ -357,7 +648,8 @@ export function PaymentFinancial() {
 
       if (!response.ok) {
         throw new Error(
-          result?.error || 'تعذر تهيئة الإدارة المالية'
+          result?.error ||
+            'تعذر تهيئة الإدارة المالية'
         )
       }
 
@@ -366,12 +658,85 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
-      await loadFinancialData(academicYear.id)
+      await loadFinancialData(
+        academicYear.id
+      )
+
+      await loadStudentPayments(
+        academicYear.id
+      )
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : 'حدث خطأ أثناء التهيئة'
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * إعادة تهيئة الإدارة المالية فقط
+   * ---------------------------------------------------------
+   */
+
+  const resetFinancialManagement = async () => {
+    if (!academicYear) return
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response = await fetch(
+        '/api/financial-management/transactions',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'reset',
+            academic_year_id:
+              academicYear.id,
+          }),
+        }
+      )
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ||
+            'تعذر إعادة تهيئة الإدارة المالية'
+        )
+      }
+
+      setModal('none')
+      setSettings(null)
+      setTransactions([])
+      setStudentPayments([])
+
+      setSummary({
+        openingBalance: 0,
+        balance: 0,
+        totalIn: 0,
+        totalOut: 0,
+        totalAdjustmentsPlus: 0,
+        totalAdjustmentsMinus: 0,
+        operations: 0,
+      })
+
+      setInitializeMode('manual')
+      setOpeningBalance('')
+      setOpeningSource('')
+      setOpeningNote('')
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر إعادة التهيئة'
       )
     } finally {
       setSaving(false)
@@ -386,13 +751,20 @@ export function PaymentFinancial() {
 
   const createTransaction = async () => {
     if (!academicYear) {
-      setError('لم يتم العثور على السنة الدراسية الحالية')
+      setError(
+        'لم يتم العثور على السنة الدراسية الحالية'
+      )
       return
     }
 
-    const amount = Number(transactionAmount)
+    const amount = Number(
+      transactionAmount
+    )
 
-    if (!amount || amount <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       setError('أدخل مبلغاً صحيحاً')
       return
     }
@@ -414,25 +786,32 @@ export function PaymentFinancial() {
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'create',
-            academic_year_id: academicYear.id,
-            transaction_type: transactionType,
+            academic_year_id:
+              academicYear.id,
+            transaction_type:
+              transactionType,
             amount,
             adjustment_direction:
-              transactionType === 'adjustment'
+              transactionType ===
+              'adjustment'
                 ? adjustmentDirection
                 : null,
             source_type:
-              transactionType === 'adjustment'
+              transactionType ===
+              'adjustment'
                 ? 'adjustment'
                 : 'manual',
             source:
-              transactionSource.trim() || null,
+              transactionSource.trim() ||
+              null,
             note:
-              transactionNote.trim() || null,
+              transactionNote.trim() ||
+              null,
           }),
         }
       )
@@ -441,7 +820,8 @@ export function PaymentFinancial() {
 
       if (!response.ok) {
         throw new Error(
-          result?.error || 'تعذر إضافة العملية'
+          result?.error ||
+            'تعذر إضافة العملية'
         )
       }
 
@@ -452,7 +832,12 @@ export function PaymentFinancial() {
       setTransactionType('in')
       setAdjustmentDirection('plus')
 
-      await loadFinancialData(academicYear.id)
+      await loadFinancialData(
+        academicYear.id
+      )
+      await loadStudentPayments(
+        academicYear.id
+      )
     } catch (err) {
       setError(
         err instanceof Error
@@ -475,6 +860,13 @@ export function PaymentFinancial() {
   ) => {
     if (!academicYear) return
 
+    if (
+      transaction.confirmation_status !==
+      'pending'
+    ) {
+      return
+    }
+
     try {
       setSaving(true)
       setError('')
@@ -484,12 +876,15 @@ export function PaymentFinancial() {
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'confirm',
-            academic_year_id: academicYear.id,
-            transaction_id: transaction.id,
+            academic_year_id:
+              academicYear.id,
+            transaction_id:
+              transaction.id,
           }),
         }
       )
@@ -498,11 +893,31 @@ export function PaymentFinancial() {
 
       if (!response.ok) {
         throw new Error(
-          result?.error || 'تعذر تأكيد العملية'
+          result?.error ||
+            'تعذر تأكيد العملية'
         )
       }
 
-      await loadFinancialData(academicYear.id)
+      /*
+       * إعادة تحميل الإدارة المالية والطلاب
+       * حتى يظهر الرصيد الجديد مباشرة.
+       */
+      await loadFinancialData(
+        academicYear.id
+      )
+
+      await loadStudentPayments(
+        academicYear.id
+      )
+
+      /*
+       * إذا كانت نافذة التفاصيل مفتوحة،
+       * نغلقها حتى لا تبقى البيانات القديمة.
+       */
+      if (modal === 'details') {
+        setModal('none')
+        setSelectedTransaction(null)
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -521,7 +936,12 @@ export function PaymentFinancial() {
    */
 
   const deleteTransaction = async () => {
-    if (!academicYear || !selectedDeleteId) return
+    if (
+      !academicYear ||
+      !selectedDeleteId
+    ) {
+      return
+    }
 
     try {
       setSaving(true)
@@ -532,12 +952,15 @@ export function PaymentFinancial() {
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'delete',
-            academic_year_id: academicYear.id,
-            transaction_id: selectedDeleteId,
+            academic_year_id:
+              academicYear.id,
+            transaction_id:
+              selectedDeleteId,
           }),
         }
       )
@@ -546,14 +969,21 @@ export function PaymentFinancial() {
 
       if (!response.ok) {
         throw new Error(
-          result?.error || 'تعذر حذف العملية'
+          result?.error ||
+            'تعذر حذف العملية'
         )
       }
 
       setModal('none')
       setSelectedDeleteId(null)
 
-      await loadFinancialData(academicYear.id)
+      await loadFinancialData(
+        academicYear.id
+      )
+
+      await loadStudentPayments(
+        academicYear.id
+      )
     } catch (err) {
       setError(
         err instanceof Error
@@ -575,8 +1005,10 @@ export function PaymentFinancial() {
     () =>
       transactions.filter(
         (item) =>
-          item.source_type === 'student_payment' &&
-          item.confirmation_status === 'pending'
+          item.source_type ===
+            'student_payment' &&
+          item.confirmation_status ===
+            'pending'
       ),
     [transactions]
   )
@@ -588,6 +1020,15 @@ export function PaymentFinancial() {
    */
 
   const exportExcel = () => {
+    if (!academicYear) return
+
+    const studentNameById = new Map(
+      studentPayments.map((student) => [
+        student.studentId,
+        student.name,
+      ])
+    )
+
     const headers = [
       'التاريخ',
       'نوع العملية',
@@ -607,28 +1048,41 @@ export function PaymentFinancial() {
       'الملاحظات',
     ]
 
-    const rows = transactions.map((transaction) => [
-      formatDate(transaction.created_at),
-      getTransactionLabel(transaction),
-      transaction.amount,
-      transaction.balance_before ?? '',
-      transaction.balance_after ?? '',
-      transaction.source ?? '',
-      '',
-      transaction.student_id ?? '',
-      transaction.student_request_number ?? '',
-      transaction.payment_method ?? '',
-      transaction.reference_number ?? '',
-      getConfirmationLabel(
-        transaction.confirmation_status
-      ),
-      transaction.confirmed_by ?? '',
-      transaction.confirmed_at
-        ? formatDate(transaction.confirmed_at)
-        : '',
-      transaction.created_by ?? '',
-      transaction.note ?? '',
-    ])
+    const rows = transactions.map(
+      (transaction) => [
+        formatDate(
+          transaction.created_at
+        ),
+        getTransactionLabel(transaction),
+        transaction.amount,
+        transaction.balance_before ??
+          '',
+        transaction.balance_after ??
+          '',
+        transaction.source ?? '',
+        transaction.student_id
+          ? studentNameById.get(
+              transaction.student_id
+            ) || ''
+          : '',
+        transaction.student_id ?? '',
+        transaction.student_request_number ??
+          '',
+        transaction.payment_method ?? '',
+        transaction.reference_number ?? '',
+        getConfirmationLabel(
+          transaction.confirmation_status
+        ),
+        transaction.confirmed_by ?? '',
+        transaction.confirmed_at
+          ? formatDate(
+              transaction.confirmed_at
+            )
+          : '',
+        transaction.created_by ?? '',
+        transaction.note ?? '',
+      ]
+    )
 
     const csv = [
       headers,
@@ -637,8 +1091,14 @@ export function PaymentFinancial() {
       .map((row) =>
         row
           .map((cell) => {
-            const value = String(cell ?? '')
-            return `"${value.replace(/"/g, '""')}"`
+            const value = String(
+              cell ?? ''
+            )
+
+            return `"${value.replace(
+              /"/g,
+              '""'
+            )}"`
           })
           .join(',')
       )
@@ -651,11 +1111,15 @@ export function PaymentFinancial() {
       }
     )
 
-    const url = URL.createObjectURL(blob)
+    const url =
+      URL.createObjectURL(blob)
 
-    const link = document.createElement('a')
+    const link =
+      document.createElement('a')
+
     link.href = url
-    link.download = `financial-management-${academicYear?.name || 'year'}.csv`
+
+    link.download = `financial-management-${academicYear.name}.csv`
 
     document.body.appendChild(link)
     link.click()
@@ -673,16 +1137,23 @@ export function PaymentFinancial() {
   const getTransactionLabel = (
     transaction: Transaction
   ) => {
-    if (transaction.transaction_type === 'in') {
+    if (
+      transaction.transaction_type ===
+      'in'
+    ) {
       return 'إيراد'
     }
 
-    if (transaction.transaction_type === 'out') {
+    if (
+      transaction.transaction_type ===
+      'out'
+    ) {
       return 'مصروف'
     }
 
     if (
-      transaction.adjustment_direction === 'plus'
+      transaction.adjustment_direction ===
+      'plus'
     ) {
       return 'تسوية +'
     }
@@ -693,24 +1164,37 @@ export function PaymentFinancial() {
   const getConfirmationLabel = (
     status: Transaction['confirmation_status']
   ) => {
-    if (status === 'pending') return 'بانتظار التأكيد'
-    if (status === 'confirmed') return 'تم التأكيد'
+    if (status === 'pending') {
+      return 'بانتظار التأكيد'
+    }
+
+    if (status === 'confirmed') {
+      return 'تم التأكيد'
+    }
+
     return 'غير مطلوب'
   }
 
   const getTypeClass = (
     transaction: Transaction
   ) => {
-    if (transaction.transaction_type === 'in') {
+    if (
+      transaction.transaction_type ===
+      'in'
+    ) {
       return 'text-emerald-600'
     }
 
-    if (transaction.transaction_type === 'out') {
+    if (
+      transaction.transaction_type ===
+      'out'
+    ) {
       return 'text-red-600'
     }
 
     if (
-      transaction.adjustment_direction === 'plus'
+      transaction.adjustment_direction ===
+      'plus'
     ) {
       return 'text-blue-600'
     }
@@ -770,7 +1254,9 @@ export function PaymentFinancial() {
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                refreshing ? 'animate-spin' : ''
+                refreshing
+                  ? 'animate-spin'
+                  : ''
               }`}
             />
             تحديث
@@ -811,9 +1297,14 @@ export function PaymentFinancial() {
               </div>
 
               <div className="mt-1 text-xs text-gray-500">
-                من {formatDateOnly(academicYear.start_date)}
-                {' '}إلى{' '}
-                {formatDateOnly(academicYear.end_date)}
+                من{' '}
+                {formatDateOnly(
+                  academicYear.start_date
+                )}{' '}
+                إلى{' '}
+                {formatDateOnly(
+                  academicYear.end_date
+                )}
               </div>
             </div>
 
@@ -842,13 +1333,18 @@ export function PaymentFinancial() {
             </h3>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              اختر طريقة تأسيس الرصيد لهذه السنة الدراسية.
-              بعد التهيئة تصبح الطريقة جزءاً من إعدادات السنة.
+              اختر طريقة تأسيس الرصيد لهذه
+              السنة الدراسية. يمكن إعادة
+              تهيئة هذا القسم أثناء التطوير
+              دون حذف مدفوعات الطلاب أو
+              بياناتهم.
             </p>
 
             <button
               type="button"
-              onClick={() => setModal('initialize')}
+              onClick={() =>
+                setModal('initialize')
+              }
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-medium text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
@@ -865,7 +1361,7 @@ export function PaymentFinancial() {
           {/* وضع الإدارة */}
 
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-sm text-gray-500">
                   طريقة تأسيس الرصيد
@@ -877,13 +1373,35 @@ export function PaymentFinancial() {
                     ? 'مرتبط بمدفوعات الطلاب'
                     : 'إدخال يدوي'}
                 </div>
+
+                <div className="mt-1 text-xs text-gray-500">
+                  {settings.financial_mode ===
+                  'student_payments'
+                    ? 'دفعات الطلاب تدخل الرصيد بعد تأكيد الاستلام.'
+                    : 'الإيرادات والمصروفات والتسويات تدار يدويًا.'}
+                </div>
               </div>
 
-              <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
-                الرصيد الافتتاحي:{' '}
-                <span className="font-bold">
-                  {money(settings.opening_balance)}
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
+                  الرصيد الافتتاحي:{' '}
+                  <span className="font-bold">
+                    {money(
+                      settings.opening_balance
+                    )}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setModal('reset')
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  إعادة تهيئة
+                </button>
               </div>
             </div>
           </div>
@@ -894,7 +1412,9 @@ export function PaymentFinancial() {
             <SummaryCard
               title="الرصيد الحالي"
               value={money(summary.balance)}
-              icon={<Wallet className="h-5 w-5" />}
+              icon={
+                <Wallet className="h-5 w-5" />
+              }
             />
 
             <SummaryCard
@@ -920,10 +1440,221 @@ export function PaymentFinancial() {
 
             <SummaryCard
               title="عدد العمليات"
-              value={String(summary.operations)}
+              value={String(
+                summary.operations
+              )}
               icon={<span>#</span>}
             />
           </div>
+
+          {/* دفعات الطلاب */}
+
+          {settings.financial_mode ===
+            'student_payments' && (
+            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+              <div className="border-b px-5 py-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="font-bold">
+                      الطلاب والدفع
+                    </h3>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      الطلاب المدفوع لهم جزئيًا
+                      أو بالكامل والمعفيون من
+                      الرسوم.
+                    </p>
+                  </div>
+
+                  <div className="rounded-full bg-gray-50 px-3 py-1 text-xs text-gray-600">
+                    {studentPayments.length}{' '}
+                    طالب
+                  </div>
+                </div>
+              </div>
+
+              {studentPayments.length ===
+              0 ? (
+                <div className="px-5 py-12 text-center text-sm text-gray-500">
+                  لا توجد دفعات أو إعفاءات
+                  مسجلة لهذه السنة.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1100px] text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50 text-right">
+                        <th className="px-4 py-3">
+                          الطالب
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الحالة المالية
+                        </th>
+
+                        <th className="px-4 py-3">
+                          المدفوع
+                        </th>
+
+                        <th className="px-4 py-3">
+                          المتبقي
+                        </th>
+
+                        <th className="px-4 py-3">
+                          طريقة الدفع
+                        </th>
+
+                        <th className="px-4 py-3">
+                          تاريخ الدفعة
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الاستلام
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الإجراء
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {studentPayments.map(
+                        (student) => (
+                          <tr
+                            key={
+                              student.studentId
+                            }
+                            className="border-b last:border-b-0 hover:bg-gray-50"
+                          >
+                            <td className="px-4 py-4">
+                              <div className="font-semibold">
+                                {student.name}
+                              </div>
+
+                              {student.personalId && (
+                                <div className="mt-1 text-xs text-gray-500">
+                                  {
+                                    student.personalId
+                                  }
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <StudentPaymentStatus
+                                status={
+                                  student.status
+                                }
+                              />
+                            </td>
+
+                            <td className="px-4 py-4 font-semibold">
+                              {student.feeExempt
+                                ? '-'
+                                : money(
+                                    student.paidAmount
+                                  )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              {student.feeExempt
+                                ? '-'
+                                : money(
+                                    student.remaining
+                                  )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              {student.feeExempt
+                                ? '-'
+                                : student.latestPaymentMethod ||
+                                  '-'}
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              {student.feeExempt
+                                ? '-'
+                                : formatDate(
+                                    student.latestPaymentDate
+                                  )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              {student.feeExempt ? (
+                                <span className="text-xs text-gray-500">
+                                  لا ينطبق
+                                </span>
+                              ) : student.pendingCount >
+                                0 ? (
+                                <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                                  بانتظار التأكيد
+                                </span>
+                              ) : student.latestTransaction
+                                  ?.confirmation_status ===
+                                'confirmed' ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  تم التأكيد
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-500">
+                                  غير مرتبط
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                {student.pendingCount >
+                                  0 &&
+                                  student.latestTransaction
+                                    ?.confirmation_status ===
+                                    'pending' && (
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        saving
+                                      }
+                                      onClick={() =>
+                                        confirmTransaction(
+                                          student.latestTransaction!
+                                        )
+                                      }
+                                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                                    >
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      تأكيد الاستلام
+                                    </button>
+                                  )}
+
+                                {student.latestTransaction && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTransaction(
+                                        student.latestTransaction!
+                                      )
+                                      setModal(
+                                        'details'
+                                      )
+                                    }}
+                                    className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
+                                  >
+                                    تفاصيل
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* العمليات المعلقة */}
 
@@ -936,12 +1667,15 @@ export function PaymentFinancial() {
                   </h3>
 
                   <p className="mt-1 text-sm text-amber-800">
-                    هذه الدفعات لا تدخل في الرصيد المالي حتى يتم تأكيد استلامها.
+                    هذه الدفعات لا تدخل في
+                    الرصيد المالي حتى يتم
+                    تأكيد استلامها.
                   </p>
                 </div>
 
                 <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
-                  {pendingTransactions.length} معلقة
+                  {pendingTransactions.length}{' '}
+                  معلقة
                 </div>
               </div>
             </div>
@@ -977,7 +1711,9 @@ export function PaymentFinancial() {
             <button
               type="button"
               onClick={() => {
-                setTransactionType('adjustment')
+                setTransactionType(
+                  'adjustment'
+                )
                 setModal('transaction')
               }}
               className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
@@ -1002,7 +1738,7 @@ export function PaymentFinancial() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px] text-sm">
+                <table className="w-full min-w-[1100px] text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50 text-right">
                       <th className="px-4 py-3">
@@ -1022,6 +1758,10 @@ export function PaymentFinancial() {
                       </th>
 
                       <th className="px-4 py-3">
+                        الطالب
+                      </th>
+
+                      <th className="px-4 py-3">
                         الحالة
                       </th>
 
@@ -1037,109 +1777,133 @@ export function PaymentFinancial() {
 
                   <tbody>
                     {transactions.map(
-                      (transaction) => (
-                        <tr
-                          key={transaction.id}
-                          className="border-b last:border-b-0 hover:bg-gray-50"
-                        >
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {formatDate(
-                              transaction.created_at
-                            )}
-                          </td>
+                      (transaction) => {
+                        const student =
+                          studentPayments.find(
+                            (item) =>
+                              item.studentId ===
+                              transaction.student_id
+                          )
 
-                          <td
-                            className={`px-4 py-4 font-semibold ${getTypeClass(
-                              transaction
-                            )}`}
+                        return (
+                          <tr
+                            key={
+                              transaction.id
+                            }
+                            className="border-b last:border-b-0 hover:bg-gray-50"
                           >
-                            {getTransactionLabel(
-                              transaction
-                            )}
-                          </td>
-
-                          <td className="px-4 py-4 font-semibold">
-                            {money(transaction.amount)}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            {transaction.source ||
-                              (transaction.source_type ===
-                              'student_payment'
-                                ? 'دفعة طالب'
-                                : transaction.source_type ===
-                                  'opening'
-                                ? 'الرصيد الافتتاحي'
-                                : '-')}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <StatusBadge
-                              status={
-                                transaction.confirmation_status
-                              }
-                            />
-                          </td>
-
-                          <td className="px-4 py-4 font-semibold">
-                            {transaction.balance_after !==
-                            undefined
-                              ? money(
-                                  transaction.balance_after
-                                )
-                              : '-'}
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedTransaction(
-                                    transaction
-                                  )
-                                  setModal('details')
-                                }}
-                                className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
-                              >
-                                تفاصيل
-                              </button>
-
-                              {transaction.confirmation_status ===
-                                'pending' && (
-                                <button
-                                  type="button"
-                                  disabled={saving}
-                                  onClick={() =>
-                                    confirmTransaction(
-                                      transaction
-                                    )
-                                  }
-                                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50"
-                                >
-                                  تأكيد
-                                </button>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              {formatDate(
+                                transaction.created_at
                               )}
+                            </td>
 
-                              {transaction.source_type !==
-                                'opening' && (
+                            <td
+                              className={`px-4 py-4 font-semibold ${getTypeClass(
+                                transaction
+                              )}`}
+                            >
+                              {getTransactionLabel(
+                                transaction
+                              )}
+                            </td>
+
+                            <td className="px-4 py-4 font-semibold">
+                              {money(
+                                transaction.amount
+                              )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              {transaction.source ||
+                                (transaction.source_type ===
+                                'student_payment'
+                                  ? 'دفعة طالب'
+                                  : transaction.source_type ===
+                                    'opening'
+                                  ? 'الرصيد الافتتاحي'
+                                  : '-')}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              {student?.name ||
+                                '-'}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <StatusBadge
+                                status={
+                                  transaction.confirmation_status
+                                }
+                              />
+                            </td>
+
+                            <td className="px-4 py-4 font-semibold">
+                              {transaction.balance_after !==
+                              undefined
+                                ? money(
+                                    transaction.balance_after
+                                  )
+                                : '-'}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSelectedDeleteId(
-                                      transaction.id
+                                    setSelectedTransaction(
+                                      transaction
                                     )
-                                    setModal('delete')
+                                    setModal(
+                                      'details'
+                                    )
                                   }}
-                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                                  className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  تفاصيل
                                 </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
+
+                                {transaction.confirmation_status ===
+                                  'pending' && (
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      saving
+                                    }
+                                    onClick={() =>
+                                      confirmTransaction(
+                                        transaction
+                                      )
+                                    }
+                                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    تأكيد
+                                  </button>
+                                )}
+
+                                {transaction.source_type !==
+                                  'opening' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedDeleteId(
+                                        transaction.id
+                                      )
+                                      setModal(
+                                        'delete'
+                                      )
+                                    }}
+                                    className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
                     )}
                   </tbody>
                 </table>
@@ -1184,17 +1948,22 @@ export function PaymentFinancial() {
                   </div>
 
                   <div className="mt-1 text-xs leading-5 text-gray-500">
-                    دفعات الطلاب تحتاج تأكيد الاستلام قبل دخولها في الرصيد.
+                    دفعات الطلاب تحتاج تأكيد
+                    الاستلام قبل دخولها في
+                    الرصيد.
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    setInitializeMode('manual')
+                    setInitializeMode(
+                      'manual'
+                    )
                   }
                   className={`rounded-xl border p-4 text-right ${
-                    initializeMode === 'manual'
+                    initializeMode ===
+                    'manual'
                       ? 'border-black bg-gray-50'
                       : ''
                   }`}
@@ -1204,7 +1973,8 @@ export function PaymentFinancial() {
                   </div>
 
                   <div className="mt-1 text-xs leading-5 text-gray-500">
-                    إدخال الرصيد الأولي يدوياً من أي مصدر.
+                    إدخال الرصيد الأولي يدوياً
+                    من أي مصدر.
                   </div>
                 </button>
               </div>
@@ -1221,7 +1991,9 @@ export function PaymentFinancial() {
                 step="0.001"
                 value={openingBalance}
                 onChange={(e) =>
-                  setOpeningBalance(e.target.value)
+                  setOpeningBalance(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
                 placeholder="0.000"
@@ -1236,28 +2008,36 @@ export function PaymentFinancial() {
               <select
                 value={openingSource}
                 onChange={(e) =>
-                  setOpeningSource(e.target.value)
+                  setOpeningSource(
+                    e.target.value
+                  )
                 }
                 className="w-full rounded-lg border bg-white px-3 py-2"
               >
                 <option value="">
                   اختر المصدر
                 </option>
+
                 <option value="previous_balance">
                   رصيد سابق
                 </option>
+
                 <option value="cash">
                   نقدي
                 </option>
+
                 <option value="transfer">
                   تحويل
                 </option>
+
                 <option value="support">
                   دعم
                 </option>
+
                 <option value="deposit">
                   إيداع
                 </option>
+
                 <option value="other">
                   أخرى
                 </option>
@@ -1272,7 +2052,9 @@ export function PaymentFinancial() {
               <textarea
                 value={openingNote}
                 onChange={(e) =>
-                  setOpeningNote(e.target.value)
+                  setOpeningNote(
+                    e.target.value
+                  )
                 }
                 rows={3}
                 className="w-full rounded-lg border px-3 py-2"
@@ -1280,10 +2062,22 @@ export function PaymentFinancial() {
               />
             </div>
 
+            {initializeMode ===
+              'student_payments' && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                سيتم جلب الدفعات الموجودة
+                مسبقًا لهذه السنة وربطها
+                بالإدارة المالية كدفعات
+                بانتظار تأكيد الاستلام.
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setModal('none')}
+                onClick={() =>
+                  setModal('none')
+                }
                 className="rounded-lg border px-4 py-2"
               >
                 إلغاء
@@ -1307,6 +2101,71 @@ export function PaymentFinancial() {
       )}
 
       {/* --------------------------------------------------
+          Modal: إعادة التهيئة
+      -------------------------------------------------- */}
+
+      {modal === 'reset' && (
+        <Modal
+          title="إعادة تهيئة الإدارة المالية"
+          onClose={() => setModal('none')}
+        >
+          <div className="space-y-5">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <div className="font-semibold text-red-800">
+                تنبيه
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-red-700">
+                سيتم حذف إعداد الإدارة
+                المالية وعملياتها لهذه السنة
+                فقط.
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-red-700">
+                لن يتم حذف مدفوعات الطلاب،
+                الطلاب، التسجيلات أو
+                الاشتراكات.
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-red-700">
+                بعد ذلك يمكنك اختيار طريقة
+                الإدارة المالية من جديد.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setModal('none')
+                }
+                className="rounded-lg border px-4 py-2"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  resetFinancialManagement
+                }
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2 text-white disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+
+                إعادة التهيئة
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* --------------------------------------------------
           Modal: إضافة عملية
       -------------------------------------------------- */}
 
@@ -1319,7 +2178,9 @@ export function PaymentFinancial() {
               ? 'إضافة مصروف'
               : 'إضافة تسوية'
           }
-          onClose={() => setModal('none')}
+          onClose={() =>
+            setModal('none')
+          }
         >
           <div className="space-y-5">
             {transactionType ===
@@ -1442,7 +2303,9 @@ export function PaymentFinancial() {
 
               <button
                 type="button"
-                onClick={createTransaction}
+                onClick={
+                  createTransaction
+                }
                 disabled={saving}
                 className="rounded-lg bg-black px-5 py-2 text-white disabled:opacity-50"
               >
@@ -1467,7 +2330,9 @@ export function PaymentFinancial() {
             title="تفاصيل العملية"
             onClose={() => {
               setModal('none')
-              setSelectedTransaction(null)
+              setSelectedTransaction(
+                null
+              )
             }}
           >
             <div className="grid gap-4 md:grid-cols-2">
@@ -1480,9 +2345,9 @@ export function PaymentFinancial() {
 
               <Detail
                 label="المبلغ"
-                value={`${money(
+                value={money(
                   selectedTransaction.amount
-                )}`}
+                )}
               />
 
               <Detail
@@ -1619,6 +2484,25 @@ export function PaymentFinancial() {
                   }
                 />
               </div>
+
+              {selectedTransaction.confirmation_status ===
+                'pending' && (
+                <div className="md:col-span-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      confirmTransaction(
+                        selectedTransaction
+                      )
+                    }
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    تأكيد استلام الدفعة
+                  </button>
+                </div>
+              )}
             </div>
           </Modal>
         )}
@@ -1638,7 +2522,14 @@ export function PaymentFinancial() {
           <div className="space-y-5">
             <p className="text-sm leading-6 text-gray-600">
               هل أنت متأكد من حذف هذه العملية؟
-              سيتم إعادة احتساب الرصيد بعد الحذف.
+              سيتم إعادة احتساب الرصيد بعد
+              الحذف.
+            </p>
+
+            <p className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
+              حذف العملية المالية لا يحذف
+              دفعة الطالب الأصلية من جدول
+              المدفوعات.
             </p>
 
             <div className="flex justify-end gap-2">
@@ -1646,7 +2537,9 @@ export function PaymentFinancial() {
                 type="button"
                 onClick={() => {
                   setModal('none')
-                  setSelectedDeleteId(null)
+                  setSelectedDeleteId(
+                    null
+                  )
                 }}
                 className="rounded-lg border px-4 py-2"
               >
@@ -1655,7 +2548,9 @@ export function PaymentFinancial() {
 
               <button
                 type="button"
-                onClick={deleteTransaction}
+                onClick={
+                  deleteTransaction
+                }
                 disabled={saving}
                 className="rounded-lg bg-red-600 px-5 py-2 text-white disabled:opacity-50"
               >
@@ -1704,6 +2599,52 @@ function SummaryCard({
         {value}
       </div>
     </div>
+  )
+}
+
+/*
+ * =========================================================
+ * حالة دفع الطالب
+ * =========================================================
+ */
+
+function StudentPaymentStatus({
+  status,
+}: {
+  status:
+    | 'paid'
+    | 'partial'
+    | 'exempt'
+    | 'unpaid'
+}) {
+  if (status === 'paid') {
+    return (
+      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+        مدفوع بالكامل
+      </span>
+    )
+  }
+
+  if (status === 'partial') {
+    return (
+      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+        مدفوع جزئيًا
+      </span>
+    )
+  }
+
+  if (status === 'exempt') {
+    return (
+      <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+        معفي
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
+      غير مدفوع
+    </span>
   )
 }
 
