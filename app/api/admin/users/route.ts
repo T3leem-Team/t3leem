@@ -46,6 +46,7 @@ async function requireAdmin() {
         id,
         auth_user_id,
         username,
+        email,
         full_name,
         role,
         department,
@@ -127,6 +128,7 @@ export async function GET() {
           id,
           auth_user_id,
           username,
+          email,
           full_name,
           role,
           department,
@@ -326,6 +328,12 @@ export async function POST(
         ? body.fullName.trim()
         : ''
 
+    const email =
+      typeof body.email ===
+      'string'
+        ? body.email.trim().toLowerCase()
+        : ''
+
     const password =
       typeof body.password ===
       'string'
@@ -363,13 +371,31 @@ export async function POST(
     if (
       !username ||
       !fullName ||
+      !email ||
       !password ||
       !role
     ) {
       return NextResponse.json(
         {
           error:
-            'اسم المستخدم والاسم الكامل وكلمة المرور والدور مطلوبة.',
+            'اسم المستخدم والاسم الكامل والبريد الإلكتروني وكلمة المرور والدور مطلوبة.',
+        },
+        { status: 400 },
+      )
+    }
+
+    /*
+     * التحقق من صيغة البريد الإلكتروني
+     */
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'البريد الإلكتروني غير صالح.',
         },
         { status: 400 },
       )
@@ -444,15 +470,51 @@ export async function POST(
     }
 
     /*
-     * نستخدم Email داخليًا في Supabase Auth.
-     *
-     * المستخدم يتعامل مع username فقط.
+     * التحقق من البريد الإلكتروني
      */
-    const email =
-      `${username.toLowerCase()}@t3leem.local`
+    const {
+      data: existingEmailProfile,
+      error:
+        existingEmailError,
+    } =
+      await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq(
+          'email',
+          email,
+        )
+        .maybeSingle()
+
+    if (existingEmailError) {
+      console.error(
+        'Existing email lookup error:',
+        existingEmailError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من البريد الإلكتروني.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (existingEmailProfile) {
+      return NextResponse.json(
+        {
+          error:
+            'البريد الإلكتروني مستخدم بالفعل.',
+        },
+        { status: 409 },
+      )
+    }
 
     /*
      * إنشاء حساب Supabase Auth
+     *
+     * نستخدم البريد الحقيقي للمستخدم.
      */
     const {
       data: authData,
@@ -504,6 +566,8 @@ export async function POST(
 
           username,
 
+          email,
+
           full_name:
             fullName,
 
@@ -520,6 +584,7 @@ export async function POST(
           id,
           auth_user_id,
           username,
+          email,
           full_name,
           role,
           department,
@@ -709,7 +774,7 @@ export async function POST(
  * --------------------------------------------------
  * PATCH
  *
- * تعديل المستخدم + الدور + القسم +
+ * تعديل المستخدم + البريد + الدور + القسم +
  * الحالة + كلمة المرور + الصلاحيات
  * --------------------------------------------------
  */
@@ -718,7 +783,6 @@ export async function PATCH(
 ) {
   try {
     const {
-      profile: adminProfile,
       access,
       error,
     } = await requireAdmin()
@@ -740,6 +804,12 @@ export async function PATCH(
       typeof body.fullName ===
       'string'
         ? body.fullName.trim()
+        : ''
+
+    const email =
+      typeof body.email ===
+      'string'
+        ? body.email.trim().toLowerCase()
         : ''
 
     const role =
@@ -830,6 +900,24 @@ export async function PATCH(
     }
 
     /*
+     * إذا تم إرسال البريد، نتحقق منه
+     */
+    if (
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email,
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'البريد الإلكتروني غير صالح.',
+        },
+        { status: 400 },
+      )
+    }
+
+    /*
      * جلب المستخدم المطلوب تعديله
      */
     const {
@@ -844,6 +932,7 @@ export async function PATCH(
           id,
           auth_user_id,
           username,
+          email,
           full_name,
           role,
           department,
@@ -882,6 +971,58 @@ export async function PATCH(
     }
 
     /*
+     * إذا كان البريد مختلفًا، نتحقق من عدم استخدامه
+     * لمستخدم آخر.
+     */
+    if (
+      email &&
+      email !== targetUser.email
+    ) {
+      const {
+        data: existingEmailProfile,
+        error:
+          existingEmailError,
+      } =
+        await supabaseAdmin
+          .from('user_profiles')
+          .select('id')
+          .eq(
+            'email',
+            email,
+          )
+          .neq(
+            'id',
+            userId,
+          )
+          .maybeSingle()
+
+      if (existingEmailError) {
+        console.error(
+          'Existing email lookup error:',
+          existingEmailError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر التحقق من البريد الإلكتروني.',
+          },
+          { status: 500 },
+        )
+      }
+
+      if (existingEmailProfile) {
+        return NextResponse.json(
+          {
+            error:
+              'البريد الإلكتروني مستخدم بالفعل.',
+          },
+          { status: 409 },
+        )
+      }
+    }
+
+    /*
      * منع الأدمن من تعطيل نفسه
      */
     if (
@@ -903,11 +1044,13 @@ export async function PATCH(
      */
     if (
       password ||
-      isActive !== undefined
+      isActive !== undefined ||
+      email
     ) {
       const authUpdate: {
         password?: string
         ban_duration?: string
+        email?: string
       } = {}
 
       if (password) {
@@ -923,6 +1066,14 @@ export async function PATCH(
           isActive
             ? 'none'
             : '876000h'
+      }
+
+      if (
+        email &&
+        email !== targetUser.email
+      ) {
+        authUpdate.email =
+          email
       }
 
       const {
@@ -969,6 +1120,11 @@ export async function PATCH(
         new Date().toISOString(),
     }
 
+    if (email) {
+      profileUpdate.email =
+        email
+    }
+
     if (
       isActive !==
       undefined
@@ -996,6 +1152,7 @@ export async function PATCH(
           id,
           auth_user_id,
           username,
+          email,
           full_name,
           role,
           department,
