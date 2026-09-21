@@ -5,9 +5,9 @@ import { useState } from 'react'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 
-import { PaymentStudents } from '@/components/PaymentStudents'
-import { PaymentFinancial } from '@/components/PaymentFinancial'
-import { PaymentPersonal } from '@/components/PaymentPersonal'
+import { PaymentStudents } from './PaymentStudents'
+import { PaymentFinancial } from './PaymentFinancial'
+import { PaymentPersonal } from './PaymentPersonal'
 
 type PaymentSection =
   | 'financial'
