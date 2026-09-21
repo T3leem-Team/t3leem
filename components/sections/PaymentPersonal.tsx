@@ -46,10 +46,33 @@ export function PaymentPersonal() {
 
   const [transactionType, setTransactionType] =
     useState<'in' | 'out' | 'adjustment'>('in')
+
   const [transactionAmount, setTransactionAmount] = useState('')
   const [transactionDescription, setTransactionDescription] = useState('')
   const [transactionNote, setTransactionNote] = useState('')
   const [adjustmentSign, setAdjustmentSign] = useState<1 | -1>(1)
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString('ar-SA', {
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+  }
+
+  function formatDateTime(date: string) {
+    return new Date(date).toLocaleString('ar-SA', {
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
 
   async function loadCycles() {
     try {
@@ -58,13 +81,17 @@ export function PaymentPersonal() {
 
       const response = await fetch(
         '/api/personal-finance?action=cycles',
-        { cache: 'no-store' },
+        {
+          cache: 'no-store',
+        },
       )
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'تعذر تحميل الدفاتر.')
+        throw new Error(
+          data.error || 'تعذر تحميل الدفاتر.',
+        )
       }
 
       setCycles(data.cycles ?? [])
@@ -83,22 +110,30 @@ export function PaymentPersonal() {
     try {
       setError('')
       setSelectedCycle(cycle)
+      setTransactions([])
+      setCurrentBalance(0)
       setShowDetails(true)
 
       const response = await fetch(
         `/api/personal-finance?action=transactions&cycleId=${cycle.id}`,
-        { cache: 'no-store' },
+        {
+          cache: 'no-store',
+        },
       )
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'تعذر تحميل العمليات.')
+        throw new Error(
+          data.error || 'تعذر تحميل العمليات.',
+        )
       }
 
       setSelectedCycle(data.cycle ?? cycle)
       setTransactions(data.transactions ?? [])
-      setCurrentBalance(Number(data.currentBalance ?? 0))
+      setCurrentBalance(
+        Number(data.currentBalance ?? 0),
+      )
     } catch (err) {
       setError(
         err instanceof Error
@@ -125,24 +160,31 @@ export function PaymentPersonal() {
       setSaving(true)
       setError('')
 
-      const response = await fetch('/api/personal-finance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        '/api/personal-finance',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'create-cycle',
+            name: cycleName.trim(),
+            initial_balance: balance,
+            initial_source:
+              initialSource.trim() || null,
+            initial_note:
+              initialNote.trim() || null,
+          }),
         },
-        body: JSON.stringify({
-          action: 'create-cycle',
-          name: cycleName.trim(),
-          initial_balance: balance,
-          initial_source: initialSource.trim() || null,
-          initial_note: initialNote.trim() || null,
-        }),
-      })
+      )
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'تعذر إنشاء الدفتر.')
+        throw new Error(
+          data.error || 'تعذر إنشاء الدفتر.',
+        )
       }
 
       setCycleName('')
@@ -164,7 +206,9 @@ export function PaymentPersonal() {
   }
 
   async function addTransaction() {
-    if (!selectedCycle) return
+    if (!selectedCycle) {
+      return
+    }
 
     if (selectedCycle.status !== 'open') {
       setError('هذا الدفتر مغلق.')
@@ -187,29 +231,36 @@ export function PaymentPersonal() {
       setSaving(true)
       setError('')
 
-      const response = await fetch('/api/personal-finance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        '/api/personal-finance',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'add-transaction',
+            cycle_id: selectedCycle.id,
+            transaction_type: transactionType,
+            amount,
+            description:
+              transactionDescription.trim(),
+            note:
+              transactionNote.trim() || null,
+            adjustment_sign:
+              transactionType === 'adjustment'
+                ? adjustmentSign
+                : null,
+          }),
         },
-        body: JSON.stringify({
-          action: 'add-transaction',
-          cycle_id: selectedCycle.id,
-          transaction_type: transactionType,
-          amount,
-          description: transactionDescription.trim(),
-          note: transactionNote.trim() || null,
-          adjustment_sign:
-            transactionType === 'adjustment'
-              ? adjustmentSign
-              : null,
-        }),
-      })
+      )
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'تعذر إضافة العملية.')
+        throw new Error(
+          data.error || 'تعذر إضافة العملية.',
+        )
       }
 
       setTransactionAmount('')
@@ -236,8 +287,10 @@ export function PaymentPersonal() {
   }, [])
 
   return (
-    <div dir="rtl" className="space-y-6">
-
+    <div
+      dir="rtl"
+      className="space-y-6"
+    >
       {/* العنوان */}
       <div className="flex items-center justify-between">
         <div>
@@ -262,7 +315,7 @@ export function PaymentPersonal() {
         </button>
       </div>
 
-      {/* الخطأ */}
+      {/* رسالة الخطأ */}
       {error && (
         <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">
           {error}
@@ -271,7 +324,6 @@ export function PaymentPersonal() {
 
       {/* جدول الدفاتر */}
       <div className="overflow-hidden rounded-2xl border bg-background">
-
         <div className="flex items-center justify-between border-b px-5 py-4">
           <h3 className="font-semibold">
             الدفاتر المالية
@@ -303,7 +355,6 @@ export function PaymentPersonal() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-5 py-4 text-right">
@@ -359,15 +410,17 @@ export function PaymentPersonal() {
                     </td>
 
                     <td className="px-5 py-4 text-muted-foreground">
-                      {new Date(
+                      {formatDate(
                         cycle.created_at,
-                      ).toLocaleDateString('ar-SA')}
+                      )}
                     </td>
 
                     <td className="px-5 py-4 text-center">
                       <button
                         type="button"
-                        onClick={() => openDetails(cycle)}
+                        onClick={() =>
+                          openDetails(cycle)
+                        }
                         className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
                       >
                         عرض التفاصيل
@@ -376,7 +429,6 @@ export function PaymentPersonal() {
                   </tr>
                 ))}
               </tbody>
-
             </table>
           </div>
         )}
@@ -385,12 +437,10 @@ export function PaymentPersonal() {
       {/* نافذة تفاصيل الدفتر */}
       {showDetails && selectedCycle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-
           <div className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl bg-background shadow-2xl">
 
             {/* رأس النافذة */}
             <div className="flex items-center justify-between border-b p-5">
-
               <div>
                 <h3 className="text-xl font-bold">
                   {selectedCycle.name}
@@ -403,15 +453,16 @@ export function PaymentPersonal() {
 
               <button
                 type="button"
-                onClick={() => setShowDetails(false)}
+                onClick={() =>
+                  setShowDetails(false)
+                }
                 className="rounded-lg border px-3 py-2 text-sm"
               >
                 إغلاق
               </button>
-
             </div>
 
-            {/* ملخص */}
+            {/* ملخص الدفتر */}
             <div className="grid gap-4 border-b p-5 md:grid-cols-3">
 
               <div className="rounded-xl border p-4">
@@ -454,7 +505,6 @@ export function PaymentPersonal() {
             <div className="flex-1 overflow-auto p-5">
 
               <div className="mb-4 flex items-center justify-between">
-
                 <h4 className="font-semibold">
                   جميع العمليات
                 </h4>
@@ -471,7 +521,6 @@ export function PaymentPersonal() {
                     + إضافة عملية
                   </button>
                 )}
-
               </div>
 
               {transactions.length === 0 ? (
@@ -480,7 +529,6 @@ export function PaymentPersonal() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-xl border">
-
                   <table className="w-full text-sm">
 
                     <thead className="bg-muted/50">
@@ -508,74 +556,76 @@ export function PaymentPersonal() {
                     </thead>
 
                     <tbody>
-                      {transactions.map((transaction) => {
-                        const isOut =
-                          transaction.transaction_type ===
-                            'out' ||
-                          (
+                      {transactions.map(
+                        (transaction) => {
+                          const isOut =
                             transaction.transaction_type ===
-                              'adjustment' &&
-                            transaction.adjustment_sign === -1
-                          )
+                              'out' ||
+                            (
+                              transaction.transaction_type ===
+                                'adjustment' &&
+                              transaction.adjustment_sign ===
+                                -1
+                            )
 
-                        return (
-                          <tr
-                            key={transaction.id}
-                            className="border-t"
-                          >
-                            <td className="px-4 py-3">
-                              {transaction.transaction_type ===
-                              'in'
-                                ? 'إيداع'
-                                : transaction.transaction_type ===
-                                  'out'
-                                  ? 'مصروف'
-                                  : 'تسوية'}
-                            </td>
-
-                            <td className="px-4 py-3 font-medium">
-                              {transaction.description}
-
-                              {transaction.note && (
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                  {transaction.note}
-                                </div>
-                              )}
-                            </td>
-
-                            <td
-                              className={`px-4 py-3 font-semibold ${
-                                isOut
-                                  ? 'text-red-600'
-                                  : 'text-green-600'
-                              }`}
+                          return (
+                            <tr
+                              key={transaction.id}
+                              className="border-t"
                             >
-                              {isOut ? '-' : '+'}
-                              {Number(
-                                transaction.amount,
-                              ).toFixed(3)}
-                            </td>
+                              <td className="px-4 py-3">
+                                {transaction.transaction_type ===
+                                'in'
+                                  ? 'إيداع'
+                                  : transaction.transaction_type ===
+                                    'out'
+                                    ? 'مصروف'
+                                    : 'تسوية'}
+                              </td>
 
-                            <td className="px-4 py-3 font-semibold">
-                              {Number(
-                                transaction.balance_after,
-                              ).toFixed(3)}
-                            </td>
+                              <td className="px-4 py-3 font-medium">
+                                {transaction.description}
 
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {new Date(
-                                transaction.created_at,
-                              ).toLocaleString('ar-SA')}
-                            </td>
-                          </tr>
-                        )
-                      })}
+                                {transaction.note && (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    {transaction.note}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td
+                                className={`px-4 py-3 font-semibold ${
+                                  isOut
+                                    ? 'text-red-600'
+                                    : 'text-green-600'
+                                }`}
+                              >
+                                {isOut ? '-' : '+'}
+                                {Number(
+                                  transaction.amount,
+                                ).toFixed(3)}
+                              </td>
+
+                              <td className="px-4 py-3 font-semibold">
+                                {Number(
+                                  transaction.balance_after,
+                                ).toFixed(3)}
+                              </td>
+
+                              <td className="px-4 py-3 text-muted-foreground">
+                                {formatDateTime(
+                                  transaction.created_at,
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        },
+                      )}
                     </tbody>
 
                   </table>
                 </div>
               )}
-
             </div>
           </div>
         </div>
@@ -594,7 +644,9 @@ export function PaymentPersonal() {
 
               <button
                 type="button"
-                onClick={() => setShowCreateCycle(false)}
+                onClick={() =>
+                  setShowCreateCycle(false)
+                }
                 className="rounded-lg border px-3 py-1"
               >
                 ×
@@ -629,7 +681,9 @@ export function PaymentPersonal() {
                   step="0.001"
                   value={initialBalance}
                   onChange={(e) =>
-                    setInitialBalance(e.target.value)
+                    setInitialBalance(
+                      e.target.value,
+                    )
                   }
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
                 />
@@ -643,7 +697,9 @@ export function PaymentPersonal() {
                 <input
                   value={initialSource}
                   onChange={(e) =>
-                    setInitialSource(e.target.value)
+                    setInitialSource(
+                      e.target.value,
+                    )
                   }
                   placeholder="مثال: نقدي"
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -658,7 +714,9 @@ export function PaymentPersonal() {
                 <textarea
                   value={initialNote}
                   onChange={(e) =>
-                    setInitialNote(e.target.value)
+                    setInitialNote(
+                      e.target.value,
+                    )
                   }
                   className="mt-1 min-h-24 w-full rounded-lg border bg-background px-3 py-2"
                 />
@@ -670,7 +728,9 @@ export function PaymentPersonal() {
 
               <button
                 type="button"
-                onClick={() => setShowCreateCycle(false)}
+                onClick={() =>
+                  setShowCreateCycle(false)
+                }
                 className="rounded-lg border px-4 py-2"
               >
                 إلغاء
@@ -706,7 +766,9 @@ export function PaymentPersonal() {
 
               <button
                 type="button"
-                onClick={() => setShowAddTransaction(false)}
+                onClick={() =>
+                  setShowAddTransaction(false)
+                }
                 className="rounded-lg border px-3 py-1"
               >
                 ×
@@ -756,7 +818,9 @@ export function PaymentPersonal() {
                     value={adjustmentSign}
                     onChange={(e) =>
                       setAdjustmentSign(
-                        Number(e.target.value) as 1 | -1,
+                        Number(
+                          e.target.value,
+                        ) as 1 | -1,
                       )
                     }
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -783,7 +847,9 @@ export function PaymentPersonal() {
                   step="0.001"
                   value={transactionAmount}
                   onChange={(e) =>
-                    setTransactionAmount(e.target.value)
+                    setTransactionAmount(
+                      e.target.value,
+                    )
                   }
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
                 />
@@ -797,7 +863,9 @@ export function PaymentPersonal() {
                 <input
                   value={transactionDescription}
                   onChange={(e) =>
-                    setTransactionDescription(e.target.value)
+                    setTransactionDescription(
+                      e.target.value,
+                    )
                   }
                   placeholder="مثال: شراء مستلزمات"
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -812,7 +880,9 @@ export function PaymentPersonal() {
                 <textarea
                   value={transactionNote}
                   onChange={(e) =>
-                    setTransactionNote(e.target.value)
+                    setTransactionNote(
+                      e.target.value,
+                    )
                   }
                   className="mt-1 min-h-24 w-full rounded-lg border bg-background px-3 py-2"
                 />
@@ -824,7 +894,9 @@ export function PaymentPersonal() {
 
               <button
                 type="button"
-                onClick={() => setShowAddTransaction(false)}
+                onClick={() =>
+                  setShowAddTransaction(false)
+                }
                 className="rounded-lg border px-4 py-2"
               >
                 إلغاء
