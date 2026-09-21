@@ -2,42 +2,40 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Check,
+  CheckCircle2,
   ChevronDown,
   Download,
   Loader2,
   Plus,
   RefreshCw,
-  Settings2,
   Trash2,
+  Wallet,
   X,
 } from 'lucide-react'
 
-import { Card, CardContent } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
 
-type FinancialMode =
-  | 'student_payments'
-  | 'manual'
+type FinancialMode = 'student_payments' | 'manual'
+type TransactionType = 'in' | 'out' | 'adjustment'
+type AdjustmentDirection = 'plus' | 'minus'
 
-type TransactionType =
-  | 'in'
-  | 'out'
-  | 'adjustment'
-
-type AdjustmentDirection =
-  | 'plus'
-  | 'minus'
+type FinancialSettings = {
+  id: string
+  academic_year_id: string
+  financial_mode: FinancialMode
+  opening_balance: number
+  opening_source: string | null
+  opening_note: string | null
+  created_at: string
+  updated_at: string
+}
 
 type Transaction = {
   id: string
   academic_year_id: string
   transaction_type: TransactionType
   amount: number
-  adjustment_direction:
-    | AdjustmentDirection
-    | null
+  adjustment_direction: AdjustmentDirection | null
   source_type:
     | 'student_payment'
     | 'manual'
@@ -49,26 +47,14 @@ type Transaction = {
   student_request_number: string | null
   payment_method: string | null
   reference_number: string | null
-  confirmation_status:
-    | 'pending'
-    | 'confirmed'
-    | 'not_required'
+  confirmation_status: 'pending' | 'confirmed' | 'not_required'
   confirmed_by: string | null
   confirmed_at: string | null
   created_by: string | null
   created_at: string
   note: string | null
-  balance_before: number
-  balance_after: number
-}
-
-type FinancialSettings = {
-  id: string
-  academic_year_id: string
-  financial_mode: FinancialMode
-  opening_balance: number
-  opening_source: string | null
-  opening_note: string | null
+  balance_before?: number
+  balance_after?: number
 }
 
 type Summary = {
@@ -76,39 +62,38 @@ type Summary = {
   balance: number
   totalIn: number
   totalOut: number
+  totalAdjustmentsPlus: number
+  totalAdjustmentsMinus: number
   operations: number
 }
 
 type ModalType =
   | 'none'
   | 'initialize'
-  | 'add'
+  | 'transaction'
   | 'details'
+  | 'delete'
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat('ar-SA', {
-    numberingSystem: 'latn',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+type AcademicYear = {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+  is_current: boolean
+  is_active: boolean
+  annual_fee: number
+}
+
+const money = (value: number) =>
+  new Intl.NumberFormat('ar-BH', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
   }).format(value)
-}
 
-function formatDate(value: string | null) {
-  if (!value) return '—'
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return '-'
 
-  return new Date(value).toLocaleDateString('ar-SA', {
-    calendar: 'gregory',
-    numberingSystem: 'latn',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return '—'
-
-  return new Date(value).toLocaleString('ar-SA', {
+  return new Intl.DateTimeFormat('ar-BH', {
     calendar: 'gregory',
     numberingSystem: 'latn',
     year: 'numeric',
@@ -116,78 +101,24 @@ function formatDateTime(value: string | null) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-  })
+  }).format(new Date(value))
 }
 
-function transactionLabel(transaction: Transaction) {
-  if (transaction.transaction_type === 'in') {
-    return 'دخل'
-  }
+const formatDateOnly = (value: string | null | undefined) => {
+  if (!value) return '-'
 
-  if (transaction.transaction_type === 'out') {
-    return 'مصروف'
-  }
-
-  if (
-    transaction.adjustment_direction === 'plus'
-  ) {
-    return 'تسوية +'
-  }
-
-  return 'تسوية -'
-}
-
-function transactionIsPositive(
-  transaction: Transaction,
-) {
-  if (transaction.transaction_type === 'in') {
-    return true
-  }
-
-  if (
-    transaction.transaction_type === 'adjustment' &&
-    transaction.adjustment_direction === 'plus'
-  ) {
-    return true
-  }
-
-  return false
-}
-
-function sourceLabel(transaction: Transaction) {
-  if (
-    transaction.source_type ===
-    'student_payment'
-  ) {
-    return (
-      transaction.source ||
-      'مدفوعات الطلاب'
-    )
-  }
-
-  if (transaction.source_type === 'opening') {
-    return (
-      transaction.source ||
-      'الرصيد الافتتاحي'
-    )
-  }
-
-  if (transaction.source_type === 'adjustment') {
-    return (
-      transaction.source ||
-      'تسوية'
-    )
-  }
-
-  return (
-    transaction.source ||
-    'إدخال يدوي'
-  )
+  return new Intl.DateTimeFormat('ar-BH', {
+    calendar: 'gregory',
+    numberingSystem: 'latn',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
 }
 
 export function PaymentFinancial() {
-  const [academicYearId, setAcademicYearId] =
-    useState<string | null>(null)
+  const [academicYear, setAcademicYear] =
+    useState<AcademicYear | null>(null)
 
   const [settings, setSettings] =
     useState<FinancialSettings | null>(null)
@@ -195,23 +126,19 @@ export function PaymentFinancial() {
   const [transactions, setTransactions] =
     useState<Transaction[]>([])
 
-  const [summary, setSummary] =
-    useState<Summary>({
-      openingBalance: 0,
-      balance: 0,
-      totalIn: 0,
-      totalOut: 0,
-      operations: 0,
-    })
+  const [summary, setSummary] = useState<Summary>({
+    openingBalance: 0,
+    balance: 0,
+    totalIn: 0,
+    totalOut: 0,
+    totalAdjustmentsPlus: 0,
+    totalAdjustmentsMinus: 0,
+    operations: 0,
+  })
 
-  const [loading, setLoading] =
-    useState(true)
-
-  const [saving, setSaving] =
-    useState(false)
-
-  const [error, setError] =
-    useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const [modal, setModal] =
     useState<ModalType>('none')
@@ -219,26 +146,11 @@ export function PaymentFinancial() {
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null)
 
-  const [transactionType, setTransactionType] =
-    useState<TransactionType>('in')
+  const [selectedDeleteId, setSelectedDeleteId] =
+    useState<string | null>(null)
 
-  const [adjustmentDirection, setAdjustmentDirection] =
-    useState<AdjustmentDirection>('plus')
-
-  const [amount, setAmount] =
-    useState('')
-
-  const [source, setSource] =
-    useState('')
-
-  const [paymentMethod, setPaymentMethod] =
-    useState('')
-
-  const [referenceNumber, setReferenceNumber] =
-    useState('')
-
-  const [note, setNote] =
-    useState('')
+  const [initializeMode, setInitializeMode] =
+    useState<FinancialMode>('manual')
 
   const [openingBalance, setOpeningBalance] =
     useState('')
@@ -249,176 +161,239 @@ export function PaymentFinancial() {
   const [openingNote, setOpeningNote] =
     useState('')
 
-  const [confirmingId, setConfirmingId] =
-    useState<string | null>(null)
+  const [transactionType, setTransactionType] =
+    useState<TransactionType>('in')
 
-  const [deletingId, setDeletingId] =
-    useState<string | null>(null)
+  const [transactionAmount, setTransactionAmount] =
+    useState('')
+
+  const [transactionSource, setTransactionSource] =
+    useState('')
+
+  const [transactionNote, setTransactionNote] =
+    useState('')
+
+  const [adjustmentDirection, setAdjustmentDirection] =
+    useState<AdjustmentDirection>('plus')
+
+  const [refreshing, setRefreshing] =
+    useState(false)
 
   /*
-   * نحاول الحصول على السنة الدراسية الحالية
-   * من endpoint الموجود في النظام.
+   * ---------------------------------------------------------
+   * جلب السنة الدراسية الحالية من Supabase مباشرة
+   * ---------------------------------------------------------
    */
-  async function getAcademicYear() {
-    const candidates = [
-      '/api/academic-years/current',
-      '/api/academic-year/current',
-      '/api/settings/academic-year',
-    ]
 
-    for (const url of candidates) {
-      try {
-        const response = await fetch(url)
+  const loadAcademicYear = async () => {
+    const { data, error: yearError } = await supabase
+      .from('academic_years')
+      .select(
+        'id, name, start_date, end_date, is_current, is_active, annual_fee'
+      )
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle()
 
-        if (!response.ok) continue
-
-        const data = await response.json()
-
-        const id =
-          data?.id ??
-          data?.academic_year?.id ??
-          data?.academicYear?.id ??
-          data?.currentYear?.id
-
-        if (id) {
-          return id as string
-        }
-      } catch {
-        // تجربة endpoint التالي
-      }
+    if (yearError) {
+      throw new Error(yearError.message)
     }
 
-    return null
+    if (!data) {
+      throw new Error('لا توجد سنة دراسية حالية في النظام')
+    }
+
+    setAcademicYear(data)
+
+    return data
   }
 
-  async function loadFinancialData(
-    yearId: string,
-  ) {
-    setLoading(true)
+  /*
+   * ---------------------------------------------------------
+   * تحميل الإدارة المالية
+   * ---------------------------------------------------------
+   */
+
+  const loadFinancialData = async (
+    yearId?: string
+  ) => {
+    const id = yearId || academicYear?.id
+
+    if (!id) return
+
     setError('')
 
-    try {
-      const response = await fetch(
-        `/api/financial-management?academic_year_id=${encodeURIComponent(
-          yearId,
-        )}`,
-        {
-          cache: 'no-store',
-        },
-      )
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            'تعذر تحميل الإدارة المالية',
-        )
+    const response = await fetch(
+      `/api/financial-management?academic_year_id=${encodeURIComponent(
+        id
+      )}`,
+      {
+        cache: 'no-store',
       }
+    )
 
-      setSettings(data.settings ?? null)
-      setTransactions(data.transactions ?? [])
-      setSummary(
-        data.summary ?? {
-          openingBalance: 0,
-          balance: 0,
-          totalIn: 0,
-          totalOut: 0,
-          operations: 0,
-        },
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        result?.error || 'تعذر تحميل الإدارة المالية'
       )
+    }
+
+    setSettings(result.settings || null)
+    setTransactions(result.transactions || [])
+
+    setSummary(
+      result.summary || {
+        openingBalance: 0,
+        balance: 0,
+        totalIn: 0,
+        totalOut: 0,
+        totalAdjustmentsPlus: 0,
+        totalAdjustmentsMinus: 0,
+        operations: 0,
+      }
+    )
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * التحميل الأول
+   * ---------------------------------------------------------
+   */
+
+  const loadAll = async () => {
+    try {
+      setLoading(true)
+      setError('')
+
+      const year = await loadAcademicYear()
+
+      await loadFinancialData(year.id)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر تحميل الإدارة المالية',
+          : 'حدث خطأ أثناء تحميل البيانات'
       )
     } finally {
       setLoading(false)
     }
   }
 
-  async function initializeYear() {
-    if (!academicYearId) return
+  useEffect(() => {
+    loadAll()
+  }, [])
 
-    const balance = Number(openingBalance)
+  /*
+   * ---------------------------------------------------------
+   * تحديث
+   * ---------------------------------------------------------
+   */
 
-    if (
-      !Number.isFinite(balance) ||
-      balance < 0
-    ) {
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true)
+      setError('')
+
+      const year = await loadAcademicYear()
+
+      await loadFinancialData(year.id)
+    } catch (err) {
       setError(
-        'أدخل رصيدًا افتتاحيًا صحيحًا',
+        err instanceof Error
+          ? err.message
+          : 'تعذر تحديث البيانات'
       )
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * تهيئة الإدارة المالية للسنة
+   * ---------------------------------------------------------
+   */
+
+  const initializeFinancial = async () => {
+    if (!academicYear) {
+      setError('لم يتم العثور على السنة الدراسية الحالية')
       return
     }
 
-    setSaving(true)
-    setError('')
+    const amount = Number(openingBalance || 0)
+
+    if (amount < 0) {
+      setError('الرصيد الافتتاحي لا يمكن أن يكون سالباً')
+      return
+    }
 
     try {
+      setSaving(true)
+      setError('')
+
       const response = await fetch(
         '/api/financial-management/transactions',
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'initialize',
-            academic_year_id:
-              academicYearId,
-            financial_mode:
-              initializeMode,
-            opening_balance: balance,
+            academic_year_id: academicYear.id,
+            financial_mode: initializeMode,
+            opening_balance: amount,
             opening_source:
-              openingSource || null,
+              openingSource.trim() || null,
             opening_note:
-              openingNote || null,
+              openingNote.trim() || null,
           }),
-        },
+        }
       )
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            'تعذر إعداد النظام المالي',
+          result?.error || 'تعذر تهيئة الإدارة المالية'
         )
       }
 
-      closeModal()
-
+      setModal('none')
       setOpeningBalance('')
       setOpeningSource('')
       setOpeningNote('')
 
-      await loadFinancialData(
-        academicYearId,
-      )
+      await loadFinancialData(academicYear.id)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر إعداد النظام المالي',
+          : 'حدث خطأ أثناء التهيئة'
       )
     } finally {
       setSaving(false)
     }
   }
 
-  async function createTransaction() {
-    if (!academicYearId) return
+  /*
+   * ---------------------------------------------------------
+   * إضافة عملية
+   * ---------------------------------------------------------
+   */
 
-    const numericAmount = Number(amount)
+  const createTransaction = async () => {
+    if (!academicYear) {
+      setError('لم يتم العثور على السنة الدراسية الحالية')
+      return
+    }
 
-    if (
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      setError('أدخل مبلغًا صحيحًا')
+    const amount = Number(transactionAmount)
+
+    if (!amount || amount <= 0) {
+      setError('أدخل مبلغاً صحيحاً')
       return
     }
 
@@ -430,25 +405,22 @@ export function PaymentFinancial() {
       return
     }
 
-    setSaving(true)
-    setError('')
-
     try {
+      setSaving(true)
+      setError('')
+
       const response = await fetch(
         '/api/financial-management/transactions',
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'create',
-            academic_year_id:
-              academicYearId,
-            transaction_type:
-              transactionType,
-            amount: numericAmount,
+            academic_year_id: academicYear.id,
+            transaction_type: transactionType,
+            amount,
             adjustment_direction:
               transactionType === 'adjustment'
                 ? adjustmentDirection
@@ -457,276 +429,233 @@ export function PaymentFinancial() {
               transactionType === 'adjustment'
                 ? 'adjustment'
                 : 'manual',
-            source: source || null,
-            payment_method:
-              paymentMethod || null,
-            reference_number:
-              referenceNumber || null,
-            note: note || null,
+            source:
+              transactionSource.trim() || null,
+            note:
+              transactionNote.trim() || null,
           }),
-        },
+        }
       )
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            'تعذر إضافة العملية',
+          result?.error || 'تعذر إضافة العملية'
         )
       }
 
-      closeModal()
-      resetTransactionForm()
+      setModal('none')
+      setTransactionAmount('')
+      setTransactionSource('')
+      setTransactionNote('')
+      setTransactionType('in')
+      setAdjustmentDirection('plus')
 
-      await loadFinancialData(
-        academicYearId,
-      )
+      await loadFinancialData(academicYear.id)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر إضافة العملية',
+          : 'حدث خطأ أثناء إضافة العملية'
       )
     } finally {
       setSaving(false)
     }
   }
 
-  async function confirmTransaction(
-    transactionId: string,
-  ) {
-    setConfirmingId(transactionId)
-    setError('')
+  /*
+   * ---------------------------------------------------------
+   * تأكيد دفعة طالب
+   * ---------------------------------------------------------
+   */
+
+  const confirmTransaction = async (
+    transaction: Transaction
+  ) => {
+    if (!academicYear) return
 
     try {
+      setSaving(true)
+      setError('')
+
       const response = await fetch(
         '/api/financial-management/transactions',
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'confirm',
-            transaction_id:
-              transactionId,
+            academic_year_id: academicYear.id,
+            transaction_id: transaction.id,
           }),
-        },
+        }
       )
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            'تعذر تأكيد العملية',
+          result?.error || 'تعذر تأكيد العملية'
         )
       }
 
-      if (academicYearId) {
-        await loadFinancialData(
-          academicYearId,
-        )
-      }
+      await loadFinancialData(academicYear.id)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر تأكيد العملية',
+          : 'تعذر تأكيد العملية'
       )
     } finally {
-      setConfirmingId(null)
+      setSaving(false)
     }
   }
 
-  async function deleteTransaction(
-    transactionId: string,
-  ) {
-    const confirmed = window.confirm(
-      'هل أنت متأكد من حذف هذه العملية؟\nسيتم إعادة احتساب الرصيد بعد الحذف.',
-    )
+  /*
+   * ---------------------------------------------------------
+   * حذف عملية
+   * ---------------------------------------------------------
+   */
 
-    if (!confirmed) return
-
-    setDeletingId(transactionId)
-    setError('')
+  const deleteTransaction = async () => {
+    if (!academicYear || !selectedDeleteId) return
 
     try {
+      setSaving(true)
+      setError('')
+
       const response = await fetch(
         '/api/financial-management/transactions',
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'delete',
-            transaction_id:
-              transactionId,
+            academic_year_id: academicYear.id,
+            transaction_id: selectedDeleteId,
           }),
-        },
+        }
       )
 
-      const data = await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            'تعذر حذف العملية',
+          result?.error || 'تعذر حذف العملية'
         )
       }
 
-      if (
-        selectedTransaction?.id ===
-        transactionId
-      ) {
-        closeModal()
-      }
+      setModal('none')
+      setSelectedDeleteId(null)
 
-      if (academicYearId) {
-        await loadFinancialData(
-          academicYearId,
-        )
-      }
+      await loadFinancialData(academicYear.id)
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : 'تعذر حذف العملية',
+          : 'تعذر حذف العملية'
       )
     } finally {
-      setDeletingId(null)
+      setSaving(false)
     }
   }
 
-  function resetTransactionForm() {
-    setTransactionType('in')
-    setAdjustmentDirection('plus')
-    setAmount('')
-    setSource('')
-    setPaymentMethod('')
-    setReferenceNumber('')
-    setNote('')
-  }
+  /*
+   * ---------------------------------------------------------
+   * العمليات المعلقة
+   * ---------------------------------------------------------
+   */
 
-  function closeModal() {
-    setModal('none')
-    setSelectedTransaction(null)
-  }
+  const pendingTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (item) =>
+          item.source_type === 'student_payment' &&
+          item.confirmation_status === 'pending'
+      ),
+    [transactions]
+  )
 
-  function openDetails(
-    transaction: Transaction,
-  ) {
-    setSelectedTransaction(transaction)
-    setModal('details')
-  }
+  /*
+   * ---------------------------------------------------------
+   * تصدير Excel-compatible CSV
+   * ---------------------------------------------------------
+   */
 
-  function exportExcel() {
-    if (!transactions.length) {
-      window.alert(
-        'لا توجد عمليات لتصديرها',
-      )
-      return
-    }
-
-    /*
-     * CSV بصيغة UTF-8 مع BOM.
-     * يفتح مباشرة في Excel ويحافظ على العربية.
-     */
+  const exportExcel = () => {
     const headers = [
-      'معرف العملية',
-      'معرف السنة الدراسية',
+      'التاريخ',
       'نوع العملية',
       'المبلغ',
       'الرصيد قبل',
       'الرصيد بعد',
-      'مصدر العملية',
       'المصدر',
-      'معرف الدفعة',
+      'اسم الطالب',
       'معرف الطالب',
-      'رقم طلب الطالب',
+      'رقم الطلب',
       'طريقة الدفع',
       'رقم المرجع',
       'حالة التأكيد',
-      'المؤكد بواسطة',
+      'تم التأكيد بواسطة',
       'وقت التأكيد',
-      'أنشأ بواسطة',
-      'تاريخ الإنشاء',
-      'ملاحظة',
+      'أنشأ العملية',
+      'الملاحظات',
     ]
 
-    const escape = (value: unknown) => {
-      const text =
-        value === null ||
-        value === undefined
-          ? ''
-          : String(value)
-
-      return `"${text.replace(
-        /"/g,
-        '""',
-      )}"`
-    }
-
-    const rows = transactions.map(
-      (transaction) => [
-        transaction.id,
-        transaction.academic_year_id,
-        transactionLabel(transaction),
-        transaction.amount,
-        transaction.balance_before,
-        transaction.balance_after,
-        transaction.source_type,
-        sourceLabel(transaction),
-        transaction.payment_id,
-        transaction.student_id,
-        transaction.student_request_number,
-        transaction.payment_method,
-        transaction.reference_number,
-        transaction.confirmation_status,
-        transaction.confirmed_by,
-        formatDateTime(
-          transaction.confirmed_at,
-        ),
-        transaction.created_by,
-        formatDateTime(
-          transaction.created_at,
-        ),
-        transaction.note,
-      ],
-    )
+    const rows = transactions.map((transaction) => [
+      formatDate(transaction.created_at),
+      getTransactionLabel(transaction),
+      transaction.amount,
+      transaction.balance_before ?? '',
+      transaction.balance_after ?? '',
+      transaction.source ?? '',
+      '',
+      transaction.student_id ?? '',
+      transaction.student_request_number ?? '',
+      transaction.payment_method ?? '',
+      transaction.reference_number ?? '',
+      getConfirmationLabel(
+        transaction.confirmation_status
+      ),
+      transaction.confirmed_by ?? '',
+      transaction.confirmed_at
+        ? formatDate(transaction.confirmed_at)
+        : '',
+      transaction.created_by ?? '',
+      transaction.note ?? '',
+    ])
 
     const csv = [
-      headers.map(escape).join(','),
-      ...rows.map((row) =>
-        row.map(escape).join(','),
-      ),
-    ].join('\r\n')
+      headers,
+      ...rows,
+    ]
+      .map((row) =>
+        row
+          .map((cell) => {
+            const value = String(cell ?? '')
+            return `"${value.replace(/"/g, '""')}"`
+          })
+          .join(',')
+      )
+      .join('\n')
 
     const blob = new Blob(
-      [
-        '\uFEFF' + csv,
-      ],
+      ['\ufeff' + csv],
       {
         type: 'text/csv;charset=utf-8;',
-      },
+      }
     )
 
-    const url =
-      URL.createObjectURL(blob)
+    const url = URL.createObjectURL(blob)
 
-    const link =
-      document.createElement('a')
-
+    const link = document.createElement('a')
     link.href = url
-
-    link.download =
-      `إدارة-مالية-${new Date()
-        .toISOString()
-        .slice(0, 10)}.csv`
+    link.download = `financial-management-${academicYear?.name || 'year'}.csv`
 
     document.body.appendChild(link)
     link.click()
@@ -735,1374 +664,1128 @@ export function PaymentFinancial() {
     URL.revokeObjectURL(url)
   }
 
-  const [initializeMode, setInitializeMode] =
-    useState<FinancialMode>(
-      'student_payments',
-    )
+  /*
+   * ---------------------------------------------------------
+   * مساعدات العرض
+   * ---------------------------------------------------------
+   */
 
-  const pendingCount = useMemo(
-    () =>
-      transactions.filter(
-        (item) =>
-          item.confirmation_status ===
-          'pending',
-      ).length,
-    [transactions],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function initialize() {
-      setLoading(true)
-
-      const id =
-        await getAcademicYear()
-
-      if (cancelled) return
-
-      if (!id) {
-        setError(
-          'تعذر معرفة السنة الدراسية الحالية',
-        )
-        setLoading(false)
-        return
-      }
-
-      setAcademicYearId(id)
-
-      await loadFinancialData(id)
+  const getTransactionLabel = (
+    transaction: Transaction
+  ) => {
+    if (transaction.transaction_type === 'in') {
+      return 'إيراد'
     }
 
-    initialize()
-
-    return () => {
-      cancelled = true
+    if (transaction.transaction_type === 'out') {
+      return 'مصروف'
     }
-  }, [])
 
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="flex min-h-[320px] items-center justify-center">
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>
-              جاري تحميل الإدارة المالية...
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    )
+    if (
+      transaction.adjustment_direction === 'plus'
+    ) {
+      return 'تسوية +'
+    }
+
+    return 'تسوية -'
   }
 
-  if (error && !settings) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
-            <p className="font-medium text-destructive">
-              {error}
-            </p>
+  const getConfirmationLabel = (
+    status: Transaction['confirmation_status']
+  ) => {
+    if (status === 'pending') return 'بانتظار التأكيد'
+    if (status === 'confirmed') return 'تم التأكيد'
+    return 'غير مطلوب'
+  }
 
-            {academicYearId && (
-              <button
-                type="button"
-                onClick={() =>
-                  loadFinancialData(
-                    academicYearId,
-                  )
-                }
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-              >
-                <RefreshCw className="h-4 w-4" />
-                إعادة المحاولة
-              </button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    )
+  const getTypeClass = (
+    transaction: Transaction
+  ) => {
+    if (transaction.transaction_type === 'in') {
+      return 'text-emerald-600'
+    }
+
+    if (transaction.transaction_type === 'out') {
+      return 'text-red-600'
+    }
+
+    if (
+      transaction.adjustment_direction === 'plus'
+    ) {
+      return 'text-blue-600'
+    }
+
+    return 'text-orange-600'
   }
 
   /*
-   * --------------------------------------------------
-   * لم يتم اختيار النظام المالي بعد
-   * --------------------------------------------------
+   * ---------------------------------------------------------
+   * شاشة التحميل
+   * ---------------------------------------------------------
    */
-  if (!settings) {
+
+  if (loading) {
     return (
-      <>
-        <Card>
-          <CardContent className="p-6">
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold">
-                إدارة المالية
-              </h2>
-
-              <p className="mt-2 text-sm text-muted-foreground">
-                اختر طريقة إدارة أموال المدرسة
-                لهذه السنة الدراسية.
-              </p>
-            </div>
-
-            {error && (
-              <div className="mb-5 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setInitializeMode(
-                    'student_payments',
-                  )
-                  setModal('initialize')
-                }}
-                className="rounded-2xl border p-5 text-right transition hover:border-primary hover:bg-muted/40"
-              >
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-                  <ArrowDownCircle className="h-6 w-6 text-primary" />
-                </div>
-
-                <h3 className="text-lg font-semibold">
-                  مرتبط بمدفوعات الطلاب
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  مدفوعات الطلاب تظهر كعمليات
-                  دخل وتحتاج إلى تأكيد استلام
-                  من مدير المدرسة قبل دخولها
-                  في الرصيد.
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setInitializeMode(
-                    'manual',
-                  )
-                  setModal('initialize')
-                }}
-                className="rounded-2xl border p-5 text-right transition hover:border-primary hover:bg-muted/40"
-              >
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
-                  <Plus className="h-6 w-6 text-primary" />
-                </div>
-
-                <h3 className="text-lg font-semibold">
-                  إدخال يدوي
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  مناسب للمصادر المختلفة مثل
-                  الرصيد السابق أو النقد أو
-                  التحويل أو الدعم أو أي مصدر
-                  آخر.
-                </p>
-              </button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {modal === 'initialize' && (
-          <InitializeModal
-            mode={initializeMode}
-            openingBalance={
-              openingBalance
-            }
-            setOpeningBalance={
-              setOpeningBalance
-            }
-            openingSource={
-              openingSource
-            }
-            setOpeningSource={
-              setOpeningSource
-            }
-            openingNote={
-              openingNote
-            }
-            setOpeningNote={
-              setOpeningNote
-            }
-            saving={saving}
-            onClose={closeModal}
-            onSave={initializeYear}
-          />
-        )}
-      </>
+      <div
+        dir="rtl"
+        className="flex min-h-[300px] items-center justify-center"
+      >
+        <div className="flex items-center gap-3 text-gray-500">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          جاري تحميل الإدارة المالية...
+        </div>
+      </div>
     )
   }
 
   return (
-    <div className="space-y-5">
+    <div
+      dir="rtl"
+      className="space-y-6"
+    >
       {/* العنوان */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-bold">
             إدارة المالية
           </h2>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>
-              {settings.financial_mode ===
-              'student_payments'
-                ? 'مرتبط بمدفوعات الطلاب'
-                : 'إدخال يدوي'}
-            </span>
-
-            <span>•</span>
-
-            <span>
-              {settings.opening_source ||
-                'بدون مصدر محدد'}
-            </span>
-          </div>
+          {academicYear && (
+            <div className="mt-1 text-sm text-gray-500">
+              السنة الدراسية:{' '}
+              <span className="font-medium text-gray-700">
+                {academicYear.name}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                refreshing ? 'animate-spin' : ''
+              }`}
+            />
+            تحديث
+          </button>
+
+          <button
+            type="button"
             onClick={exportExcel}
-            className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+            disabled={!transactions.length}
+            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             تحميل Excel
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              resetTransactionForm()
-              setModal('add')
-            }}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            إضافة عملية
-          </button>
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <span>{error}</span>
+      {/* الخطأ */}
 
-          <button
-            type="button"
-            onClick={() => setError('')}
-            className="shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
       )}
 
-      {/* الملخص */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          title="الرصيد الحالي"
-          value={summary.balance}
-          highlight
-        />
+      {/* السنة */}
 
-        <SummaryCard
-          title="إجمالي الدخل"
-          value={summary.totalIn}
-          positive
-        />
+      {academicYear && (
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm text-gray-500">
+                السنة الحالية
+              </div>
 
-        <SummaryCard
-          title="إجمالي المصروف"
-          value={summary.totalOut}
-          negative
-        />
+              <div className="mt-1 text-lg font-semibold">
+                {academicYear.name}
+              </div>
 
-        <SummaryCard
-          title="الرصيد الافتتاحي"
-          value={summary.openingBalance}
-        />
+              <div className="mt-1 text-xs text-gray-500">
+                من {formatDateOnly(academicYear.start_date)}
+                {' '}إلى{' '}
+                {formatDateOnly(academicYear.end_date)}
+              </div>
+            </div>
 
-        <SummaryCard
-          title="عدد العمليات"
-          value={summary.operations}
-          count
-        />
-      </div>
+            <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
+              <div className="text-gray-500">
+                معرف السنة
+              </div>
 
-      {/* التنبيه بالعمليات المعلقة */}
-      {pendingCount > 0 && (
-        <div className="flex flex-col gap-3 rounded-xl border border-amber-300/60 bg-amber-50 p-4 dark:bg-amber-950/20 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-semibold">
-              توجد عمليات بانتظار التأكيد
-            </p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              عدد العمليات التي تحتاج إلى
-              تأكيد استلام: {pendingCount}
-            </p>
+              <div className="mt-1 break-all font-mono text-xs">
+                {academicYear.id}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* الجدول */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between border-b p-5">
-            <div>
-              <h3 className="font-semibold">
-                العمليات المالية
-              </h3>
+      {/* لم تتم التهيئة */}
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                جميع عمليات السنة الدراسية الحالية
-              </p>
-            </div>
+      {!settings && (
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="mx-auto max-w-2xl text-center">
+            <Wallet className="mx-auto h-10 w-10 text-gray-400" />
+
+            <h3 className="mt-4 text-xl font-bold">
+              تهيئة الإدارة المالية
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              اختر طريقة تأسيس الرصيد لهذه السنة الدراسية.
+              بعد التهيئة تصبح الطريقة جزءاً من إعدادات السنة.
+            </p>
 
             <button
               type="button"
-              onClick={() =>
-                academicYearId &&
-                loadFinancialData(
-                  academicYearId,
-                )
-              }
-              className="rounded-lg border p-2 hover:bg-muted"
-              title="تحديث"
+              onClick={() => setModal('initialize')}
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-medium text-white hover:opacity-90"
             >
-              <RefreshCw className="h-4 w-4" />
+              <Plus className="h-4 w-4" />
+              بدء الإدارة المالية
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* بعد التهيئة */}
+
+      {settings && (
+        <>
+          {/* وضع الإدارة */}
+
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-sm text-gray-500">
+                  طريقة تأسيس الرصيد
+                </div>
+
+                <div className="mt-1 text-lg font-semibold">
+                  {settings.financial_mode ===
+                  'student_payments'
+                    ? 'مرتبط بمدفوعات الطلاب'
+                    : 'إدخال يدوي'}
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
+                الرصيد الافتتاحي:{' '}
+                <span className="font-bold">
+                  {money(settings.opening_balance)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* البطاقات */}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <SummaryCard
+              title="الرصيد الحالي"
+              value={money(summary.balance)}
+              icon={<Wallet className="h-5 w-5" />}
+            />
+
+            <SummaryCard
+              title="إجمالي الإيرادات"
+              value={money(summary.totalIn)}
+              icon={<span>+</span>}
+            />
+
+            <SummaryCard
+              title="إجمالي المصروفات"
+              value={money(summary.totalOut)}
+              icon={<span>-</span>}
+            />
+
+            <SummaryCard
+              title="التسويات"
+              value={money(
+                summary.totalAdjustmentsPlus -
+                  summary.totalAdjustmentsMinus
+              )}
+              icon={<span>±</span>}
+            />
+
+            <SummaryCard
+              title="عدد العمليات"
+              value={String(summary.operations)}
+              icon={<span>#</span>}
+            />
+          </div>
+
+          {/* العمليات المعلقة */}
+
+          {pendingTransactions.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="font-bold text-amber-900">
+                    دفعات بانتظار تأكيد الاستلام
+                  </h3>
+
+                  <p className="mt-1 text-sm text-amber-800">
+                    هذه الدفعات لا تدخل في الرصيد المالي حتى يتم تأكيد استلامها.
+                  </p>
+                </div>
+
+                <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
+                  {pendingTransactions.length} معلقة
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* شريط الإجراءات */}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTransactionType('in')
+                setModal('transaction')
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة إيراد
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTransactionType('out')
+                setModal('transaction')
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة مصروف
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTransactionType('adjustment')
+                setModal('transaction')
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة تسوية
             </button>
           </div>
 
-          {transactions.length === 0 ? (
-            <div className="flex min-h-[240px] items-center justify-center p-8 text-center text-sm text-muted-foreground">
-              لا توجد عمليات مالية حتى الآن.
+          {/* جدول العمليات */}
+
+          <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="border-b px-5 py-4">
+              <h3 className="font-bold">
+                العمليات المالية
+              </h3>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30 text-right">
-                    <th className="px-4 py-3 font-medium">
-                      التاريخ
-                    </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      النوع
-                    </th>
+            {transactions.length === 0 ? (
+              <div className="px-5 py-16 text-center text-sm text-gray-500">
+                لا توجد عمليات مالية حتى الآن.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1000px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-right">
+                      <th className="px-4 py-3">
+                        التاريخ
+                      </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      المبلغ
-                    </th>
+                      <th className="px-4 py-3">
+                        النوع
+                      </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      المصدر
-                    </th>
+                      <th className="px-4 py-3">
+                        المبلغ
+                      </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      الحالة
-                    </th>
+                      <th className="px-4 py-3">
+                        المصدر
+                      </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      الرصيد
-                    </th>
+                      <th className="px-4 py-3">
+                        الحالة
+                      </th>
 
-                    <th className="px-4 py-3 font-medium">
-                      التفاصيل
-                    </th>
-                  </tr>
-                </thead>
+                      <th className="px-4 py-3">
+                        الرصيد
+                      </th>
 
-                <tbody>
-                  {transactions.map(
-                    (transaction) => {
-                      const positive =
-                        transactionIsPositive(
-                          transaction,
-                        )
+                      <th className="px-4 py-3">
+                        التفاصيل
+                      </th>
+                    </tr>
+                  </thead>
 
-                      return (
+                  <tbody>
+                    {transactions.map(
+                      (transaction) => (
                         <tr
-                          key={
-                            transaction.id
-                          }
-                          className="border-b last:border-0 hover:bg-muted/20"
+                          key={transaction.id}
+                          className="border-b last:border-b-0 hover:bg-gray-50"
                         >
                           <td className="px-4 py-4 whitespace-nowrap">
                             {formatDate(
-                              transaction.created_at,
+                              transaction.created_at
                             )}
+                          </td>
+
+                          <td
+                            className={`px-4 py-4 font-semibold ${getTypeClass(
+                              transaction
+                            )}`}
+                          >
+                            {getTransactionLabel(
+                              transaction
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 font-semibold">
+                            {money(transaction.amount)}
                           </td>
 
                           <td className="px-4 py-4">
-                            <div className="flex items-center gap-2">
-                              {positive ? (
-                                <ArrowUpCircle className="h-4 w-4 text-emerald-600" />
-                              ) : (
-                                <ArrowDownCircle className="h-4 w-4 text-red-600" />
-                              )}
-
-                              <span>
-                                {transactionLabel(
-                                  transaction,
-                                )}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-4 font-medium">
-                            {positive
-                              ? '+'
-                              : '-'}{' '}
-                            {formatMoney(
-                              Number(
-                                transaction.amount,
-                              ),
-                            )}
-                          </td>
-
-                          <td className="max-w-[220px] px-4 py-4">
-                            <div className="truncate">
-                              {transaction.student_id
-                                ? 'طالب'
-                                : sourceLabel(
-                                    transaction,
-                                  )}
-                            </div>
+                            {transaction.source ||
+                              (transaction.source_type ===
+                              'student_payment'
+                                ? 'دفعة طالب'
+                                : transaction.source_type ===
+                                  'opening'
+                                ? 'الرصيد الافتتاحي'
+                                : '-')}
                           </td>
 
                           <td className="px-4 py-4">
                             <StatusBadge
-                              transaction={
-                                transaction
+                              status={
+                                transaction.confirmation_status
                               }
                             />
                           </td>
 
-                          <td className="px-4 py-4 font-medium whitespace-nowrap">
-                            {formatMoney(
-                              Number(
-                                transaction.balance_after,
-                              ),
-                            )}
+                          <td className="px-4 py-4 font-semibold">
+                            {transaction.balance_after !==
+                            undefined
+                              ? money(
+                                  transaction.balance_after
+                                )
+                              : '-'}
                           </td>
 
                           <td className="px-4 py-4">
-                            <div className="flex items-center gap-2">
-                              {transaction.confirmation_status ===
-                                'pending' && (
-                                <button
-                                  type="button"
-                                  disabled={
-                                    confirmingId ===
-                                    transaction.id
-                                  }
-                                  onClick={() =>
-                                    confirmTransaction(
-                                      transaction.id,
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-                                >
-                                  {confirmingId ===
-                                  transaction.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Check className="h-3.5 w-3.5" />
-                                  )}
-                                  تأكيد
-                                </button>
-                              )}
-
+                            <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  openDetails(
-                                    transaction,
+                                onClick={() => {
+                                  setSelectedTransaction(
+                                    transaction
                                   )
-                                }
-                                className="rounded-lg border px-3 py-1.5 text-xs hover:bg-muted"
+                                  setModal('details')
+                                }}
+                                className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
                               >
                                 تفاصيل
                               </button>
 
-                              <button
-                                type="button"
-                                disabled={
-                                  deletingId ===
-                                  transaction.id
-                                }
-                                onClick={() =>
-                                  deleteTransaction(
-                                    transaction.id,
-                                  )
-                                }
-                                className="rounded-lg border p-1.5 text-destructive hover:bg-destructive/5 disabled:opacity-50"
-                                title="حذف"
-                              >
-                                {deletingId ===
-                                transaction.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                )}
-                              </button>
+                              {transaction.confirmation_status ===
+                                'pending' && (
+                                <button
+                                  type="button"
+                                  disabled={saving}
+                                  onClick={() =>
+                                    confirmTransaction(
+                                      transaction
+                                    )
+                                  }
+                                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50"
+                                >
+                                  تأكيد
+                                </button>
+                              )}
+
+                              {transaction.source_type !==
+                                'opening' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDeleteId(
+                                      transaction.id
+                                    )
+                                    setModal('delete')
+                                  }}
+                                  className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
                       )
-                    },
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* إعدادات السنة */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-start gap-3">
-            <Settings2 className="mt-0.5 h-5 w-5 text-muted-foreground" />
-
-            <div>
-              <p className="font-medium">
-                إعداد النظام المالي
-              </p>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                النظام الحالي:{' '}
-                {settings.financial_mode ===
-                'student_payments'
-                  ? 'مرتبط بمدفوعات الطلاب'
-                  : 'إدخال يدوي'}
-              </p>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                المصدر الافتتاحي:{' '}
-                {settings.opening_source ||
-                  'غير محدد'}
-              </p>
-            </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* إضافة عملية */}
-      {modal === 'add' && (
-        <AddTransactionModal
-          transactionType={
-            transactionType
-          }
-          setTransactionType={
-            setTransactionType
-          }
-          adjustmentDirection={
-            adjustmentDirection
-          }
-          setAdjustmentDirection={
-            setAdjustmentDirection
-          }
-          amount={amount}
-          setAmount={setAmount}
-          source={source}
-          setSource={setSource}
-          paymentMethod={paymentMethod}
-          setPaymentMethod={
-            setPaymentMethod
-          }
-          referenceNumber={
-            referenceNumber
-          }
-          setReferenceNumber={
-            setReferenceNumber
-          }
-          note={note}
-          setNote={setNote}
-          saving={saving}
-          onClose={closeModal}
-          onSave={createTransaction}
-        />
+        </>
       )}
 
-      {/* التفاصيل */}
+      {/* --------------------------------------------------
+          Modal: التهيئة
+      -------------------------------------------------- */}
+
+      {modal === 'initialize' && (
+        <Modal
+          title="تهيئة الإدارة المالية"
+          onClose={() => setModal('none')}
+        >
+          <div className="space-y-5">
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                طريقة الإدارة
+              </label>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInitializeMode(
+                      'student_payments'
+                    )
+                  }
+                  className={`rounded-xl border p-4 text-right ${
+                    initializeMode ===
+                    'student_payments'
+                      ? 'border-black bg-gray-50'
+                      : ''
+                  }`}
+                >
+                  <div className="font-semibold">
+                    مرتبط بمدفوعات الطلاب
+                  </div>
+
+                  <div className="mt-1 text-xs leading-5 text-gray-500">
+                    دفعات الطلاب تحتاج تأكيد الاستلام قبل دخولها في الرصيد.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInitializeMode('manual')
+                  }
+                  className={`rounded-xl border p-4 text-right ${
+                    initializeMode === 'manual'
+                      ? 'border-black bg-gray-50'
+                      : ''
+                  }`}
+                >
+                  <div className="font-semibold">
+                    إدخال يدوي
+                  </div>
+
+                  <div className="mt-1 text-xs leading-5 text-gray-500">
+                    إدخال الرصيد الأولي يدوياً من أي مصدر.
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                الرصيد الافتتاحي
+              </label>
+
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={openingBalance}
+                onChange={(e) =>
+                  setOpeningBalance(e.target.value)
+                }
+                className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
+                placeholder="0.000"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                مصدر الرصيد
+              </label>
+
+              <select
+                value={openingSource}
+                onChange={(e) =>
+                  setOpeningSource(e.target.value)
+                }
+                className="w-full rounded-lg border bg-white px-3 py-2"
+              >
+                <option value="">
+                  اختر المصدر
+                </option>
+                <option value="previous_balance">
+                  رصيد سابق
+                </option>
+                <option value="cash">
+                  نقدي
+                </option>
+                <option value="transfer">
+                  تحويل
+                </option>
+                <option value="support">
+                  دعم
+                </option>
+                <option value="deposit">
+                  إيداع
+                </option>
+                <option value="other">
+                  أخرى
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                ملاحظات
+              </label>
+
+              <textarea
+                value={openingNote}
+                onChange={(e) =>
+                  setOpeningNote(e.target.value)
+                }
+                rows={3}
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder="ملاحظات الرصيد الافتتاحي..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModal('none')}
+                className="rounded-lg border px-4 py-2"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={initializeFinancial}
+                disabled={saving}
+                className="rounded-lg bg-black px-5 py-2 text-white disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'حفظ وبدء'
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* --------------------------------------------------
+          Modal: إضافة عملية
+      -------------------------------------------------- */}
+
+      {modal === 'transaction' && (
+        <Modal
+          title={
+            transactionType === 'in'
+              ? 'إضافة إيراد'
+              : transactionType === 'out'
+              ? 'إضافة مصروف'
+              : 'إضافة تسوية'
+          }
+          onClose={() => setModal('none')}
+        >
+          <div className="space-y-5">
+            {transactionType ===
+              'adjustment' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  اتجاه التسوية
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAdjustmentDirection(
+                        'plus'
+                      )
+                    }
+                    className={`rounded-lg border px-4 py-3 ${
+                      adjustmentDirection ===
+                      'plus'
+                        ? 'border-black bg-gray-50'
+                        : ''
+                    }`}
+                  >
+                    تسوية +
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAdjustmentDirection(
+                        'minus'
+                      )
+                    }
+                    className={`rounded-lg border px-4 py-3 ${
+                      adjustmentDirection ===
+                      'minus'
+                        ? 'border-black bg-gray-50'
+                        : ''
+                    }`}
+                  >
+                    تسوية -
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                المبلغ
+              </label>
+
+              <input
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={transactionAmount}
+                onChange={(e) =>
+                  setTransactionAmount(
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder="0.000"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                المصدر / البيان
+              </label>
+
+              <input
+                type="text"
+                value={transactionSource}
+                onChange={(e) =>
+                  setTransactionSource(
+                    e.target.value
+                  )
+                }
+                className="w-full rounded-lg border px-3 py-2"
+                placeholder={
+                  transactionType === 'out'
+                    ? 'مثال: صيانة، مشتريات...'
+                    : transactionType ===
+                      'adjustment'
+                    ? 'سبب التسوية'
+                    : 'مصدر الإيراد'
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                ملاحظات
+              </label>
+
+              <textarea
+                value={transactionNote}
+                onChange={(e) =>
+                  setTransactionNote(
+                    e.target.value
+                  )
+                }
+                rows={3}
+                className="w-full rounded-lg border px-3 py-2"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setModal('none')
+                }
+                className="rounded-lg border px-4 py-2"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={createTransaction}
+                disabled={saving}
+                className="rounded-lg bg-black px-5 py-2 text-white disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'حفظ العملية'
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* --------------------------------------------------
+          Modal: التفاصيل
+      -------------------------------------------------- */}
+
       {modal === 'details' &&
         selectedTransaction && (
-          <DetailsModal
-            transaction={
-              selectedTransaction
-            }
-            onClose={closeModal}
-            onDelete={() =>
-              deleteTransaction(
-                selectedTransaction.id,
-              )
-            }
-            deleting={
-              deletingId ===
-              selectedTransaction.id
-            }
-          />
+          <Modal
+            title="تفاصيل العملية"
+            onClose={() => {
+              setModal('none')
+              setSelectedTransaction(null)
+            }}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <Detail
+                label="نوع العملية"
+                value={getTransactionLabel(
+                  selectedTransaction
+                )}
+              />
+
+              <Detail
+                label="المبلغ"
+                value={`${money(
+                  selectedTransaction.amount
+                )}`}
+              />
+
+              <Detail
+                label="التاريخ"
+                value={formatDate(
+                  selectedTransaction.created_at
+                )}
+              />
+
+              <Detail
+                label="الرصيد قبل"
+                value={
+                  selectedTransaction.balance_before !==
+                  undefined
+                    ? money(
+                        selectedTransaction.balance_before
+                      )
+                    : '-'
+                }
+              />
+
+              <Detail
+                label="الرصيد بعد"
+                value={
+                  selectedTransaction.balance_after !==
+                  undefined
+                    ? money(
+                        selectedTransaction.balance_after
+                      )
+                    : '-'
+                }
+              />
+
+              <Detail
+                label="المصدر"
+                value={
+                  selectedTransaction.source ||
+                  '-'
+                }
+              />
+
+              <Detail
+                label="نوع المصدر"
+                value={
+                  selectedTransaction.source_type
+                }
+              />
+
+              <Detail
+                label="معرف الدفعة"
+                value={
+                  selectedTransaction.payment_id
+                }
+              />
+
+              <Detail
+                label="معرف الطالب"
+                value={
+                  selectedTransaction.student_id
+                }
+              />
+
+              <Detail
+                label="رقم طلب التسجيل"
+                value={
+                  selectedTransaction.student_request_number
+                }
+              />
+
+              <Detail
+                label="طريقة الدفع"
+                value={
+                  selectedTransaction.payment_method
+                }
+              />
+
+              <Detail
+                label="رقم المرجع"
+                value={
+                  selectedTransaction.reference_number
+                }
+              />
+
+              <Detail
+                label="حالة التأكيد"
+                value={getConfirmationLabel(
+                  selectedTransaction.confirmation_status
+                )}
+              />
+
+              <Detail
+                label="تم التأكيد بواسطة"
+                value={
+                  selectedTransaction.confirmed_by
+                }
+              />
+
+              <Detail
+                label="وقت التأكيد"
+                value={
+                  selectedTransaction.confirmed_at
+                    ? formatDate(
+                        selectedTransaction.confirmed_at
+                      )
+                    : null
+                }
+              />
+
+              <Detail
+                label="أنشأ العملية"
+                value={
+                  selectedTransaction.created_by
+                }
+              />
+
+              {selectedTransaction
+                .adjustment_direction && (
+                <Detail
+                  label="اتجاه التسوية"
+                  value={
+                    selectedTransaction.adjustment_direction ===
+                    'plus'
+                      ? 'تسوية +'
+                      : 'تسوية -'
+                  }
+                />
+              )}
+
+              <div className="md:col-span-2">
+                <Detail
+                  label="الملاحظات"
+                  value={
+                    selectedTransaction.note
+                  }
+                />
+              </div>
+            </div>
+          </Modal>
         )}
+
+      {/* --------------------------------------------------
+          Modal: حذف
+      -------------------------------------------------- */}
+
+      {modal === 'delete' && (
+        <Modal
+          title="حذف العملية"
+          onClose={() => {
+            setModal('none')
+            setSelectedDeleteId(null)
+          }}
+        >
+          <div className="space-y-5">
+            <p className="text-sm leading-6 text-gray-600">
+              هل أنت متأكد من حذف هذه العملية؟
+              سيتم إعادة احتساب الرصيد بعد الحذف.
+            </p>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setModal('none')
+                  setSelectedDeleteId(null)
+                }}
+                className="rounded-lg border px-4 py-2"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={deleteTransaction}
+                disabled={saving}
+                className="rounded-lg bg-red-600 px-5 py-2 text-white disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'حذف العملية'
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
 
-/* ======================================================
-   Summary Card
-====================================================== */
+/*
+ * =========================================================
+ * Summary Card
+ * =========================================================
+ */
 
 function SummaryCard({
   title,
   value,
-  positive,
-  negative,
-  highlight,
-  count,
+  icon,
 }: {
   title: string
-  value: number
-  positive?: boolean
-  negative?: boolean
-  highlight?: boolean
-  count?: boolean
+  value: string
+  icon: React.ReactNode
 }) {
   return (
-    <Card>
-      <CardContent className="p-5">
-        <p className="text-sm text-muted-foreground">
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-gray-500">
           {title}
-        </p>
+        </div>
 
-        <p
-          className={[
-            'mt-2 text-2xl font-bold',
-            highlight
-              ? 'text-primary'
-              : '',
-            positive
-              ? 'text-emerald-600'
-              : '',
-            negative
-              ? 'text-red-600'
-              : '',
-          ].join(' ')}
-        >
-          {count
-            ? value
-            : formatMoney(value)}
-          {!count && (
-            <span className="mr-1 text-xs font-normal text-muted-foreground">
-              د.ب
-            </span>
-          )}
-        </p>
-      </CardContent>
-    </Card>
+        <div className="text-gray-400">
+          {icon}
+        </div>
+      </div>
+
+      <div className="mt-3 text-xl font-bold">
+        {value}
+      </div>
+    </div>
   )
 }
 
-/* ======================================================
-   Status Badge
-====================================================== */
+/*
+ * =========================================================
+ * Status Badge
+ * =========================================================
+ */
 
 function StatusBadge({
-  transaction,
+  status,
 }: {
-  transaction: Transaction
+  status: Transaction['confirmation_status']
 }) {
-  if (
-    transaction.confirmation_status ===
-    'pending'
-  ) {
+  if (status === 'pending') {
     return (
-      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
         بانتظار التأكيد
       </span>
     )
   }
 
-  if (
-    transaction.confirmation_status ===
-    'confirmed'
-  ) {
+  if (status === 'confirmed') {
     return (
-      <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-        مؤكد
+      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+        تم التأكيد
       </span>
     )
   }
 
   return (
-    <span className="inline-flex rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
-      لا يحتاج تأكيد
+    <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+      غير مطلوب
     </span>
   )
 }
 
-/* ======================================================
-   Initialize Modal
-====================================================== */
+/*
+ * =========================================================
+ * Modal
+ * =========================================================
+ */
 
-function InitializeModal({
-  mode,
-  openingBalance,
-  setOpeningBalance,
-  openingSource,
-  setOpeningSource,
-  openingNote,
-  setOpeningNote,
-  saving,
-  onClose,
-  onSave,
-}: {
-  mode: FinancialMode
-  openingBalance: string
-  setOpeningBalance: (
-    value: string,
-  ) => void
-  openingSource: string
-  setOpeningSource: (
-    value: string,
-  ) => void
-  openingNote: string
-  setOpeningNote: (
-    value: string,
-  ) => void
-  saving: boolean
-  onClose: () => void
-  onSave: () => void
-}) {
-  return (
-    <Modal
-      title="إعداد الإدارة المالية"
-      onClose={onClose}
-    >
-      <div className="space-y-5">
-        <div className="rounded-xl bg-muted/50 p-4">
-          <p className="text-sm font-medium">
-            النظام المختار
-          </p>
-
-          <p className="mt-1 font-semibold">
-            {mode === 'student_payments'
-              ? 'مرتبط بمدفوعات الطلاب'
-              : 'إدخال يدوي'}
-          </p>
-
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            هذا الاختيار تأسيسي للسنة
-            الدراسية، ويحدد طريقة دخول
-            الأموال إلى الإدارة المالية.
-          </p>
-        </div>
-
-        <Field
-          label="الرصيد الافتتاحي"
-          required
-        >
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={openingBalance}
-            onChange={(event) =>
-              setOpeningBalance(
-                event.target.value,
-              )
-            }
-            placeholder="0.00"
-            className={inputClass}
-          />
-        </Field>
-
-        <Field label="مصدر الرصيد">
-          <input
-            value={openingSource}
-            onChange={(event) =>
-              setOpeningSource(
-                event.target.value,
-              )
-            }
-            placeholder={
-              mode === 'manual'
-                ? 'مثال: رصيد سابق، نقد، تحويل، دعم...'
-                : 'مثال: رصيد سابق'
-            }
-            className={inputClass}
-          />
-        </Field>
-
-        <Field label="ملاحظة">
-          <textarea
-            value={openingNote}
-            onChange={(event) =>
-              setOpeningNote(
-                event.target.value,
-              )
-            }
-            rows={3}
-            className={textareaClass}
-            placeholder="أي ملاحظات على الرصيد الافتتاحي..."
-          />
-        </Field>
-
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-          >
-            إلغاء
-          </button>
-
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onSave}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {saving && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            حفظ الإعداد
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-/* ======================================================
-   Add Transaction Modal
-====================================================== */
-
-function AddTransactionModal({
-  transactionType,
-  setTransactionType,
-  adjustmentDirection,
-  setAdjustmentDirection,
-  amount,
-  setAmount,
-  source,
-  setSource,
-  paymentMethod,
-  setPaymentMethod,
-  referenceNumber,
-  setReferenceNumber,
-  note,
-  setNote,
-  saving,
-  onClose,
-  onSave,
-}: {
-  transactionType: TransactionType
-  setTransactionType: (
-    value: TransactionType,
-  ) => void
-  adjustmentDirection: AdjustmentDirection
-  setAdjustmentDirection: (
-    value: AdjustmentDirection,
-  ) => void
-  amount: string
-  setAmount: (value: string) => void
-  source: string
-  setSource: (value: string) => void
-  paymentMethod: string
-  setPaymentMethod: (
-    value: string,
-  ) => void
-  referenceNumber: string
-  setReferenceNumber: (
-    value: string,
-  ) => void
-  note: string
-  setNote: (value: string) => void
-  saving: boolean
-  onClose: () => void
-  onSave: () => void
-}) {
-  return (
-    <Modal
-      title="إضافة عملية مالية"
-      onClose={onClose}
-    >
-      <div className="space-y-5">
-        <Field label="نوع العملية">
-          <div className="grid grid-cols-3 gap-2">
-            <TypeButton
-              active={
-                transactionType === 'in'
-              }
-              onClick={() =>
-                setTransactionType('in')
-              }
-            >
-              دخل
-            </TypeButton>
-
-            <TypeButton
-              active={
-                transactionType === 'out'
-              }
-              onClick={() =>
-                setTransactionType('out')
-              }
-            >
-              مصروف
-            </TypeButton>
-
-            <TypeButton
-              active={
-                transactionType ===
-                'adjustment'
-              }
-              onClick={() =>
-                setTransactionType(
-                  'adjustment',
-                )
-              }
-            >
-              تسوية
-            </TypeButton>
-          </div>
-        </Field>
-
-        {transactionType ===
-          'adjustment' && (
-          <Field label="اتجاه التسوية">
-            <div className="grid grid-cols-2 gap-2">
-              <TypeButton
-                active={
-                  adjustmentDirection ===
-                  'plus'
-                }
-                onClick={() =>
-                  setAdjustmentDirection(
-                    'plus',
-                  )
-                }
-              >
-                تسوية +
-              </TypeButton>
-
-              <TypeButton
-                active={
-                  adjustmentDirection ===
-                  'minus'
-                }
-                onClick={() =>
-                  setAdjustmentDirection(
-                    'minus',
-                  )
-                }
-              >
-                تسوية -
-              </TypeButton>
-            </div>
-          </Field>
-        )}
-
-        <Field label="المبلغ" required>
-          <input
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={(event) =>
-              setAmount(
-                event.target.value,
-              )
-            }
-            placeholder="0.00"
-            className={inputClass}
-          />
-        </Field>
-
-        <Field label="المصدر">
-          <input
-            value={source}
-            onChange={(event) =>
-              setSource(
-                event.target.value,
-              )
-            }
-            placeholder={
-              transactionType === 'out'
-                ? 'مثال: شراء، صيانة، راتب...'
-                : 'مثال: نقد، تحويل، دعم...'
-            }
-            className={inputClass}
-          />
-        </Field>
-
-        {transactionType !==
-          'adjustment' && (
-          <Field label="طريقة الدفع">
-            <select
-              value={paymentMethod}
-              onChange={(event) =>
-                setPaymentMethod(
-                  event.target.value,
-                )
-              }
-              className={inputClass}
-            >
-              <option value="">
-                اختر الطريقة
-              </option>
-              <option value="نقدي">
-                نقدي
-              </option>
-              <option value="تحويل">
-                تحويل
-              </option>
-              <option value="بطاقة">
-                بطاقة
-              </option>
-              <option value="أخرى">
-                أخرى
-              </option>
-            </select>
-          </Field>
-        )}
-
-        <Field label="رقم المرجع">
-          <input
-            value={referenceNumber}
-            onChange={(event) =>
-              setReferenceNumber(
-                event.target.value,
-              )
-            }
-            placeholder="اختياري"
-            className={inputClass}
-          />
-        </Field>
-
-        <Field label="ملاحظة">
-          <textarea
-            value={note}
-            onChange={(event) =>
-              setNote(
-                event.target.value,
-              )
-            }
-            rows={3}
-            className={textareaClass}
-            placeholder="ملاحظات العملية..."
-          />
-        </Field>
-
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-          >
-            إلغاء
-          </button>
-
-          <button
-            type="button"
-            disabled={saving}
-            onClick={onSave}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {saving && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            حفظ العملية
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-/* ======================================================
-   Details Modal
-====================================================== */
-
-function DetailsModal({
-  transaction,
-  onClose,
-  onDelete,
-  deleting,
-}: {
-  transaction: Transaction
-  onClose: () => void
-  onDelete: () => void
-  deleting: boolean
-}) {
-  return (
-    <Modal
-      title="تفاصيل العملية"
-      onClose={onClose}
-    >
-      <div className="space-y-5">
-        <div className="rounded-xl bg-muted/40 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                نوع العملية
-              </p>
-
-              <p className="mt-1 font-semibold">
-                {transactionLabel(
-                  transaction,
-                )}
-              </p>
-            </div>
-
-            <p className="text-xl font-bold">
-              {transactionIsPositive(
-                transaction,
-              )
-                ? '+'
-                : '-'}{' '}
-              {formatMoney(
-                Number(
-                  transaction.amount,
-                ),
-              )}{' '}
-              د.ب
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Detail
-            label="معرف العملية"
-            value={transaction.id}
-          />
-
-          <Detail
-            label="تاريخ العملية"
-            value={formatDateTime(
-              transaction.created_at,
-            )}
-          />
-
-          <Detail
-            label="الرصيد قبل"
-            value={`${formatMoney(
-              Number(
-                transaction.balance_before,
-              ),
-            )} د.ب`}
-          />
-
-          <Detail
-            label="الرصيد بعد"
-            value={`${formatMoney(
-              Number(
-                transaction.balance_after,
-              ),
-            )} د.ب`}
-          />
-
-          <Detail
-            label="مصدر العملية"
-            value={
-              sourceLabel(
-                transaction,
-              )
-            }
-          />
-
-          <Detail
-            label="نوع المصدر"
-            value={
-              transaction.source_type
-            }
-          />
-
-          <Detail
-            label="معرف الدفعة"
-            value={
-              transaction.payment_id
-            />
-
-          <Detail
-            label="معرف الطالب"
-            value={
-              transaction.student_id
-            }
-          />
-
-          <Detail
-            label="رقم طلب الطالب"
-            value={
-              transaction.student_request_number
-            }
-          />
-
-          <Detail
-            label="طريقة الدفع"
-            value={
-              transaction.payment_method
-            }
-          />
-
-          <Detail
-            label="رقم المرجع"
-            value={
-              transaction.reference_number
-            }
-          />
-
-          <Detail
-            label="حالة التأكيد"
-            value={
-              transaction.confirmation_status ===
-              'pending'
-                ? 'بانتظار التأكيد'
-                : transaction.confirmation_status ===
-                  'confirmed'
-                ? 'مؤكد'
-                : 'لا يحتاج تأكيد'
-            }
-          />
-
-          <Detail
-            label="المؤكد بواسطة"
-            value={
-              transaction.confirmed_by
-            }
-          />
-
-          <Detail
-            label="وقت التأكيد"
-            value={formatDateTime(
-              transaction.confirmed_at,
-            )}
-          />
-
-          <Detail
-            label="أنشأ بواسطة"
-            value={
-              transaction.created_by
-            }
-          />
-
-          {transaction.adjustment_direction && (
-            <Detail
-              label="اتجاه التسوية"
-              value={
-                transaction.adjustment_direction ===
-                'plus'
-                  ? 'زيادة'
-                  : 'نقص'
-              }
-            />
-          )}
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-medium">
-            الملاحظة
-          </p>
-
-          <div className="min-h-[70px] rounded-lg border bg-muted/20 p-3 text-sm">
-            {transaction.note ||
-              'لا توجد ملاحظات'}
-          </div>
-        </div>
-
-        <div className="flex justify-between border-t pt-4">
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={onDelete}
-            className="inline-flex items-center gap-2 rounded-lg border border-destructive/30 px-4 py-2 text-sm text-destructive hover:bg-destructive/5 disabled:opacity-50"
-          >
-            {deleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            حذف العملية
-          </button>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-          >
-            إغلاق
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
-/* ======================================================
-   Shared UI
-====================================================== */
-
-const inputClass =
-  'w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary'
-
-const textareaClass =
-  'w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary'
-
-function Field({
-  label,
-  required,
+function Modal({
+  title,
   children,
+  onClose,
 }: {
-  label: string
-  required?: boolean
+  title: string
   children: React.ReactNode
+  onClose: () => void
 }) {
   return (
-    <div>
-      <label className="mb-2 block text-sm font-medium">
-        {label}
-        {required && (
-          <span className="mr-1 text-destructive">
-            *
-          </span>
-        )}
-      </label>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <h3 className="font-bold">
+            {title}
+          </h3>
 
-      {children}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 hover:bg-gray-100"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5">
+          {children}
+        </div>
+      </div>
     </div>
   )
 }
 
-function TypeButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        'rounded-lg border px-3 py-2 text-sm transition',
-        active
-          ? 'border-primary bg-primary/10 text-primary'
-          : 'hover:bg-muted',
-      ].join(' ')}
-    >
-      {children}
-    </button>
-  )
-}
+/*
+ * =========================================================
+ * Detail
+ * =========================================================
+ */
 
 function Detail({
   label,
@@ -2112,47 +1795,13 @@ function Detail({
   value: string | null | undefined
 }) {
   return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground">
+    <div className="rounded-xl bg-gray-50 p-4">
+      <div className="text-xs text-gray-500">
         {label}
-      </p>
+      </div>
 
-      <p className="mt-1 break-all text-sm font-medium">
-        {value || '—'}
-      </p>
-    </div>
-  )
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-background shadow-xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-5 py-4">
-          <h3 className="font-semibold">
-            {title}
-          </h3>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 hover:bg-muted"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="p-5">
-          {children}
-        </div>
+      <div className="mt-1 break-all text-sm font-medium">
+        {value || '-'}
       </div>
     </div>
   )
