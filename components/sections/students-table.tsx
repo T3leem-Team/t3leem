@@ -1,10 +1,6 @@
 'use client'
 
-import {
-  Filter,
-  Settings2,
-} from 'lucide-react'
-
+import { Filter, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 
 import {
@@ -18,9 +14,7 @@ import {
 
 import { StatusBadge } from '@/components/dashboard/status-badge'
 
-import type {
-  StudentCourseStatus,
-} from './student-details'
+import type { StudentCourseStatus } from './student-details'
 
 export type StudentTableFilters = {
   name: string
@@ -75,17 +69,12 @@ export type StudentTableStudent = {
   updatedAt: string | null
   academicYearId: string | null
   academicYearName: string | null
-  attendance?: {
-    totalDays: number
-    present: number
-    absent: number
-    late: number
-    excused: number
-    notRecorded: number
-    percentage: number
-  }
-  courseStatuses?: Record<string, StudentCourseStatus>
-  dynamicValues?: Record<string, unknown>
+  attendance?: string
+  courseStatuses: StudentCourseStatus[]
+  dynamicValues?: Record<string, string>
+
+  attendanceSummaries?: unknown[]
+  attendanceRecords?: unknown[]
 }
 
 type Props = {
@@ -97,17 +86,38 @@ type Props = {
   visibleColumns: Record<string, boolean>
   selectedStudentId: string | null
   currentCourseName?: string | null
+
   onSelectStudent: (studentId: string) => void
+
   onUpdateFilter: (
     key: keyof StudentTableFilters,
     value: string
   ) => void
+
   onToggleColumn: (key: string) => void
-  onOpenNotes: (student: StudentTableStudent) => void
-  onOpenAttendance: (student: StudentTableStudent) => void
+
+  onOpenNotes: (
+    student: StudentTableStudent
+  ) => void
+
+  onOpenAttendance: (
+    student: StudentTableStudent
+  ) => void
+
+  onOpenColumns?: () => void
 }
 
-const standardColumns = [
+const baseColumns = [
+  { key: 'name', label: 'الاسم' },
+  { key: 'personalId', label: 'رقم الهوية' },
+  { key: 'grade', label: 'المرحلة / المستوى' },
+  { key: 'contact', label: 'التواصل' },
+  { key: 'paymentStatus', label: 'حالة السداد' },
+  { key: 'notes', label: 'الملاحظات' },
+  { key: 'attendance', label: 'الحضور' },
+]
+
+const extraColumns = [
   { key: 'studentId', label: 'رقم الطالب' },
   { key: 'gender', label: 'الجنس' },
   { key: 'age', label: 'العمر' },
@@ -126,16 +136,6 @@ const standardColumns = [
   { key: 'academicYearName', label: 'العام الدراسي' },
 ]
 
-const baseColumns = [
-  { key: 'name', label: 'الاسم' },
-  { key: 'personalId', label: 'رقم الهوية' },
-  { key: 'grade', label: 'المرحلة / المستوى' },
-  { key: 'contact', label: 'التواصل' },
-  { key: 'paymentStatus', label: 'حالة السداد' },
-  { key: 'notes', label: 'الملاحظات' },
-  { key: 'attendance', label: 'الحضور' },
-]
-
 function formatDate(value: string | null) {
   if (!value) return '-'
 
@@ -152,12 +152,16 @@ function getSourceLabel(source: string | null) {
   switch (source) {
     case 'external':
       return 'تسجيل خارجي'
-    case 'internal':
-      return 'إضافة داخلية'
-    case 'admin':
-      return 'إضافة إداري'
+
     case 'registration':
       return 'التسجيل'
+
+    case 'internal':
+      return 'إضافة داخلية'
+
+    case 'admin':
+      return 'إضافة إداري'
+
     default:
       return source || '-'
   }
@@ -202,7 +206,7 @@ export function StudentsTable({
   onOpenNotes,
   onOpenAttendance,
 }: Props) {
-  const [showColumnCustomization, setShowColumnCustomization] =
+  const [showColumns, setShowColumns] =
     useState(false)
 
   const [paymentStudent, setPaymentStudent] =
@@ -219,7 +223,7 @@ export function StudentsTable({
 
   const [paymentDate, setPaymentDate] =
     useState(
-      new Date().toISOString().split('T')[0]
+      new Date().toISOString().slice(0, 10)
     )
 
   const [paymentReference, setPaymentReference] =
@@ -234,56 +238,25 @@ export function StudentsTable({
   const [paymentMessage, setPaymentMessage] =
     useState('')
 
-  const textFilter = (
-    key: keyof StudentTableFilters,
-    placeholder: string
-  ) => (
-    <div className="flex items-center gap-1">
-      <Filter className="h-3 w-3 shrink-0 opacity-50" />
-
-      <input
-        value={filters[key]}
-        onChange={(event) =>
-          onUpdateFilter(
-            key,
-            event.target.value
-          )
-        }
-        placeholder={placeholder}
-        className="h-7 w-full min-w-0 rounded border bg-background px-2 text-xs outline-none focus:ring-1"
-        onClick={(event) =>
-          event.stopPropagation()
-        }
-      />
-    </div>
-  )
-
-  const visibleColumnCount =
-    1 +
-    Object.values(visibleColumns).filter(Boolean).length
-
   const openPayment = (
     student: StudentTableStudent
   ) => {
     setPaymentStudent(student)
+
     setShowAddPayment(false)
 
-    setPaymentAmount(
-      Math.max(
-        0,
-        student.amountDue -
-          student.amountPaid
-      ).toFixed(3)
-    )
+    setPaymentAmount('')
 
     setPaymentMethod('نقدي')
 
     setPaymentDate(
-      new Date().toISOString().split('T')[0]
+      new Date().toISOString().slice(0, 10)
     )
 
     setPaymentReference('')
+
     setPaymentNotes('')
+
     setPaymentMessage('')
   }
 
@@ -291,7 +264,9 @@ export function StudentsTable({
     if (paymentSaving) return
 
     setPaymentStudent(null)
+
     setShowAddPayment(false)
+
     setPaymentMessage('')
   }
 
@@ -301,19 +276,8 @@ export function StudentsTable({
     const amount = Number(paymentAmount)
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentMessage('أدخل مبلغاً صحيحاً')
-      return
-    }
-
-    const remaining = Math.max(
-      0,
-      paymentStudent.amountDue -
-        paymentStudent.amountPaid
-    )
-
-    if (amount > remaining + 0.000001) {
       setPaymentMessage(
-        `المبلغ أكبر من المتبقي (${remaining.toFixed(3)})`
+        'أدخل مبلغاً صحيحاً.'
       )
       return
     }
@@ -321,6 +285,19 @@ export function StudentsTable({
     if (!paymentStudent.academicYearId) {
       setPaymentMessage(
         'لا توجد سنة دراسية مرتبطة بالطالب.'
+      )
+      return
+    }
+
+    const remaining = Math.max(
+      Number(paymentStudent.amountDue) -
+        Number(paymentStudent.amountPaid),
+      0
+    )
+
+    if (amount > remaining + 0.000001) {
+      setPaymentMessage(
+        `المبلغ أكبر من المتبقي. المتبقي: ${remaining.toFixed(3)} د.ب`
       )
       return
     }
@@ -334,52 +311,45 @@ export function StudentsTable({
         {
           method: 'POST',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            student_id:
-              paymentStudent.id,
-
+            student_id: paymentStudent.id,
             academic_year_id:
               paymentStudent.academicYearId,
-
             amount,
-
-            payment_method:
-              paymentMethod,
-
-            payment_date:
-              paymentDate,
-
+            payment_method: paymentMethod,
+            payment_date: paymentDate,
             reference_number:
               paymentReference || null,
-
-            notes:
-              paymentNotes || null,
+            notes: paymentNotes || null,
           }),
         }
       )
 
-      const data =
-        await response.json()
+      const data = await response.json()
 
       if (!response.ok) {
         throw new Error(
           data?.error ||
-            'تعذر تسجيل الدفعة'
+            'تعذر حفظ الدفعة.'
         )
       }
 
       const newPaid =
-        paymentStudent.amountPaid +
+        Number(paymentStudent.amountPaid) +
         amount
+
+      const newRemaining = Math.max(
+        Number(paymentStudent.amountDue) -
+          newPaid,
+        0
+      )
 
       const newStatus =
         paymentStudent.feeExempt
           ? 'معفي'
-          : newPaid >=
-              paymentStudent.amountDue
+          : newRemaining <= 0
             ? 'مدفوع بالكامل'
             : newPaid > 0
               ? 'مدفوع جزئيًا'
@@ -391,642 +361,660 @@ export function StudentsTable({
         paymentStatus: newStatus,
       })
 
-      setPaymentMessage(
-        'تم تسجيل الدفعة بنجاح'
-      )
-
       setPaymentAmount('')
+
       setPaymentReference('')
+
       setPaymentNotes('')
+
+      setPaymentMessage(
+        'تم تسجيل الدفعة بنجاح ✅'
+      )
 
       setTimeout(() => {
         setShowAddPayment(false)
-        setPaymentMessage('')
       }, 700)
     } catch (error) {
       setPaymentMessage(
         error instanceof Error
           ? error.message
-          : 'حدث خطأ أثناء تسجيل الدفعة'
+          : 'تعذر حفظ الدفعة.'
       )
     } finally {
       setPaymentSaving(false)
     }
   }
 
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-medium">
-          الطلاب ({students.length})
-        </div>
+  const filterInput = (
+    key: keyof StudentTableFilters,
+    placeholder: string
+  ) => {
+    return (
+      <div className="flex items-center gap-1">
+        <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
 
-        <button
-          type="button"
-          onClick={() =>
-            setShowColumnCustomization(
-              (value) => !value
+        <input
+          value={filters[key]}
+          onChange={(event) =>
+            onUpdateFilter(
+              key,
+              event.target.value
             )
           }
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
-        >
-          <Settings2 className="h-4 w-4" />
-          تخصيص الأعمدة
-        </button>
+          placeholder={placeholder}
+          className="h-7 w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1"
+          onClick={(event) =>
+            event.stopPropagation()
+          }
+        />
       </div>
+    )
+  }
 
-      {showColumnCustomization && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="mb-3 text-sm font-semibold">
-            الأعمدة
+  const visibleExtraColumns =
+    extraColumns.filter(
+      (column) =>
+        visibleColumns[column.key]
+    )
+
+  const visibleDynamicFields =
+    dynamicFields.filter(
+      (field) =>
+        field.is_active &&
+        visibleColumns[
+          `dynamic-${field.id}`
+        ]
+    )
+
+  const visibleCourses =
+    courses.filter(
+      (course) =>
+        visibleColumns[
+          `course-${course.id}`
+        ]
+    )
+
+  const totalColumns =
+    baseColumns.filter(
+      (column) =>
+        visibleColumns[column.key] !== false
+    ).length +
+    visibleExtraColumns.length +
+    visibleDynamicFields.length +
+    visibleCourses.length
+
+  return (
+    <>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">
+            الطلاب ({students.length})
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-muted-foreground">
-                الأعمدة الأساسية
-              </div>
+          <button
+            type="button"
+            onClick={() =>
+              setShowColumns(
+                (current) => !current
+              )
+            }
+            className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+          >
+            <Settings2 className="h-4 w-4" />
+            تخصيص الأعمدة
+          </button>
+        </div>
 
-              {baseColumns.map(
-                (column) => (
-                  <label
-                    key={column.key}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        visibleColumns[
-                          column.key
-                        ] !== false
-                      }
-                      onChange={() =>
-                        onToggleColumn(
-                          column.key
-                        )
-                      }
-                    />
-
-                    <span>
-                      {column.label}
-                    </span>
-                  </label>
-                )
-              )}
+        {showColumns && (
+          <div className="rounded-lg border bg-muted/20 p-4">
+            <div className="mb-3 text-sm font-semibold">
+              تخصيص الأعمدة
             </div>
 
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-muted-foreground">
-                الأعمدة الإضافية
-              </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground">
+                  الأعمدة الأساسية
+                </div>
 
-              {standardColumns.map(
-                (column) => (
-                  <label
-                    key={column.key}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        !!visibleColumns[
-                          column.key
-                        ]
-                      }
-                      onChange={() =>
-                        onToggleColumn(
-                          column.key
-                        )
-                      }
-                    />
+                {baseColumns.map(
+                  (column) => (
+                    <label
+                      key={column.key}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          visibleColumns[
+                            column.key
+                          ] !== false
+                        }
+                        onChange={() =>
+                          onToggleColumn(
+                            column.key
+                          )
+                        }
+                      />
 
-                    <span>
                       {column.label}
-                    </span>
-                  </label>
-                )
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-muted-foreground">
-                الحقول المخصصة
+                    </label>
+                  )
+                )}
               </div>
 
-              {dynamicFields
-                .filter(
-                  (field) =>
-                    field.is_active
-                )
-                .map((field) => (
-                  <label
-                    key={field.id}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        !!visibleColumns[
-                          `dynamic-${field.id}`
-                        ]
-                      }
-                      onChange={() =>
-                        onToggleColumn(
-                          `dynamic-${field.id}`
-                        )
-                      }
-                    />
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground">
+                  أعمدة إضافية
+                </div>
 
-                    <span>
-                      {field.name}
-                    </span>
-                  </label>
-                ))}
+                {extraColumns.map(
+                  (column) => (
+                    <label
+                      key={column.key}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          !!visibleColumns[
+                            column.key
+                          ]
+                        }
+                        onChange={() =>
+                          onToggleColumn(
+                            column.key
+                          )
+                        }
+                      />
 
-              {courses.length > 0 && (
-                <>
-                  <div className="mt-4 text-xs font-semibold text-muted-foreground">
-                    الدورات
-                  </div>
+                      {column.label}
+                    </label>
+                  )
+                )}
+              </div>
 
-                  {courses.map(
-                    (course) => (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground">
+                  الحقول والدورات
+                </div>
+
+                {dynamicFields
+                  .filter(
+                    (field) =>
+                      field.is_active
+                  )
+                  .map(
+                    (field) => (
                       <label
-                        key={course.id}
-                        className="flex cursor-pointer items-center gap-2 text-sm"
+                        key={field.id}
+                        className="flex items-center gap-2 text-sm"
                       >
                         <input
                           type="checkbox"
                           checked={
                             !!visibleColumns[
-                              `course-${course.id}`
+                              `dynamic-${field.id}`
                             ]
                           }
                           onChange={() =>
                             onToggleColumn(
-                              `course-${course.id}`
+                              `dynamic-${field.id}`
                             )
                           }
                         />
 
-                        <span>
-                          {course.name}
-                        </span>
+                        {field.name}
                       </label>
                     )
                   )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      <div className="overflow-x-auto rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {visibleColumns.name !== false && (
-                <TableHead className="min-w-[220px]">
-                  {textFilter(
-                    'name',
-                    'الاسم'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.personalId !== false && (
-                <TableHead className="min-w-[150px]">
-                  {textFilter(
-                    'personalId',
-                    'رقم الهوية'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.grade !== false && (
-                <TableHead className="min-w-[150px]">
-                  {textFilter(
-                    'grade',
-                    'المرحلة / المستوى'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.contact !== false && (
-                <TableHead className="min-w-[180px]">
-                  {textFilter(
-                    'phone',
-                    'الهاتف / واتساب'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.paymentStatus !== false && (
-                <TableHead className="min-w-[150px]">
-                  {textFilter(
-                    'paymentStatus',
-                    'حالة السداد'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.notes !== false && (
-                <TableHead className="min-w-[130px]">
-                  {textFilter(
-                    'notes',
-                    'الملاحظات'
-                  )}
-                </TableHead>
-              )}
-
-              {visibleColumns.attendance !== false && (
-                <TableHead className="min-w-[130px]">
-                  {textFilter(
-                    'attendance',
-                    'الحضور'
-                  )}
-                </TableHead>
-              )}
-
-              {standardColumns
-                .filter(
-                  (column) =>
-                    visibleColumns[
-                      column.key
-                    ]
-                )
-                .map((column) => (
-                  <TableHead
-                    key={column.key}
-                  >
-                    {column.label}
-                  </TableHead>
-                ))}
-
-              {dynamicFields
-                .filter(
-                  (field) =>
-                    field.is_active &&
-                    visibleColumns[
-                      `dynamic-${field.id}`
-                    ]
-                )
-                .map((field) => (
-                  <TableHead
-                    key={`dynamic-${field.id}`}
-                  >
-                    {field.name}
-                  </TableHead>
-                ))}
-
-              {courses
-                .filter(
-                  (course) =>
-                    visibleColumns[
-                      `course-${course.id}`
-                    ]
-                )
-                .map((course) => (
-                  <TableHead
-                    key={`course-${course.id}`}
-                  >
-                    {course.name}
-                  </TableHead>
-                ))}
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {students.map((student) => {
-              const remaining =
-                Math.max(
-                  0,
-                  student.amountDue -
-                    student.amountPaid
-                )
-
-              const attendance =
-                student.attendance
-
-              return (
-                <TableRow
-                  key={student.id}
-                  data-state={
-                    selectedStudentId ===
-                    student.id
-                      ? 'selected'
-                      : undefined
-                  }
-                  className="cursor-pointer"
-                  onClick={() =>
-                    onSelectStudent(
-                      student.id
-                    )
-                  }
-                >
-                  {visibleColumns.name !== false && (
-                    <TableCell className="font-medium">
-                      {student.name}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.personalId !== false && (
-                    <TableCell>
-                      {student.personalId ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.grade !== false && (
-                    <TableCell>
-                      {student.grade ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.contact !== false && (
-                    <TableCell>
-                      <div className="space-y-1 text-xs">
-                        <div>
-                          {student.phone ||
-                            '-'}
-                        </div>
-
-                        {student.whatsapp && (
-                          <div className="text-muted-foreground">
-                            {student.whatsapp}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.paymentStatus !== false && (
-                    <TableCell>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openPayment(student)
-                        }}
-                        className="rounded-md px-2 py-1 transition hover:bg-muted"
-                      >
-                        <StatusBadge
-                          status={getPaymentStatusLabel(
-                            student.paymentStatus
-                          )}
-                        />
-                      </button>
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.notes !== false && (
-                    <TableCell>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onOpenNotes(
-                            student
+                {courses.map(
+                  (course) => (
+                    <label
+                      key={course.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          !!visibleColumns[
+                            `course-${course.id}`
+                          ]
+                        }
+                        onChange={() =>
+                          onToggleColumn(
+                            `course-${course.id}`
                           )
-                        }}
-                        className="max-w-[180px] truncate rounded px-2 py-1 text-xs hover:bg-muted"
-                      >
-                        {student.notes ||
-                          'لا توجد'}
-                      </button>
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.attendance !== false && (
-                    <TableCell>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onOpenAttendance(
-                            student
-                          )
-                        }}
-                        className="rounded-md px-2 py-1 text-xs hover:bg-muted"
-                      >
-                        {attendance ? (
-                          <div className="space-y-1 text-right">
-                            <div>
-                              {attendance.percentage.toFixed(
-                                0
-                              )}
-                              %
-                            </div>
-
-                            <div className="text-[10px] text-muted-foreground">
-                              {attendance.present}{' '}
-                              حاضر /{' '}
-                              {attendance.absent}{' '}
-                              غائب
-                            </div>
-                          </div>
-                        ) : currentCourseName ? (
-                          'لم تقم الدورة حتى الآن'
-                        ) : (
-                          'غير حاضر'
-                        )}
-                      </button>
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.studentId && (
-                    <TableCell>
-                      {student.studentId ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.gender && (
-                    <TableCell>
-                      {student.gender ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.age && (
-                    <TableCell>
-                      {student.age ?? '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.phone && (
-                    <TableCell>
-                      {student.phone ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.whatsapp && (
-                    <TableCell>
-                      {student.whatsapp ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.status && (
-                    <TableCell>
-                      <StatusBadge
-                        status={
-                          student.status ||
-                          '-'
                         }
                       />
-                    </TableCell>
-                  )}
 
-                  {visibleColumns.className && (
-                    <TableCell>
-                      {student.className ||
-                        '-'}
-                    </TableCell>
-                  )}
+                      {course.name}
+                    </label>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
-                  {visibleColumns.source && (
-                    <TableCell>
-                      {getSourceLabel(
-                        student.source
-                      )}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.amountDue && (
-                    <TableCell>
-                      {student.amountDue.toFixed(
-                        3
-                      )}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.amountPaid && (
-                    <TableCell>
-                      {student.amountPaid.toFixed(
-                        3
-                      )}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.remaining && (
-                    <TableCell>
-                      {remaining.toFixed(3)}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.feeExempt && (
-                    <TableCell>
-                      {student.feeExempt
-                        ? 'نعم'
-                        : 'لا'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.chronicDiseases && (
-                    <TableCell>
-                      {student.chronicDiseases ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.createdAt && (
-                    <TableCell>
-                      {formatDate(
-                        student.createdAt
-                      )}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.updatedAt && (
-                    <TableCell>
-                      {formatDate(
-                        student.updatedAt
-                      )}
-                    </TableCell>
-                  )}
-
-                  {visibleColumns.academicYearName && (
-                    <TableCell>
-                      {student.academicYearName ||
-                        '-'}
-                    </TableCell>
-                  )}
-
-                  {dynamicFields
-                    .filter(
-                      (field) =>
-                        field.is_active &&
-                        visibleColumns[
-                          `dynamic-${field.id}`
-                        ]
-                    )
-                    .map((field) => {
-                      const value =
-                        student
-                          .dynamicValues?.[
-                          field.field_key
-                        ]
-
-                      return (
-                        <TableCell
-                          key={`dynamic-${field.id}`}
-                        >
-                          {value === null ||
-                          value ===
-                            undefined ||
-                          value === ''
-                            ? '-'
-                            : String(value)}
-                        </TableCell>
-                      )
-                    })}
-
-                  {courses
-                    .filter(
-                      (course) =>
-                        visibleColumns[
-                          `course-${course.id}`
-                        ]
-                    )
-                    .map((course) => {
-                      const status =
-                        student
-                          .courseStatuses?.[
-                          course.id
-                        ]
-
-                      return (
-                        <TableCell
-                          key={`course-${course.id}`}
-                        >
-                          {status || 'لم يسجل'}
-                        </TableCell>
-                      )
-                    })}
-                </TableRow>
-              )
-            })}
-
-            {students.length === 0 && (
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={
-                    visibleColumnCount
-                  }
-                  className="h-32 text-center text-muted-foreground"
-                >
-                  لا توجد بيانات
-                </TableCell>
+                {visibleColumns.name !== false && (
+                  <TableHead className="min-w-[220px]">
+                    {filterInput(
+                      'name',
+                      'الاسم'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.personalId !== false && (
+                  <TableHead className="min-w-[150px]">
+                    {filterInput(
+                      'personalId',
+                      'رقم الهوية'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.grade !== false && (
+                  <TableHead className="min-w-[150px]">
+                    {filterInput(
+                      'grade',
+                      'المرحلة / المستوى'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.contact !== false && (
+                  <TableHead className="min-w-[180px]">
+                    {filterInput(
+                      'phone',
+                      'الهاتف / واتساب'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.paymentStatus !== false && (
+                  <TableHead className="min-w-[150px]">
+                    {filterInput(
+                      'paymentStatus',
+                      'حالة السداد'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.notes !== false && (
+                  <TableHead className="min-w-[130px]">
+                    {filterInput(
+                      'notes',
+                      'الملاحظات'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleColumns.attendance !== false && (
+                  <TableHead className="min-w-[130px]">
+                    {filterInput(
+                      'attendance',
+                      'الحضور'
+                    )}
+                  </TableHead>
+                )}
+
+                {visibleExtraColumns.map(
+                  (column) => (
+                    <TableHead
+                      key={column.key}
+                    >
+                      {column.label}
+                    </TableHead>
+                  )
+                )}
+
+                {visibleDynamicFields.map(
+                  (field) => (
+                    <TableHead
+                      key={`dynamic-${field.id}`}
+                    >
+                      {field.name}
+                    </TableHead>
+                  )
+                )}
+
+                {visibleCourses.map(
+                  (course) => (
+                    <TableHead
+                      key={`course-${course.id}`}
+                    >
+                      {course.name}
+                    </TableHead>
+                  )
+                )}
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+
+            <TableBody>
+              {students.map(
+                (student) => {
+                  const remaining =
+                    student.feeExempt
+                      ? 0
+                      : Math.max(
+                          Number(
+                            student.amountDue
+                          ) -
+                            Number(
+                              student.amountPaid
+                            ),
+                          0
+                        )
+
+                  return (
+                    <TableRow
+                      key={student.id}
+                      data-state={
+                        selectedStudentId ===
+                        student.id
+                          ? 'selected'
+                          : undefined
+                      }
+                      className="cursor-pointer"
+                      onClick={() =>
+                        onSelectStudent(
+                          student.id
+                        )
+                      }
+                    >
+                      {visibleColumns.name !== false && (
+                        <TableCell className="font-medium">
+                          {student.name}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.personalId !== false && (
+                        <TableCell>
+                          {student.personalId ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.grade !== false && (
+                        <TableCell>
+                          {student.grade ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.contact !== false && (
+                        <TableCell>
+                          <div className="space-y-1 text-xs">
+                            <div>
+                              {student.phone ||
+                                '-'}
+                            </div>
+
+                            {student.whatsapp && (
+                              <div className="text-muted-foreground">
+                                {student.whatsapp}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.paymentStatus !== false && (
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="rounded-md px-2 py-1 hover:bg-muted"
+                            onClick={(
+                              event
+                            ) => {
+                              event.stopPropagation()
+                              openPayment(
+                                student
+                              )
+                            }}
+                          >
+                            <StatusBadge
+                              status={getPaymentStatusLabel(
+                                student.paymentStatus
+                              )}
+                            />
+                          </button>
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.notes !== false && (
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="max-w-[180px] truncate rounded-md px-2 py-1 text-xs hover:bg-muted"
+                            onClick={(
+                              event
+                            ) => {
+                              event.stopPropagation()
+                              onOpenNotes(
+                                student
+                              )
+                            }}
+                          >
+                            {student.notes ||
+                              'لا توجد'}
+                          </button>
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.attendance !== false && (
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="rounded-md px-2 py-1 text-xs hover:bg-muted"
+                            onClick={(
+                              event
+                            ) => {
+                              event.stopPropagation()
+                              onOpenAttendance(
+                                student
+                              )
+                            }}
+                          >
+                            {student.attendance ||
+                              'لم يسجل'}
+                          </button>
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.studentId && (
+                        <TableCell>
+                          {student.studentId ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.gender && (
+                        <TableCell>
+                          {student.gender ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.age && (
+                        <TableCell>
+                          {student.age ??
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.phone && (
+                        <TableCell>
+                          {student.phone ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.whatsapp && (
+                        <TableCell>
+                          {student.whatsapp ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.status && (
+                        <TableCell>
+                          <StatusBadge
+                            status={
+                              student.status ||
+                              '-'
+                            }
+                          />
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.className && (
+                        <TableCell>
+                          {student.className ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.source && (
+                        <TableCell>
+                          {getSourceLabel(
+                            student.source
+                          )}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.amountDue && (
+                        <TableCell>
+                          {Number(
+                            student.amountDue
+                          ).toFixed(3)}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.amountPaid && (
+                        <TableCell>
+                          {Number(
+                            student.amountPaid
+                          ).toFixed(3)}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.remaining && (
+                        <TableCell>
+                          {remaining.toFixed(
+                            3
+                          )}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.feeExempt && (
+                        <TableCell>
+                          {student.feeExempt
+                            ? 'نعم'
+                            : 'لا'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.chronicDiseases && (
+                        <TableCell>
+                          {student.chronicDiseases ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.createdAt && (
+                        <TableCell>
+                          {formatDate(
+                            student.createdAt
+                          )}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.updatedAt && (
+                        <TableCell>
+                          {formatDate(
+                            student.updatedAt
+                          )}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.academicYearName && (
+                        <TableCell>
+                          {student.academicYearName ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleDynamicFields.map(
+                        (field) => (
+                          <TableCell
+                            key={`dynamic-${field.id}`}
+                          >
+                            {student
+                              .dynamicValues?.[
+                              field.field_key
+                            ] ||
+                              student
+                                .dynamicValues?.[
+                                field.id
+                              ] ||
+                              '-'}
+                          </TableCell>
+                        )
+                      )}
+
+                      {visibleCourses.map(
+                        (course) => {
+                          const status =
+                            student.courseStatuses?.find(
+                              (item) =>
+                                item.courseId ===
+                                course.id
+                            )
+
+                          return (
+                            <TableCell
+                              key={`course-${course.id}`}
+                            >
+                              {status?.status ||
+                                'لم يسجل'}
+                            </TableCell>
+                          )
+                        }
+                      )}
+                    </TableRow>
+                  )
+                }
+              )}
+
+              {students.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={
+                      Math.max(
+                        totalColumns,
+                        1
+                      )
+                    }
+                    className="h-32 text-center text-muted-foreground"
+                  >
+                    لا توجد بيانات
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
+      {/* نافذة تفاصيل الدفع */}
       {paymentStudent && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1041,17 +1029,18 @@ export function StudentsTable({
         >
           <div
             className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
+            dir="rtl"
             onMouseDown={(event) =>
               event.stopPropagation()
             }
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-5 flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold">
                   تفاصيل السداد
                 </h2>
 
-                <p className="text-sm text-muted-foreground">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {paymentStudent.name}
                 </p>
               </div>
@@ -1060,7 +1049,7 @@ export function StudentsTable({
                 type="button"
                 onClick={closePayment}
                 disabled={paymentSaving}
-                className="rounded-md px-2 py-1 text-sm hover:bg-muted disabled:opacity-50"
+                className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
               >
                 إغلاق
               </button>
@@ -1073,9 +1062,10 @@ export function StudentsTable({
                 </div>
 
                 <div className="mt-1 font-semibold">
-                  {paymentStudent.amountDue.toFixed(
-                    3
-                  )}
+                  {Number(
+                    paymentStudent.amountDue
+                  ).toFixed(3)}{' '}
+                  د.ب
                 </div>
               </div>
 
@@ -1085,9 +1075,10 @@ export function StudentsTable({
                 </div>
 
                 <div className="mt-1 font-semibold">
-                  {paymentStudent.amountPaid.toFixed(
-                    3
-                  )}
+                  {Number(
+                    paymentStudent.amountPaid
+                  ).toFixed(3)}{' '}
+                  د.ب
                 </div>
               </div>
 
@@ -1098,10 +1089,15 @@ export function StudentsTable({
 
                 <div className="mt-1 font-semibold">
                   {Math.max(
-                    0,
-                    paymentStudent.amountDue -
-                      paymentStudent.amountPaid
-                  ).toFixed(3)}
+                    Number(
+                      paymentStudent.amountDue
+                    ) -
+                      Number(
+                        paymentStudent.amountPaid
+                      ),
+                    0
+                  ).toFixed(3)}{' '}
+                  د.ب
                 </div>
               </div>
 
@@ -1110,7 +1106,7 @@ export function StudentsTable({
                   الحالة
                 </div>
 
-                <div className="mt-1">
+                <div className="mt-2">
                   <StatusBadge
                     status={getPaymentStatusLabel(
                       paymentStudent.paymentStatus
@@ -1120,178 +1116,221 @@ export function StudentsTable({
               </div>
             </div>
 
-            {paymentStudent.feeExempt ? (
-              <div className="mt-4 rounded-lg border p-3 text-sm">
-                الطالب معفي من الرسوم.
-              </div>
-            ) : (
-              <div className="mt-5">
-                {!showAddPayment ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowAddPayment(
-                        true
-                      )
-                    }
-                    disabled={
-                      paymentStudent.amountPaid >=
-                      paymentStudent.amountDue
-                    }
-                    className="w-full rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    إضافة دفعة
-                  </button>
-                ) : (
-                  <div className="space-y-3 rounded-lg border p-4">
-                    <div className="text-sm font-semibold">
-                      إضافة دفعة جديدة
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">
-                        المبلغ
-                      </label>
-
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.001"
-                        value={paymentAmount}
-                        onChange={(event) =>
-                          setPaymentAmount(
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">
-                        طريقة الدفع
-                      </label>
-
-                      <select
-                        value={paymentMethod}
-                        onChange={(event) =>
-                          setPaymentMethod(
-                            event.target.value as
-                              | 'نقدي'
-                              | 'تحويل'
-                              | 'بطاقة'
-                          )
-                        }
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="نقدي">
-                          نقدي
-                        </option>
-
-                        <option value="تحويل">
-                          تحويل
-                        </option>
-
-                        <option value="بطاقة">
-                          بطاقة
-                        </option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">
-                        التاريخ
-                      </label>
-
-                      <input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(event) =>
-                          setPaymentDate(
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">
-                        رقم المرجع
-                      </label>
-
-                      <input
-                        value={paymentReference}
-                        onChange={(event) =>
-                          setPaymentReference(
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1 block text-xs text-muted-foreground">
-                        ملاحظات
-                      </label>
-
-                      <textarea
-                        value={paymentNotes}
-                        onChange={(event) =>
-                          setPaymentNotes(
-                            event.target.value
-                          )
-                        }
-                        rows={3}
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    {paymentMessage && (
-                      <div className="rounded-md border p-2 text-sm">
-                        {paymentMessage}
+            {!paymentStudent.feeExempt &&
+              Number(
+                paymentStudent.amountPaid
+              ) <
+                Number(
+                  paymentStudent.amountDue
+                ) && (
+                <div className="mt-5">
+                  {!showAddPayment ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowAddPayment(
+                          true
+                        )
+                      }
+                      className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                    >
+                      إضافة دفعة
+                    </button>
+                  ) : (
+                    <div className="space-y-4 rounded-lg border p-4">
+                      <div className="text-sm font-semibold">
+                        إضافة دفعة
                       </div>
-                    )}
 
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={
-                          savePayment
-                        }
-                        disabled={
-                          paymentSaving
-                        }
-                        className="flex-1 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-                      >
-                        {paymentSaving
-                          ? 'جاري الحفظ...'
-                          : 'حفظ الدفعة'}
-                      </button>
+                      <div>
+                        <label className="mb-1.5 block text-xs text-muted-foreground">
+                          المبلغ
+                        </label>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowAddPayment(
-                            false
-                          )
-                        }
-                        disabled={
-                          paymentSaving
-                        }
-                        className="rounded-md border px-4 py-2 text-sm"
-                      >
-                        إلغاء
-                      </button>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={
+                            paymentAmount
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setPaymentAmount(
+                              event.target.value
+                            )
+                          }
+                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-1"
+                          placeholder="0.000"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs text-muted-foreground">
+                          طريقة الدفع
+                        </label>
+
+                        <select
+                          value={
+                            paymentMethod
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setPaymentMethod(
+                              event.target
+                                .value as
+                                | 'نقدي'
+                                | 'تحويل'
+                                | 'بطاقة'
+                            )
+                          }
+                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                        >
+                          <option value="نقدي">
+                            نقدي
+                          </option>
+
+                          <option value="تحويل">
+                            تحويل
+                          </option>
+
+                          <option value="بطاقة">
+                            بطاقة
+                          </option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs text-muted-foreground">
+                          تاريخ الدفع
+                        </label>
+
+                        <input
+                          type="date"
+                          value={
+                            paymentDate
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setPaymentDate(
+                              event.target
+                                .value
+                            )
+                          }
+                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs text-muted-foreground">
+                          رقم المرجع
+                        </label>
+
+                        <input
+                          value={
+                            paymentReference
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setPaymentReference(
+                              event.target
+                                .value
+                            )
+                          }
+                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                          placeholder="اختياري"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-xs text-muted-foreground">
+                          ملاحظات
+                        </label>
+
+                        <textarea
+                          value={
+                            paymentNotes
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setPaymentNotes(
+                              event.target
+                                .value
+                            )
+                          }
+                          rows={3}
+                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                          placeholder="اختياري"
+                        />
+                      </div>
+
+                      {paymentMessage && (
+                        <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                          {paymentMessage}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={
+                            savePayment
+                          }
+                          disabled={
+                            paymentSaving
+                          }
+                          className="flex-1 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        >
+                          {paymentSaving
+                            ? 'جاري الحفظ...'
+                            : 'حفظ الدفعة'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowAddPayment(
+                              false
+                            )
+                          }
+                          disabled={
+                            paymentSaving
+                          }
+                          className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
+
+            {paymentStudent.feeExempt && (
+              <div className="mt-5 rounded-lg border p-3 text-sm">
+                الطالب معفي من الرسوم ولا يمكن إضافة دفعة له.
               </div>
             )}
+
+            {!paymentStudent.feeExempt &&
+              Number(
+                paymentStudent.amountPaid
+              ) >=
+                Number(
+                  paymentStudent.amountDue
+                ) && (
+                <div className="mt-5 rounded-lg border p-3 text-sm">
+                  تم سداد الرسوم بالكامل.
+                </div>
+              )}
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
