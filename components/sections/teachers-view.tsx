@@ -1,6 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import {
   ArrowLeftRight,
   Plus,
@@ -40,488 +44,809 @@ type Assignment = {
   studentId: string
 }
 
+type TeachersCache = {
+  teachers: Teacher[]
+  courses: Course[]
+  students: Student[]
+  assignments: Assignment[]
+  attendanceStatuses: AttendanceStatus[]
+  attendanceRecords: AttendanceRecord[]
+  allowTeacherTransfer: boolean
+  allowTeacherRemove: boolean
+  courseTeacherIds: Record<string, string[]>
+}
+
+let teachersCache: TeachersCache | null = null
+
+let teachersDataLoading = false
+
+function updateTeachersCache(
+  patch: Partial<TeachersCache>,
+) {
+  teachersCache = {
+    teachers:
+      teachersCache?.teachers ?? [],
+    courses:
+      teachersCache?.courses ?? [],
+    students:
+      teachersCache?.students ?? [],
+    assignments:
+      teachersCache?.assignments ?? [],
+    attendanceStatuses:
+      teachersCache?.attendanceStatuses ??
+      [],
+    attendanceRecords:
+      teachersCache?.attendanceRecords ??
+      [],
+    allowTeacherTransfer:
+      teachersCache?.allowTeacherTransfer ??
+      false,
+    allowTeacherRemove:
+      teachersCache?.allowTeacherRemove ??
+      false,
+    courseTeacherIds:
+      teachersCache?.courseTeacherIds ??
+      {},
+    ...patch,
+  }
+}
+
 export function TeachersView() {
-  const [teachers, setTeachers] = useState<Teacher[]>([])
-  const [courses, setCourses] = useState<Course[]>([])
-  const [students, setStudents] = useState<Student[]>([])
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [teachers, setTeachers] = useState<
+    Teacher[]
+  >(
+    teachersCache?.teachers ?? [],
+  )
 
-  const [attendanceStatuses, setAttendanceStatuses] = useState<
-    AttendanceStatus[]
-  >([])
+  const [courses, setCourses] = useState<
+    Course[]
+  >(
+    teachersCache?.courses ?? [],
+  )
 
-  const [attendanceRecords, setAttendanceRecords] = useState<
-    AttendanceRecord[]
-  >([])
+  const [students, setStudents] = useState<
+    Student[]
+  >(
+    teachersCache?.students ?? [],
+  )
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [assignments, setAssignments] =
+    useState<Assignment[]>(
+      teachersCache?.assignments ?? [],
+    )
 
-  const [deletingAssignmentId, setDeletingAssignmentId] =
-    useState<string | null>(null)
+  const [
+    attendanceStatuses,
+    setAttendanceStatuses,
+  ] = useState<AttendanceStatus[]>(
+    teachersCache?.attendanceStatuses ??
+      [],
+  )
+
+  const [
+    attendanceRecords,
+    setAttendanceRecords,
+  ] = useState<AttendanceRecord[]>(
+    teachersCache?.attendanceRecords ??
+      [],
+  )
+
+  const [loading, setLoading] =
+    useState(
+      teachersCache === null,
+    )
+
+  const [saving, setSaving] =
+    useState(false)
+
+  const [
+    deletingAssignmentId,
+    setDeletingAssignmentId,
+  ] = useState<string | null>(
+    null,
+  )
 
   /*
    * صلاحيات النقل والمسح القادمة من إعدادات الإشراف
    */
-  const [allowTeacherTransfer, setAllowTeacherTransfer] =
-    useState(false)
+  const [
+    allowTeacherTransfer,
+    setAllowTeacherTransfer,
+  ] = useState(
+    teachersCache?.allowTeacherTransfer ??
+      false,
+  )
 
-  const [allowTeacherRemove, setAllowTeacherRemove] =
-    useState(false)
+  const [
+    allowTeacherRemove,
+    setAllowTeacherRemove,
+  ] = useState(
+    teachersCache?.allowTeacherRemove ??
+      false,
+  )
 
-  const [statusMessage, setStatusMessage] = useState('')
-  const [search, setSearch] = useState('')
+  const [
+    statusMessage,
+    setStatusMessage,
+  ] = useState('')
 
-  const [selectedTeacherId, setSelectedTeacherId] =
-    useState<string | null>(null)
-
-  const [activePanel, setActivePanel] = useState<
-    'students' | 'addStudents' | 'attendance'
-  >('students')
-
-  const [selectedGrade, setSelectedGrade] = useState('')
-  const [selectedStudentIds, setSelectedStudentIds] =
-    useState<string[]>([])
-
-  const [isTransferOpen, setIsTransferOpen] =
-    useState(false)
-
-  const [transferStudentId, setTransferStudentId] =
-    useState<string | null>(null)
-
-  const [transferTeacherId, setTransferTeacherId] =
+  const [search, setSearch] =
     useState('')
 
-  const [selectedAttendanceDate, setSelectedAttendanceDate] =
-    useState<string | null>(null)
+  const [
+    selectedTeacherId,
+    setSelectedTeacherId,
+  ] = useState<string | null>(
+    null,
+  )
 
-  const [attendanceNotes, setAttendanceNotes] =
-    useState<AttendanceNotes>({})
+  const [activePanel, setActivePanel] =
+    useState<
+      | 'students'
+      | 'addStudents'
+      | 'attendance'
+    >('students')
 
-  const [courseTeacherIds, setCourseTeacherIds] =
-    useState<Record<string, string[]>>({})
+  const [
+    selectedGrade,
+    setSelectedGrade,
+  ] = useState('')
 
-  const loadData = async () => {
-    setLoading(true)
+  const [
+    selectedStudentIds,
+    setSelectedStudentIds,
+  ] = useState<string[]>([])
+
+  const [
+    isTransferOpen,
+    setIsTransferOpen,
+  ] = useState(false)
+
+  const [
+    transferStudentId,
+    setTransferStudentId,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    transferTeacherId,
+    setTransferTeacherId,
+  ] = useState('')
+
+  const [
+    selectedAttendanceDate,
+    setSelectedAttendanceDate,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    attendanceNotes,
+    setAttendanceNotes,
+  ] = useState<AttendanceNotes>(
+    {},
+  )
+
+  const [
+    courseTeacherIds,
+    setCourseTeacherIds,
+  ] = useState<
+    Record<string, string[]>
+  >(
+    teachersCache?.courseTeacherIds ??
+      {},
+  )
+
+  /*
+   * ---------------------------------------------------------
+   * تحميل البيانات
+   * ---------------------------------------------------------
+   *
+   * إذا كانت البيانات موجودة في الـcache:
+   * - لا نظهر loading
+   * - تظهر البيانات مباشرة
+   * - نحدثها في الخلفية
+   */
+
+  const loadData = async (
+    showLoading = false,
+  ) => {
+    if (
+      teachersDataLoading
+    ) {
+      return
+    }
+
+    teachersDataLoading = true
+
+    if (
+      showLoading ||
+      teachersCache === null
+    ) {
+      setLoading(true)
+    }
+
     setStatusMessage('')
 
-    /*
-     * تحميل إعدادات الإشراف
-     *
-     * إذا لم نستطع قراءة الإعدادات، نغلق
-     * النقل والمسح احتياطياً.
-     */
-    const {
-      data: supervisionSettings,
-      error: supervisionSettingsError,
-    } = await supabase
-      .from('supervision_settings')
-      .select(
-        'id, allow_teacher_transfer, allow_teacher_remove',
-      )
-      .eq('id', 'default')
-      .maybeSingle()
-
-    if (supervisionSettingsError) {
-      setAllowTeacherTransfer(false)
-      setAllowTeacherRemove(false)
-
-      setStatusMessage(
-        `خطأ في تحميل إعدادات الإشراف: ${supervisionSettingsError.message}`,
-      )
-    } else {
-      setAllowTeacherTransfer(
-        Boolean(
-          supervisionSettings?.allow_teacher_transfer,
-        ),
-      )
-
-      setAllowTeacherRemove(
-        Boolean(
-          supervisionSettings?.allow_teacher_remove,
-        ),
-      )
-    }
-
-    const {
-      data: academicYear,
-      error: academicYearError,
-    } = await supabase
-      .from('academic_years')
-      .select(
-        'id, name, start_date, end_date, is_current, is_active',
-      )
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
-
-    if (academicYearError) {
-      setStatusMessage(
-        `خطأ في تحميل السنة الدراسية: ${academicYearError.message}`,
-      )
-      setLoading(false)
-      return
-    }
-
-    if (!academicYear) {
-      setStatusMessage(
-        'لا توجد سنة دراسية حالية مفعلة.',
-      )
-      setLoading(false)
-      return
-    }
-
-    const {
-      data: courseRows,
-      error: coursesError,
-    } = await supabase
-      .from('courses')
-      .select(
-        'id, name, start_date, end_date, days, created_at',
-      )
-      .eq('academic_year_id', academicYear.id)
-      .order('created_at', {
-        ascending: true,
-      })
-
-    if (coursesError) {
-      setStatusMessage(
-        `خطأ في تحميل الدورات: ${coursesError.message}`,
-      )
-      setLoading(false)
-      return
-    }
-
-    const mappedCourses: Course[] = (
-      courseRows ?? []
-    ).map((course) => ({
-      id: course.id,
-      name: course.name,
-      startDate: course.start_date ?? '',
-      endDate: course.end_date ?? '',
-      days: Array.isArray(course.days)
-        ? course.days
-        : [],
-    }))
-
-    setCourses(mappedCourses)
-
-    const courseIds = mappedCourses.map(
-      (course) => course.id,
-    )
-
-    let courseTeacherRows: {
-      id: string
-      course_id: string
-      teacher_id: string
-    }[] = []
-
-    if (courseIds.length > 0) {
-      const { data, error } = await supabase
-        .from('course_teachers')
+    try {
+      /*
+       * تحميل إعدادات الإشراف
+       *
+       * إذا لم نستطع قراءة الإعدادات، نغلق
+       * النقل والمسح احتياطياً.
+       */
+      const {
+        data: supervisionSettings,
+        error:
+          supervisionSettingsError,
+      } = await supabase
+        .from('supervision_settings')
         .select(
-          'id, course_id, teacher_id',
+          'id, allow_teacher_transfer, allow_teacher_remove',
         )
-        .in('course_id', courseIds)
+        .eq('id', 'default')
+        .maybeSingle()
 
-      if (error) {
+      if (supervisionSettingsError) {
+        setAllowTeacherTransfer(false)
+        setAllowTeacherRemove(false)
+
+        updateTeachersCache({
+          allowTeacherTransfer: false,
+          allowTeacherRemove: false,
+        })
+
         setStatusMessage(
-          `خطأ في تحميل ارتباط المعلمين بالدورات: ${error.message}`,
+          `خطأ في تحميل إعدادات الإشراف: ${supervisionSettingsError.message}`,
         )
-        setLoading(false)
+      } else {
+        const nextAllowTeacherTransfer =
+          Boolean(
+            supervisionSettings?.allow_teacher_transfer,
+          )
+
+        const nextAllowTeacherRemove =
+          Boolean(
+            supervisionSettings?.allow_teacher_remove,
+          )
+
+        setAllowTeacherTransfer(
+          nextAllowTeacherTransfer,
+        )
+
+        setAllowTeacherRemove(
+          nextAllowTeacherRemove,
+        )
+
+        updateTeachersCache({
+          allowTeacherTransfer:
+            nextAllowTeacherTransfer,
+          allowTeacherRemove:
+            nextAllowTeacherRemove,
+        })
+      }
+
+      const {
+        data: academicYear,
+        error: academicYearError,
+      } = await supabase
+        .from('academic_years')
+        .select(
+          'id, name, start_date, end_date, is_current, is_active',
+        )
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (academicYearError) {
+        setStatusMessage(
+          `خطأ في تحميل السنة الدراسية: ${academicYearError.message}`,
+        )
+
         return
       }
 
-      courseTeacherRows = data ?? []
-    }
-
-    const teacherIds = Array.from(
-      new Set(
-        courseTeacherRows.map(
-          (item) => item.teacher_id,
-        ),
-      ),
-    )
-
-    let teacherRows: {
-      id: string
-      name: string
-      is_active: boolean
-    }[] = []
-
-    if (teacherIds.length > 0) {
-      const { data, error } = await supabase
-        .from('teachers')
-        .select(
-          'id, name, is_active',
+      if (!academicYear) {
+        setStatusMessage(
+          'لا توجد سنة دراسية حالية مفعلة.',
         )
-        .in('id', teacherIds)
-        .eq('is_active', true)
-        .order('name', {
+
+        return
+      }
+
+      const {
+        data: courseRows,
+        error: coursesError,
+      } = await supabase
+        .from('courses')
+        .select(
+          'id, name, start_date, end_date, days, created_at',
+        )
+        .eq(
+          'academic_year_id',
+          academicYear.id,
+        )
+        .order('created_at', {
           ascending: true,
         })
 
-      if (error) {
+      if (coursesError) {
         setStatusMessage(
-          `خطأ في تحميل المعلمين: ${error.message}`,
+          `خطأ في تحميل الدورات: ${coursesError.message}`,
         )
-        setLoading(false)
+
         return
       }
 
-      teacherRows = data ?? []
-    }
+      const mappedCourses: Course[] = (
+        courseRows ?? []
+      ).map((course) => ({
+        id: course.id,
+        name: course.name,
+        startDate:
+          course.start_date ?? '',
+        endDate:
+          course.end_date ?? '',
+        days: Array.isArray(
+          course.days,
+        )
+          ? course.days
+          : [],
+      }))
 
-    const mappedTeachers: Teacher[] =
-      teacherRows
-        .map((teacher) => ({
-          id: teacher.id,
-          name: teacher.name,
-          isActive: Boolean(
-            teacher.is_active,
-          ),
-        }))
-        .sort((a, b) =>
-          a.name.localeCompare(b.name, 'ar'),
+      setCourses(mappedCourses)
+
+      updateTeachersCache({
+        courses: mappedCourses,
+      })
+
+      const courseIds =
+        mappedCourses.map(
+          (course) => course.id,
         )
 
-    setTeachers(mappedTeachers)
+      let courseTeacherRows: {
+        id: string
+        course_id: string
+        teacher_id: string
+      }[] = []
 
-    const {
-      data: enrollmentRows,
-      error: enrollmentsError,
-    } = await supabase
-      .from('enrollments')
-      .select(
-        `
-          id,
-          student_id,
-          academic_year_id,
-          level_id,
-          status,
-          levels (
-            id,
-            name,
-            sort_order
+      if (
+        courseIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('course_teachers')
+          .select(
+            'id, course_id, teacher_id',
           )
-        `,
+          .in(
+            'course_id',
+            courseIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل ارتباط المعلمين بالدورات: ${error.message}`,
+          )
+
+          return
+        }
+
+        courseTeacherRows =
+          data ?? []
+      }
+
+      const teacherIds =
+        Array.from(
+          new Set(
+            courseTeacherRows.map(
+              (item) =>
+                item.teacher_id,
+            ),
+          ),
+        )
+
+      let teacherRows: {
+        id: string
+        name: string
+        is_active: boolean
+      }[] = []
+
+      if (
+        teacherIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('teachers')
+          .select(
+            'id, name, is_active',
+          )
+          .in(
+            'id',
+            teacherIds,
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+          .order('name', {
+            ascending: true,
+          })
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل المعلمين: ${error.message}`,
+          )
+
+          return
+        }
+
+        teacherRows =
+          data ?? []
+      }
+
+      const mappedTeachers: Teacher[] =
+        teacherRows
+          .map((teacher) => ({
+            id: teacher.id,
+            name: teacher.name,
+            isActive:
+              Boolean(
+                teacher.is_active,
+              ),
+          }))
+          .sort((a, b) =>
+            a.name.localeCompare(
+              b.name,
+              'ar',
+            ),
+          )
+
+      setTeachers(
+        mappedTeachers,
       )
-      .eq(
-        'academic_year_id',
-        academicYear.id,
-      )
-      .eq('status', 'نشط')
 
-    if (enrollmentsError) {
-      setStatusMessage(
-        `خطأ في تحميل تسجيلات الطلاب: ${enrollmentsError.message}`,
-      )
-      setLoading(false)
-      return
-    }
+      updateTeachersCache({
+        teachers:
+          mappedTeachers,
+      })
 
-    const studentIds = Array.from(
-      new Set(
-        (enrollmentRows ?? []).map(
-          (row) => row.student_id,
-        ),
-      ),
-    )
-
-    let studentRows: {
-      id: string
-      student_id: string | null
-      name: string
-      personal_id: string | null
-      phone: string | null
-      status: string
-    }[] = []
-
-    if (studentIds.length > 0) {
-      const { data, error } = await supabase
-        .from('students')
+      const {
+        data: enrollmentRows,
+        error: enrollmentsError,
+      } = await supabase
+        .from('enrollments')
         .select(
-          'id, student_id, name, personal_id, phone, status',
+          `
+            id,
+            student_id,
+            academic_year_id,
+            level_id,
+            status,
+            levels (
+              id,
+              name,
+              sort_order
+            )
+          `,
         )
-        .in('id', studentIds)
+        .eq(
+          'academic_year_id',
+          academicYear.id,
+        )
+        .eq('status', 'نشط')
 
-      if (error) {
+      if (enrollmentsError) {
         setStatusMessage(
-          `خطأ في تحميل الطلاب: ${error.message}`,
+          `خطأ في تحميل تسجيلات الطلاب: ${enrollmentsError.message}`,
         )
-        setLoading(false)
+
         return
       }
 
-      studentRows = data ?? []
-    }
-
-    const studentMap = new Map(
-      studentRows.map((student) => [
-        student.id,
-        student,
-      ]),
-    )
-
-    const mappedStudents: Student[] = (
-      enrollmentRows ?? []
-    )
-      .map((enrollment) => {
-        const student = studentMap.get(
-          enrollment.student_id,
+      const studentIds =
+        Array.from(
+          new Set(
+            (
+              enrollmentRows ?? []
+            ).map(
+              (row) =>
+                row.student_id,
+            ),
+          ),
         )
 
-        if (!student) {
-          return null
+      let studentRows: {
+        id: string
+        student_id: string | null
+        name: string
+        personal_id:
+          | string
+          | null
+        phone: string | null
+        status: string
+      }[] = []
+
+      if (
+        studentIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, phone, status',
+          )
+          .in(
+            'id',
+            studentIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل الطلاب: ${error.message}`,
+          )
+
+          return
         }
 
-        const levelData = Array.isArray(
-          enrollment.levels,
+        studentRows =
+          data ?? []
+      }
+
+      const studentMap =
+        new Map(
+          studentRows.map(
+            (student) => [
+              student.id,
+              student,
+            ],
+          ),
         )
-          ? enrollment.levels[0]
-          : enrollment.levels
 
-        return {
-          id: student.id,
-          studentId:
-            student.student_id ?? '',
-          name: student.name,
-          personalId:
-            student.personal_id ?? '',
-          phone: student.phone ?? '',
-          levelId: enrollment.level_id,
-          levelName:
-            levelData?.name ?? '—',
-          enrollmentId: enrollment.id,
-        }
-      })
-      .filter(
+      const mappedStudents: Student[] =
         (
-          student,
-        ): student is Student =>
-          student !== null,
+          enrollmentRows ?? []
+        )
+          .map(
+            (enrollment) => {
+              const student =
+                studentMap.get(
+                  enrollment.student_id,
+                )
+
+              if (!student) {
+                return null
+              }
+
+              const levelData =
+                Array.isArray(
+                  enrollment.levels,
+                )
+                  ? enrollment
+                      .levels[0]
+                  : enrollment.levels
+
+              return {
+                id: student.id,
+                studentId:
+                  student.student_id ??
+                  '',
+                name:
+                  student.name,
+                personalId:
+                  student.personal_id ??
+                  '',
+                phone:
+                  student.phone ??
+                  '',
+                levelId:
+                  enrollment.level_id,
+                levelName:
+                  levelData?.name ??
+                  '—',
+                enrollmentId:
+                  enrollment.id,
+              }
+            },
+          )
+          .filter(
+            (
+              student,
+            ): student is Student =>
+              student !== null,
+          )
+
+      setStudents(
+        mappedStudents,
       )
 
-    setStudents(mappedStudents)
+      updateTeachersCache({
+        students:
+          mappedStudents,
+      })
 
-    let assignmentRows: Assignment[] = []
+      let assignmentRows: Assignment[] =
+        []
 
-    if (courseIds.length > 0) {
-      const { data, error } = await supabase
+      if (
+        courseIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'teacher_student_assignments',
+          )
+          .select(
+            'id, course_id, teacher_id, student_id',
+          )
+          .in(
+            'course_id',
+            courseIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل توزيع الطلاب: ${error.message}`,
+          )
+
+          return
+        }
+
+        assignmentRows = (
+          data ?? []
+        ).map((row) => ({
+          id: row.id,
+          courseId:
+            row.course_id,
+          teacherId:
+            row.teacher_id,
+          studentId:
+            row.student_id,
+        }))
+      }
+
+      setAssignments(
+        assignmentRows,
+      )
+
+      updateTeachersCache({
+        assignments:
+          assignmentRows,
+      })
+
+      const teacherMap: Record<
+        string,
+        string[]
+      > = {}
+
+      for (const row of courseTeacherRows) {
+        teacherMap[row.course_id] ??=
+          []
+
+        teacherMap[
+          row.course_id
+        ].push(
+          row.teacher_id,
+        )
+      }
+
+      setCourseTeacherIds(
+        teacherMap,
+      )
+
+      updateTeachersCache({
+        courseTeacherIds:
+          teacherMap,
+      })
+
+      const {
+        data: statusRows,
+        error: statusError,
+      } = await supabase
         .from(
-          'teacher_student_assignments',
+          'attendance_statuses',
         )
         .select(
-          'id, course_id, teacher_id, student_id',
+          'id, name, is_active, sort_order',
         )
-        .in('course_id', courseIds)
+        .order(
+          'sort_order',
+          {
+            ascending: true,
+          },
+        )
 
-      if (error) {
+      if (statusError) {
         setStatusMessage(
-          `خطأ في تحميل توزيع الطلاب: ${error.message}`,
+          `خطأ في تحميل حالات الحضور: ${statusError.message}`,
         )
-        setLoading(false)
+
         return
       }
 
-      assignmentRows = (
-        data ?? []
-      ).map((row) => ({
-        id: row.id,
-        courseId: row.course_id,
-        teacherId: row.teacher_id,
-        studentId: row.student_id,
-      }))
-    }
-
-    setAssignments(assignmentRows)
-
-    const teacherMap: Record<
-      string,
-      string[]
-    > = {}
-
-    for (const row of courseTeacherRows) {
-      teacherMap[row.course_id] ??= []
-      teacherMap[row.course_id].push(
-        row.teacher_id,
-      )
-    }
-
-    setCourseTeacherIds(teacherMap)
-
-    const {
-      data: statusRows,
-      error: statusError,
-    } = await supabase
-      .from('attendance_statuses')
-      .select(
-        'id, name, is_active, sort_order',
-      )
-      .order('sort_order', {
-        ascending: true,
-      })
-
-    if (statusError) {
-      setStatusMessage(
-        `خطأ في تحميل حالات الحضور: ${statusError.message}`,
-      )
-      setLoading(false)
-      return
-    }
-
-    const mappedStatuses: AttendanceStatus[] = (
-      statusRows ?? []
-    )
-      .filter((status) => {
-        const name = String(
-          status.name ?? '',
-        ).trim()
-
-        return (
-          name === 'حاضر' ||
-          name === 'غائب' ||
-          name === 'متأخر' ||
-          name === 'مستأذن'
+      const mappedStatuses: AttendanceStatus[] =
+        (
+          statusRows ?? []
         )
-      })
-      .map((status) => ({
-        id: status.id,
-        name: String(
-          status.name,
-        ).trim() as AttendanceStatus['name'],
-        isActive: Boolean(
-          status.is_active,
-        ),
-        sortOrder:
-          status.sort_order ?? 0,
-      }))
+          .filter((status) => {
+            const name =
+              String(
+                status.name ??
+                  '',
+              ).trim()
 
-    setAttendanceStatuses(
-      mappedStatuses,
-    )
+            return (
+              name === 'حاضر' ||
+              name === 'غائب' ||
+              name === 'متأخر' ||
+              name ===
+                'مستأذن'
+            )
+          })
+          .map((status) => ({
+            id: status.id,
+            name: String(
+              status.name,
+            ).trim() as AttendanceStatus['name'],
+            isActive:
+              Boolean(
+                status.is_active,
+              ),
+            sortOrder:
+              status.sort_order ??
+              0,
+          }))
 
-    if (mappedStatuses.length === 0) {
-      setStatusMessage(
-        `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
-          statusRows?.length ?? 0
-        }`,
+      setAttendanceStatuses(
+        mappedStatuses,
       )
-    }
 
-    let attendanceRows: {
-      id: string
-      student_id: string
-      enrollment_id: string | null
-      attendance_date: string
-      status_id: string
-      note: string | null
-      course_id: string
-    }[] = []
+      updateTeachersCache({
+        attendanceStatuses:
+          mappedStatuses,
+      })
 
-    if (courseIds.length > 0) {
-      const { data, error } =
-        await supabase
+      if (
+        mappedStatuses.length ===
+        0
+      ) {
+        setStatusMessage(
+          `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
+            statusRows?.length ??
+            0
+          }`,
+        )
+      }
+
+      let attendanceRows: {
+        id: string
+        student_id: string
+        enrollment_id:
+          | string
+          | null
+        attendance_date: string
+        status_id: string
+        note: string | null
+        course_id: string
+      }[] = []
+
+      if (
+        courseIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
           .from('attendance')
           .select(
             'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
@@ -531,44 +856,107 @@ export function TeachersView() {
             courseIds,
           )
 
-      if (error) {
-        setStatusMessage(
-          `خطأ في تحميل الحضور: ${error.message}`,
-        )
-        setLoading(false)
-        return
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل الحضور: ${error.message}`,
+          )
+
+          return
+        }
+
+        attendanceRows =
+          data ?? []
       }
 
-      attendanceRows = data ?? []
+      const mappedAttendanceRecords: AttendanceRecord[] =
+        attendanceRows.map(
+          (record) => ({
+            id: record.id,
+            studentId:
+              record.student_id,
+            enrollmentId:
+              record.enrollment_id,
+            courseId:
+              record.course_id,
+            attendanceDate:
+              record.attendance_date,
+            statusId:
+              record.status_id,
+            note:
+              record.note ?? '',
+          }),
+        )
+
+      setAttendanceRecords(
+        mappedAttendanceRecords,
+      )
+
+      updateTeachersCache({
+        attendanceRecords:
+          mappedAttendanceRecords,
+      })
+    } catch (error) {
+      console.error(
+        'Teachers load error:',
+        error,
+      )
+
+      if (
+        error instanceof Error
+      ) {
+        setStatusMessage(
+          `حدث خطأ أثناء تحميل البيانات: ${error.message}`,
+        )
+      }
+    } finally {
+      setLoading(false)
+      teachersDataLoading = false
     }
-
-    setAttendanceRecords(
-      attendanceRows.map(
-        (record) => ({
-          id: record.id,
-          studentId:
-            record.student_id,
-          enrollmentId:
-            record.enrollment_id,
-          courseId:
-            record.course_id,
-          attendanceDate:
-            record.attendance_date,
-          statusId:
-            record.status_id,
-          note:
-            record.note ?? '',
-        }),
-      ),
-    )
-
-    setLoading(false)
   }
 
+  /*
+   * أول دخول:
+   * إذا لا يوجد cache يظهر loading.
+   *
+   * الرجوع للصفحة:
+   * البيانات موجودة بالفعل، لذلك تظهر فوراً
+   * و loadData يعمل بالخلفية.
+   */
   useEffect(() => {
-    loadData()
+    void loadData(
+      teachersCache === null,
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /*
+   * إذا تغيرت بيانات الحضور من AttendanceView
+   * نحدث الـcache أيضاً.
+   */
+  const updateAttendanceRecords = (
+    value:
+      | AttendanceRecord[]
+      | ((
+          previous: AttendanceRecord[],
+        ) => AttendanceRecord[]),
+  ) => {
+    setAttendanceRecords(
+      (previous) => {
+        const next =
+          typeof value ===
+          'function'
+            ? value(previous)
+            : value
+
+        updateTeachersCache({
+          attendanceRecords:
+            next,
+        })
+
+        return next
+      },
+    )
+  }
 
   const currentCourse =
     courses[0] ?? null
@@ -589,28 +977,29 @@ export function TeachersView() {
       ),
     )
 
-  const filteredTeachers = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase()
+  const filteredTeachers =
+    useMemo(() => {
+      const query = search
+        .trim()
+        .toLowerCase()
 
-    if (!query) {
-      return operationalTeachers
-    }
+      if (!query) {
+        return operationalTeachers
+      }
 
-    return operationalTeachers.filter(
-      (teacher) =>
-        teacher.name
-          .toLowerCase()
-          .includes(query) ||
-        teacher.id
-          .toLowerCase()
-          .includes(query),
-    )
-  }, [
-    search,
-    operationalTeachers,
-  ])
+      return operationalTeachers.filter(
+        (teacher) =>
+          teacher.name
+            .toLowerCase()
+            .includes(query) ||
+          teacher.id
+            .toLowerCase()
+            .includes(query),
+      )
+    }, [
+      search,
+      operationalTeachers,
+    ])
 
   const selectedTeacher =
     operationalTeachers.find(
@@ -793,30 +1182,56 @@ export function TeachersView() {
     setSelectedTeacherId(
       teacherId,
     )
-    setActivePanel('students')
+
+    setActivePanel(
+      'students',
+    )
+
     setSelectedGrade('')
+
     setSelectedStudentIds([])
+
     setIsTransferOpen(false)
+
     setTransferStudentId(null)
+
     setTransferTeacherId('')
-    setSelectedAttendanceDate(null)
+
+    setSelectedAttendanceDate(
+      null,
+    )
   }
 
   const closeTeacher = () => {
     setSelectedTeacherId(null)
-    setActivePanel('students')
+
+    setActivePanel(
+      'students',
+    )
+
     setSelectedGrade('')
+
     setSelectedStudentIds([])
+
     setIsTransferOpen(false)
+
     setTransferStudentId(null)
+
     setTransferTeacherId('')
-    setSelectedAttendanceDate(null)
+
+    setSelectedAttendanceDate(
+      null,
+    )
   }
 
   const openAddStudents = () => {
     setSelectedGrade('')
+
     setSelectedStudentIds([])
-    setActivePanel('addStudents')
+
+    setActivePanel(
+      'addStudents',
+    )
   }
 
   const toggleStudent = (
@@ -826,7 +1241,9 @@ export function TeachersView() {
       (current) =>
         current.includes(studentId)
           ? current.filter(
-              (id) => id !== studentId,
+              (id) =>
+                id !==
+                studentId,
             )
           : [
               ...current,
@@ -839,12 +1256,14 @@ export function TeachersView() {
     if (
       !selectedTeacherId ||
       !currentCourse ||
-      selectedStudentIds.length === 0
+      selectedStudentIds.length ===
+        0
     ) {
       return
     }
 
     setSaving(true)
+
     setStatusMessage(
       'جاري التحقق من الطلاب...',
     )
@@ -872,7 +1291,9 @@ export function TeachersView() {
       setStatusMessage(
         `تعذر التحقق من توزيع الطلاب: ${existingError.message}`,
       )
+
       setSaving(false)
+
       return
     }
 
@@ -923,7 +1344,9 @@ export function TeachersView() {
       setStatusMessage(
         `لا يمكن إضافة الطالب لأنه مسند بالفعل إلى ${anotherTeacher?.name ?? 'معلم آخر'} في هذه الدورة.`,
       )
+
       setSaving(false)
+
       return
     }
 
@@ -936,15 +1359,25 @@ export function TeachersView() {
       )
 
     if (
-      studentsToInsert.length === 0
+      studentsToInsert.length ===
+      0
     ) {
-      setSelectedStudentIds([])
+      setSelectedStudentIds(
+        [],
+      )
+
       setSelectedGrade('')
-      setActivePanel('students')
+
+      setActivePanel(
+        'students',
+      )
+
       setStatusMessage(
         'الطلاب المحددون مضافون بالفعل لهذا المعلم.',
       )
+
       setSaving(false)
+
       return
     }
 
@@ -974,7 +1407,9 @@ export function TeachersView() {
       setStatusMessage(
         `تعذر إضافة الطلاب: ${error.message}`,
       )
+
       setSaving(false)
+
       return
     }
 
@@ -990,25 +1425,41 @@ export function TeachersView() {
       }))
 
     setAssignments(
-      (current) => [
-        ...current,
-        ...newAssignments,
-      ],
+      (current) => {
+        const next = [
+          ...current,
+          ...newAssignments,
+        ]
+
+        updateTeachersCache({
+          assignments: next,
+        })
+
+        return next
+      },
     )
 
     setSelectedStudentIds([])
+
     setSelectedGrade('')
-    setActivePanel('students')
+
+    setActivePanel(
+      'students',
+    )
+
     setStatusMessage(
       'تمت إضافة الطلاب بنجاح ✅',
     )
+
     setSaving(false)
   }
 
   const openTransfer = (
     studentId: string,
   ) => {
-    if (!allowTeacherTransfer) {
+    if (
+      !allowTeacherTransfer
+    ) {
       return
     }
 
@@ -1017,11 +1468,14 @@ export function TeachersView() {
     )
 
     setTransferTeacherId('')
+
     setIsTransferOpen(true)
   }
 
   const saveTransfer = async () => {
-    if (!allowTeacherTransfer) {
+    if (
+      !allowTeacherTransfer
+    ) {
       return
     }
 
@@ -1052,6 +1506,7 @@ export function TeachersView() {
     }
 
     setSaving(true)
+
     setStatusMessage(
       'جاري نقل الطالب...',
     )
@@ -1082,30 +1537,45 @@ export function TeachersView() {
       setStatusMessage(
         `تعذر نقل الطالب: ${error.message}`,
       )
+
       setSaving(false)
+
       return
     }
 
     setAssignments(
-      (current) =>
-        current.map((item) =>
-          item.id ===
-          assignment.id
-            ? {
-                id: data.id,
-                courseId:
-                  data.course_id,
-                teacherId:
-                  data.teacher_id,
-                studentId:
-                  data.student_id,
-              }
-            : item,
-        ),
+      (current) => {
+        const next =
+          current.map(
+            (item) =>
+              item.id ===
+              assignment.id
+                ? {
+                    id: data.id,
+                    courseId:
+                      data.course_id,
+                    teacherId:
+                      data.teacher_id,
+                    studentId:
+                      data.student_id,
+                  }
+                : item,
+          )
+
+        updateTeachersCache({
+          assignments: next,
+        })
+
+        return next
+      },
     )
 
-    setTransferStudentId(null)
+    setTransferStudentId(
+      null,
+    )
+
     setTransferTeacherId('')
+
     setIsTransferOpen(false)
 
     setStatusMessage(
@@ -1115,72 +1585,90 @@ export function TeachersView() {
     setSaving(false)
   }
 
-  const removeStudentFromTeacher = async (
-    assignment: Assignment,
-    student: Student,
-  ) => {
-    if (!allowTeacherRemove) {
-      return
-    }
+  const removeStudentFromTeacher =
+    async (
+      assignment: Assignment,
+      student: Student,
+    ) => {
+      if (
+        !allowTeacherRemove
+      ) {
+        return
+      }
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء توزيع الطالب على المعلم فقط، ولن يتم حذف الطالب من النظام أو حذف سجلات حضوره.`,
-    )
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء توزيع الطالب على المعلم فقط، ولن يتم حذف الطالب من النظام أو حذف سجلات حضوره.`,
+        )
 
-    if (!confirmed) {
-      return
-    }
+      if (!confirmed) {
+        return
+      }
 
-    setDeletingAssignmentId(
-      assignment.id,
-    )
-
-    setStatusMessage(
-      'جاري مسح الطالب من المعلم...',
-    )
-
-    const { error } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
-      .delete()
-      .eq(
-        'id',
+      setDeletingAssignmentId(
         assignment.id,
       )
 
-    if (error) {
       setStatusMessage(
-        `تعذر مسح الطالب من المعلم: ${error.message}`,
+        'جاري مسح الطالب من المعلم...',
       )
 
-      setDeletingAssignmentId(null)
-      return
-    }
-
-    setAssignments(
-      (current) =>
-        current.filter(
-          (item) =>
-            item.id !==
+      const { error } =
+        await supabase
+          .from(
+            'teacher_student_assignments',
+          )
+          .delete()
+          .eq(
+            'id',
             assignment.id,
-        ),
-    )
+          )
 
-    setSelectedStudentIds(
-      (current) =>
-        current.filter(
-          (id) =>
-            id !== student.id,
-        ),
-    )
+      if (error) {
+        setStatusMessage(
+          `تعذر مسح الطالب من المعلم: ${error.message}`,
+        )
 
-    setDeletingAssignmentId(null)
+        setDeletingAssignmentId(
+          null,
+        )
 
-    setStatusMessage(
-      `تم مسح ${student.name} من المعلم بنجاح ✅`,
-    )
-  }
+        return
+      }
+
+      setAssignments(
+        (current) => {
+          const next =
+            current.filter(
+              (item) =>
+                item.id !==
+                assignment.id,
+            )
+
+          updateTeachersCache({
+            assignments: next,
+          })
+
+          return next
+        },
+      )
+
+      setSelectedStudentIds(
+        (current) =>
+          current.filter(
+            (id) =>
+              id !== student.id,
+          ),
+      )
+
+      setDeletingAssignmentId(
+        null,
+      )
+
+      setStatusMessage(
+        `تم مسح ${student.name} من المعلم بنجاح ✅`,
+      )
+    }
 
   if (
     !loading &&
@@ -1236,7 +1724,8 @@ export function TeachersView() {
               </p>
 
               <h2 className="mt-1 text-lg font-semibold">
-                {currentCourse?.name ?? '—'}
+                {currentCourse?.name ??
+                  '—'}
               </h2>
             </div>
           </div>
@@ -1342,14 +1831,18 @@ export function TeachersView() {
                       const teacherStudentIds =
                         assignments
                           .filter(
-                            (assignment) =>
+                            (
+                              assignment,
+                            ) =>
                               assignment.courseId ===
                                 currentCourse?.id &&
                               assignment.teacherId ===
                                 teacher.id,
                           )
                           .map(
-                            (assignment) =>
+                            (
+                              assignment,
+                            ) =>
                               assignment.studentId,
                           )
 
@@ -1393,6 +1886,7 @@ export function TeachersView() {
                                 event,
                               ) => {
                                 event.stopPropagation()
+
                                 openTeacher(
                                   teacher.id,
                                 )
@@ -1553,6 +2047,7 @@ export function TeachersView() {
                     setActivePanel(
                       'students',
                     )
+
                     setSelectedAttendanceDate(
                       null,
                     )
@@ -1572,6 +2067,7 @@ export function TeachersView() {
                     setActivePanel(
                       'attendance',
                     )
+
                     setSelectedAttendanceDate(
                       null,
                     )
@@ -1651,7 +2147,9 @@ export function TeachersView() {
                             ) => {
                               const assignment =
                                 assignments.find(
-                                  (item) =>
+                                  (
+                                    item,
+                                  ) =>
                                     item.courseId ===
                                       currentCourse?.id &&
                                     item.teacherId ===
@@ -1984,7 +2482,7 @@ export function TeachersView() {
                     attendanceRecords
                   }
                   setAttendanceRecords={
-                    setAttendanceRecords
+                    updateAttendanceRecords
                   }
                   attendanceNotes={
                     attendanceNotes
