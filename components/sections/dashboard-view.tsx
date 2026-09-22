@@ -129,6 +129,26 @@ type LessonDateStatus =
   | 'no-lesson'
   | 'lesson'
 
+type DashboardCache = {
+  academicYear: AcademicYear | null
+  courses: Course[]
+  enrollments: Enrollment[]
+  assignments: Assignment[]
+  courseTeachers: CourseTeacher[]
+  teachers: Teacher[]
+  attendanceStatuses: AttendanceStatus[]
+  attendanceRecords: AttendanceRecord[]
+  students: Student[]
+  pendingRegistrationCount: number
+  selectedCourseId: string
+  selectedDate: string
+}
+
+let dashboardCache: DashboardCache | null = null
+
+let dashboardDataLoading = false
+let dashboardAccessChecked = false
+
 function getLocalDateString() {
   const now = new Date()
 
@@ -159,11 +179,6 @@ function normalizeId(
   return String(value ?? '').trim()
 }
 
-/*
- * attendance_date في Supabase عندنا DATE،
- * لكن هذا يجعل الكود آمنًا حتى لو رجعت القيمة
- * بصيغة فيها وقت مستقبلًا.
- */
 function normalizeAttendanceDate(
   value: string | null | undefined,
 ) {
@@ -390,63 +405,87 @@ export function DashboardView() {
   const [
     checkingAccess,
     setCheckingAccess,
-  ] = useState(true)
+  ] = useState(!dashboardAccessChecked)
 
   const [loading, setLoading] =
-    useState(true)
+    useState(dashboardCache === null)
 
   const [refreshing, setRefreshing] =
     useState(false)
 
   const [academicYear, setAcademicYear] =
-    useState<AcademicYear | null>(null)
+    useState<AcademicYear | null>(
+      dashboardCache?.academicYear ?? null,
+    )
 
   const [courses, setCourses] =
-    useState<Course[]>([])
+    useState<Course[]>(
+      dashboardCache?.courses ?? [],
+    )
 
   const [enrollments, setEnrollments] =
-    useState<Enrollment[]>([])
+    useState<Enrollment[]>(
+      dashboardCache?.enrollments ?? [],
+    )
 
   const [assignments, setAssignments] =
-    useState<Assignment[]>([])
+    useState<Assignment[]>(
+      dashboardCache?.assignments ?? [],
+    )
 
   const [
     courseTeachers,
     setCourseTeachers,
-  ] = useState<CourseTeacher[]>([])
+  ] = useState<CourseTeacher[]>(
+    dashboardCache?.courseTeachers ?? [],
+  )
 
   const [teachers, setTeachers] =
-    useState<Teacher[]>([])
+    useState<Teacher[]>(
+      dashboardCache?.teachers ?? [],
+    )
 
   const [
     attendanceStatuses,
     setAttendanceStatuses,
-  ] = useState<AttendanceStatus[]>([])
+  ] = useState<AttendanceStatus[]>(
+    dashboardCache?.attendanceStatuses ?? [],
+  )
 
   const [
     attendanceRecords,
     setAttendanceRecords,
-  ] = useState<AttendanceRecord[]>([])
+  ] = useState<AttendanceRecord[]>(
+    dashboardCache?.attendanceRecords ?? [],
+  )
 
   const [students, setStudents] =
-    useState<Student[]>([])
+    useState<Student[]>(
+      dashboardCache?.students ?? [],
+    )
 
   const [
     selectedCourseId,
     setSelectedCourseId,
-  ] = useState('')
+  ] = useState(
+    dashboardCache?.selectedCourseId ?? '',
+  )
 
   const [
     selectedDate,
     setSelectedDate,
   ] = useState(
-    getLocalDateString(),
+    dashboardCache?.selectedDate ??
+      getLocalDateString(),
   )
 
   const [
     pendingRegistrationCount,
     setPendingRegistrationCount,
-  ] = useState(0)
+  ] = useState(
+    dashboardCache?.pendingRegistrationCount ??
+      0,
+  )
 
   const [
     attendanceDetailsOpen,
@@ -493,12 +532,61 @@ export function DashboardView() {
     )
 
   /*
-   * التحقق من صلاحية المستخدم للوصول
-   * إلى لوحة المعلومات.
-   *
-   * إذا لم تكن dashboard ضمن أقسامه المسموحة،
-   * يتم تحويله مباشرة إلى أول قسم مسموح له.
+   * ---------------------------------------------------------
+   * تحديث الـ cache
+   * ---------------------------------------------------------
    */
+
+  const updateDashboardCache = useCallback(
+    (
+      patch: Partial<DashboardCache>,
+    ) => {
+      const current =
+        dashboardCache
+
+      dashboardCache = {
+        academicYear:
+          current?.academicYear ??
+          null,
+        courses:
+          current?.courses ?? [],
+        enrollments:
+          current?.enrollments ?? [],
+        assignments:
+          current?.assignments ?? [],
+        courseTeachers:
+          current?.courseTeachers ?? [],
+        teachers:
+          current?.teachers ?? [],
+        attendanceStatuses:
+          current?.attendanceStatuses ??
+          [],
+        attendanceRecords:
+          current?.attendanceRecords ??
+          [],
+        students:
+          current?.students ?? [],
+        pendingRegistrationCount:
+          current?.pendingRegistrationCount ??
+          0,
+        selectedCourseId:
+          current?.selectedCourseId ??
+          '',
+        selectedDate:
+          current?.selectedDate ??
+          getLocalDateString(),
+        ...patch,
+      }
+    },
+    [],
+  )
+
+  /*
+   * ---------------------------------------------------------
+   * التحقق من صلاحية المستخدم
+   * ---------------------------------------------------------
+   */
+
   useEffect(() => {
     let cancelled = false
 
@@ -517,13 +605,13 @@ export function DashboardView() {
           return
         }
 
-        const data = await response.json()
+        const data =
+          await response.json()
 
-        const sections = Array.isArray(
-          data.sections,
-        )
-          ? data.sections
-          : []
+        const sections =
+          Array.isArray(data.sections)
+            ? data.sections
+            : []
 
         const hasDashboard =
           sections.some(
@@ -535,6 +623,8 @@ export function DashboardView() {
           )
 
         if (hasDashboard) {
+          dashboardAccessChecked = true
+
           if (!cancelled) {
             setCheckingAccess(false)
           }
@@ -565,6 +655,10 @@ export function DashboardView() {
       }
     }
 
+    if (dashboardAccessChecked) {
+      setCheckingAccess(false)
+    }
+
     void checkDashboardAccess()
 
     return () => {
@@ -573,8 +667,11 @@ export function DashboardView() {
   }, [router])
 
   /*
-   * قراءة الحضور من Supabase.
+   * ---------------------------------------------------------
+   * قراءة الحضور من Supabase
+   * ---------------------------------------------------------
    */
+
   const loadAttendance =
     useCallback(
       async (courseIds: string[]) => {
@@ -592,6 +689,11 @@ export function DashboardView() {
           0
         ) {
           setAttendanceRecords([])
+
+          updateDashboardCache({
+            attendanceRecords: [],
+          })
+
           return
         }
 
@@ -706,10 +808,15 @@ export function DashboardView() {
           records,
         )
 
+        updateDashboardCache({
+          attendanceRecords:
+            records,
+        })
+
         if (
           !statusesResult.error
         ) {
-          setAttendanceStatuses(
+          const mappedStatuses =
             (
               statusesResult.data ??
               []
@@ -723,12 +830,26 @@ export function DashboardView() {
                     '',
                 ),
               }),
-            ),
+            )
+
+          setAttendanceStatuses(
+            mappedStatuses,
           )
+
+          updateDashboardCache({
+            attendanceStatuses:
+              mappedStatuses,
+          })
         }
       },
-      [],
+      [updateDashboardCache],
     )
+
+  /*
+   * ---------------------------------------------------------
+   * تحميل بيانات الداشبورد
+   * ---------------------------------------------------------
+   */
 
   const loadData =
     useCallback(
@@ -737,7 +858,9 @@ export function DashboardView() {
       ) => {
         if (showRefresh) {
           setRefreshing(true)
-        } else {
+        } else if (
+          dashboardCache === null
+        ) {
           setLoading(true)
         }
 
@@ -784,6 +907,20 @@ export function DashboardView() {
             setAttendanceRecords([])
             setAttendanceStatuses([])
             setPendingRegistrationCount(0)
+
+            updateDashboardCache({
+              academicYear: null,
+              courses: [],
+              enrollments: [],
+              assignments: [],
+              courseTeachers: [],
+              teachers: [],
+              students: [],
+              attendanceRecords: [],
+              attendanceStatuses: [],
+              pendingRegistrationCount: 0,
+            })
+
             return
           }
 
@@ -808,6 +945,11 @@ export function DashboardView() {
           setAcademicYear(
             currentYear,
           )
+
+          updateDashboardCache({
+            academicYear:
+              currentYear,
+          })
 
           const [
             coursesResult,
@@ -1208,6 +1350,26 @@ export function DashboardView() {
             ).length,
           )
 
+          updateDashboardCache({
+            courses:
+              mappedCourses,
+            enrollments:
+              mappedEnrollments,
+            assignments:
+              mappedAssignments,
+            courseTeachers:
+              mappedCourseTeachers,
+            teachers:
+              mappedTeachers,
+            students:
+              mappedStudents,
+            pendingRegistrationCount:
+              (
+                registrationsResult.data ??
+                []
+              ).length,
+          })
+
           setSelectedCourseId(
             (current) => {
               if (
@@ -1218,6 +1380,11 @@ export function DashboardView() {
                     current,
                 )
               ) {
+                updateDashboardCache({
+                  selectedCourseId:
+                    current,
+                })
+
                 return current
               }
 
@@ -1225,6 +1392,11 @@ export function DashboardView() {
                 mappedCourses.length ===
                 0
               ) {
+                updateDashboardCache({
+                  selectedCourseId:
+                    '',
+                })
+
                 return ''
               }
 
@@ -1251,14 +1423,20 @@ export function DashboardView() {
                   },
                 )
 
-              return (
+              const nextCourseId =
                 currentCourse?.id ??
                 mappedCourses[
                   mappedCourses.length -
                     1
                 ]?.id ??
                 ''
-              )
+
+              updateDashboardCache({
+                selectedCourseId:
+                  nextCourseId,
+              })
+
+              return nextCourseId
             },
           )
 
@@ -1275,15 +1453,32 @@ export function DashboardView() {
           setRefreshing(false)
         }
       },
-      [loadAttendance],
+      [
+        loadAttendance,
+        updateDashboardCache,
+      ],
     )
+
+  /*
+   * ---------------------------------------------------------
+   * التحميل الأول / تحديث الخلفية
+   * ---------------------------------------------------------
+   */
 
   useEffect(() => {
     if (checkingAccess) {
       return
     }
 
-    void loadData()
+    if (dashboardDataLoading) {
+      return
+    }
+
+    dashboardDataLoading = true
+
+    void loadData().finally(() => {
+      dashboardDataLoading = false
+    })
   }, [
     checkingAccess,
     loadData,
@@ -1293,10 +1488,16 @@ export function DashboardView() {
    * عند تغيير الدورة أو التاريخ:
    * نعيد قراءة الحضور للدورة المختارة.
    */
+
   useEffect(() => {
     if (!selectedCourseId) {
       return
     }
+
+    updateDashboardCache({
+      selectedCourseId,
+      selectedDate,
+    })
 
     void loadAttendance([
       selectedCourseId,
@@ -1305,11 +1506,13 @@ export function DashboardView() {
     selectedCourseId,
     selectedDate,
     loadAttendance,
+    updateDashboardCache,
   ])
 
   /*
    * تحديث عند الرجوع للصفحة.
    */
+
   useEffect(() => {
     if (!selectedCourseId) {
       return
@@ -1340,6 +1543,7 @@ export function DashboardView() {
      * تحديث تلقائي كل 5 ثوانٍ طالما
      * الداشبورد ظاهر.
      */
+
     const interval =
       window.setInterval(() => {
         if (
@@ -1419,12 +1623,6 @@ export function DashboardView() {
       [selectedCourseAssignments],
     )
 
-  /*
-   * الحضور الفعلي لليوم المختار.
-   *
-   * لا نعتمد هنا على assignments لتحديد
-   * هل سجل الحضور موجود أم لا.
-   */
   const selectedDateRecords =
     useMemo(() => {
       const selectedCourse =
@@ -1605,13 +1803,6 @@ export function DashboardView() {
         const normalizedCourseId =
           normalizeId(selectedCourseId)
 
-        /*
-         * جميع المعلمين المسجلين في الدورة.
-         *
-         * نأخذهم من course_teachers أولاً،
-         * ونضيف أي معلم موجود في assignments
-         * حتى لا يختفي أحد من التفاصيل.
-         */
         const courseTeacherRows =
           courseTeachers.filter(
             (item) =>
@@ -1656,10 +1847,6 @@ export function DashboardView() {
                   ) === teacherId,
               )
 
-            /*
-             * الطلاب الموزعون على هذا المعلم
-             * في الدورة الحالية.
-             */
             const teacherStudentIds =
               new Set(
                 assignmentRows
@@ -1681,9 +1868,6 @@ export function DashboardView() {
             const studentCount =
               teacherStudentIds.size
 
-            /*
-             * سجلات الحضور لهذا المعلم فقط.
-             */
             const teacherRecords =
               selectedDateRecords.filter(
                 (record) =>
@@ -1694,10 +1878,6 @@ export function DashboardView() {
                   ),
               )
 
-            /*
-             * نضمن عدم احتساب الطالب أكثر
-             * من مرة في حالة وجود سجل مكرر.
-             */
             const seenStudents =
               new Set<string>()
 
@@ -1738,20 +1918,9 @@ export function DashboardView() {
               }
             }
 
-            /*
-             * هذا هو الفرق المهم:
-             *
-             * recordedCount = عدد الطلاب الذين
-             * لديهم سجل حضور فعلي.
-             */
             const recordedCount =
               seenStudents.size
 
-            /*
-             * إذا المعلم عنده طلاب لكن لم يسجل
-             * لأي واحد منهم، نرسل percentage = null
-             * حتى تعرض الواجهة "لم يسجل".
-             */
             const percentage =
               recordedCount === 0
                 ? null
