@@ -38,15 +38,15 @@ const quickLinks = [
   {
     title: 'التسجيل الخارجي',
     description:
-      'فتح ومراجعة صفحة التسجيل الخارجي وإعداداتها.',
-    href: '/settings/registration',
+      'فتح صفحة التسجيل الخارجي التي يستخدمها أولياء الأمور والطلاب للتسجيل.',
+    href: '/register',
     icon: ExternalLink,
   },
   {
-    title: 'حالة الطلاب',
+    title: 'متابعة الطالب',
     description:
-      'إدارة حالات الطلاب والبيانات المرتبطة بهم.',
-    href: '/students',
+      'فتح صفحة متابعة الطالب باستخدام الرقم الشخصي (CPR) لعرض بياناته وحضوره.',
+    href: '/student-status',
     icon: GraduationCap,
   },
 ]
