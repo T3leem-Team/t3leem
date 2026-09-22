@@ -3,9 +3,12 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL!
+
 const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 
@@ -54,12 +57,14 @@ function getAdminClient() {
 
 export async function GET() {
   try {
-    const user = await getAuthenticatedUser()
+    const user =
+      await getAuthenticatedUser()
 
     if (!user) {
       return NextResponse.json(
         {
-          error: 'غير مصرح بالوصول',
+          error:
+            'غير مصرح بالوصول',
         },
         {
           status: 401,
@@ -67,15 +72,17 @@ export async function GET() {
       )
     }
 
-    const supabase = getAdminClient()
+    const supabase =
+      getAdminClient()
 
-    const { data, error } = await supabase
-      .from('school_settings')
-      .select(
-        'id, school_name, school_subtitle, updated_at',
-      )
-      .eq('id', 1)
-      .maybeSingle()
+    const { data, error } =
+      await supabase
+        .from('school_settings')
+        .select(
+          'id, school_name, school_subtitle, updated_at',
+        )
+        .eq('id', 1)
+        .maybeSingle()
 
     if (error) {
       console.error(
@@ -85,7 +92,10 @@ export async function GET() {
 
       return NextResponse.json(
         {
-          error: 'تعذر تحميل إعدادات المدرسة',
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
         },
         {
           status: 500,
@@ -94,18 +104,21 @@ export async function GET() {
     }
 
     if (!data) {
-      const { data: created, error: insertError } =
-        await supabase
-          .from('school_settings')
-          .insert({
-            id: 1,
-            school_name: 'تعليم',
-            school_subtitle: 'نظام إدارة المدارس',
-          })
-          .select(
-            'id, school_name, school_subtitle, updated_at',
-          )
-          .single()
+      const {
+        data: created,
+        error: insertError,
+      } = await supabase
+        .from('school_settings')
+        .insert({
+          id: 1,
+          school_name: 'تعليم',
+          school_subtitle:
+            'نظام إدارة المدارس',
+        })
+        .select(
+          'id, school_name, school_subtitle, updated_at',
+        )
+        .single()
 
       if (insertError) {
         console.error(
@@ -115,7 +128,14 @@ export async function GET() {
 
         return NextResponse.json(
           {
-            error: 'تعذر إنشاء إعدادات المدرسة',
+            error:
+              insertError.message,
+            code:
+              insertError.code,
+            details:
+              insertError.details,
+            hint:
+              insertError.hint,
           },
           {
             status: 500,
@@ -139,7 +159,10 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error: 'حدث خطأ غير متوقع',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'حدث خطأ غير متوقع',
       },
       {
         status: 500,
@@ -148,14 +171,18 @@ export async function GET() {
   }
 }
 
-export async function PUT(request: Request) {
+export async function PUT(
+  request: Request,
+) {
   try {
-    const user = await getAuthenticatedUser()
+    const user =
+      await getAuthenticatedUser()
 
     if (!user) {
       return NextResponse.json(
         {
-          error: 'غير مصرح بالوصول',
+          error:
+            'غير مصرح بالوصول',
         },
         {
           status: 401,
@@ -163,22 +190,26 @@ export async function PUT(request: Request) {
       )
     }
 
-    const body = await request.json()
+    const body =
+      await request.json()
 
     const schoolName =
-      typeof body.school_name === 'string'
+      typeof body.school_name ===
+      'string'
         ? body.school_name.trim()
         : ''
 
     const schoolSubtitle =
-      typeof body.school_subtitle === 'string'
+      typeof body.school_subtitle ===
+      'string'
         ? body.school_subtitle.trim()
         : ''
 
     if (!schoolName) {
       return NextResponse.json(
         {
-          error: 'اسم المدرسة مطلوب',
+          error:
+            'اسم المدرسة مطلوب.',
         },
         {
           status: 400,
@@ -189,7 +220,8 @@ export async function PUT(request: Request) {
     if (!schoolSubtitle) {
       return NextResponse.json(
         {
-          error: 'اسم النظام مطلوب',
+          error:
+            'اسم النظام مطلوب.',
         },
         {
           status: 400,
@@ -200,7 +232,8 @@ export async function PUT(request: Request) {
     if (schoolName.length > 100) {
       return NextResponse.json(
         {
-          error: 'اسم المدرسة طويل جداً',
+          error:
+            'اسم المدرسة طويل جداً.',
         },
         {
           status: 400,
@@ -208,10 +241,14 @@ export async function PUT(request: Request) {
       )
     }
 
-    if (schoolSubtitle.length > 150) {
+    if (
+      schoolSubtitle.length >
+      150
+    ) {
       return NextResponse.json(
         {
-          error: 'اسم النظام طويل جداً',
+          error:
+            'اسم النظام طويل جداً.',
         },
         {
           status: 400,
@@ -219,25 +256,25 @@ export async function PUT(request: Request) {
       )
     }
 
-    const supabase = getAdminClient()
+    const supabase =
+      getAdminClient()
 
-    const { data, error } = await supabase
-      .from('school_settings')
-      .upsert(
-        {
-          id: 1,
-          school_name: schoolName,
-          school_subtitle: schoolSubtitle,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'id',
-        },
-      )
-      .select(
-        'id, school_name, school_subtitle, updated_at',
-      )
-      .single()
+    const { data, error } =
+      await supabase
+        .from('school_settings')
+        .update({
+          school_name:
+            schoolName,
+          school_subtitle:
+            schoolSubtitle,
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq('id', 1)
+        .select(
+          'id, school_name, school_subtitle, updated_at',
+        )
+        .single()
 
     if (error) {
       console.error(
@@ -247,7 +284,14 @@ export async function PUT(request: Request) {
 
       return NextResponse.json(
         {
-          error: 'تعذر حفظ إعدادات المدرسة',
+          error:
+            error.message,
+          code:
+            error.code,
+          details:
+            error.details,
+          hint:
+            error.hint,
         },
         {
           status: 500,
@@ -267,7 +311,10 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(
       {
-        error: 'حدث خطأ غير متوقع',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'حدث خطأ غير متوقع',
       },
       {
         status: 500,
