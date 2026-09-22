@@ -46,9 +46,13 @@ export function SectionRouter() {
   const pathname = usePathname()
   const router = useRouter()
 
-  const [sections, setSections] = useState<DashboardSection[] | null>(null)
+  const [sections, setSections] =
+    useState<DashboardSection[] | null>(null)
 
   useEffect(() => {
+    // تحميل الصلاحيات مرة واحدة فقط
+    if (sections) return
+
     let cancelled = false
 
     async function checkAccess() {
@@ -62,7 +66,9 @@ export function SectionRouter() {
         )
 
         if (!response.ok) {
-          router.replace('/login?reason=session_expired')
+          router.replace(
+            '/login?reason=session_expired',
+          )
           return
         }
 
@@ -81,31 +87,6 @@ export function SectionRouter() {
             : []
 
         setSections(allowedSections)
-
-        const currentSectionKey =
-          getSectionKey(pathname)
-
-        if (!currentSectionKey) return
-
-        const allowed =
-          allowedSections.some(
-            (section) =>
-              section.section_key ===
-              currentSectionKey,
-          )
-
-        if (allowed) return
-
-        const firstSection =
-          allowedSections[0]
-
-        if (firstSection) {
-          router.replace(firstSection.href)
-        } else {
-          router.replace(
-            '/status?reason=no_permissions',
-          )
-        }
       } catch (error) {
         console.error(
           'Section access check error:',
@@ -119,7 +100,7 @@ export function SectionRouter() {
     return () => {
       cancelled = true
     }
-  }, [pathname, router])
+  }, [sections, router])
 
   const isSubPage =
     pathname.split('/').filter(Boolean).length > 1
@@ -150,6 +131,16 @@ export function SectionRouter() {
     )
 
   if (!hasAccess) {
+    const firstSection = sections[0]
+
+    if (firstSection) {
+      router.replace(firstSection.href)
+    } else {
+      router.replace(
+        '/status?reason=no_permissions',
+      )
+    }
+
     return (
       <div className="flex min-h-[240px] items-center justify-center">
         <div className="text-sm text-muted-foreground">
