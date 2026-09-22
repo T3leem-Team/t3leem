@@ -95,6 +95,30 @@ type AcademicYear = {
   annualFee: number
 }
 
+/*
+ * =========================================================
+ * Cache
+ * =========================================================
+ */
+
+type CommunicationCache = {
+  academicYear: AcademicYear | null
+  students: Student[]
+  teachers: Teacher[]
+  courses: Course[]
+  assignments: TeacherAssignment[]
+  attendance: AttendanceRecord[]
+  attendanceStatuses: AttendanceStatus[]
+  payments: Payment[]
+  groupUrl: string
+  savedGroupUrl: string
+}
+
+let communicationCache:
+  CommunicationCache | null = null
+
+let communicationCacheLoading = false
+
 const TODAY =
   new Date()
     .toISOString()
@@ -111,55 +135,73 @@ export function CommunicationView() {
   const [
     students,
     setStudents,
-  ] = useState<Student[]>([])
+  ] = useState<Student[]>(
+    communicationCache?.students ?? []
+  )
 
   const [
     teachers,
     setTeachers,
-  ] = useState<Teacher[]>([])
+  ] = useState<Teacher[]>(
+    communicationCache?.teachers ?? []
+  )
 
   const [
     courses,
     setCourses,
-  ] = useState<Course[]>([])
+  ] = useState<Course[]>(
+    communicationCache?.courses ?? []
+  )
 
   const [
     assignments,
     setAssignments,
   ] = useState<
     TeacherAssignment[]
-  >([])
+  >(
+    communicationCache?.assignments ?? []
+  )
 
   const [
     attendance,
     setAttendance,
   ] = useState<
     AttendanceRecord[]
-  >([])
+  >(
+    communicationCache?.attendance ?? []
+  )
 
   const [
     attendanceStatuses,
     setAttendanceStatuses,
   ] = useState<
     AttendanceStatus[]
-  >([])
+  >(
+    communicationCache?.attendanceStatuses ?? []
+  )
 
   const [
     payments,
     setPayments,
-  ] = useState<Payment[]>([])
+  ] = useState<Payment[]>(
+    communicationCache?.payments ?? []
+  )
 
   const [
     academicYear,
     setAcademicYear,
   ] = useState<
     AcademicYear | null
-  >(null)
+  >(
+    communicationCache?.academicYear ?? null
+  )
 
   const [
     loading,
     setLoading,
-  ] = useState(true)
+  ] = useState(
+    !communicationCache
+  )
 
   const [
     search,
@@ -179,12 +221,16 @@ export function CommunicationView() {
   const [
     groupUrl,
     setGroupUrl,
-  ] = useState('')
+  ] = useState(
+    communicationCache?.groupUrl ?? ''
+  )
 
   const [
     savedGroupUrl,
     setSavedGroupUrl,
-  ] = useState('')
+  ] = useState(
+    communicationCache?.savedGroupUrl ?? ''
+  )
 
   const [
     groupSaving,
@@ -224,171 +270,193 @@ export function CommunicationView() {
   ] = useState<string[]>([])
 
   useEffect(() => {
+    let cancelled = false
+
     async function loadData() {
-      setLoading(true)
-
-      const {
-        data: yearData,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, annual_fee'
-        )
-        .eq(
-          'is_current',
-          true
-        )
-        .eq(
-          'is_active',
-          true
-        )
-        .maybeSingle()
-
-      if (!yearData) {
-        setLoading(false)
+      /*
+       * إذا البيانات موجودة في الكاش:
+       * لا نعيد التحميل ولا نظهر loading.
+       */
+      if (
+        communicationCache ||
+        communicationCacheLoading
+      ) {
         return
       }
 
-      setAcademicYear({
-        id: yearData.id,
-        annualFee:
-          Number(
-            yearData.annual_fee
-          ) || 0,
-      })
+      communicationCacheLoading = true
 
-      const [
-        studentsResult,
-        teachersResult,
-        coursesResult,
-        assignmentsResult,
-        attendanceResult,
-        statusesResult,
-        paymentsResult,
-        groupResult,
-      ] = await Promise.all([
-        supabase
-          .from('students')
+      try {
+        const {
+          data: yearData,
+        } = await supabase
+          .from('academic_years')
           .select(
-            'id, name, phone, whatsapp, personal_id, academic_year_id, fee_exempt'
+            'id, annual_fee'
           )
           .eq(
-            'academic_year_id',
-            yearData.id
-          )
-          .order(
-            'name',
-            {
-              ascending: true,
-            }
-          ),
-
-        supabase
-          .from('teachers')
-          .select(
-            'id, name'
+            'is_current',
+            true
           )
           .eq(
             'is_active',
             true
           )
-          .order(
-            'name',
-            {
-              ascending: true,
-            }
-          ),
+          .maybeSingle()
 
-        supabase
-          .from('courses')
-          .select(
-            'id, name, academic_year_id'
+        if (!yearData) {
+          if (!cancelled) {
+            setLoading(false)
+          }
+
+          communicationCache = {
+            academicYear: null,
+            students: [],
+            teachers: [],
+            courses: [],
+            assignments: [],
+            attendance: [],
+            attendanceStatuses: [],
+            payments: [],
+            groupUrl: '',
+            savedGroupUrl: '',
+          }
+
+          return
+        }
+
+        const currentAcademicYear: AcademicYear = {
+          id: yearData.id,
+          annualFee:
+            Number(
+              yearData.annual_fee
+            ) || 0,
+        }
+
+        const [
+          studentsResult,
+          teachersResult,
+          coursesResult,
+          assignmentsResult,
+          attendanceResult,
+          statusesResult,
+          paymentsResult,
+          groupResult,
+        ] = await Promise.all([
+          supabase
+            .from('students')
+            .select(
+              'id, name, phone, whatsapp, personal_id, academic_year_id, fee_exempt'
+            )
+            .eq(
+              'academic_year_id',
+              yearData.id
+            )
+            .order(
+              'name',
+              {
+                ascending: true,
+              }
+            ),
+
+          supabase
+            .from('teachers')
+            .select(
+              'id, name'
+            )
+            .eq(
+              'is_active',
+              true
+            )
+            .order(
+              'name',
+              {
+                ascending: true,
+              }
+            ),
+
+          supabase
+            .from('courses')
+            .select(
+              'id, name, academic_year_id'
+            )
+            .eq(
+              'academic_year_id',
+              yearData.id
+            )
+            .order(
+              'name',
+              {
+                ascending: true,
+              }
+            ),
+
+          supabase
+            .from(
+              'teacher_student_assignments'
+            )
+            .select(
+              'teacher_id, course_id, student_id'
+            ),
+
+          supabase
+            .from('attendance')
+            .select(
+              'student_id, course_id, enrollment_id, attendance_date, status_id'
+            )
+            .eq(
+              'attendance_date',
+              TODAY
+            ),
+
+          supabase
+            .from(
+              'attendance_statuses'
+            )
+            .select(
+              'id, name'
+            )
+            .eq(
+              'is_active',
+              true
+            )
+            .order(
+              'sort_order',
+              {
+                ascending: true,
+              }
+            ),
+
+          supabase
+            .from('payments')
+            .select(
+              'student_id, amount'
+            )
+            .eq(
+              'academic_year_id',
+              yearData.id
+            ),
+
+          supabase
+            .from('communication_group')
+            .select(
+              'whatsapp_url'
+            )
+            .limit(1)
+            .maybeSingle(),
+        ])
+
+        const currentCourseIds =
+          new Set(
+            (coursesResult.data ?? []).map(
+              (course) => course.id
+            )
           )
-          .eq(
-            'academic_year_id',
-            yearData.id
-          )
-          .order(
-            'name',
-            {
-              ascending: true,
-            }
-          ),
 
-        supabase
-          .from(
-            'teacher_student_assignments'
-          )
-          .select(
-            'teacher_id, course_id, student_id'
-          ),
-
-        supabase
-          .from('attendance')
-          .select(
-            'student_id, course_id, enrollment_id, attendance_date, status_id'
-          )
-          .eq(
-            'attendance_date',
-            TODAY
-          ),
-
-        supabase
-          .from(
-            'attendance_statuses'
-          )
-          .select(
-            'id, name'
-          )
-          .eq(
-            'is_active',
-            true
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            }
-          ),
-
-        supabase
-          .from('payments')
-          .select(
-            'student_id, amount'
-          )
-          .eq(
-            'academic_year_id',
-            yearData.id
-          ),
-
-        supabase
-          .from('communication_group')
-          .select(
-            'whatsapp_url'
-          )
-          .limit(1)
-          .maybeSingle(),
-      ])
-
-      setGroupUrl(
-        groupResult.data?.whatsapp_url ??
-          ''
-      )
-
-      setSavedGroupUrl(
-        groupResult.data?.whatsapp_url ??
-          ''
-      )
-
-      const currentCourseIds = new Set(
-        (coursesResult.data ?? []).map(
-          (course) => course.id
-        )
-      )
-
-      setStudents(
-        (studentsResult.data ??
-          []).map(
+        const nextStudents: Student[] =
+          (
+            studentsResult.data ?? []
+          ).map(
             (student) => ({
               id: student.id,
               name:
@@ -410,22 +478,22 @@ export function CommunicationView() {
                 ),
             })
           )
-      )
 
-      setTeachers(
-        (teachersResult.data ??
-          []).map(
+        const nextTeachers: Teacher[] =
+          (
+            teachersResult.data ?? []
+          ).map(
             (teacher) => ({
               id: teacher.id,
               name:
                 teacher.name ?? '',
             })
           )
-      )
 
-      setCourses(
-        (coursesResult.data ??
-          []).map(
+        const nextCourses: Course[] =
+          (
+            coursesResult.data ?? []
+          ).map(
             (course) => ({
               id: course.id,
               name:
@@ -434,31 +502,31 @@ export function CommunicationView() {
                 course.academic_year_id,
             })
           )
-      )
 
-      setAssignments(
-        (assignmentsResult.data ??
-          [])
-          .filter((item) =>
-            currentCourseIds.has(
-              item.course_id
+        const nextAssignments: TeacherAssignment[] =
+          (
+            assignmentsResult.data ?? []
+          )
+            .filter((item) =>
+              currentCourseIds.has(
+                item.course_id
+              )
             )
-          )
-          .map(
-            (item) => ({
-              teacherId:
-                item.teacher_id,
-              courseId:
-                item.course_id,
-              studentId:
-                item.student_id,
-            })
-          )
-      )
+            .map(
+              (item) => ({
+                teacherId:
+                  item.teacher_id,
+                courseId:
+                  item.course_id,
+                studentId:
+                  item.student_id,
+              })
+            )
 
-      setAttendance(
-        (attendanceResult.data ??
-          []).map(
+        const nextAttendance: AttendanceRecord[] =
+          (
+            attendanceResult.data ?? []
+          ).map(
             (item) => ({
               studentId:
                 item.student_id,
@@ -472,22 +540,22 @@ export function CommunicationView() {
                 item.status_id,
             })
           )
-      )
 
-      setAttendanceStatuses(
-        (statusesResult.data ??
-          []).map(
+        const nextAttendanceStatuses: AttendanceStatus[] =
+          (
+            statusesResult.data ?? []
+          ).map(
             (status) => ({
               id: status.id,
               name:
                 status.name ?? '',
             })
           )
-      )
 
-      setPayments(
-        (paymentsResult.data ??
-          []).map(
+        const nextPayments: Payment[] =
+          (
+            paymentsResult.data ?? []
+          ).map(
             (payment) => ({
               studentId:
                 payment.student_id,
@@ -497,12 +565,100 @@ export function CommunicationView() {
                 ) || 0,
             })
           )
-      )
 
-      setLoading(false)
+        const nextGroupUrl =
+          groupResult.data?.whatsapp_url ??
+          ''
+
+        /*
+         * نحفظ كل البيانات في كاش واحد.
+         */
+        communicationCache = {
+          academicYear:
+            currentAcademicYear,
+          students:
+            nextStudents,
+          teachers:
+            nextTeachers,
+          courses:
+            nextCourses,
+          assignments:
+            nextAssignments,
+          attendance:
+            nextAttendance,
+          attendanceStatuses:
+            nextAttendanceStatuses,
+          payments:
+            nextPayments,
+          groupUrl:
+            nextGroupUrl,
+          savedGroupUrl:
+            nextGroupUrl,
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        setAcademicYear(
+          currentAcademicYear
+        )
+
+        setStudents(
+          nextStudents
+        )
+
+        setTeachers(
+          nextTeachers
+        )
+
+        setCourses(
+          nextCourses
+        )
+
+        setAssignments(
+          nextAssignments
+        )
+
+        setAttendance(
+          nextAttendance
+        )
+
+        setAttendanceStatuses(
+          nextAttendanceStatuses
+        )
+
+        setPayments(
+          nextPayments
+        )
+
+        setGroupUrl(
+          nextGroupUrl
+        )
+
+        setSavedGroupUrl(
+          nextGroupUrl
+        )
+      } catch (error) {
+        console.error(
+          'Communication load error:',
+          error
+        )
+      } finally {
+        communicationCacheLoading =
+          false
+
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
     }
 
     loadData()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const filteredStudents =
@@ -981,8 +1137,20 @@ export function CommunicationView() {
       return
     }
 
+    /*
+     * تحديث الواجهة والكاش مباشرة
+     * بدون إعادة تحميل البيانات.
+     */
     setSavedGroupUrl(url)
     setGroupUrl(url)
+
+    if (communicationCache) {
+      communicationCache.groupUrl =
+        url
+      communicationCache.savedGroupUrl =
+        url
+    }
+
     setGroupMessage(
       'تم حفظ رابط المجموعة.'
     )
@@ -1018,6 +1186,14 @@ export function CommunicationView() {
 
     setGroupUrl('')
     setSavedGroupUrl('')
+
+    if (communicationCache) {
+      communicationCache.groupUrl =
+        ''
+      communicationCache.savedGroupUrl =
+        ''
+    }
+
     setGroupMessage(
       'تم مسح رابط المجموعة.'
     )
