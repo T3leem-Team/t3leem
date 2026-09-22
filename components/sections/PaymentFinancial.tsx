@@ -122,6 +122,36 @@ type PaymentRecord = {
   notes: string | null
 }
 
+/*
+ * =========================================================
+ * Cache
+ * =========================================================
+ */
+
+type PaymentFinancialCache = {
+  academicYear: AcademicYear | null
+  settings: FinancialSettings | null
+  transactions: Transaction[]
+  studentPayments: StudentPaymentRow[]
+  summary: Summary
+}
+
+let paymentFinancialCache:
+  | PaymentFinancialCache
+  | null = null
+
+let paymentFinancialLoading = false
+
+const emptySummary: Summary = {
+  openingBalance: 0,
+  balance: 0,
+  totalIn: 0,
+  totalOut: 0,
+  totalAdjustmentsPlus: 0,
+  totalAdjustmentsMinus: 0,
+  operations: 0,
+}
+
 const money = (value: number) =>
   new Intl.NumberFormat('ar-BH', {
     minimumFractionDigits: 3,
@@ -160,28 +190,35 @@ const formatDateOnly = (
 
 export function PaymentFinancial() {
   const [academicYear, setAcademicYear] =
-    useState<AcademicYear | null>(null)
+    useState<AcademicYear | null>(
+      paymentFinancialCache?.academicYear ?? null
+    )
 
   const [settings, setSettings] =
-    useState<FinancialSettings | null>(null)
+    useState<FinancialSettings | null>(
+      paymentFinancialCache?.settings ?? null
+    )
 
   const [transactions, setTransactions] =
-    useState<Transaction[]>([])
+    useState<Transaction[]>(
+      paymentFinancialCache?.transactions ?? []
+    )
 
   const [studentPayments, setStudentPayments] =
-    useState<StudentPaymentRow[]>([])
+    useState<StudentPaymentRow[]>(
+      paymentFinancialCache?.studentPayments ?? []
+    )
 
-  const [summary, setSummary] = useState<Summary>({
-    openingBalance: 0,
-    balance: 0,
-    totalIn: 0,
-    totalOut: 0,
-    totalAdjustmentsPlus: 0,
-    totalAdjustmentsMinus: 0,
-    operations: 0,
-  })
+  const [summary, setSummary] =
+    useState<Summary>(
+      paymentFinancialCache?.summary ??
+        emptySummary
+    )
 
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(
+    paymentFinancialCache === null
+  )
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -277,9 +314,10 @@ export function PaymentFinancial() {
   const loadFinancialData = async (
     yearId?: string
   ) => {
-    const id = yearId || academicYear?.id
+    const id =
+      yearId || academicYear?.id
 
-    if (!id) return
+    if (!id) return []
 
     setError('')
 
@@ -301,20 +339,20 @@ export function PaymentFinancial() {
       )
     }
 
-    setSettings(result.settings || null)
-    setTransactions(result.transactions || [])
+    const nextSettings =
+      result.settings || null
 
-    setSummary(
-      result.summary || {
-        openingBalance: 0,
-        balance: 0,
-        totalIn: 0,
-        totalOut: 0,
-        totalAdjustmentsPlus: 0,
-        totalAdjustmentsMinus: 0,
-        operations: 0,
-      }
-    )
+    const nextTransactions =
+      result.transactions || []
+
+    const nextSummary =
+      result.summary || emptySummary
+
+    setSettings(nextSettings)
+    setTransactions(nextTransactions)
+    setSummary(nextSummary)
+
+    return nextTransactions as Transaction[]
   }
 
   /*
@@ -324,9 +362,11 @@ export function PaymentFinancial() {
    */
 
   const loadStudentPayments = async (
-    yearId?: string
+    yearId?: string,
+    transactionsOverride?: Transaction[]
   ) => {
-    const id = yearId || academicYear?.id
+    const id =
+      yearId || academicYear?.id
 
     if (!id) return
 
@@ -414,7 +454,11 @@ export function PaymentFinancial() {
     const transactionsByPaymentId =
       new Map<string, Transaction>()
 
-    for (const transaction of transactions) {
+    const currentTransactions =
+      transactionsOverride ??
+      transactions
+
+    for (const transaction of currentTransactions) {
       if (transaction.payment_id) {
         transactionsByPaymentId.set(
           transaction.payment_id,
@@ -432,7 +476,8 @@ export function PaymentFinancial() {
         const paidAmount =
           studentPaymentRows.reduce(
             (total, payment) =>
-              total + Number(payment.amount || 0),
+              total +
+              Number(payment.amount || 0),
             0
           )
 
@@ -519,14 +564,68 @@ export function PaymentFinancial() {
      *
      * أما غير المدفوع فلا يدخل في جدول الدفعات المالية.
      */
-    setStudentPayments(
+
+    const filteredRows =
       rows.filter(
         (row) =>
           row.status === 'partial' ||
           row.status === 'paid' ||
           row.status === 'exempt'
       )
-    )
+
+    setStudentPayments(filteredRows)
+
+    return filteredRows
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * حفظ الكاش
+   * ---------------------------------------------------------
+   */
+
+  const updateFinancialCache = ({
+    academicYear: nextAcademicYear,
+    settings: nextSettings,
+    transactions: nextTransactions,
+    studentPayments: nextStudentPayments,
+    summary: nextSummary,
+  }: {
+    academicYear?: AcademicYear | null
+    settings?: FinancialSettings | null
+    transactions?: Transaction[]
+    studentPayments?: StudentPaymentRow[]
+    summary?: Summary
+  }) => {
+    const current =
+      paymentFinancialCache
+
+    paymentFinancialCache = {
+      academicYear:
+        nextAcademicYear ??
+        current?.academicYear ??
+        null,
+
+      settings:
+        nextSettings ??
+        current?.settings ??
+        null,
+
+      transactions:
+        nextTransactions ??
+        current?.transactions ??
+        [],
+
+      studentPayments:
+        nextStudentPayments ??
+        current?.studentPayments ??
+        [],
+
+      summary:
+        nextSummary ??
+        current?.summary ??
+        emptySummary,
+    }
   }
 
   /*
@@ -536,19 +635,67 @@ export function PaymentFinancial() {
    */
 
   const loadAll = async () => {
+    const hasCache =
+      paymentFinancialCache !== null
+
     try {
-      setLoading(true)
+      if (!hasCache) {
+        setLoading(true)
+      }
+
       setError('')
 
-      const year = await loadAcademicYear()
+      const year =
+        await loadAcademicYear()
 
-      await loadFinancialData(year.id)
+      const loadedTransactions =
+        await loadFinancialData(
+          year.id
+        )
+
+      const loadedStudents =
+        await loadStudentPayments(
+          year.id,
+          loadedTransactions
+        )
+
+      const currentSettings =
+        paymentFinancialCache?.settings ??
+        null
 
       /*
-       * بيانات الطلاب مهمة في وضع مدفوعات الطلاب.
-       * نحملها أيضًا عند وجود إعداد مالي.
+       * نقرأ القيم الحالية من الـ state
+       * التي تم تحميلها قبل بناء الكاش.
        */
-      await loadStudentPayments(year.id)
+      updateFinancialCache({
+        academicYear: year,
+        settings:
+          currentSettings,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      })
+
+      /*
+       * تحديث الكاش بالقيم الفعلية
+       * الموجودة في الواجهة.
+       */
+      paymentFinancialCache = {
+        academicYear: year,
+        settings:
+          currentSettings,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -561,12 +708,27 @@ export function PaymentFinancial() {
   }
 
   useEffect(() => {
-    loadAll()
+    if (paymentFinancialLoading) {
+      return
+    }
+
+    paymentFinancialLoading = true
+
+    void loadAll().finally(() => {
+      paymentFinancialLoading = false
+    })
+
+    return () => {
+      /*
+       * لا نلغي الطلب.
+       * التحديث يستمر بالخلفية ويحدث الـ cache.
+       */
+    }
   }, [])
 
   /*
    * ---------------------------------------------------------
-   * تحديث
+   * تحديث يدوي
    * ---------------------------------------------------------
    */
 
@@ -575,10 +737,36 @@ export function PaymentFinancial() {
       setRefreshing(true)
       setError('')
 
-      const year = await loadAcademicYear()
+      const year =
+        await loadAcademicYear()
 
-      await loadFinancialData(year.id)
-      await loadStudentPayments(year.id)
+      const loadedTransactions =
+        await loadFinancialData(
+          year.id
+        )
+
+      const loadedStudents =
+        await loadStudentPayments(
+          year.id,
+          loadedTransactions
+        )
+
+      /*
+       * تحديث الكاش بعد التحديث اليدوي.
+       */
+      paymentFinancialCache = {
+        academicYear: year,
+        settings:
+          paymentFinancialCache?.settings ??
+          null,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -658,13 +846,31 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
-      await loadFinancialData(
-        academicYear.id
-      )
+      const loadedTransactions =
+        await loadFinancialData(
+          academicYear.id
+        )
 
-      await loadStudentPayments(
-        academicYear.id
-      )
+      const loadedStudents =
+        await loadStudentPayments(
+          academicYear.id,
+          loadedTransactions
+        )
+
+      paymentFinancialCache = {
+        academicYear,
+        settings:
+          result.settings ??
+          paymentFinancialCache?.settings ??
+          null,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -719,19 +925,23 @@ export function PaymentFinancial() {
       setStudentPayments([])
 
       setSummary({
-        openingBalance: 0,
-        balance: 0,
-        totalIn: 0,
-        totalOut: 0,
-        totalAdjustmentsPlus: 0,
-        totalAdjustmentsMinus: 0,
-        operations: 0,
+        ...emptySummary,
       })
 
       setInitializeMode('manual')
       setOpeningBalance('')
       setOpeningSource('')
       setOpeningNote('')
+
+      paymentFinancialCache = {
+        academicYear,
+        settings: null,
+        transactions: [],
+        studentPayments: [],
+        summary: {
+          ...emptySummary,
+        },
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -832,12 +1042,30 @@ export function PaymentFinancial() {
       setTransactionType('in')
       setAdjustmentDirection('plus')
 
-      await loadFinancialData(
-        academicYear.id
-      )
-      await loadStudentPayments(
-        academicYear.id
-      )
+      const loadedTransactions =
+        await loadFinancialData(
+          academicYear.id
+        )
+
+      const loadedStudents =
+        await loadStudentPayments(
+          academicYear.id,
+          loadedTransactions
+        )
+
+      paymentFinancialCache = {
+        academicYear,
+        settings:
+          paymentFinancialCache?.settings ??
+          null,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -898,17 +1126,30 @@ export function PaymentFinancial() {
         )
       }
 
-      /*
-       * إعادة تحميل الإدارة المالية والطلاب
-       * حتى يظهر الرصيد الجديد مباشرة.
-       */
-      await loadFinancialData(
-        academicYear.id
-      )
+      const loadedTransactions =
+        await loadFinancialData(
+          academicYear.id
+        )
 
-      await loadStudentPayments(
-        academicYear.id
-      )
+      const loadedStudents =
+        await loadStudentPayments(
+          academicYear.id,
+          loadedTransactions
+        )
+
+      paymentFinancialCache = {
+        academicYear,
+        settings:
+          paymentFinancialCache?.settings ??
+          null,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
 
       /*
        * إذا كانت نافذة التفاصيل مفتوحة،
@@ -977,13 +1218,30 @@ export function PaymentFinancial() {
       setModal('none')
       setSelectedDeleteId(null)
 
-      await loadFinancialData(
-        academicYear.id
-      )
+      const loadedTransactions =
+        await loadFinancialData(
+          academicYear.id
+        )
 
-      await loadStudentPayments(
-        academicYear.id
-      )
+      const loadedStudents =
+        await loadStudentPayments(
+          academicYear.id,
+          loadedTransactions
+        )
+
+      paymentFinancialCache = {
+        academicYear,
+        settings:
+          paymentFinancialCache?.settings ??
+          null,
+        transactions:
+          loadedTransactions,
+        studentPayments:
+          loadedStudents || [],
+        summary:
+          paymentFinancialCache?.summary ??
+          emptySummary,
+      }
     } catch (err) {
       setError(
         err instanceof Error
