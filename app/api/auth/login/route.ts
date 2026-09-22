@@ -36,6 +36,12 @@ const supabaseAdmin = createClient(
   },
 )
 
+/*
+ * ---------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------
+ */
+
 function hashDeviceToken(token: string) {
   return createHash('sha256')
     .update(token)
@@ -111,6 +117,12 @@ function getIpAddress(request: Request) {
   )
 }
 
+/*
+ * ---------------------------------------------------------
+ * POST
+ * ---------------------------------------------------------
+ */
+
 export async function POST(
   request: Request,
 ) {
@@ -137,9 +149,6 @@ export async function POST(
       )
     }
 
-    /*
-     * معلومات الاتصال المستخدمة في سجل التدقيق.
-     */
     const ipAddress =
       getIpAddress(request)
 
@@ -147,8 +156,11 @@ export async function POST(
       getUserAgent(request)
 
     /*
-     * البحث عن المستخدم باستخدام Service Role.
+     * ------------------------------------------------------
+     * 1. البحث عن Profile
+     * ------------------------------------------------------
      */
+
     const {
       data: profile,
       error: profileError,
@@ -156,9 +168,18 @@ export async function POST(
       await supabaseAdmin
         .from('user_profiles')
         .select(
-          'auth_user_id, username, full_name, role, is_active',
+          `
+          auth_user_id,
+          username,
+          full_name,
+          role,
+          is_active
+          `,
         )
-        .eq('username', username)
+        .eq(
+          'username',
+          username,
+        )
         .maybeSingle()
 
     if (profileError) {
@@ -187,8 +208,11 @@ export async function POST(
     }
 
     /*
-     * الحصول على الإيميل الداخلي لحساب Supabase Auth.
+     * ------------------------------------------------------
+     * 2. الحصول على Email حساب Supabase
+     * ------------------------------------------------------
      */
+
     const {
       data: authUser,
       error: authUserError,
@@ -219,10 +243,14 @@ export async function POST(
       authUser.user.email
 
     /*
-     * --------------------------------------------------
-     * 1. التحقق من كلمة المرور بدون حفظ Session
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 3. التحقق من كلمة المرور
+     *
+     * مهم:
+     * هذه هي عملية signInWithPassword الوحيدة.
+     * ------------------------------------------------------
      */
+
     const passwordClient =
       createClient(
         supabaseUrl,
@@ -248,13 +276,17 @@ export async function POST(
 
     if (
       passwordError ||
-      !passwordAuthData.user
+      !passwordAuthData.user ||
+      !passwordAuthData.session
     ) {
       console.error(
         'Password verification failed:',
         passwordError,
       )
 
+      /*
+       * Audit failed login
+       */
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -293,10 +325,11 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * 2. فحص الجهاز
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 4. فحص الجهاز الموثوق
+     * ------------------------------------------------------
      */
+
     const existingDeviceToken =
       getCookie(
         request,
@@ -307,7 +340,9 @@ export async function POST(
       | {
           id: string
           status: string
-          device_name: string | null
+          device_name:
+            | string
+            | null
         }
       | null = null
 
@@ -324,7 +359,11 @@ export async function POST(
         await supabaseAdmin
           .from('trusted_devices')
           .select(
-            'id, status, device_name',
+            `
+            id,
+            status,
+            device_name
+            `,
           )
           .eq(
             'device_token_hash',
@@ -357,10 +396,11 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * 3. الجهاز مرفوض أو مسحوب
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 5. الجهاز مرفوض أو مسحوب
+     * ------------------------------------------------------
      */
+
     if (
       device &&
       (
@@ -401,6 +441,14 @@ export async function POST(
         )
       }
 
+      /*
+       * Session التي أنشأها Supabase للتحقق
+       * لا نستخدمها، ولا ننشئ Session للنظام.
+       *
+       * لأنها موجودة فقط داخل passwordClient
+       * ولا يتم إرسالها للمتصفح.
+       */
+
       return NextResponse.json(
         {
           error:
@@ -413,10 +461,11 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * 4. الجهاز Pending
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 6. الجهاز Pending
+     * ------------------------------------------------------
      */
+
     if (
       device &&
       device.status === 'pending'
@@ -425,18 +474,21 @@ export async function POST(
         {
           error:
             'هذا الجهاز بانتظار موافقة مدير النظام.',
-          deviceStatus: 'pending',
-          deviceId: device.id,
+          deviceStatus:
+            'pending',
+          deviceId:
+            device.id,
         },
         { status: 403 },
       )
     }
 
     /*
-     * --------------------------------------------------
-     * 5. جهاز جديد
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 7. جهاز جديد
+     * ------------------------------------------------------
      */
+
     if (!device) {
       const deviceToken =
         randomBytes(32).toString(
@@ -464,7 +516,11 @@ export async function POST(
             status: 'pending',
           })
           .select(
-            'id, status, device_name',
+            `
+            id,
+            status,
+            device_name
+            `,
           )
           .single()
 
@@ -485,6 +541,10 @@ export async function POST(
           { status: 500 },
         )
       }
+
+      /*
+       * Audit: device pending
+       */
 
       const { error: auditError } =
         await supabaseAdmin
@@ -516,6 +576,10 @@ export async function POST(
         )
       }
 
+      /*
+       * لا نرسل Supabase Session للمتصفح.
+       */
+
       const response =
         NextResponse.json(
           {
@@ -528,6 +592,10 @@ export async function POST(
           },
           { status: 403 },
         )
+
+      /*
+       * حفظ Device Cookie فقط.
+       */
 
       response.cookies.set(
         DEVICE_COOKIE,
@@ -548,32 +616,68 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * 6. الجهاز Approved
-     * --------------------------------------------------
+     * ------------------------------------------------------
+     * 8. الجهاز Approved
+     * ------------------------------------------------------
      */
-    if (device.status === 'approved') {
-      await supabaseAdmin
-        .from('trusted_devices')
-        .update({
-          last_used_at:
-            new Date().toISOString(),
-        })
-        .eq('id', device.id)
+
+    if (
+      device.status ===
+      'approved'
+    ) {
+      /*
+       * تحديث آخر استخدام للجهاز.
+       */
+
+      const { error: deviceUpdateError } =
+        await supabaseAdmin
+          .from('trusted_devices')
+          .update({
+            last_used_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            'id',
+            device.id,
+          )
+
+      if (deviceUpdateError) {
+        console.error(
+          'Trusted device update error:',
+          deviceUpdateError,
+        )
+      }
+
+      /*
+       * ----------------------------------------------------
+       * إنشاء Response
+       * ----------------------------------------------------
+       */
 
       const response =
         NextResponse.json({
           user: {
-            id: profile.auth_user_id,
+            id:
+              profile.auth_user_id,
             username:
               profile.username,
             full_name:
               profile.full_name,
-            role: profile.role,
+            role:
+              profile.role,
           },
           deviceStatus:
             'approved',
         })
+
+      /*
+       * ----------------------------------------------------
+       * استخدام Session التي تم إنشاؤها
+       * في signInWithPassword الأول.
+       *
+       * لا يوجد signInWithPassword ثاني.
+       * ----------------------------------------------------
+       */
 
       const supabase =
         createServerClient(
@@ -606,29 +710,32 @@ export async function POST(
                         return {
                           name:
                             cookie.trim(),
-                          value: '',
+                          value:
+                            '',
                         }
                       }
 
                       return {
-                        name: cookie
-                          .slice(
-                            0,
-                            index,
-                          )
-                          .trim(),
-                        value: cookie
-                          .slice(
-                            index + 1,
-                          )
-                          .trim(),
+                        name:
+                          cookie
+                            .slice(
+                              0,
+                              index,
+                            )
+                            .trim(),
+                        value:
+                          cookie
+                            .slice(
+                              index + 1,
+                            )
+                            .trim(),
                       }
                     },
                   )
                   .filter(
                     (cookie) =>
-                      cookie.name.length >
-                      0,
+                      cookie.name
+                        .length > 0,
                   )
               },
 
@@ -659,52 +766,43 @@ export async function POST(
         )
 
       /*
-       * إنشاء Session حقيقية.
+       * ----------------------------------------------------
+       * مهم:
+       *
+       * Session الناتجة من passwordClient موجودة
+       * بالفعل، لكن createServerClient لا يعرف عنها
+       * تلقائياً.
+       *
+       * لذلك نضعها مباشرة في Auth cookies.
+       * ----------------------------------------------------
        */
+
+      const session =
+        passwordAuthData.session
+
+      /*
+       * Supabase SSR cookies
+       *
+       * يتم إنشاء Cookie Session من خلال
+       * setSession.
+       */
+
       const {
-        data: authData,
-        error: signInError,
+        error: setSessionError,
       } =
-        await supabase.auth.signInWithPassword(
+        await supabase.auth.setSession(
           {
-            email,
-            password,
+            access_token:
+              session.access_token,
+            refresh_token:
+              session.refresh_token,
           },
         )
 
-      if (
-        signInError ||
-        !authData.session
-      ) {
+      if (setSessionError) {
         console.error(
-          'Supabase session creation error:',
-          signInError,
-        )
-
-        return NextResponse.json(
-          {
-            error:
-              'تعذر إنشاء جلسة تسجيل الدخول.',
-          },
-          { status: 500 },
-        )
-      }
-
-      const {
-        data: {
-          user: loggedInUser,
-        },
-        error: getUserError,
-      } =
-        await supabase.auth.getUser()
-
-      if (
-        getUserError ||
-        !loggedInUser
-      ) {
-        console.error(
-          'Session verification error:',
-          getUserError,
+          'Supabase session setup error:',
+          setSessionError,
         )
 
         return NextResponse.json(
@@ -717,21 +815,22 @@ export async function POST(
       }
 
       /*
-       * --------------------------------------------------
-       * إنشاء active session
-       *
-       * الحد الأقصى للجلسة = 4 ساعات
-       * --------------------------------------------------
+       * ----------------------------------------------------
+       * إنشاء Active Session
+       * ----------------------------------------------------
        */
-      const loginAt = new Date()
 
-      const expiresAt = new Date(
-        loginAt.getTime() +
-          SESSION_MAX_HOURS *
-            60 *
-            60 *
-            1000,
-      )
+      const loginAt =
+        new Date()
+
+      const expiresAt =
+        new Date(
+          loginAt.getTime() +
+            SESSION_MAX_HOURS *
+              60 *
+              60 *
+              1000,
+        )
 
       const {
         data: activeSession,
@@ -748,10 +847,12 @@ export async function POST(
               loginAt.toISOString(),
             last_activity_at:
               loginAt.toISOString(),
-            logout_at: null,
+            logout_at:
+              null,
             expires_at:
               expiresAt.toISOString(),
-            is_active: true,
+            is_active:
+              true,
           })
           .select('id')
           .single()
@@ -761,11 +862,19 @@ export async function POST(
           'Active session insert error:',
           sessionError,
         )
+
+        /*
+         * لا نفشل تسجيل الدخول بسبب Audit/Session tracking
+         * إذا كانت Auth Session نفسها سليمة.
+         */
       }
 
       /*
-       * حفظ Session ID.
+       * ----------------------------------------------------
+       * Session Cookie
+       * ----------------------------------------------------
        */
+
       if (activeSession?.id) {
         response.cookies.set(
           SESSION_COOKIE,
@@ -786,8 +895,11 @@ export async function POST(
       }
 
       /*
+       * ----------------------------------------------------
        * Audit Log
+       * ----------------------------------------------------
        */
+
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -825,8 +937,11 @@ export async function POST(
     }
 
     /*
-     * أي حالة غير متوقعة.
+     * ------------------------------------------------------
+     * حالة غير متوقعة
+     * ------------------------------------------------------
      */
+
     return NextResponse.json(
       {
         error:
@@ -840,12 +955,21 @@ export async function POST(
       error,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
-      },
-      { status: 500 },
-    )
+    const response =
+      NextResponse.json(
+        {
+          error:
+            'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
+        },
+        { status: 500 },
+      )
+
+    /*
+     * لا نحذف Device Cookie هنا.
+     *
+     * الجهاز الموثوق يجب أن يبقى محفوظاً.
+     */
+
+    return response
   }
 }
