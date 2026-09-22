@@ -212,7 +212,7 @@ function getAttendancePercentage(
 
   return Math.round((attended / counted) * 100)
 }
-}
+
 
 function getPercentageClass(
   percentage: number,
