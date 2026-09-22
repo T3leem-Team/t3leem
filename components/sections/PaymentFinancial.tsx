@@ -369,21 +369,6 @@ export function PaymentFinancial() {
   /*
    * ---------------------------------------------------------
    * تحميل طلاب السنة ودفعاتهم
-   *
-   * مهم:
-   * ظهور الطالب في جدول الإدارة المالية الحالية
-   * يعتمد على financial_transactions الحالية.
-   *
-   * payments = المدفوعات الأصلية
-   * financial_transactions = سجل الإدارة المالية الحالية
-   *
-   * لذلك بعد Reset:
-   * financial_transactions = فارغ
-   * => جدول الطلاب المالي = فارغ
-   *
-   * وبعد Initialize:
-   * يتم إنشاء معاملات جديدة بحالة pending
-   * => يظهر الطالب من جديد بحالة بانتظار التأكيد.
    * ---------------------------------------------------------
    */
 
@@ -401,10 +386,6 @@ export function PaymentFinancial() {
     const currentTransactions =
       transactionsOverride ?? transactions
 
-    /*
-     * لا يوجد أي سجل مالي حالي مرتبط بدفعات الطلاب.
-     * بالتالي لا يوجد شيء لعرضه في جدول الإدارة المالية.
-     */
     const studentPaymentTransactions =
       currentTransactions.filter(
         (transaction) =>
@@ -463,10 +444,6 @@ export function PaymentFinancial() {
         )
         .in('id', studentIds),
 
-      /*
-       * نحتاج جميع دفعات الطلاب الأصلية
-       * حتى نحسب الإجمالي والمدفوع والمتبقي.
-       */
       supabase
         .from('payments')
         .select(
@@ -512,9 +489,6 @@ export function PaymentFinancial() {
       )
     }
 
-    /*
-     * ربط payment_id بالمعاملة المالية الحالية.
-     */
     const transactionsByPaymentId =
       new Map<string, Transaction>()
 
@@ -538,9 +512,6 @@ export function PaymentFinancial() {
             paymentsByStudent.get(student.id) ||
             []
 
-          /*
-           * فقط الدفعات المرتبطة بالإدارة المالية الحالية.
-           */
           const linkedPayments =
             studentPaymentRows.filter(
               (payment) =>
@@ -549,18 +520,10 @@ export function PaymentFinancial() {
                 )
             )
 
-          /*
-           * إذا لم يكن للطالب أي سجل في
-           * الإدارة المالية الحالية، لا يظهر.
-           */
           if (linkedPayments.length === 0) {
             return null
           }
 
-          /*
-           * إجمالي مدفوعات الطالب الأصلية للسنة.
-           * هذا لا يتأثر بإعادة تهيئة الإدارة المالية.
-           */
           const paidAmount =
             studentPaymentRows.reduce(
               (total, payment) =>
@@ -595,16 +558,9 @@ export function PaymentFinancial() {
             status = 'unpaid'
           }
 
-          /*
-           * آخر دفعة مرتبطة بالإدارة المالية الحالية،
-           * وليس بالضرورة آخر دفعة أصلية للطالب.
-           */
           const latestLinkedPayment =
             linkedPayments[0] || null
 
-          /*
-           * عدد الدفعات الحالية التي تنتظر التأكيد.
-           */
           const pendingCount =
             linkedPayments.filter(
               (payment) =>
@@ -657,11 +613,6 @@ export function PaymentFinancial() {
             row !== null
         )
 
-    /*
-     * لا نعرض غير المدفوع.
-     * ونضيف فقط الطلاب الموجودين فعلياً
-     * في الإدارة المالية الحالية.
-     */
     const filteredRows =
       rows.filter(
         (row) =>
@@ -789,12 +740,7 @@ export function PaymentFinancial() {
       paymentFinancialLoading = false
     })
 
-    return () => {
-      /*
-       * لا نلغي الطلب.
-       * التحديث يستمر بالخلفية ويحدث الـ cache.
-       */
-    }
+    return () => {}
   }, [])
 
   /*
@@ -998,11 +944,6 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
-      /*
-       * مهم جداً:
-       * نحدث الكاش أيضاً حتى لو انتقل المستخدم
-       * من الصفحة ثم رجع لها، لا ترجع بيانات الإدارة القديمة.
-       */
       paymentFinancialCache = {
         academicYear,
         settings: null,
@@ -1500,24 +1441,24 @@ export function PaymentFinancial() {
       transaction.transaction_type ===
       'in'
     ) {
-      return 'text-emerald-600'
+      return 'text-emerald-600 dark:text-emerald-400'
     }
 
     if (
       transaction.transaction_type ===
       'out'
     ) {
-      return 'text-red-600'
+      return 'text-red-600 dark:text-red-400'
     }
 
     if (
       transaction.adjustment_direction ===
       'plus'
     ) {
-      return 'text-blue-600'
+      return 'text-blue-600 dark:text-blue-400'
     }
 
-    return 'text-orange-600'
+    return 'text-orange-600 dark:text-orange-400'
   }
 
   /*
@@ -1532,7 +1473,7 @@ export function PaymentFinancial() {
         dir="rtl"
         className="flex min-h-[300px] items-center justify-center"
       >
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           جاري تحميل الإدارة المالية...
         </div>
@@ -1543,7 +1484,7 @@ export function PaymentFinancial() {
   return (
     <div
       dir="rtl"
-      className="space-y-6"
+      className="space-y-6 text-foreground"
     >
       {/* العنوان */}
 
@@ -1554,9 +1495,9 @@ export function PaymentFinancial() {
           </h2>
 
           {academicYear && (
-            <div className="mt-1 text-sm text-gray-500">
+            <div className="mt-1 text-sm text-muted-foreground">
               السنة الدراسية:{' '}
-              <span className="font-medium text-gray-700">
+              <span className="font-medium text-foreground">
                 {academicYear.name}
               </span>
             </div>
@@ -1568,7 +1509,7 @@ export function PaymentFinancial() {
             type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
           >
             <RefreshCw
               className={`h-4 w-4 ${
@@ -1584,7 +1525,7 @@ export function PaymentFinancial() {
             type="button"
             onClick={exportExcel}
             disabled={!transactions.length}
-            className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             تحميل Excel
@@ -1595,7 +1536,7 @@ export function PaymentFinancial() {
       {/* الخطأ */}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
           {error}
         </div>
       )}
@@ -1603,10 +1544,10 @@ export function PaymentFinancial() {
       {/* السنة */}
 
       {academicYear && (
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 السنة الحالية
               </div>
 
@@ -1614,7 +1555,7 @@ export function PaymentFinancial() {
                 {academicYear.name}
               </div>
 
-              <div className="mt-1 text-xs text-gray-500">
+              <div className="mt-1 text-xs text-muted-foreground">
                 من{' '}
                 {formatDateOnly(
                   academicYear.start_date
@@ -1626,8 +1567,8 @@ export function PaymentFinancial() {
               </div>
             </div>
 
-            <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
-              <div className="text-gray-500">
+            <div className="rounded-lg bg-muted px-4 py-3 text-sm">
+              <div className="text-muted-foreground">
                 معرف السنة
               </div>
 
@@ -1642,15 +1583,15 @@ export function PaymentFinancial() {
       {/* لم تتم التهيئة */}
 
       {!settings && (
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mx-auto max-w-2xl text-center">
-            <Wallet className="mx-auto h-10 w-10 text-gray-400" />
+            <Wallet className="mx-auto h-10 w-10 text-muted-foreground" />
 
             <h3 className="mt-4 text-xl font-bold">
               تهيئة الإدارة المالية
             </h3>
 
-            <p className="mt-2 text-sm leading-6 text-gray-500">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               اختر طريقة تأسيس الرصيد لهذه
               السنة الدراسية. يمكن إعادة
               تهيئة هذا القسم أثناء التطوير
@@ -1663,7 +1604,7 @@ export function PaymentFinancial() {
               onClick={() =>
                 setModal('initialize')
               }
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-medium text-white hover:opacity-90"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               بدء الإدارة المالية
@@ -1678,10 +1619,10 @@ export function PaymentFinancial() {
         <>
           {/* وضع الإدارة */}
 
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-muted-foreground">
                   طريقة تأسيس الرصيد
                 </div>
 
@@ -1692,7 +1633,7 @@ export function PaymentFinancial() {
                     : 'إدخال يدوي'}
                 </div>
 
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {settings.financial_mode ===
                   'student_payments'
                     ? 'دفعات الطلاب تدخل الرصيد بعد تأكيد الاستلام.'
@@ -1701,7 +1642,7 @@ export function PaymentFinancial() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm">
+                <div className="rounded-lg bg-muted px-4 py-3 text-sm">
                   الرصيد الافتتاحي:{' '}
                   <span className="font-bold">
                     {money(
@@ -1715,7 +1656,7 @@ export function PaymentFinancial() {
                   onClick={() =>
                     setModal('reset')
                   }
-                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/30"
                 >
                   <RotateCcw className="h-4 w-4" />
                   إعادة تهيئة
@@ -1765,33 +1706,25 @@ export function PaymentFinancial() {
             />
           </div>
 
-          {/* =================================================
-              جدول واحد فقط
-              ================================================= */}
+          {/* جدول واحد فقط */}
 
           {settings.financial_mode ===
           'student_payments' ? (
-            /*
-             * =================================================
-             * جدول الطلاب والدفع
-             * =================================================
-             */
-
-            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-              <div className="border-b px-5 py-4">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-5 py-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h3 className="font-bold">
                       الطلاب والدفع
                     </h3>
 
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       هذه القائمة تمثل الإدارة
                       المالية الحالية فقط.
                     </p>
                   </div>
 
-                  <div className="rounded-full bg-gray-50 px-3 py-1 text-xs text-gray-600">
+                  <div className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
                     {studentPayments.length}{' '}
                     طالب
                   </div>
@@ -1800,7 +1733,7 @@ export function PaymentFinancial() {
 
               {studentPayments.length ===
               0 ? (
-                <div className="px-5 py-12 text-center text-sm text-gray-500">
+                <div className="px-5 py-12 text-center text-sm text-muted-foreground">
                   لا توجد دفعات مرتبطة
                   بالإدارة المالية الحالية.
                 </div>
@@ -1808,7 +1741,7 @@ export function PaymentFinancial() {
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1100px] text-sm">
                     <thead>
-                      <tr className="border-b bg-gray-50 text-right">
+                      <tr className="border-b border-border bg-muted text-right">
                         <th className="px-4 py-3">
                           الطالب
                         </th>
@@ -1850,7 +1783,7 @@ export function PaymentFinancial() {
                             key={
                               student.studentId
                             }
-                            className="border-b last:border-b-0 hover:bg-gray-50"
+                            className="border-b border-border last:border-b-0 hover:bg-muted/60"
                           >
                             <td className="px-4 py-4">
                               <div className="font-semibold">
@@ -1858,7 +1791,7 @@ export function PaymentFinancial() {
                               </div>
 
                               {student.personalId && (
-                                <div className="mt-1 text-xs text-gray-500">
+                                <div className="mt-1 text-xs text-muted-foreground">
                                   {
                                     student.personalId
                                   }
@@ -1907,23 +1840,23 @@ export function PaymentFinancial() {
 
                             <td className="px-4 py-4">
                               {student.feeExempt ? (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-muted-foreground">
                                   لا ينطبق
                                 </span>
                               ) : student.pendingCount >
                                 0 ? (
-                                <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                                <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                                   بانتظار التأكيد
                                 </span>
                               ) : student.latestTransaction
                                   ?.confirmation_status ===
                                 'confirmed' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                   تم التأكيد
                                 </span>
                               ) : (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-muted-foreground">
                                   غير مرتبط
                                 </span>
                               )}
@@ -1964,7 +1897,7 @@ export function PaymentFinancial() {
                                         'details'
                                       )
                                     }}
-                                    className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
+                                    className="rounded-lg border border-border bg-background px-3 py-2 text-xs hover:bg-muted"
                                   >
                                     تفاصيل
                                   </button>
@@ -1980,30 +1913,22 @@ export function PaymentFinancial() {
               )}
             </div>
           ) : (
-            /*
-             * =================================================
-             * جدول العمليات المالية
-             *
-             * يظهر فقط في الوضع اليدوي.
-             * =================================================
-             */
-
-            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-              <div className="border-b px-5 py-4">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+              <div className="border-b border-border px-5 py-4">
                 <h3 className="font-bold">
                   العمليات المالية
                 </h3>
               </div>
 
               {transactions.length === 0 ? (
-                <div className="px-5 py-16 text-center text-sm text-gray-500">
+                <div className="px-5 py-16 text-center text-sm text-muted-foreground">
                   لا توجد عمليات مالية حتى الآن.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1100px] text-sm">
                     <thead>
-                      <tr className="border-b bg-gray-50 text-right">
+                      <tr className="border-b border-border bg-muted text-right">
                         <th className="px-4 py-3">
                           التاريخ
                         </th>
@@ -2053,7 +1978,7 @@ export function PaymentFinancial() {
                               key={
                                 transaction.id
                               }
-                              className="border-b last:border-b-0 hover:bg-gray-50"
+                              className="border-b border-border last:border-b-0 hover:bg-muted/60"
                             >
                               <td className="px-4 py-4 whitespace-nowrap">
                                 {formatDate(
@@ -2122,7 +2047,7 @@ export function PaymentFinancial() {
                                         'details'
                                       )
                                     }}
-                                    className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
+                                    className="rounded-lg border border-border bg-background px-3 py-2 text-xs hover:bg-muted"
                                   >
                                     تفاصيل
                                   </button>
@@ -2157,7 +2082,7 @@ export function PaymentFinancial() {
                                           'delete'
                                         )
                                       }}
-                                      className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                                      className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/30"
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </button>
@@ -2180,21 +2105,21 @@ export function PaymentFinancial() {
           {settings.financial_mode ===
             'student_payments' &&
             pendingTransactions.length > 0 && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/60 dark:bg-amber-950/30">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h3 className="font-bold text-amber-900">
+                    <h3 className="font-bold text-amber-900 dark:text-amber-300">
                       دفعات بانتظار تأكيد الاستلام
                     </h3>
 
-                    <p className="mt-1 text-sm text-amber-800">
+                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
                       هذه الدفعات لا تدخل في
                       الرصيد المالي حتى يتم
                       تأكيد استلامها.
                     </p>
                   </div>
 
-                  <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
+                  <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
                     {pendingTransactions.length}{' '}
                     معلقة
                   </div>
@@ -2237,7 +2162,7 @@ export function PaymentFinancial() {
                 )
                 setModal('transaction')
               }}
-              className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
             >
               <Plus className="h-4 w-4" />
               إضافة تسوية
@@ -2246,9 +2171,7 @@ export function PaymentFinancial() {
         </>
       )}
 
-      {/* --------------------------------------------------
-          Modal: التهيئة
-      -------------------------------------------------- */}
+      {/* Modal: التهيئة */}
 
       {modal === 'initialize' && (
         <Modal
@@ -2269,18 +2192,18 @@ export function PaymentFinancial() {
                       'student_payments'
                     )
                   }
-                  className={`rounded-xl border p-4 text-right ${
+                  className={`rounded-xl border border-border p-4 text-right ${
                     initializeMode ===
                     'student_payments'
-                      ? 'border-black bg-gray-50'
-                      : ''
+                      ? 'border-foreground bg-muted'
+                      : 'bg-background hover:bg-muted'
                   }`}
                 >
                   <div className="font-semibold">
                     مرتبط بمدفوعات الطلاب
                   </div>
 
-                  <div className="mt-1 text-xs leading-5 text-gray-500">
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
                     دفعات الطلاب تحتاج تأكيد
                     الاستلام قبل دخولها في
                     الرصيد.
@@ -2294,18 +2217,18 @@ export function PaymentFinancial() {
                       'manual'
                     )
                   }
-                  className={`rounded-xl border p-4 text-right ${
+                  className={`rounded-xl border border-border p-4 text-right ${
                     initializeMode ===
                     'manual'
-                      ? 'border-black bg-gray-50'
-                      : ''
+                      ? 'border-foreground bg-muted'
+                      : 'bg-background hover:bg-muted'
                   }`}
                 >
                   <div className="font-semibold">
                     إدخال يدوي
                   </div>
 
-                  <div className="mt-1 text-xs leading-5 text-gray-500">
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
                     إدخال الرصيد الأولي يدوياً
                     من أي مصدر.
                   </div>
@@ -2328,7 +2251,7 @@ export function PaymentFinancial() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border px-3 py-2 outline-none focus:ring-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
                 placeholder="0.000"
               />
             </div>
@@ -2345,7 +2268,7 @@ export function PaymentFinancial() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border bg-white px-3 py-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground"
               >
                 <option value="">
                   اختر المصدر
@@ -2390,14 +2313,14 @@ export function PaymentFinancial() {
                   )
                 }
                 rows={3}
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
                 placeholder="ملاحظات الرصيد الافتتاحي..."
               />
             </div>
 
             {initializeMode ===
               'student_payments' && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
                 سيتم جلب الدفعات الموجودة
                 مسبقًا لهذه السنة وربطها
                 بالإدارة المالية كدفعات
@@ -2411,7 +2334,7 @@ export function PaymentFinancial() {
                 onClick={() =>
                   setModal('none')
                 }
-                className="rounded-lg border px-4 py-2"
+                className="rounded-lg border border-border bg-background px-4 py-2 hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -2420,7 +2343,7 @@ export function PaymentFinancial() {
                 type="button"
                 onClick={initializeFinancial}
                 disabled={saving}
-                className="rounded-lg bg-black px-5 py-2 text-white disabled:opacity-50"
+                className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -2433,9 +2356,7 @@ export function PaymentFinancial() {
         </Modal>
       )}
 
-      {/* --------------------------------------------------
-          Modal: إعادة التهيئة
-      -------------------------------------------------- */}
+      {/* Modal: إعادة التهيئة */}
 
       {modal === 'reset' && (
         <Modal
@@ -2443,24 +2364,24 @@ export function PaymentFinancial() {
           onClose={() => setModal('none')}
         >
           <div className="space-y-5">
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <div className="font-semibold text-red-800">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
+              <div className="font-semibold text-red-800 dark:text-red-300">
                 تنبيه
               </div>
 
-              <p className="mt-2 text-sm leading-6 text-red-700">
+              <p className="mt-2 text-sm leading-6 text-red-700 dark:text-red-300">
                 سيتم حذف إعداد الإدارة
                 المالية وعملياتها لهذه السنة
                 فقط.
               </p>
 
-              <p className="mt-2 text-sm leading-6 text-red-700">
+              <p className="mt-2 text-sm leading-6 text-red-700 dark:text-red-300">
                 لن يتم حذف مدفوعات الطلاب،
                 الطلاب، التسجيلات أو
                 الاشتراكات.
               </p>
 
-              <p className="mt-2 text-sm leading-6 text-red-700">
+              <p className="mt-2 text-sm leading-6 text-red-700 dark:text-red-300">
                 بعد ذلك يمكنك اختيار طريقة
                 الإدارة المالية من جديد.
               </p>
@@ -2472,7 +2393,7 @@ export function PaymentFinancial() {
                 onClick={() =>
                   setModal('none')
                 }
-                className="rounded-lg border px-4 py-2"
+                className="rounded-lg border border-border bg-background px-4 py-2 hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -2498,9 +2419,7 @@ export function PaymentFinancial() {
         </Modal>
       )}
 
-      {/* --------------------------------------------------
-          Modal: إضافة عملية
-      -------------------------------------------------- */}
+      {/* Modal: إضافة عملية */}
 
       {modal === 'transaction' && (
         <Modal
@@ -2531,11 +2450,11 @@ export function PaymentFinancial() {
                         'plus'
                       )
                     }
-                    className={`rounded-lg border px-4 py-3 ${
+                    className={`rounded-lg border border-border px-4 py-3 ${
                       adjustmentDirection ===
                       'plus'
-                        ? 'border-black bg-gray-50'
-                        : ''
+                        ? 'border-foreground bg-muted'
+                        : 'bg-background hover:bg-muted'
                     }`}
                   >
                     تسوية +
@@ -2548,11 +2467,11 @@ export function PaymentFinancial() {
                         'minus'
                       )
                     }
-                    className={`rounded-lg border px-4 py-3 ${
+                    className={`rounded-lg border border-border px-4 py-3 ${
                       adjustmentDirection ===
                       'minus'
-                        ? 'border-black bg-gray-50'
-                        : ''
+                        ? 'border-foreground bg-muted'
+                        : 'bg-background hover:bg-muted'
                     }`}
                   >
                     تسوية -
@@ -2576,7 +2495,7 @@ export function PaymentFinancial() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
                 placeholder="0.000"
               />
             </div>
@@ -2594,7 +2513,7 @@ export function PaymentFinancial() {
                     e.target.value
                   )
                 }
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
                 placeholder={
                   transactionType === 'out'
                     ? 'مثال: صيانة، مشتريات...'
@@ -2619,7 +2538,7 @@ export function PaymentFinancial() {
                   )
                 }
                 rows={3}
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -2629,7 +2548,7 @@ export function PaymentFinancial() {
                 onClick={() =>
                   setModal('none')
                 }
-                className="rounded-lg border px-4 py-2"
+                className="rounded-lg border border-border bg-background px-4 py-2 hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -2640,7 +2559,7 @@ export function PaymentFinancial() {
                   createTransaction
                 }
                 disabled={saving}
-                className="rounded-lg bg-black px-5 py-2 text-white disabled:opacity-50"
+                className="rounded-lg bg-primary px-5 py-2 text-primary-foreground disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -2653,9 +2572,7 @@ export function PaymentFinancial() {
         </Modal>
       )}
 
-      {/* --------------------------------------------------
-          Modal: التفاصيل
-      -------------------------------------------------- */}
+      {/* Modal: التفاصيل */}
 
       {modal === 'details' &&
         selectedTransaction && (
@@ -2840,9 +2757,7 @@ export function PaymentFinancial() {
           </Modal>
         )}
 
-      {/* --------------------------------------------------
-          Modal: حذف
-      -------------------------------------------------- */}
+      {/* Modal: حذف */}
 
       {modal === 'delete' && (
         <Modal
@@ -2853,13 +2768,13 @@ export function PaymentFinancial() {
           }}
         >
           <div className="space-y-5">
-            <p className="text-sm leading-6 text-gray-600">
+            <p className="text-sm leading-6 text-muted-foreground">
               هل أنت متأكد من حذف هذه العملية؟
               سيتم إعادة احتساب الرصيد بعد
               الحذف.
             </p>
 
-            <p className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
+            <p className="rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground">
               حذف العملية المالية لا يحذف
               دفعة الطالب الأصلية من جدول
               المدفوعات.
@@ -2874,7 +2789,7 @@ export function PaymentFinancial() {
                     null
                   )
                 }}
-                className="rounded-lg border px-4 py-2"
+                className="rounded-lg border border-border bg-background px-4 py-2 hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -2917,13 +2832,13 @@ function SummaryCard({
   icon: React.ReactNode
 }) {
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted-foreground">
           {title}
         </div>
 
-        <div className="text-gray-400">
+        <div className="text-muted-foreground">
           {icon}
         </div>
       </div>
@@ -2952,7 +2867,7 @@ function StudentPaymentStatus({
 }) {
   if (status === 'paid') {
     return (
-      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
         مدفوع بالكامل
       </span>
     )
@@ -2960,7 +2875,7 @@ function StudentPaymentStatus({
 
   if (status === 'partial') {
     return (
-      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
         مدفوع جزئيًا
       </span>
     )
@@ -2968,14 +2883,14 @@ function StudentPaymentStatus({
 
   if (status === 'exempt') {
     return (
-      <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+      <span className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
         معفي
       </span>
     )
   }
 
   return (
-    <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800">
+    <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-800 dark:bg-red-950/50 dark:text-red-300">
       غير مدفوع
     </span>
   )
@@ -2994,7 +2909,7 @@ function StatusBadge({
 }) {
   if (status === 'pending') {
     return (
-      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+      <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
         بانتظار التأكيد
       </span>
     )
@@ -3002,14 +2917,14 @@ function StatusBadge({
 
   if (status === 'confirmed') {
     return (
-      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+      <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
         تم التأكيد
       </span>
     )
   }
 
   return (
-    <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+    <span className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
       غير مطلوب
     </span>
   )
@@ -3032,8 +2947,8 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card text-foreground shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h3 className="font-bold">
             {title}
           </h3>
@@ -3041,7 +2956,7 @@ function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 hover:bg-gray-100"
+            className="rounded-lg p-2 hover:bg-muted"
           >
             <X className="h-5 w-5" />
           </button>
@@ -3069,8 +2984,8 @@ function Detail({
   value: string | null | undefined
 }) {
   return (
-    <div className="rounded-xl bg-gray-50 p-4">
-      <div className="text-xs text-gray-500">
+    <div className="rounded-xl bg-muted p-4">
+      <div className="text-xs text-muted-foreground">
         {label}
       </div>
 
