@@ -9,6 +9,7 @@ import {
   GraduationCap,
   KeyRound,
   LockKeyhole,
+  Settings2,
   ShieldCheck,
   UserCog,
   Users,
