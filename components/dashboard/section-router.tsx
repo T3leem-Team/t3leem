@@ -11,6 +11,19 @@ import { PaymentsView } from '@/components/sections/payments-view'
 import { SettingsView } from '@/components/sections/settings-view'
 import { SupervisionView } from '@/components/sections/supervision-view'
 
+const routes: {
+  match: (p: string) => boolean
+  view: () => React.ReactNode
+}[] = [
+  { match: (p) => p === '/', view: () => <DashboardView /> },
+  { match: (p) => p.startsWith('/settings'), view: () => <SettingsView /> },
+  { match: (p) => p.startsWith('/supervision'), view: () => <SupervisionView /> },
+  { match: (p) => p.startsWith('/enrollment'), view: () => <EnrollmentView /> },
+  { match: (p) => p.startsWith('/students'), view: () => <StudentsView /> },
+  { match: (p) => p.startsWith('/teachers'), view: () => <TeachersView /> },
+  { match: (p) => p.startsWith('/payments'), view: () => <PaymentsView /> },
+]
+
 type DashboardSection = {
   section_key: string
   href: string
@@ -37,8 +50,6 @@ export function SectionRouter() {
     useState<DashboardSection[] | null>(null)
 
   useEffect(() => {
-    if (sections) return
-
     let cancelled = false
 
     async function checkAccess() {
@@ -52,9 +63,7 @@ export function SectionRouter() {
         )
 
         if (!response.ok) {
-          router.replace(
-            '/login?reason=session_expired',
-          )
+          router.replace('/login?reason=session_expired')
           return
         }
 
@@ -73,6 +82,31 @@ export function SectionRouter() {
             : []
 
         setSections(allowedSections)
+
+        const currentSectionKey =
+          getSectionKey(pathname)
+
+        if (!currentSectionKey) return
+
+        const allowed =
+          allowedSections.some(
+            (section) =>
+              section.section_key ===
+              currentSectionKey,
+          )
+
+        if (allowed) return
+
+        const firstSection =
+          allowedSections[0]
+
+        if (firstSection) {
+          router.replace(firstSection.href)
+        } else {
+          router.replace(
+            '/status?reason=no_permissions',
+          )
+        }
       } catch (error) {
         console.error(
           'Section access check error:',
@@ -86,7 +120,7 @@ export function SectionRouter() {
     return () => {
       cancelled = true
     }
-  }, [sections, router])
+  }, [pathname, router])
 
   const isSubPage =
     pathname.split('/').filter(Boolean).length > 1
@@ -117,16 +151,6 @@ export function SectionRouter() {
     )
 
   if (!hasAccess) {
-    const firstSection = sections[0]
-
-    if (firstSection) {
-      router.replace(firstSection.href)
-    } else {
-      router.replace(
-        '/status?reason=no_permissions',
-      )
-    }
-
     return (
       <div className="flex min-h-[240px] items-center justify-center">
         <div className="text-sm text-muted-foreground">
@@ -136,77 +160,10 @@ export function SectionRouter() {
     )
   }
 
-  return (
-    <div className="min-w-0">
-      <div
-        className={
-          currentSectionKey === 'dashboard'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <DashboardView />
-      </div>
+  const active =
+    routes.find((route) =>
+      route.match(pathname),
+    ) ?? routes[0]
 
-      <div
-        className={
-          currentSectionKey === 'settings'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <SettingsView />
-      </div>
-
-      <div
-        className={
-          currentSectionKey === 'supervision'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <SupervisionView />
-      </div>
-
-      <div
-        className={
-          currentSectionKey === 'enrollment'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <EnrollmentView />
-      </div>
-
-      <div
-        className={
-          currentSectionKey === 'students'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <StudentsView />
-      </div>
-
-      <div
-        className={
-          currentSectionKey === 'teachers'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <TeachersView />
-      </div>
-
-      <div
-        className={
-          currentSectionKey === 'payments'
-            ? 'block'
-            : 'hidden'
-        }
-      >
-        <PaymentsView />
-      </div>
-    </div>
-  )
+  return active.view()
 }
