@@ -1567,15 +1567,7 @@ export function PaymentFinancial() {
               </div>
             </div>
 
-            <div className="rounded-lg bg-muted px-4 py-3 text-sm">
-              <div className="text-muted-foreground">
-                معرف السنة
-              </div>
-
-              <div className="mt-1 break-all font-mono text-xs">
-                {academicYear.id}
-              </div>
-            </div>
+        
           </div>
         </div>
       )}
