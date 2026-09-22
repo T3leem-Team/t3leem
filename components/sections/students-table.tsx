@@ -150,20 +150,27 @@ function formatDate(value: string | null) {
 
 function getSourceLabel(source: string | null) {
   switch (source) {
-    case 'external':
-      return 'تسجيل خارجي'
+    case 'manual':
+      return 'إضافة من قسم الطلاب'
 
     case 'registration':
-      return 'التسجيل'
+      return 'التسجيل من الرابط الخارجي'
+
+    case 'import':
+      return 'مستورد من Excel'
+
+    // توافق مع أي بيانات قديمة موجودة
+    case 'external':
+      return 'التسجيل من الرابط الخارجي'
 
     case 'internal':
-      return 'إضافة داخلية'
+      return 'إضافة من قسم الطلاب'
 
     case 'admin':
-      return 'إضافة إداري'
+      return 'إضافة من قسم الطلاب'
 
     default:
-      return source || '-'
+      return source || 'غير محدد'
   }
 }
 
