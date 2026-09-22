@@ -39,6 +39,7 @@ type FilterType =
   | 'teacher_attendance'
   | 'teacher_course_attendance'
   | 'payment'
+  | 'not_assigned_current_course'
 
 type Student = {
   id: string
@@ -190,9 +191,9 @@ export function CommunicationView() {
   )
 
   const [
-    selectedTeacherId,
-    setSelectedTeacherId,
-  ] = useState('')
+    selectedTeacherIds,
+    setSelectedTeacherIds,
+  ] = useState<string[]>([])
 
   const [
     selectedCourseId,
@@ -347,6 +348,12 @@ export function CommunicationView() {
           ),
       ])
 
+      const currentCourseIds = new Set(
+        (coursesResult.data ?? []).map(
+          (course) => course.id
+        )
+      )
+
       setStudents(
         (studentsResult.data ??
           []).map(
@@ -399,7 +406,13 @@ export function CommunicationView() {
 
       setAssignments(
         (assignmentsResult.data ??
-          []).map(
+          [])
+          .filter((item) =>
+            currentCourseIds.has(
+              item.course_id
+            )
+          )
+          .map(
             (item) => ({
               teacherId:
                 item.teacher_id,
@@ -468,7 +481,10 @@ export function CommunicationView() {
         filterType ===
         'teacher'
       ) {
-        if (!selectedTeacherId) {
+        if (
+          selectedTeacherIds.length ===
+          0
+        ) {
           result = []
         } else {
           const ids =
@@ -476,8 +492,9 @@ export function CommunicationView() {
               assignments
                 .filter(
                   (item) =>
-                    item.teacherId ===
-                    selectedTeacherId
+                    selectedTeacherIds.includes(
+                      item.teacherId
+                    )
                 )
                 .map(
                   (item) =>
@@ -531,7 +548,8 @@ export function CommunicationView() {
         'teacher_course'
       ) {
         if (
-          !selectedTeacherId ||
+          selectedTeacherIds.length ===
+            0 ||
           !selectedCourseId
         ) {
           result = []
@@ -541,8 +559,9 @@ export function CommunicationView() {
               assignments
                 .filter(
                   (item) =>
-                    item.teacherId ===
-                      selectedTeacherId &&
+                    selectedTeacherIds.includes(
+                      item.teacherId
+                    ) &&
                     item.courseId ===
                       selectedCourseId
                 )
@@ -560,6 +579,27 @@ export function CommunicationView() {
                 )
             )
         }
+      }
+
+      if (
+        filterType ===
+        'not_assigned_current_course'
+      ) {
+        const assignedStudentIds =
+          new Set(
+            assignments.map(
+              (item) =>
+                item.studentId
+            )
+          )
+
+        result =
+          result.filter(
+            (student) =>
+              !assignedStudentIds.has(
+                student.id
+              )
+          )
       }
 
       if (
@@ -590,7 +630,8 @@ export function CommunicationView() {
               'teacher_course_attendance'
           ) {
             if (
-              !selectedTeacherId
+              selectedTeacherIds.length ===
+              0
             ) {
               result = []
             } else {
@@ -600,8 +641,9 @@ export function CommunicationView() {
                     .filter(
                       (item) => {
                         if (
-                          item.teacherId !==
-                          selectedTeacherId
+                          !selectedTeacherIds.includes(
+                            item.teacherId
+                          )
                         ) {
                           return false
                         }
@@ -731,7 +773,7 @@ export function CommunicationView() {
       payments,
       academicYear,
       filterType,
-      selectedTeacherId,
+      selectedTeacherIds,
       selectedCourseId,
       selectedAttendanceStatusId,
       search,
@@ -854,7 +896,7 @@ export function CommunicationView() {
 
   const resetFilter = () => {
     setFilterType('all')
-    setSelectedTeacherId('')
+    setSelectedTeacherIds([])
     setSelectedCourseId('')
     setSelectedAttendanceStatusId('')
   }
@@ -968,7 +1010,7 @@ export function CommunicationView() {
                     event.target
                       .value as FilterType
                   )
-                  setSelectedTeacherId('')
+                  setSelectedTeacherIds([])
                   setSelectedCourseId('')
                   setSelectedAttendanceStatusId('')
                 }}
@@ -1005,6 +1047,10 @@ export function CommunicationView() {
                 <option value="payment">
                   حسب حالة الدفع
                 </option>
+
+                <option value="not_assigned_current_course">
+                  غير مشاركين في الدورة الحالية
+                </option>
               </select>
 
               {filterType ===
@@ -1022,41 +1068,82 @@ export function CommunicationView() {
             </div>
 
             {filterNeedsTeacher && (
-              <select
-                value={
-                  selectedTeacherId
-                }
-                onChange={(
-                  event
-                ) =>
-                  setSelectedTeacherId(
-                    event.target
-                      .value
-                  )
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              >
-                <option value="">
-                  اختر المعلم
-                </option>
+              <div className="rounded-md border bg-background p-3">
+                <div className="mb-2 text-sm font-medium">
+                  اختر المعلمين
+                </div>
 
-                {teachers.map(
-                  (teacher) => (
-                    <option
-                      key={
-                        teacher.id
-                      }
-                      value={
-                        teacher.id
-                      }
-                    >
-                      {
-                        teacher.name
-                      }
-                    </option>
-                  )
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {teachers.map(
+                    (teacher) => {
+                      const selected =
+                        selectedTeacherIds.includes(
+                          teacher.id
+                        )
+
+                      return (
+                        <button
+                          key={
+                            teacher.id
+                          }
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeacherIds(
+                              (current) =>
+                                current.includes(
+                                  teacher.id
+                                )
+                                  ? current.filter(
+                                      (id) =>
+                                        id !==
+                                        teacher.id
+                                    )
+                                  : [
+                                      ...current,
+                                      teacher.id,
+                                    ]
+                            )
+                          }}
+                          className={`rounded-md border px-3 py-2 text-right text-sm transition ${
+                            selected
+                              ? 'border-primary bg-primary/10 font-medium'
+                              : 'hover:bg-muted'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={`flex size-4 shrink-0 items-center justify-center rounded border ${
+                                selected
+                                  ? 'bg-primary text-primary-foreground'
+                                  : ''
+                              }`}
+                            >
+                              {selected && (
+                                <Check className="size-3" />
+                              )}
+                            </span>
+
+                            {
+                              teacher.name
+                            }
+                          </span>
+                        </button>
+                      )
+                    }
+                  )}
+                </div>
+
+                {selectedTeacherIds.length >
+                  0 && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    تم اختيار{' '}
+                    {
+                      selectedTeacherIds.length
+                    }{' '}
+                    معلم
+                  </div>
                 )}
-              </select>
+              </div>
             )}
 
             {filterNeedsCourse && (
