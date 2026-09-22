@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   GraduationCap,
   X,
@@ -16,8 +18,6 @@ import {
   Loader2,
   Pencil,
 } from 'lucide-react'
-
-import { usePathname, useRouter } from 'next/navigation'
 
 import { cn } from '@/lib/utils'
 
@@ -86,8 +86,7 @@ export function Sidebar({
       schoolSettingsCache ?? {
         id: 1,
         school_name: DEFAULT_SCHOOL_NAME,
-        school_subtitle:
-          DEFAULT_SCHOOL_SUBTITLE,
+        school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
       },
     )
 
@@ -131,24 +130,28 @@ export function Sidebar({
           if (!cancelled) {
             setSections([])
           }
+
           return
         }
 
         const data = await response.json()
 
         if (!cancelled) {
-          setSections(
+          const loadedSections =
             Array.isArray(data.sections)
-              ? data.sections.sort(
-                  (
-                    a: DashboardSection,
-                    b: DashboardSection,
-                  ) =>
-                    a.sort_order -
-                    b.sort_order,
-                )
-              : [],
-          )
+              ? data.sections
+                  .slice()
+                  .sort(
+                    (
+                      a: DashboardSection,
+                      b: DashboardSection,
+                    ) =>
+                      a.sort_order -
+                      b.sort_order,
+                  )
+              : []
+
+          setSections(loadedSections)
         }
       } catch {
         if (!cancelled) {
@@ -189,7 +192,7 @@ export function Sidebar({
 
         if (
           !cancelled &&
-          data.settings
+          data?.settings
         ) {
           const settings: SchoolSettings =
             data.settings
@@ -197,15 +200,17 @@ export function Sidebar({
           schoolSettingsCache = settings
 
           setSchoolSettings(settings)
+
           setSchoolName(
             settings.school_name,
           )
+
           setSchoolSubtitle(
             settings.school_subtitle,
           )
         }
       } catch {
-        // استخدام القيم الافتراضية الموجودة
+        // الاحتفاظ بالقيم الافتراضية
       }
     }
 
@@ -230,7 +235,9 @@ export function Sidebar({
   }
 
   function closeSchoolSettings() {
-    if (savingSchoolSettings) return
+    if (savingSchoolSettings) {
+      return
+    }
 
     setSchoolDialogOpen(false)
     setSchoolSettingsError('')
@@ -255,6 +262,7 @@ export function Sidebar({
       setSchoolSettingsError(
         'اسم المدرسة مطلوب.',
       )
+
       return
     }
 
@@ -262,6 +270,7 @@ export function Sidebar({
       setSchoolSettingsError(
         'اسم النظام مطلوب.',
       )
+
       return
     }
 
@@ -279,25 +288,42 @@ export function Sidebar({
           },
           cache: 'no-store',
           body: JSON.stringify({
-            school_name:
-              trimmedName,
+            school_name: trimmedName,
             school_subtitle:
               trimmedSubtitle,
           }),
         },
       )
 
-      const data = await response.json()
+      let data: {
+        settings?: SchoolSettings
+        error?: string
+      } = {}
+
+      try {
+        data = await response.json()
+      } catch {
+        data = {}
+      }
 
       if (!response.ok) {
         setSchoolSettingsError(
-          data?.error ??
+          data.error ??
             'تعذر حفظ الإعدادات.',
         )
+
         return
       }
 
-      const updatedSettings: SchoolSettings =
+      if (!data.settings) {
+        setSchoolSettingsError(
+          'تم الحفظ لكن لم يتم استلام البيانات الجديدة.',
+        )
+
+        return
+      }
+
+      const updatedSettings =
         data.settings
 
       schoolSettingsCache =
@@ -331,7 +357,9 @@ export function Sidebar({
   }
 
   async function handleLogout() {
-    if (loggingOut) return
+    if (loggingOut) {
+      return
+    }
 
     setLoggingOut(true)
 
@@ -421,7 +449,7 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* القائمة */}
+        {/* القائمة الرئيسية */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           <p className="px-3 pb-2 text-[11px] font-medium text-sidebar-foreground/50">
             القائمة الرئيسية
@@ -584,7 +612,7 @@ export function Sidebar({
               </button>
             </div>
 
-            {/* المحتوى */}
+            {/* الحقول */}
             <div className="space-y-5 p-5">
               <div className="space-y-2">
                 <label
