@@ -4,10 +4,11 @@ import { useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
-  CheckCircle2,
   Clock3,
+  Eye,
   Search,
   UserRound,
+  X,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -86,14 +87,8 @@ function getTodayString() {
   const today = new Date()
 
   const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(
-    2,
-    '0',
-  )
-  const day = String(today.getDate()).padStart(
-    2,
-    '0',
-  )
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -128,22 +123,17 @@ function isCourseStudyDay(
   dateString: string,
   course: Course,
 ) {
-  if (
-    !course.days ||
-    course.days.length === 0
-  ) {
+  if (!course.days || course.days.length === 0) {
     return true
   }
 
-  const currentDay =
-    normalizeArabicDay(
-      getDayOfWeek(dateString),
-    )
+  const currentDay = normalizeArabicDay(
+    getDayOfWeek(dateString),
+  )
 
   return course.days.some(
     (day) =>
-      normalizeArabicDay(day) ===
-      currentDay,
+      normalizeArabicDay(day) === currentDay,
   )
 }
 
@@ -174,10 +164,7 @@ function calculateCourseSummary(
 
   const records: CourseSummary['records'] = []
 
-  if (
-    course.start_date &&
-    course.end_date
-  ) {
+  if (course.start_date && course.end_date) {
     const start = new Date(
       `${course.start_date}T00:00:00`,
     )
@@ -191,79 +178,58 @@ function calculateCourseSummary(
     while (current <= end) {
       const dateString = [
         current.getFullYear(),
-        String(
-          current.getMonth() + 1,
-        ).padStart(2, '0'),
-        String(
-          current.getDate(),
-        ).padStart(2, '0'),
+        String(current.getMonth() + 1).padStart(2, '0'),
+        String(current.getDate()).padStart(2, '0'),
       ].join('-')
 
       if (
         dateString <= today &&
-        isCourseStudyDay(
-          dateString,
-          course,
-        )
+        isCourseStudyDay(dateString, course)
       ) {
         totalDays += 1
 
-        const record =
-          attendanceRecords.find(
-            (item) =>
-              item.student_id ===
-                studentId &&
-              item.course_id ===
-                course.id &&
-              item.attendance_date ===
-                dateString,
-          )
+        const record = attendanceRecords.find(
+          (item) =>
+            item.student_id === studentId &&
+            item.course_id === course.id &&
+            item.attendance_date === dateString,
+        )
 
         if (!record) {
           notRecorded += 1
+
+          // يظهر اليوم في التفاصيل كـ "لم يسجل"
+          records.push({
+            date: dateString,
+            status: 'لم يسجل',
+            note: '',
+          })
         } else {
-          const status =
-            attendanceStatuses.find(
-              (item) =>
-                item.id ===
-                record.status_id,
-            )
+          const status = attendanceStatuses.find(
+            (item) => item.id === record.status_id,
+          )
 
-          const statusName =
-            status?.name ?? ''
+          const statusName = status?.name ?? ''
 
-          if (
-            statusName === 'حاضر'
-          ) {
+          if (statusName === 'حاضر') {
             present += 1
-          } else if (
-            statusName === 'غائب'
-          ) {
+          } else if (statusName === 'غائب') {
             absent += 1
-          } else if (
-            statusName === 'متأخر'
-          ) {
+          } else if (statusName === 'متأخر') {
             late += 1
-          } else if (
-            statusName === 'مستأذن'
-          ) {
+          } else if (statusName === 'مستأذن') {
             excused += 1
           }
 
           records.push({
             date: dateString,
-            status:
-              statusName ||
-              'غير معروف',
-            note:
-              record.note ?? '',
+            status: statusName || 'غير معروف',
+            note: record.note ?? '',
           })
         }
       }
 
-      current.setDate(
-        current.getDate() + 1,
-      )
+      current.setDate(current.getDate() + 1)
     }
   }
 
@@ -276,9 +242,7 @@ function calculateCourseSummary(
   const percentage =
     denominator > 0
       ? Math.round(
-          ((present +
-            late +
-            excused) /
+          ((present + late + excused) /
             denominator) *
             100,
         )
@@ -293,11 +257,8 @@ function calculateCourseSummary(
     excused,
     notRecorded,
     percentage,
-    records: records.sort(
-      (a, b) =>
-        b.date.localeCompare(
-          a.date,
-        ),
+    records: records.sort((a, b) =>
+      b.date.localeCompare(a.date),
     ),
   }
 }
@@ -321,19 +282,19 @@ export default function StudentStatusPage() {
   const [level, setLevel] =
     useState<Level | null>(null)
 
-  const [
-    currentCourses,
-    setCurrentCourses,
-  ] = useState<CourseSummary[]>([])
+  const [currentCourses, setCurrentCourses] =
+    useState<CourseSummary[]>([])
+
+  const [previousCourses, setPreviousCourses] =
+    useState<CourseSummary[]>([])
 
   const [
-    previousCourses,
-    setPreviousCourses,
-  ] = useState<CourseSummary[]>([])
+    selectedCourse,
+    setSelectedCourse,
+  ] = useState<CourseSummary | null>(null)
 
   const handleSearch = async () => {
-    const personalId =
-      searchValue.trim()
+    const personalId = searchValue.trim()
 
     if (!personalId) return
 
@@ -344,6 +305,7 @@ export default function StudentStatusPage() {
     setLevel(null)
     setCurrentCourses([])
     setPreviousCourses([])
+    setSelectedCourse(null)
 
     try {
       /*
@@ -370,10 +332,7 @@ export default function StudentStatusPage() {
             health_notes
           `,
         )
-        .eq(
-          'personal_id',
-          personalId,
-        )
+        .eq('personal_id', personalId)
         .maybeSingle()
 
       if (studentError) {
@@ -404,10 +363,8 @@ export default function StudentStatusPage() {
         .select(
           'id, name, is_active',
         )
-        .eq(
-          'is_active',
-          true,
-        )
+        .eq('is_current', true)
+        .eq('is_active', true)
         .maybeSingle()
 
       if (yearError) {
@@ -416,23 +373,19 @@ export default function StudentStatusPage() {
 
       /*
        * ============================
-       * 3. تسجيل الطالب في السنة
+       * 3. تسجيل الطالب في السنوات
        * ============================
        */
 
       const {
         data: enrollments,
-        error:
-          enrollmentError,
+        error: enrollmentError,
       } = await supabase
         .from('enrollments')
         .select(
           'id, academic_year_id, level_id, status',
         )
-        .eq(
-          'student_id',
-          studentData.id,
-        )
+        .eq('student_id', studentData.id)
 
       if (enrollmentError) {
         throw enrollmentError
@@ -453,13 +406,10 @@ export default function StudentStatusPage() {
        * ============================
        */
 
-      if (
-        currentEnrollment?.level_id
-      ) {
+      if (currentEnrollment?.level_id) {
         const {
           data: levelData,
-          error:
-            levelError,
+          error: levelError,
         } = await supabase
           .from('levels')
           .select('id, name')
@@ -484,22 +434,14 @@ export default function StudentStatusPage() {
 
       const {
         data: statuses,
-        error:
-          statusesError,
+        error: statusesError,
       } = await supabase
-        .from(
-          'attendance_statuses',
-        )
+        .from('attendance_statuses')
         .select(
           'id, name, sort_order',
         )
-        .eq(
-          'is_active',
-          true,
-        )
-        .order(
-          'sort_order',
-        )
+        .eq('is_active', true)
+        .order('sort_order')
 
       if (statusesError) {
         throw statusesError
@@ -510,7 +452,45 @@ export default function StudentStatusPage() {
 
       /*
        * ============================
-       * 6. تحميل الدورات
+       * 6. الدورات المرتبطة بالطالب
+       * ============================
+       *
+       * لا نعرض جميع دورات النظام.
+       * فقط الدورات التي تم توزيع الطالب
+       * عليها فعليًا.
+       */
+
+      const {
+        data: assignments,
+        error: assignmentsError,
+      } = await supabase
+        .from('teacher_student_assignments')
+        .select('course_id')
+        .eq(
+          'student_id',
+          studentData.id,
+        )
+
+      if (assignmentsError) {
+        throw assignmentsError
+      }
+
+      const studentCourseIds = new Set(
+        (assignments ?? [])
+          .map((item) => item.course_id)
+          .filter(Boolean),
+      )
+
+      if (studentCourseIds.size === 0) {
+        setCurrentCourses([])
+        setPreviousCourses([])
+        setSearched(true)
+        return
+      }
+
+      /*
+       * ============================
+       * 7. تحميل الدورات المرتبطة فقط
        * ============================
        */
 
@@ -529,6 +509,10 @@ export default function StudentStatusPage() {
             days
           `,
         )
+        .in(
+          'id',
+          Array.from(studentCourseIds),
+        )
         .order(
           'start_date',
           {
@@ -540,19 +524,18 @@ export default function StudentStatusPage() {
         throw coursesError
       }
 
-      const allCourses =
+      const studentCourses =
         courses ?? []
 
       /*
        * ============================
-       * 7. تحميل حضور الطالب
+       * 8. تحميل حضور الطالب
        * ============================
        */
 
       const {
         data: attendance,
-        error:
-          attendanceError,
+        error: attendanceError,
       } = await supabase
         .from('attendance')
         .select(
@@ -577,17 +560,16 @@ export default function StudentStatusPage() {
       const attendanceRecords =
         attendance ?? []
 
+      const today = getTodayString()
+
       /*
        * ============================
-       * 8. الدورة الحالية
+       * 9. الدورة الحالية
        * ============================
        */
 
-      const today =
-        getTodayString()
-
       const currentCourseList =
-        allCourses.filter(
+        studentCourses.filter(
           (course) => {
             if (
               !currentYear ||
@@ -605,10 +587,8 @@ export default function StudentStatusPage() {
             }
 
             return (
-              course.start_date <=
-                today &&
-              course.end_date >=
-                today
+              course.start_date <= today &&
+              course.end_date >= today
             )
           },
         )
@@ -630,23 +610,18 @@ export default function StudentStatusPage() {
 
       /*
        * ============================
-       * 9. الدورات السابقة
+       * 10. الدورات السابقة
        * ============================
        */
 
       const previousCourseList =
-        allCourses.filter(
+        studentCourses.filter(
           (course) => {
-            if (
-              !course.end_date
-            ) {
+            if (!course.end_date) {
               return false
             }
 
-            return (
-              course.end_date <
-              today
-            )
+            return course.end_date < today
           },
         )
 
@@ -719,9 +694,7 @@ export default function StudentStatusPage() {
                 )
               }
               onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter'
-                ) {
+                if (e.key === 'Enter') {
                   handleSearch()
                 }
               }}
@@ -732,9 +705,7 @@ export default function StudentStatusPage() {
 
             <button
               type="button"
-              onClick={
-                handleSearch
-              }
+              onClick={handleSearch}
               disabled={loading}
               className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -784,9 +755,7 @@ export default function StudentStatusPage() {
                 <div className="grid gap-4 p-5 sm:grid-cols-2">
                   <InfoItem
                     label="اسم الطالب"
-                    value={
-                      student.name
-                    }
+                    value={student.name}
                   />
 
                   <InfoItem
@@ -800,8 +769,7 @@ export default function StudentStatusPage() {
                   <InfoItem
                     label="المستوى"
                     value={
-                      level?.name ??
-                      '—'
+                      level?.name ?? '—'
                     }
                   />
 
@@ -823,13 +791,11 @@ export default function StudentStatusPage() {
                   </h2>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    تفاصيل حضور الطالب
-                    في الدورة الحالية
+                    ملخص حضور الطالب
                   </p>
                 </div>
 
-                {currentCourses.length ===
-                0 ? (
+                {currentCourses.length === 0 ? (
                   <div className="p-5 text-sm text-muted-foreground">
                     لا توجد دورة حالية
                     مسجلة للطالب حاليًا.
@@ -840,11 +806,15 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <CurrentCourseCard
                           key={
-                            summary.course
-                              .id
+                            summary.course.id
                           }
                           summary={
                             summary
+                          }
+                          onDetails={() =>
+                            setSelectedCourse(
+                              summary,
+                            )
                           }
                         />
                       ),
@@ -854,8 +824,7 @@ export default function StudentStatusPage() {
               </div>
 
               {/* Previous courses */}
-              {previousCourses.length >
-                0 && (
+              {previousCourses.length > 0 && (
                 <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                   <div className="border-b px-5 py-4">
                     <h2 className="font-semibold">
@@ -863,8 +832,7 @@ export default function StudentStatusPage() {
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      ملخص حضور الدورات
-                      السابقة
+                      نسبة الحضور في الدورات السابقة
                     </p>
                   </div>
 
@@ -873,8 +841,7 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <div
                           key={
-                            summary.course
-                              .id
+                            summary.course.id
                           }
                           className="flex flex-wrap items-center justify-between gap-4 p-5"
                         >
@@ -908,35 +875,9 @@ export default function StudentStatusPage() {
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-4">
-                            <div className="text-left">
-                              <p className="text-xs text-muted-foreground">
-                                نسبة الحضور
-                              </p>
-
-                              <p className="mt-1 text-lg font-bold">
-                                {
-                                  summary.percentage
-                                }
-                                %
-                              </p>
-                            </div>
-
-                            <div className="text-left">
-                              <p className="text-xs text-muted-foreground">
-                                أيام الحضور
-                              </p>
-
-                              <p className="mt-1 text-sm font-medium">
-                                {summary.present +
-                                  summary.late +
-                                  summary.excused}{' '}
-                                /{' '}
-                                {
-                                  summary.totalDays
-                                }
-                              </p>
-                            </div>
+                          <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
+                            {summary.percentage}%
+                            حضور
                           </div>
                         </div>
                       ),
@@ -950,51 +891,60 @@ export default function StudentStatusPage() {
         {/* Footer */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <CalendarDays className="size-3.5" />
+
           <span>
             نظام متابعة الطلاب
           </span>
         </div>
       </div>
+
+      {/* Attendance Details Modal */}
+      {selectedCourse && (
+        <AttendanceDetailsModal
+          summary={selectedCourse}
+          onClose={() =>
+            setSelectedCourse(null)
+          }
+        />
+      )}
     </main>
   )
 }
 
 function CurrentCourseCard({
   summary,
+  onDetails,
 }: {
   summary: CourseSummary
+  onDetails: () => void
 }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Course header */}
       <div className="rounded-xl border bg-muted/20 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="font-semibold">
               {summary.course.name}
             </p>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              {summary.course
-                .start_date
+              {summary.course.start_date
                 ? formatDate(
-                    summary.course
-                      .start_date,
+                    summary.course.start_date,
                   )
                 : '—'}
               {' — '}
-              {summary.course
-                .end_date
+              {summary.course.end_date
                 ? formatDate(
-                    summary.course
-                      .end_date,
+                    summary.course.end_date,
                   )
                 : '—'}
             </p>
           </div>
 
-          <div className="rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold">
-            {summary.percentage}%
-            حضور
+          <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
+            {summary.percentage}% حضور
           </div>
         </div>
       </div>
@@ -1027,74 +977,150 @@ function CurrentCourseCard({
         />
       </div>
 
-      {/* Daily details */}
-      <div>
-        <h3 className="mb-3 text-sm font-semibold">
-          تفاصيل الحضور
-        </h3>
+      {/* Details button */}
+      <button
+        type="button"
+        onClick={onDetails}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border bg-background px-4 py-3 text-sm font-medium transition hover:bg-muted"
+      >
+        <Eye className="size-4" />
 
-        {summary.records
-          .length === 0 ? (
-          <div className="rounded-xl border p-4 text-sm text-muted-foreground">
-            لم يتم تسجيل حضور
-            للطالب حتى الآن.
+        عرض تفاصيل الحضور
+      </button>
+    </div>
+  )
+}
+
+function AttendanceDetailsModal({
+  summary,
+  onClose,
+}: {
+  summary: CourseSummary
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border bg-background shadow-xl"
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+      >
+        {/* Modal header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div>
+            <h2 className="font-semibold">
+              تفاصيل الحضور
+            </h2>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              {summary.course.name}
+            </p>
           </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px] text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="px-4 py-3 text-right">
-                      التاريخ
-                    </th>
 
-                    <th className="px-4 py-3 text-right">
-                      الحالة
-                    </th>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-9 items-center justify-center rounded-lg transition hover:bg-muted"
+            aria-label="إغلاق"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
 
-                    <th className="px-4 py-3 text-right">
-                      الملاحظة
-                    </th>
-                  </tr>
-                </thead>
+        {/* Modal summary */}
+        <div className="border-b bg-muted/20 p-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <AttendanceBox
+              label="حاضر"
+              value={summary.present}
+            />
 
-                <tbody>
-                  {summary.records.map(
-                    (
-                      record,
-                      index,
-                    ) => (
-                      <tr
-                        key={`${record.date}-${index}`}
-                        className="border-b last:border-b-0"
-                      >
-                        <td className="px-4 py-3">
-                          {formatDate(
-                            record.date,
-                          )}
-                        </td>
+            <AttendanceBox
+              label="غائب"
+              value={summary.absent}
+            />
 
-                        <td className="px-4 py-3">
-                          <StatusBadge
-                            status={
-                              record.status
-                            }
-                          />
-                        </td>
+            <AttendanceBox
+              label="متأخر"
+              value={summary.late}
+            />
 
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {record.note ||
-                            '—'}
-                        </td>
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
+            <AttendanceBox
+              label="مستأذن"
+              value={summary.excused}
+            />
+
+            <AttendanceBox
+              label="لم يسجل"
+              value={summary.notRecorded}
+            />
+          </div>
+        </div>
+
+        {/* Daily attendance */}
+        <div className="max-h-[55vh] overflow-y-auto p-5">
+          {summary.records.length === 0 ? (
+            <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+              لا توجد أيام حضور مسجلة.
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="overflow-hidden rounded-xl border">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-4 py-3 text-right">
+                        التاريخ
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        الحالة
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        ملاحظة المعلم
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {summary.records.map(
+                      (record, index) => (
+                        <tr
+                          key={`${record.date}-${index}`}
+                          className="border-b last:border-b-0"
+                        >
+                          <td className="px-4 py-3">
+                            {formatDate(
+                              record.date,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <StatusBadge
+                              status={
+                                record.status
+                              }
+                            />
+                          </td>
+
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {record.note ||
+                              '—'}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -1108,7 +1134,7 @@ function AttendanceBox({
   value: number
 }) {
   return (
-    <div className="rounded-xl border p-3 text-center">
+    <div className="rounded-xl border bg-background p-3 text-center">
       <p className="text-xs text-muted-foreground">
         {label}
       </p>
