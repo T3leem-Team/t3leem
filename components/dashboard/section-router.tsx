@@ -17,11 +17,26 @@ const routes: {
 }[] = [
   { match: (p) => p === '/', view: () => <DashboardView /> },
   { match: (p) => p.startsWith('/settings'), view: () => <SettingsView /> },
-  { match: (p) => p.startsWith('/supervision'), view: () => <SupervisionView /> },
-  { match: (p) => p.startsWith('/enrollment'), view: () => <EnrollmentView /> },
-  { match: (p) => p.startsWith('/students'), view: () => <StudentsView /> },
-  { match: (p) => p.startsWith('/teachers'), view: () => <TeachersView /> },
-  { match: (p) => p.startsWith('/payments'), view: () => <PaymentsView /> },
+  {
+    match: (p) => p.startsWith('/supervision'),
+    view: () => <SupervisionView />,
+  },
+  {
+    match: (p) => p.startsWith('/enrollment'),
+    view: () => <EnrollmentView />,
+  },
+  {
+    match: (p) => p.startsWith('/students'),
+    view: () => <StudentsView />,
+  },
+  {
+    match: (p) => p.startsWith('/teachers'),
+    view: () => <TeachersView />,
+  },
+  {
+    match: (p) => p.startsWith('/payments'),
+    view: () => <PaymentsView />,
+  },
 ]
 
 type DashboardSection = {
@@ -29,6 +44,18 @@ type DashboardSection = {
   href: string
   sort_order: number
 }
+
+/*
+ * كاش صلاحيات أقسام لوحة التحكم.
+ *
+ * الهدف:
+ * - الدخول لأول مرة يتحقق من الصلاحيات.
+ * - التنقل بين الأقسام لا يعيد إظهار Loading.
+ * - زر Back يرجع فورًا.
+ * - يتم تحديث الصلاحيات في الخلفية بدون تعطيل الصفحة.
+ */
+let sectionsCache: DashboardSection[] | null = null
+let sectionsLoading = false
 
 function getSectionKey(pathname: string) {
   if (pathname === '/') return 'dashboard'
@@ -42,76 +69,93 @@ function getSectionKey(pathname: string) {
   return null
 }
 
+async function refreshSections(
+  router: ReturnType<typeof useRouter>,
+) {
+  if (sectionsLoading) return
+
+  sectionsLoading = true
+
+  try {
+    const response = await fetch(
+      '/api/auth/dashboard-sections',
+      {
+        method: 'GET',
+        cache: 'no-store',
+      },
+    )
+
+    if (!response.ok) {
+      router.replace('/login?reason=session_expired')
+      return
+    }
+
+    const data = await response.json()
+
+    const allowedSections: DashboardSection[] =
+      Array.isArray(data.sections)
+        ? data.sections.sort(
+            (
+              a: DashboardSection,
+              b: DashboardSection,
+            ) => a.sort_order - b.sort_order,
+          )
+        : []
+
+    sectionsCache = allowedSections
+  } catch (error) {
+    console.error(
+      'Section access check error:',
+      error,
+    )
+  } finally {
+    sectionsLoading = false
+  }
+}
+
 export function SectionRouter() {
   const pathname = usePathname()
   const router = useRouter()
 
   const [sections, setSections] =
-    useState<DashboardSection[] | null>(null)
+    useState<DashboardSection[] | null>(
+      sectionsCache,
+    )
 
+  /*
+   * التحقق من الصلاحيات.
+   *
+   * إذا كان الكاش موجود:
+   * نعرض الصفحة فورًا بدون Loading.
+   *
+   * ثم نعمل تحديث صامت في الخلفية.
+   */
   useEffect(() => {
     let cancelled = false
 
     async function checkAccess() {
-      try {
-        const response = await fetch(
-          '/api/auth/dashboard-sections',
-          {
-            method: 'GET',
-            cache: 'no-store',
-          },
-        )
+      if (sectionsCache) {
+        setSections(sectionsCache)
 
-        if (!response.ok) {
-          router.replace('/login?reason=session_expired')
-          return
+        /*
+         * تحديث صامت للخلفية.
+         */
+        await refreshSections(router)
+
+        if (!cancelled && sectionsCache) {
+          setSections(sectionsCache)
         }
 
-        const data = await response.json()
+        return
+      }
 
-        if (cancelled) return
+      /*
+       * أول دخول فقط يحتاج انتظار التحقق.
+       */
+      await refreshSections(router)
 
-        const allowedSections: DashboardSection[] =
-          Array.isArray(data.sections)
-            ? data.sections.sort(
-                (
-                  a: DashboardSection,
-                  b: DashboardSection,
-                ) => a.sort_order - b.sort_order,
-              )
-            : []
-
-        setSections(allowedSections)
-
-        const currentSectionKey =
-          getSectionKey(pathname)
-
-        if (!currentSectionKey) return
-
-        const allowed =
-          allowedSections.some(
-            (section) =>
-              section.section_key ===
-              currentSectionKey,
-          )
-
-        if (allowed) return
-
-        const firstSection =
-          allowedSections[0]
-
-        if (firstSection) {
-          router.replace(firstSection.href)
-        } else {
-          router.replace(
-            '/status?reason=no_permissions',
-          )
-        }
-      } catch (error) {
-        console.error(
-          'Section access check error:',
-          error,
-        )
+      if (!cancelled && sectionsCache) {
+        setSections(sectionsCache)
       }
     }
 
@@ -129,6 +173,10 @@ export function SectionRouter() {
     return null
   }
 
+  /*
+   * يظهر Loading فقط في أول دخول،
+   * وليس عند الرجوع أو التنقل بعد وجود الكاش.
+   */
   if (!sections) {
     return (
       <div className="flex min-h-[240px] items-center justify-center">
