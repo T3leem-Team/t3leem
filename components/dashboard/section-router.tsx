@@ -11,19 +11,6 @@ import { PaymentsView } from '@/components/sections/payments-view'
 import { SettingsView } from '@/components/sections/settings-view'
 import { SupervisionView } from '@/components/sections/supervision-view'
 
-const routes: {
-  match: (p: string) => boolean
-  view: () => React.ReactNode
-}[] = [
-  { match: (p) => p === '/', view: () => <DashboardView /> },
-  { match: (p) => p.startsWith('/settings'), view: () => <SettingsView /> },
-  { match: (p) => p.startsWith('/supervision'), view: () => <SupervisionView /> },
-  { match: (p) => p.startsWith('/enrollment'), view: () => <EnrollmentView /> },
-  { match: (p) => p.startsWith('/students'), view: () => <StudentsView /> },
-  { match: (p) => p.startsWith('/teachers'), view: () => <TeachersView /> },
-  { match: (p) => p.startsWith('/payments'), view: () => <PaymentsView /> },
-]
-
 type DashboardSection = {
   section_key: string
   href: string
@@ -50,7 +37,6 @@ export function SectionRouter() {
     useState<DashboardSection[] | null>(null)
 
   useEffect(() => {
-    // تحميل الصلاحيات مرة واحدة فقط
     if (sections) return
 
     let cancelled = false
@@ -150,10 +136,77 @@ export function SectionRouter() {
     )
   }
 
-  const active =
-    routes.find((route) =>
-      route.match(pathname),
-    ) ?? routes[0]
+  return (
+    <div className="min-w-0">
+      <div
+        className={
+          currentSectionKey === 'dashboard'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <DashboardView />
+      </div>
 
-  return active.view()
+      <div
+        className={
+          currentSectionKey === 'settings'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <SettingsView />
+      </div>
+
+      <div
+        className={
+          currentSectionKey === 'supervision'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <SupervisionView />
+      </div>
+
+      <div
+        className={
+          currentSectionKey === 'enrollment'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <EnrollmentView />
+      </div>
+
+      <div
+        className={
+          currentSectionKey === 'students'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <StudentsView />
+      </div>
+
+      <div
+        className={
+          currentSectionKey === 'teachers'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <TeachersView />
+      </div>
+
+      <div
+        className={
+          currentSectionKey === 'payments'
+            ? 'block'
+            : 'hidden'
+        }
+      >
+        <PaymentsView />
+      </div>
+    </div>
+  )
 }
