@@ -170,52 +170,48 @@ function getStatusClasses(
 function getAttendancePercentage(
   studentId: string,
   courseId: string,
-  records: AttendanceRecord[],
-  statuses: AttendanceStatus[],
+  attendanceRecords: AttendanceRecord[],
+  attendanceStatuses: AttendanceStatus[],
 ) {
-  const studentRecords =
-    records.filter(
-      (record) =>
-        record.studentId ===
-          studentId &&
-        record.courseId === courseId,
-    )
+  const studentRecords = attendanceRecords.filter(
+    (record) =>
+      record.studentId === studentId &&
+      record.courseId === courseId,
+  )
 
   let attended = 0
   let counted = 0
 
-  for (const record of studentRecords) {
+  studentRecords.forEach((record) => {
     const status = getStatusName(
-      statuses,
       record.statusId,
+      attendanceStatuses,
     )
 
-    if (!status) {
-      continue
-    }
-
+    // حاضر + متأخر + مستأذن = حضور
     if (
       status === 'حاضر' ||
-      status === 'متأخر'
+      status === 'متأخر' ||
+      status === 'مستأذن'
     ) {
       attended += 1
       counted += 1
     }
 
+    // غائب يدخل في الحساب ويخفض النسبة
     if (status === 'غائب') {
       counted += 1
     }
 
-    // مستأذن لا يدخل في الحساب
-  }
+    // لم يسجل لا يدخل في الحساب
+  })
 
   if (counted === 0) {
     return 0
   }
 
-  return Math.round(
-    (attended / counted) * 100,
-  )
+  return Math.round((attended / counted) * 100)
+}
 }
 
 function getPercentageClass(
