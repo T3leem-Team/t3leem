@@ -24,6 +24,7 @@ export type GuardResult = {
   userId?: string
   sessionId?: string
   deviceId?: string
+  profileId?: string
   reason?: string
 }
 
@@ -184,6 +185,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     /*
      * --------------------------------------------------
      * 6. المستخدم
+     *
+     * نرجع profileId هنا حتى تستطيع
+     * بقية Guards استخدامه بدون إعادة
+     * الاستعلام عن user_profiles.
      * --------------------------------------------------
      */
     const {
@@ -247,12 +252,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
           'device_token_hash',
           deviceTokenHash,
         )
+        .eq(
+          'status',
+          'approved',
+        )
         .maybeSingle()
 
     if (
       deviceError ||
-      !device ||
-      device.status !== 'approved'
+      !device
     ) {
       await closeSession(
         session.id,
@@ -268,6 +276,9 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      * --------------------------------------------------
      * 8. السماح
      *
+     * نرجع profileId حتى لا يتم
+     * الاستعلام عن user_profiles مرة أخرى.
+     *
      * لا نحدث last_activity_at هنا.
      * --------------------------------------------------
      */
@@ -276,6 +287,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       userId: user.id,
       sessionId: session.id,
       deviceId: device.id,
+      profileId: profile.id,
     }
   } catch (error) {
     console.error(
