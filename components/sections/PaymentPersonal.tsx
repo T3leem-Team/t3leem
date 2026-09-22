@@ -25,32 +25,73 @@ type Transaction = {
   created_at: string
 }
 
-export function PaymentPersonal() {
-  const [cycles, setCycles] = useState<Cycle[]>([])
-  const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(null)
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [currentBalance, setCurrentBalance] = useState(0)
+type PaymentPersonalCache = {
+  cycles: Cycle[]
+}
 
-  const [loading, setLoading] = useState(true)
+let paymentPersonalCache:
+  | PaymentPersonalCache
+  | null = null
+
+let paymentPersonalLoading = false
+
+export function PaymentPersonal() {
+  const [cycles, setCycles] = useState<Cycle[]>(
+    paymentPersonalCache?.cycles ?? [],
+  )
+
+  const [selectedCycle, setSelectedCycle] =
+    useState<Cycle | null>(null)
+
+  const [transactions, setTransactions] = useState<
+    Transaction[]
+  >([])
+
+  const [currentBalance, setCurrentBalance] =
+    useState(0)
+
+  const [loading, setLoading] = useState(
+    paymentPersonalCache === null,
+  )
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const [showCreateCycle, setShowCreateCycle] = useState(false)
-  const [showDetails, setShowDetails] = useState(false)
-  const [showAddTransaction, setShowAddTransaction] = useState(false)
+  const [showCreateCycle, setShowCreateCycle] =
+    useState(false)
+
+  const [showDetails, setShowDetails] =
+    useState(false)
+
+  const [showAddTransaction, setShowAddTransaction] =
+    useState(false)
 
   const [cycleName, setCycleName] = useState('')
-  const [initialBalance, setInitialBalance] = useState('')
-  const [initialSource, setInitialSource] = useState('')
-  const [initialNote, setInitialNote] = useState('')
+  const [initialBalance, setInitialBalance] =
+    useState('')
+
+  const [initialSource, setInitialSource] =
+    useState('')
+
+  const [initialNote, setInitialNote] =
+    useState('')
 
   const [transactionType, setTransactionType] =
     useState<'in' | 'out' | 'adjustment'>('in')
 
-  const [transactionAmount, setTransactionAmount] = useState('')
-  const [transactionDescription, setTransactionDescription] = useState('')
-  const [transactionNote, setTransactionNote] = useState('')
-  const [adjustmentSign, setAdjustmentSign] = useState<1 | -1>(1)
+  const [transactionAmount, setTransactionAmount] =
+    useState('')
+
+  const [
+    transactionDescription,
+    setTransactionDescription,
+  ] = useState('')
+
+  const [transactionNote, setTransactionNote] =
+    useState('')
+
+  const [adjustmentSign, setAdjustmentSign] =
+    useState<1 | -1>(1)
 
   function formatDate(date: string) {
     return new Date(date).toLocaleDateString('ar-SA', {
@@ -75,8 +116,14 @@ export function PaymentPersonal() {
   }
 
   async function loadCycles() {
+    const hasCache =
+      paymentPersonalCache !== null
+
     try {
-      setLoading(true)
+      if (!hasCache) {
+        setLoading(true)
+      }
+
       setError('')
 
       const response = await fetch(
@@ -94,13 +141,24 @@ export function PaymentPersonal() {
         )
       }
 
-      setCycles(data.cycles ?? [])
+      const nextCycles: Cycle[] =
+        Array.isArray(data.cycles)
+          ? data.cycles
+          : []
+
+      setCycles(nextCycles)
+
+      paymentPersonalCache = {
+        cycles: nextCycles,
+      }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'تعذر تحميل الدفاتر.',
-      )
+      if (!hasCache) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'تعذر تحميل الدفاتر.',
+        )
+      }
     } finally {
       setLoading(false)
     }
@@ -283,7 +341,20 @@ export function PaymentPersonal() {
   }
 
   useEffect(() => {
-    loadCycles()
+    if (paymentPersonalLoading) {
+      return
+    }
+
+    paymentPersonalLoading = true
+
+    void loadCycles()
+
+    return () => {
+      /*
+       * لا نلغي الطلب.
+       * التحديث يستمر بالخلفية ويحدث الـ cache.
+       */
+    }
   }, [])
 
   return (
@@ -754,171 +825,172 @@ export function PaymentPersonal() {
       )}
 
       {/* نافذة إضافة عملية */}
-      {showAddTransaction && selectedCycle && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+      {showAddTransaction &&
+        selectedCycle && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
 
-          <div className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl">
+            <div className="w-full max-w-lg rounded-2xl bg-background p-6 shadow-2xl">
 
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold">
-                إضافة عملية
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold">
+                  إضافة عملية
+                </h3>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAddTransaction(false)
-                }
-                className="rounded-lg border px-3 py-1"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-4">
-
-              <div>
-                <label className="text-sm font-medium">
-                  نوع العملية
-                </label>
-
-                <select
-                  value={transactionType}
-                  onChange={(e) =>
-                    setTransactionType(
-                      e.target.value as
-                        | 'in'
-                        | 'out'
-                        | 'adjustment',
-                    )
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowAddTransaction(false)
                   }
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+                  className="rounded-lg border px-3 py-1"
                 >
-                  <option value="in">
-                    إيداع
-                  </option>
-
-                  <option value="out">
-                    مصروف
-                  </option>
-
-                  <option value="adjustment">
-                    تسوية
-                  </option>
-                </select>
+                  ×
+                </button>
               </div>
 
-              {transactionType === 'adjustment' && (
+              <div className="mt-5 space-y-4">
+
                 <div>
                   <label className="text-sm font-medium">
-                    اتجاه التسوية
+                    نوع العملية
                   </label>
 
                   <select
-                    value={adjustmentSign}
+                    value={transactionType}
                     onChange={(e) =>
-                      setAdjustmentSign(
-                        Number(
-                          e.target.value,
-                        ) as 1 | -1,
+                      setTransactionType(
+                        e.target.value as
+                          | 'in'
+                          | 'out'
+                          | 'adjustment',
                       )
                     }
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
                   >
-                    <option value={1}>
-                      زيادة الرصيد
+                    <option value="in">
+                      إيداع
                     </option>
 
-                    <option value={-1}>
-                      تخفيض الرصيد
+                    <option value="out">
+                      مصروف
+                    </option>
+
+                    <option value="adjustment">
+                      تسوية
                     </option>
                   </select>
                 </div>
-              )}
 
-              <div>
-                <label className="text-sm font-medium">
-                  المبلغ
-                </label>
+                {transactionType ===
+                  'adjustment' && (
+                  <div>
+                    <label className="text-sm font-medium">
+                      اتجاه التسوية
+                    </label>
 
-                <input
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={transactionAmount}
-                  onChange={(e) =>
-                    setTransactionAmount(
-                      e.target.value,
-                    )
-                  }
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-                />
+                    <select
+                      value={adjustmentSign}
+                      onChange={(e) =>
+                        setAdjustmentSign(
+                          Number(
+                            e.target.value,
+                          ) as 1 | -1,
+                        )
+                      }
+                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+                    >
+                      <option value={1}>
+                        زيادة الرصيد
+                      </option>
+
+                      <option value={-1}>
+                        تخفيض الرصيد
+                      </option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm font-medium">
+                    المبلغ
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    value={transactionAmount}
+                    onChange={(e) =>
+                      setTransactionAmount(
+                        e.target.value,
+                      )
+                    }
+                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">
+                    وصف العملية
+                  </label>
+
+                  <input
+                    value={transactionDescription}
+                    onChange={(e) =>
+                      setTransactionDescription(
+                        e.target.value,
+                      )
+                    }
+                    placeholder="مثال: شراء مستلزمات"
+                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">
+                    ملاحظة
+                  </label>
+
+                  <textarea
+                    value={transactionNote}
+                    onChange={(e) =>
+                      setTransactionNote(
+                        e.target.value,
+                      )
+                    }
+                    className="mt-1 min-h-24 w-full rounded-lg border bg-background px-3 py-2"
+                  />
+                </div>
+
               </div>
 
-              <div>
-                <label className="text-sm font-medium">
-                  وصف العملية
-                </label>
+              <div className="mt-6 flex justify-end gap-3">
 
-                <input
-                  value={transactionDescription}
-                  onChange={(e) =>
-                    setTransactionDescription(
-                      e.target.value,
-                    )
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowAddTransaction(false)
                   }
-                  placeholder="مثال: شراء مستلزمات"
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-                />
-              </div>
+                  className="rounded-lg border px-4 py-2"
+                >
+                  إلغاء
+                </button>
 
-              <div>
-                <label className="text-sm font-medium">
-                  ملاحظة
-                </label>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={addTransaction}
+                  className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
+                >
+                  {saving
+                    ? 'جاري الحفظ...'
+                    : 'إضافة العملية'}
+                </button>
 
-                <textarea
-                  value={transactionNote}
-                  onChange={(e) =>
-                    setTransactionNote(
-                      e.target.value,
-                    )
-                  }
-                  className="mt-1 min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-                />
               </div>
 
             </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowAddTransaction(false)
-                }
-                className="rounded-lg border px-4 py-2"
-              >
-                إلغاء
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={addTransaction}
-                className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-              >
-                {saving
-                  ? 'جاري الحفظ...'
-                  : 'إضافة العملية'}
-              </button>
-
-            </div>
-
           </div>
-        </div>
-      )}
-
+        )}
     </div>
   )
 }
