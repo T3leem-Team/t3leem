@@ -73,6 +73,23 @@ type SupervisionSettings = {
   allowTeacherRemove: boolean
 }
 
+type SupervisionCache = {
+  academicYear: AcademicYear | null
+  courses: Course[]
+  selectedCourseId: string
+  teachers: Teacher[]
+  records: SupervisionRecord[]
+  supervisionSettings: SupervisionSettings
+}
+
+let supervisionCache: SupervisionCache | null = null
+let supervisionLoading = false
+
+const defaultSupervisionSettings: SupervisionSettings = {
+  allowTeacherTransfer: true,
+  allowTeacherRemove: true,
+}
+
 const supervisionTypes: {
   value: SupervisionType
   label: string
@@ -176,22 +193,32 @@ export function SupervisionView() {
   const today = getLocalDateString()
 
   const [academicYear, setAcademicYear] =
-    useState<AcademicYear | null>(null)
+    useState<AcademicYear | null>(
+      supervisionCache?.academicYear ?? null,
+    )
 
   const [courses, setCourses] =
-    useState<Course[]>([])
+    useState<Course[]>(
+      supervisionCache?.courses ?? [],
+    )
 
   const [selectedCourseId, setSelectedCourseId] =
-    useState('')
+    useState(
+      supervisionCache?.selectedCourseId ?? '',
+    )
 
   const [teachers, setTeachers] =
-    useState<Teacher[]>([])
+    useState<Teacher[]>(
+      supervisionCache?.teachers ?? [],
+    )
 
   const [records, setRecords] =
-    useState<SupervisionRecord[]>([])
+    useState<SupervisionRecord[]>(
+      supervisionCache?.records ?? [],
+    )
 
   const [isLoading, setIsLoading] =
-    useState(true)
+    useState(!supervisionCache)
 
   const [isLoadingTeachers, setIsLoadingTeachers] =
     useState(false)
@@ -229,10 +256,10 @@ export function SupervisionView() {
   const [
     supervisionSettings,
     setSupervisionSettings,
-  ] = useState<SupervisionSettings>({
-    allowTeacherTransfer: true,
-    allowTeacherRemove: true,
-  })
+  ] = useState<SupervisionSettings>(
+    supervisionCache?.supervisionSettings ??
+      defaultSupervisionSettings,
+  )
 
   const selectedCourse = useMemo(
     () =>
@@ -242,6 +269,31 @@ export function SupervisionView() {
       ) ?? null,
     [courses, selectedCourseId],
   )
+
+  const updateCache = (
+    overrides: Partial<SupervisionCache> = {},
+  ) => {
+    supervisionCache = {
+      academicYear:
+        overrides.academicYear ??
+        academicYear,
+      courses:
+        overrides.courses ??
+        courses,
+      selectedCourseId:
+        overrides.selectedCourseId ??
+        selectedCourseId,
+      teachers:
+        overrides.teachers ??
+        teachers,
+      records:
+        overrides.records ??
+        records,
+      supervisionSettings:
+        overrides.supervisionSettings ??
+        supervisionSettings,
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -277,20 +329,36 @@ export function SupervisionView() {
           throw insertError
         }
 
-        setSupervisionSettings({
-          allowTeacherTransfer: true,
-          allowTeacherRemove: true,
+        const nextSettings =
+          defaultSupervisionSettings
+
+        setSupervisionSettings(
+          nextSettings,
+        )
+
+        updateCache({
+          supervisionSettings:
+            nextSettings,
         })
 
-        return
+        return nextSettings
       }
 
-      setSupervisionSettings({
+      const nextSettings: SupervisionSettings = {
         allowTeacherTransfer:
           data.allow_teacher_transfer ?? true,
         allowTeacherRemove:
           data.allow_teacher_remove ?? true,
+      }
+
+      setSupervisionSettings(nextSettings)
+
+      updateCache({
+        supervisionSettings:
+          nextSettings,
       })
+
+      return nextSettings
     } catch (err) {
       console.error(err)
 
@@ -299,6 +367,8 @@ export function SupervisionView() {
           ? err.message
           : 'تعذر تحميل صلاحيات المعلمين.',
       )
+
+      return supervisionSettings
     }
   }
 
@@ -315,10 +385,12 @@ export function SupervisionView() {
     const previousSettings =
       supervisionSettings
 
-    setSupervisionSettings((current) => ({
-      ...current,
+    const nextSettings: SupervisionSettings = {
+      ...supervisionSettings,
       [setting]: value,
-    }))
+    }
+
+    setSupervisionSettings(nextSettings)
 
     try {
       const payload =
@@ -341,6 +413,11 @@ export function SupervisionView() {
         throw updateError
       }
 
+      updateCache({
+        supervisionSettings:
+          nextSettings,
+      })
+
       setSettingsMessage(
         'تم حفظ صلاحية المعلمين.',
       )
@@ -355,6 +432,11 @@ export function SupervisionView() {
         previousSettings,
       )
 
+      updateCache({
+        supervisionSettings:
+          previousSettings,
+      })
+
       setError(
         err instanceof Error
           ? err.message
@@ -365,12 +447,18 @@ export function SupervisionView() {
     }
   }
 
-  const loadInitialData = async () => {
-    setIsLoading(true)
+  const loadInitialData = async (
+    showLoading = true,
+  ) => {
+    if (showLoading) {
+      setIsLoading(true)
+    }
+
     setError('')
 
     try {
-      await loadSettings()
+      const settingsPromise =
+        loadSettings()
 
       const {
         data: year,
@@ -388,15 +476,25 @@ export function SupervisionView() {
         throw yearError
       }
 
+      await settingsPromise
+
       if (!year) {
         setAcademicYear(null)
         setCourses([])
         setSelectedCourseId('')
+        setTeachers([])
         setRecords([])
+
+        updateCache({
+          academicYear: null,
+          courses: [],
+          selectedCourseId: '',
+          teachers: [],
+          records: [],
+        })
+
         return
       }
-
-      setAcademicYear(year)
 
       const {
         data: courseRows,
@@ -422,8 +520,6 @@ export function SupervisionView() {
       const loadedCourses =
         (courseRows ?? []) as Course[]
 
-      setCourses(loadedCourses)
-
       const currentCourse =
         loadedCourses.find((course) => {
           if (
@@ -439,9 +535,26 @@ export function SupervisionView() {
           )
         }) ?? loadedCourses[0]
 
+      const currentSelectedCourseId =
+        loadedCourses.some(
+          (course) =>
+            course.id === selectedCourseId,
+        )
+          ? selectedCourseId
+          : currentCourse?.id ?? ''
+
+      setAcademicYear(year)
+      setCourses(loadedCourses)
       setSelectedCourseId(
-        currentCourse?.id ?? '',
+        currentSelectedCourseId,
       )
+
+      updateCache({
+        academicYear: year,
+        courses: loadedCourses,
+        selectedCourseId:
+          currentSelectedCourseId,
+      })
     } catch (err) {
       console.error(err)
 
@@ -451,13 +564,22 @@ export function SupervisionView() {
           : 'تعذر تحميل بيانات الإشراف.',
       )
     } finally {
-      setIsLoading(false)
+      if (showLoading) {
+        setIsLoading(false)
+      }
     }
   }
 
-  const loadTeachers = async (courseId: string) => {
+  const loadTeachers = async (
+    courseId: string,
+  ) => {
     if (!courseId) {
       setTeachers([])
+
+      updateCache({
+        teachers: [],
+      })
+
       return
     }
 
@@ -505,6 +627,11 @@ export function SupervisionView() {
 
       setTeachers(loadedTeachers)
 
+      updateCache({
+        teachers: loadedTeachers,
+        selectedCourseId: courseId,
+      })
+
       if (
         selectedTeacher &&
         !loadedTeachers.some(
@@ -519,6 +646,10 @@ export function SupervisionView() {
 
       setTeachers([])
 
+      updateCache({
+        teachers: [],
+      })
+
       setError(
         err instanceof Error
           ? err.message
@@ -529,9 +660,16 @@ export function SupervisionView() {
     }
   }
 
-  const loadRecords = async (courseId: string) => {
+  const loadRecords = async (
+    courseId: string,
+  ) => {
     if (!courseId) {
       setRecords([])
+
+      updateCache({
+        records: [],
+      })
+
       return
     }
 
@@ -610,10 +748,19 @@ export function SupervisionView() {
         })
 
       setRecords(mappedRecords)
+
+      updateCache({
+        records: mappedRecords,
+        selectedCourseId: courseId,
+      })
     } catch (err) {
       console.error(err)
 
       setRecords([])
+
+      updateCache({
+        records: [],
+      })
 
       setError(
         err instanceof Error
@@ -624,15 +771,61 @@ export function SupervisionView() {
   }
 
   useEffect(() => {
-    void loadInitialData()
+    if (supervisionCache) {
+      setAcademicYear(
+        supervisionCache.academicYear,
+      )
+      setCourses(
+        supervisionCache.courses,
+      )
+      setSelectedCourseId(
+        supervisionCache.selectedCourseId,
+      )
+      setTeachers(
+        supervisionCache.teachers,
+      )
+      setRecords(
+        supervisionCache.records,
+      )
+      setSupervisionSettings(
+        supervisionCache.supervisionSettings,
+      )
+
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (supervisionLoading) {
+      return
+    }
+
+    supervisionLoading = true
+
+    void loadInitialData(
+      !supervisionCache,
+    ).finally(() => {
+      supervisionLoading = false
+    })
   }, [])
 
   useEffect(() => {
     if (!selectedCourseId) {
       setTeachers([])
       setRecords([])
+
+      updateCache({
+        selectedCourseId: '',
+        teachers: [],
+        records: [],
+      })
+
       return
     }
+
+    updateCache({
+      selectedCourseId,
+    })
 
     void loadTeachers(selectedCourseId)
     void loadRecords(selectedCourseId)
