@@ -66,6 +66,19 @@ type AcademicYear = {
   annual_fee: number | null
 }
 
+type PaymentStudentsCache = {
+  studentList: StudentRow[]
+  currentAcademicYearId: string | null
+  currentAcademicYearName: string
+  currentAnnualFee: number
+}
+
+let paymentStudentsCache:
+  | PaymentStudentsCache
+  | null = null
+
+let paymentStudentsLoading = false
+
 const emptyFilters: Filters = {
   name: '',
   personalId: '',
@@ -90,19 +103,32 @@ export function PaymentStudents() {
     useState<Filters>(emptyFilters)
 
   const [studentList, setStudentList] =
-    useState<StudentRow[]>([])
+    useState<StudentRow[]>(
+      paymentStudentsCache?.studentList ?? [],
+    )
 
   const [loading, setLoading] =
-    useState(true)
+    useState(
+      paymentStudentsCache === null,
+    )
 
   const [currentAcademicYearId, setCurrentAcademicYearId] =
-    useState<string | null>(null)
+    useState<string | null>(
+      paymentStudentsCache?.currentAcademicYearId ??
+        null,
+    )
 
   const [currentAcademicYearName, setCurrentAcademicYearName] =
-    useState('')
+    useState(
+      paymentStudentsCache?.currentAcademicYearName ??
+        '',
+    )
 
   const [currentAnnualFee, setCurrentAnnualFee] =
-    useState(0)
+    useState(
+      paymentStudentsCache?.currentAnnualFee ??
+        0,
+    )
 
   const [detailsDialogOpen, setDetailsDialogOpen] =
     useState(false)
@@ -134,7 +160,12 @@ export function PaymentStudents() {
   }, [])
 
   const loadPayments = async (): Promise<StudentRow[]> => {
-    setLoading(true)
+    const hasCache =
+      paymentStudentsCache !== null
+
+    if (!hasCache) {
+      setLoading(true)
+    }
 
     try {
       const response = await fetch(
@@ -164,12 +195,21 @@ export function PaymentStudents() {
         data.academicYear ?? null
 
       if (!currentYear) {
-        setStudentList([])
+        const emptyList: StudentRow[] = []
+
+        setStudentList(emptyList)
         setCurrentAcademicYearId(null)
         setCurrentAcademicYearName('')
         setCurrentAnnualFee(0)
 
-        return []
+        paymentStudentsCache = {
+          studentList: emptyList,
+          currentAcademicYearId: null,
+          currentAcademicYearName: '',
+          currentAnnualFee: 0,
+        }
+
+        return emptyList
       }
 
       const annualFee = Number(
@@ -306,6 +346,18 @@ export function PaymentStudents() {
         mappedStudents,
       )
 
+      setLoading(false)
+
+      paymentStudentsCache = {
+        studentList: mappedStudents,
+        currentAcademicYearId:
+          currentYear.id,
+        currentAcademicYearName:
+          currentYear.name,
+        currentAnnualFee:
+          annualFee,
+      }
+
       if (detailsStudent) {
         const updatedStudent =
           mappedStudents.find(
@@ -327,6 +379,16 @@ export function PaymentStudents() {
         'Failed to load payments:',
         error,
       )
+
+      /*
+       * إذا عندنا cache، نخليه ظاهر
+       * ولا نستبدله بالـ fallback.
+       */
+      if (paymentStudentsCache) {
+        setLoading(false)
+
+        return paymentStudentsCache.studentList
+      }
 
       const fallback:
         StudentRow[] =
@@ -380,14 +442,30 @@ export function PaymentStudents() {
         fallback,
       )
 
+      setLoading(false)
+
       return fallback
     } finally {
+      paymentStudentsLoading = false
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    if (paymentStudentsLoading) {
+      return
+    }
+
+    paymentStudentsLoading = true
+
     void loadPayments()
+
+    return () => {
+      /*
+       * لا نلغي الطلب.
+       * التحديث يستمر بالخلفية ويحدث الـ cache.
+       */
+    }
   }, [])
 
   useEffect(() => {
