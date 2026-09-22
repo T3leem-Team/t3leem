@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Check,
-  Eye,
   FileArchive,
   FileSpreadsheet,
   Filter,
@@ -17,7 +16,6 @@ import {
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { StatusBadge } from '@/components/dashboard/status-badge'
 import {
   Card,
   CardContent,
@@ -37,8 +35,11 @@ import {
   type RegistrationRequest,
 } from './enrollment-view-two'
 
-const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
-const ARCHIVE_KEY = 'allow_add_to_archive'
+const CURRENT_YEAR_KEY =
+  'allow_add_to_current_year'
+
+const ARCHIVE_KEY =
+  'allow_add_to_archive'
 
 const COLUMNS_STORAGE_KEY =
   't3leem_registration_requests_columns_v1'
@@ -51,13 +52,67 @@ const emptyFilters: Filters = {
   status: '',
 }
 
-function mapRequest(row: any): RegistrationRequest {
+/*
+ * =========================================================
+ * Cache
+ * =========================================================
+ *
+ * الكاش خاص ببيانات الصفحة فقط.
+ *
+ * لا نخزن:
+ * - النوافذ
+ * - الفلاتر
+ * - الطلب المحدد
+ * - حالة الحفظ
+ * - الرسائل
+ * - إعدادات الأعمدة
+ *
+ * هذه كلها حالة مؤقتة للواجهة.
+ */
+
+type EnrollmentCache = {
+  requests: RegistrationRequest[]
+  customFields: CustomField[]
+  customFieldValues: CustomFieldValue[]
+  levels: Level[]
+  allowCurrentYearImport: boolean
+  allowArchiveImport: boolean
+}
+
+const EMPTY_ENROLLMENT_CACHE: EnrollmentCache = {
+  requests: [],
+  customFields: [],
+  customFieldValues: [],
+  levels: [],
+  allowCurrentYearImport: false,
+  allowArchiveImport: false,
+}
+
+let enrollmentCache: EnrollmentCache | null =
+  null
+
+function updateEnrollmentCache(
+  patch: Partial<EnrollmentCache>,
+) {
+  enrollmentCache = {
+    ...(enrollmentCache ??
+      EMPTY_ENROLLMENT_CACHE),
+    ...patch,
+  }
+}
+
+function mapRequest(
+  row: any,
+): RegistrationRequest {
   return {
     id: row.id ?? '',
-    requestNumber: row.request_number ?? '',
-    trackingToken: row.tracking_token ?? '',
+    requestNumber:
+      row.request_number ?? '',
+    trackingToken:
+      row.tracking_token ?? '',
     name: row.name ?? '',
-    personalId: row.personal_id ?? '',
+    personalId:
+      row.personal_id ?? '',
     gender: row.gender ?? '',
     age:
       typeof row.age === 'number'
@@ -69,14 +124,18 @@ function mapRequest(row: any): RegistrationRequest {
           : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
-    levelId: row.level_id ?? null,
-    classId: row.class_id ?? null,
+    levelId:
+      row.level_id ?? null,
+    classId:
+      row.class_id ?? null,
     notes: row.notes ?? '',
-    healthNotes: row.health_notes ?? '',
+    healthNotes:
+      row.health_notes ?? '',
     status:
       row.status ?? 'pending',
     processingMode:
-      row.processing_mode ?? 'review',
+      row.processing_mode ??
+      'review',
     studentId:
       row.student_id ?? null,
     rejectionReason:
@@ -86,7 +145,9 @@ function mapRequest(row: any): RegistrationRequest {
     paymentAmount:
       row.payment_amount !== null &&
       row.payment_amount !== undefined
-        ? Number(row.payment_amount)
+        ? Number(
+            row.payment_amount,
+          )
         : null,
     paymentReference:
       row.payment_reference ?? '',
@@ -96,12 +157,17 @@ function mapRequest(row: any): RegistrationRequest {
       row.payment_status ??
       'not_required',
     verifiedPaymentAmount:
-      row.verified_payment_amount !== null &&
-      row.verified_payment_amount !== undefined
-        ? Number(row.verified_payment_amount)
+      row.verified_payment_amount !==
+        null &&
+      row.verified_payment_amount !==
+        undefined
+        ? Number(
+            row.verified_payment_amount,
+          )
         : null,
     paymentRejectionReason:
-      row.payment_rejection_reason ?? '',
+      row.payment_rejection_reason ??
+      '',
     createdAt:
       row.created_at ?? '',
     source:
@@ -114,7 +180,9 @@ function mapRequest(row: any): RegistrationRequest {
 function hasHealthNotes(
   request: RegistrationRequest,
 ) {
-  return request.healthNotes.trim() !== ''
+  return (
+    request.healthNotes.trim() !== ''
+  )
 }
 
 function hasNotes(
@@ -219,11 +287,24 @@ type KeyRow = {
 }
 
 export function EnrollmentView() {
-  const [requests, setRequests] =
-    useState<RegistrationRequest[]>([])
+  /*
+   * =========================================================
+   * Initial state from cache
+   * =========================================================
+   */
 
-  const [selectedRequest, setSelectedRequest] =
-    useState<RegistrationRequest | null>(null)
+  const [requests, setRequests] =
+    useState<RegistrationRequest[]>(
+      enrollmentCache?.requests ?? [],
+    )
+
+  const [
+    selectedRequest,
+    setSelectedRequest,
+  ] =
+    useState<RegistrationRequest | null>(
+      null,
+    )
 
   const [showReview, setShowReview] =
     useState(false)
@@ -234,14 +315,21 @@ export function EnrollmentView() {
   const [showArchive, setShowArchive] =
     useState(false)
 
-  const [showColumnSettings, setShowColumnSettings] =
-    useState(false)
+  const [
+    showColumnSettings,
+    setShowColumnSettings,
+  ] = useState(false)
 
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
+  /*
+   * إذا يوجد كاش، لا نعرض loading.
+   */
   const [loading, setLoading] =
-    useState(true)
+    useState(
+      enrollmentCache === null,
+    )
 
   const [saving, setSaving] =
     useState(false)
@@ -249,28 +337,65 @@ export function EnrollmentView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  const [permissionsLoading, setPermissionsLoading] =
-    useState(true)
+  /*
+   * إذا يوجد كاش للصلاحيات، لا ننتظر
+   * استعلام الصلاحيات حتى تظهر الصفحة.
+   */
+  const [
+    permissionsLoading,
+    setPermissionsLoading,
+  ] = useState(
+    enrollmentCache === null,
+  )
 
-  const [allowCurrentYearImport, setAllowCurrentYearImport] =
-    useState(false)
+  const [
+    allowCurrentYearImport,
+    setAllowCurrentYearImport,
+  ] = useState(
+    enrollmentCache
+      ?.allowCurrentYearImport ??
+      false,
+  )
 
-  const [allowArchiveImport, setAllowArchiveImport] =
-    useState(false)
+  const [
+    allowArchiveImport,
+    setAllowArchiveImport,
+  ] = useState(
+    enrollmentCache
+      ?.allowArchiveImport ??
+      false,
+  )
 
   const [customFields, setCustomFields] =
-    useState<CustomField[]>([])
+    useState<CustomField[]>(
+      enrollmentCache?.customFields ??
+        [],
+    )
 
-  const [customFieldValues, setCustomFieldValues] =
-    useState<CustomFieldValue[]>([])
+  const [
+    customFieldValues,
+    setCustomFieldValues,
+  ] =
+    useState<CustomFieldValue[]>(
+      enrollmentCache?.customFieldValues ??
+        [],
+    )
 
   const [levels, setLevels] =
-    useState<Level[]>([])
+    useState<Level[]>(
+      enrollmentCache?.levels ?? [],
+    )
 
   const [visibleColumns, setVisibleColumns] =
     useState<Record<string, boolean>>(
       DEFAULT_COLUMNS,
     )
+
+  /*
+   * =========================================================
+   * Column settings
+   * =========================================================
+   */
 
   useEffect(() => {
     try {
@@ -326,113 +451,196 @@ export function EnrollmentView() {
     }
   }, [visibleColumns])
 
-  const loadImportPermissions = async () => {
-    setPermissionsLoading(true)
+  /*
+   * =========================================================
+   * Import permissions
+   * =========================================================
+   */
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('system_keys')
-      .select('key_name, enabled')
-      .in('key_name', [
-        CURRENT_YEAR_KEY,
-        ARCHIVE_KEY,
-      ])
+  const loadImportPermissions =
+    async (
+      options?: {
+        silent?: boolean
+      },
+    ) => {
+      const silent =
+        options?.silent === true
 
-    if (error) {
-      console.error(
-        'Could not load import permissions:',
+      /*
+       * عند وجود كاش، لا نظهر loading
+       * أثناء التحديث الخلفي.
+       */
+      if (!silent) {
+        setPermissionsLoading(
+          true,
+        )
+      }
+
+      const {
+        data,
         error,
-      )
-
-      setAllowCurrentYearImport(false)
-      setAllowArchiveImport(false)
-      setPermissionsLoading(false)
-
-      return
-    }
-
-    const rows =
-      (data ?? []) as KeyRow[]
-
-    const currentYearRow =
-      rows.find(
-        (row) =>
-          row.key_name ===
+      } = await supabase
+        .from('system_keys')
+        .select(
+          'key_name, enabled',
+        )
+        .in('key_name', [
           CURRENT_YEAR_KEY,
-      )
-
-    const archiveRow =
-      rows.find(
-        (row) =>
-          row.key_name ===
           ARCHIVE_KEY,
+        ])
+
+      if (error) {
+        console.error(
+          'Could not load import permissions:',
+          error,
+        )
+
+        /*
+         * إذا عندنا كاش، نحافظ عليه.
+         * لا نختفي الأزرار بسبب خطأ مؤقت
+         * أثناء التحديث الخلفي.
+         */
+        if (
+          enrollmentCache === null
+        ) {
+          setAllowCurrentYearImport(
+            false,
+          )
+
+          setAllowArchiveImport(
+            false,
+          )
+        }
+
+        setPermissionsLoading(false)
+
+        return
+      }
+
+      const rows =
+        (data ?? []) as KeyRow[]
+
+      const currentYearRow =
+        rows.find(
+          (row) =>
+            row.key_name ===
+            CURRENT_YEAR_KEY,
+        )
+
+      const archiveRow =
+        rows.find(
+          (row) =>
+            row.key_name ===
+            ARCHIVE_KEY,
+        )
+
+      const nextAllowCurrentYearImport =
+        currentYearRow?.enabled ===
+        true
+
+      const nextAllowArchiveImport =
+        archiveRow?.enabled ===
+        true
+
+      setAllowCurrentYearImport(
+        nextAllowCurrentYearImport,
       )
 
-    setAllowCurrentYearImport(
-      currentYearRow?.enabled === true,
-    )
-
-    setAllowArchiveImport(
-      archiveRow?.enabled === true,
-    )
-
-    setPermissionsLoading(false)
-  }
-
-  const loadCustomFields = async () => {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('custom_fields')
-      .select(`
-        id,
-        name,
-        field_type,
-        available_in_registration,
-        available_in_students,
-        available_in_payments,
-        sort_order,
-        is_active
-      `)
-      .eq(
-        'available_in_registration',
-        true,
-      )
-      .eq(
-        'is_active',
-        true,
-      )
-      .order(
-        'sort_order',
-        {
-          ascending: true,
-        },
-      )
-      .order(
-        'created_at',
-        {
-          ascending: true,
-        },
+      setAllowArchiveImport(
+        nextAllowArchiveImport,
       )
 
-    if (error) {
-      console.error(
-        'Could not load custom fields:',
-        error,
-      )
+      updateEnrollmentCache({
+        allowCurrentYearImport:
+          nextAllowCurrentYearImport,
+        allowArchiveImport:
+          nextAllowArchiveImport,
+      })
 
-      setCustomFields([])
-
-      return
+      setPermissionsLoading(false)
     }
 
-    setCustomFields(
-      (data ?? []) as CustomField[],
-    )
-  }
+  /*
+   * =========================================================
+   * Custom fields
+   * =========================================================
+   */
+
+  const loadCustomFields =
+    async () => {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from('custom_fields')
+        .select(`
+          id,
+          name,
+          field_type,
+          available_in_registration,
+          available_in_students,
+          available_in_payments,
+          sort_order,
+          is_active
+        `)
+        .eq(
+          'available_in_registration',
+          true,
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+        .order(
+          'sort_order',
+          {
+            ascending: true,
+          },
+        )
+        .order(
+          'created_at',
+          {
+            ascending: true,
+          },
+        )
+
+      if (error) {
+        console.error(
+          'Could not load custom fields:',
+          error,
+        )
+
+        /*
+         * لا نمسح الكاش أثناء refresh
+         * إذا فشل الاستعلام.
+         */
+        if (
+          enrollmentCache === null
+        ) {
+          setCustomFields([])
+        }
+
+        return
+      }
+
+      const nextCustomFields =
+        (data ?? []) as CustomField[]
+
+      setCustomFields(
+        nextCustomFields,
+      )
+
+      updateEnrollmentCache({
+        customFields:
+          nextCustomFields,
+      })
+    }
+
+  /*
+   * =========================================================
+   * Levels
+   * =========================================================
+   */
 
   const loadLevels = async () => {
     const {
@@ -454,62 +662,128 @@ export function EnrollmentView() {
         error,
       )
 
-      setLevels([])
+      /*
+       * نحافظ على الكاش إذا كان موجودًا.
+       */
+      if (
+        enrollmentCache === null
+      ) {
+        setLevels([])
+      }
 
       return
     }
 
-    setLevels(
-      (data ?? []) as Level[],
-    )
+    const nextLevels =
+      (data ?? []) as Level[]
+
+    setLevels(nextLevels)
+
+    updateEnrollmentCache({
+      levels: nextLevels,
+    })
   }
 
-  const loadCustomFieldValues = async (
-    requestIds: string[],
-  ) => {
-    if (requestIds.length === 0) {
-      setCustomFieldValues([])
-      return
-    }
+  /*
+   * =========================================================
+   * Custom field values
+   * =========================================================
+   */
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('custom_field_values')
-      .select(`
-        custom_field_id,
-        record_type,
-        record_id,
-        value
-      `)
-      .eq(
-        'record_type',
-        'registration_request',
-      )
-      .in(
-        'record_id',
-        requestIds,
-      )
+  const loadCustomFieldValues =
+    async (
+      requestIds: string[],
+    ) => {
+      if (
+        requestIds.length === 0
+      ) {
+        setCustomFieldValues([])
 
-    if (error) {
-      console.warn(
-        'Could not load custom field values:',
+        updateEnrollmentCache({
+          customFieldValues: [],
+        })
+
+        return
+      }
+
+      const {
+        data,
         error,
+      } = await supabase
+        .from(
+          'custom_field_values',
+        )
+        .select(`
+          custom_field_id,
+          record_type,
+          record_id,
+          value
+        `)
+        .eq(
+          'record_type',
+          'registration_request',
+        )
+        .in(
+          'record_id',
+          requestIds,
+        )
+
+      if (error) {
+        console.warn(
+          'Could not load custom field values:',
+          error,
+        )
+
+        /*
+         * لا نمسح البيانات القديمة
+         * أثناء تحديث خلفي فاشل.
+         */
+        if (
+          enrollmentCache === null
+        ) {
+          setCustomFieldValues([])
+        }
+
+        return
+      }
+
+      const nextValues =
+        (data ?? []) as CustomFieldValue[]
+
+      setCustomFieldValues(
+        nextValues,
       )
 
-      setCustomFieldValues([])
-
-      return
+      updateEnrollmentCache({
+        customFieldValues:
+          nextValues,
+      })
     }
 
-    setCustomFieldValues(
-      (data ?? []) as CustomFieldValue[],
-    )
-  }
+  /*
+   * =========================================================
+   * Registration requests
+   * =========================================================
+   */
 
-  const loadRequests = async () => {
-    setLoading(true)
+  const loadRequests = async (
+    options?: {
+      silent?: boolean
+    },
+  ) => {
+    const hasCache =
+      enrollmentCache !== null
+
+    /*
+     * أول دخول فقط يظهر loading.
+     *
+     * عند الرجوع للصفحة:
+     * البيانات موجودة أصلًا ولا نعرض شاشة
+     * تحميل جديدة.
+     */
+    if (!hasCache) {
+      setLoading(true)
+    }
 
     const {
       data,
@@ -558,8 +832,15 @@ export function EnrollmentView() {
         `خطأ في تحميل طلبات التسجيل: ${error.message}`,
       )
 
-      setRequests([])
-      setCustomFieldValues([])
+      /*
+       * مهم:
+       * إذا عندنا كاش، لا نمسح الطلبات القديمة.
+       */
+      if (!hasCache) {
+        setRequests([])
+        setCustomFieldValues([])
+      }
+
       setLoading(false)
 
       return
@@ -574,6 +855,11 @@ export function EnrollmentView() {
       mappedRequests,
     )
 
+    updateEnrollmentCache({
+      requests:
+        mappedRequests,
+    })
+
     await loadCustomFieldValues(
       mappedRequests.map(
         (request) =>
@@ -584,18 +870,42 @@ export function EnrollmentView() {
     setLoading(false)
   }
 
+  /*
+   * =========================================================
+   * Initial page load
+   * =========================================================
+   */
+
   useEffect(() => {
     const loadPage = async () => {
+      /*
+       * إذا عندنا كاش، البيانات ظهرت بالفعل.
+       * الآن نعمل تحديث صامت بالخلفية.
+       */
       await Promise.all([
-        loadRequests(),
-        loadImportPermissions(),
+        loadRequests({
+          silent:
+            enrollmentCache !== null,
+        }),
+        loadImportPermissions({
+          silent:
+            enrollmentCache !== null,
+        }),
         loadCustomFields(),
         loadLevels(),
       ])
     }
 
-    loadPage()
+    void loadPage()
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /*
+   * =========================================================
+   * Filters
+   * =========================================================
+   */
 
   const updateFilter = (
     key: keyof Filters,
@@ -708,6 +1018,12 @@ export function EnrollmentView() {
         ),
     ).length
 
+  /*
+   * =========================================================
+   * Review
+   * =========================================================
+   */
+
   const openReview = (
     request: RegistrationRequest,
   ) => {
@@ -724,6 +1040,12 @@ export function EnrollmentView() {
     setShowReview(false)
     setSelectedRequest(null)
   }
+
+  /*
+   * =========================================================
+   * Approve
+   * =========================================================
+   */
 
   const approveRequest =
     async (
@@ -856,6 +1178,27 @@ export function EnrollmentView() {
           return
         }
 
+        /*
+         * نحذف الطلب من الكاش مباشرة.
+         * وبعدها loadRequests يعمل مزامنة كاملة.
+         */
+        setRequests(
+          (current) => {
+            const next =
+              current.filter(
+                (item) =>
+                  item.id !==
+                  request.id,
+              )
+
+            updateEnrollmentCache({
+              requests: next,
+            })
+
+            return next
+          },
+        )
+
         setShowReview(false)
         setSelectedRequest(
           null,
@@ -886,6 +1229,12 @@ export function EnrollmentView() {
       }
     }
 
+  /*
+   * =========================================================
+   * Reject
+   * =========================================================
+   */
+
   const rejectRequest =
     async (
       request: RegistrationRequest,
@@ -910,6 +1259,7 @@ export function EnrollmentView() {
       if (!confirmed) return
 
       setSaving(true)
+
       setStatusMessage(
         'جاري رفض الطلب...',
       )
@@ -942,18 +1292,26 @@ export function EnrollmentView() {
       }
 
       setRequests(
-        (current) =>
-          current.map(
-            (item) =>
-              item.id ===
-              request.id
-                ? {
-                    ...item,
-                    status:
-                      'rejected',
-                  }
-                : item,
-          ),
+        (current) => {
+          const next =
+            current.map(
+              (item) =>
+                item.id ===
+                request.id
+                  ? {
+                      ...item,
+                      status:
+                        'rejected',
+                    }
+                  : item,
+            )
+
+          updateEnrollmentCache({
+            requests: next,
+          })
+
+          return next
+        },
       )
 
       setSelectedRequest(
@@ -974,6 +1332,12 @@ export function EnrollmentView() {
 
       setSaving(false)
     }
+
+  /*
+   * =========================================================
+   * Columns
+   * =========================================================
+   */
 
   const hasFilters =
     Object.values(
@@ -1073,6 +1437,12 @@ export function EnrollmentView() {
 
     setVisibleColumns(next)
   }
+
+  /*
+   * =========================================================
+   * Render
+   * =========================================================
+   */
 
   return (
     <div className="space-y-6">
@@ -1278,6 +1648,13 @@ export function EnrollmentView() {
           }}
           onImported={async () => {
             setShowImport(false)
+
+            /*
+             * بعد الاستيراد نعيد جلب الطلبات.
+             * بما أن الصفحة لديها كاش، لن تظهر
+             * شاشة loading؛ سيتم تحديث الجدول
+             * مباشرة بعد رجوع البيانات.
+             */
             await loadRequests()
           }}
         />
