@@ -418,7 +418,7 @@ export function StudentForm({
           editingStudent.id,
         )
         .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt',
+          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
         )
         .single()
 
@@ -559,9 +559,12 @@ export function StudentForm({
             chronicDiseases,
           status: 'نشط',
           fee_exempt: false,
+
+          // الطالب تمت إضافته يدوياً من قسم الطلاب
+          source: 'manual',
         })
         .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt',
+          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
         )
         .single()
 
@@ -691,7 +694,10 @@ export function StudentForm({
           newStudent.status ??
           'نشط',
 
-        source: '',
+        // مصدر التسجيل الحقيقي المحفوظ في قاعدة البيانات
+        source:
+          newStudent.source ??
+          'manual',
 
         createdAt:
           new Date().toISOString(),
