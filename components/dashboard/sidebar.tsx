@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   GraduationCap,
@@ -13,6 +13,9 @@ import {
   Users,
   CreditCard,
   MessageCircle,
+  LogOut,
+  ChevronUp,
+  Loader2,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -51,9 +54,12 @@ export function Sidebar({
   onClose: () => void
 }) {
   const pathname = usePathname()
+  const router = useRouter()
 
   const [sections, setSections] = useState<DashboardSection[]>([])
   const [loading, setLoading] = useState(true)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -62,10 +68,13 @@ export function Sidebar({
       try {
         setLoading(true)
 
-        const response = await fetch('/api/auth/dashboard-sections', {
-          method: 'GET',
-          cache: 'no-store',
-        })
+        const response = await fetch(
+          '/api/auth/dashboard-sections',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
 
         if (!response.ok) {
           if (!cancelled) {
@@ -80,8 +89,10 @@ export function Sidebar({
           setSections(
             Array.isArray(data.sections)
               ? data.sections.sort(
-                  (a: DashboardSection, b: DashboardSection) =>
-                    a.sort_order - b.sort_order,
+                  (
+                    a: DashboardSection,
+                    b: DashboardSection,
+                  ) => a.sort_order - b.sort_order,
                 )
               : [],
           )
@@ -104,6 +115,44 @@ export function Sidebar({
     }
   }, [])
 
+  async function handleLogout() {
+    if (loggingOut) return
+
+    setLoggingOut(true)
+
+    try {
+      const response = await fetch(
+        '/api/auth/logout',
+        {
+          method: 'POST',
+          cache: 'no-store',
+        },
+      )
+
+      if (!response.ok) {
+        console.error(
+          'Logout request failed:',
+          response.status,
+        )
+      }
+
+      /*
+       * الانتقال لصفحة تسجيل الدخول
+       * سواء نجح الطلب أو رجع بخطأ.
+       */
+      router.replace('/login')
+      router.refresh()
+    } catch (error) {
+      console.error(
+        'Logout error:',
+        error,
+      )
+
+      router.replace('/login')
+      router.refresh()
+    }
+  }
+
   return (
     <>
       {open && (
@@ -117,7 +166,9 @@ export function Sidebar({
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:static lg:translate-x-0',
-          open ? 'translate-x-0' : 'translate-x-full',
+          open
+            ? 'translate-x-0'
+            : 'translate-x-full',
         )}
       >
         <div className="flex h-16 items-center justify-between gap-2 border-b border-sidebar-border px-5">
@@ -164,7 +215,10 @@ export function Sidebar({
             </div>
           ) : (
             sections.map((section) => {
-              const active = isActive(pathname, section.href)
+              const active = isActive(
+                pathname,
+                section.href,
+              )
 
               const Icon =
                 iconMap[
@@ -176,7 +230,9 @@ export function Sidebar({
                   key={section.id}
                   href={section.href}
                   onClick={onClose}
-                  aria-current={active ? 'page' : undefined}
+                  aria-current={
+                    active ? 'page' : undefined
+                  }
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                     active
@@ -185,27 +241,71 @@ export function Sidebar({
                   )}
                 >
                   <Icon className="size-[18px] shrink-0" />
-                  <span>{section.section_name}</span>
+                  <span>
+                    {section.section_name}
+                  </span>
                 </Link>
               )
             })
           )}
         </nav>
 
-        <div className="border-t border-sidebar-border p-4">
-          <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/60 p-3">
-            <span className="flex size-9 items-center justify-center rounded-full bg-sidebar-primary/20 text-sm font-semibold text-sidebar-primary-foreground">
+        <div className="relative border-t border-sidebar-border p-4">
+          {userMenuOpen && (
+            <div className="absolute bottom-full right-4 left-4 mb-2 overflow-hidden rounded-xl border border-sidebar-border bg-sidebar shadow-lg">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loggingOut ? (
+                  <Loader2 className="size-[18px] animate-spin" />
+                ) : (
+                  <LogOut className="size-[18px]" />
+                )}
+
+                <span>
+                  {loggingOut
+                    ? 'جاري تسجيل الخروج...'
+                    : 'تسجيل الخروج'}
+                </span>
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() =>
+              setUserMenuOpen(
+                (current) => !current,
+              )
+            }
+            aria-expanded={userMenuOpen}
+            className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/60 p-3 text-right transition-colors hover:bg-sidebar-accent"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-sm font-semibold text-sidebar-primary-foreground">
               م أ
             </span>
 
-            <div className="flex flex-col leading-tight">
-              <span className="text-sm font-semibold">مدير النظام</span>
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="text-sm font-semibold">
+                مدير النظام
+              </span>
 
-              <span className="text-[11px] text-sidebar-foreground/60">
+              <span className="truncate text-[11px] text-sidebar-foreground/60">
                 admin@t3leem.sa
               </span>
-            </div>
-          </div>
+            </span>
+
+            <ChevronUp
+              className={cn(
+                'size-4 shrink-0 text-sidebar-foreground/50 transition-transform',
+                userMenuOpen &&
+                  'rotate-180',
+              )}
+            />
+          </button>
         </div>
       </aside>
     </>
