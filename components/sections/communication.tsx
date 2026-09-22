@@ -15,6 +15,9 @@ import {
   Check,
   RotateCcw,
   SlidersHorizontal,
+  Save,
+  Trash2,
+  Pencil,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -174,13 +177,23 @@ export function CommunicationView() {
   ] = useState('')
 
   const [
-    groupName,
-    setGroupName,
+    groupUrl,
+    setGroupUrl,
   ] = useState('')
 
   const [
-    groupUrl,
-    setGroupUrl,
+    savedGroupUrl,
+    setSavedGroupUrl,
+  ] = useState('')
+
+  const [
+    groupSaving,
+    setGroupSaving,
+  ] = useState(false)
+
+  const [
+    groupMessage,
+    setGroupMessage,
   ] = useState('')
 
   const [
@@ -252,6 +265,7 @@ export function CommunicationView() {
         attendanceResult,
         statusesResult,
         paymentsResult,
+        groupResult,
       ] = await Promise.all([
         supabase
           .from('students')
@@ -346,7 +360,25 @@ export function CommunicationView() {
             'academic_year_id',
             yearData.id
           ),
+
+        supabase
+          .from('communication_group')
+          .select(
+            'whatsapp_url'
+          )
+          .limit(1)
+          .maybeSingle(),
       ])
+
+      setGroupUrl(
+        groupResult.data?.whatsapp_url ??
+          ''
+      )
+
+      setSavedGroupUrl(
+        groupResult.data?.whatsapp_url ??
+          ''
+      )
 
       const currentCourseIds = new Set(
         (coursesResult.data ?? []).map(
@@ -901,6 +933,97 @@ export function CommunicationView() {
     setSelectedAttendanceStatusId('')
   }
 
+  const saveGroupUrl = async () => {
+    const url =
+      groupUrl.trim()
+
+    if (!url) {
+      setGroupMessage(
+        'أدخل رابط المجموعة أولاً.'
+      )
+      return
+    }
+
+    if (
+      !url.startsWith(
+        'https://chat.whatsapp.com/'
+      )
+    ) {
+      setGroupMessage(
+        'يرجى إدخال رابط مجموعة WhatsApp صحيح.'
+      )
+      return
+    }
+
+    setGroupSaving(true)
+    setGroupMessage('')
+
+    const {
+      error,
+    } = await supabase
+      .from('communication_group')
+      .update({
+        whatsapp_url: url,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .not(
+        'id',
+        'is',
+        null
+      )
+
+    if (error) {
+      setGroupMessage(
+        'تعذر حفظ الرابط.'
+      )
+      setGroupSaving(false)
+      return
+    }
+
+    setSavedGroupUrl(url)
+    setGroupUrl(url)
+    setGroupMessage(
+      'تم حفظ رابط المجموعة.'
+    )
+    setGroupSaving(false)
+  }
+
+  const deleteGroupUrl = async () => {
+    setGroupSaving(true)
+    setGroupMessage('')
+
+    const {
+      error,
+    } = await supabase
+      .from('communication_group')
+      .update({
+        whatsapp_url: null,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .not(
+        'id',
+        'is',
+        null
+      )
+
+    if (error) {
+      setGroupMessage(
+        'تعذر مسح الرابط.'
+      )
+      setGroupSaving(false)
+      return
+    }
+
+    setGroupUrl('')
+    setSavedGroupUrl('')
+    setGroupMessage(
+      'تم مسح رابط المجموعة.'
+    )
+    setGroupSaving(false)
+  }
+
   const filterNeedsTeacher =
     filterType ===
       'teacher' ||
@@ -933,6 +1056,15 @@ export function CommunicationView() {
     openedStudentIds.includes(
       studentId
     )
+
+  const hasSavedGroup =
+    Boolean(
+      savedGroupUrl.trim()
+    )
+
+  const groupChanged =
+    groupUrl.trim() !==
+    savedGroupUrl.trim()
 
   return (
     <div className="space-y-6">
@@ -1389,12 +1521,16 @@ export function CommunicationView() {
                             type="button"
                             size="sm"
                             variant={
-                              started
+                              isStarted(
+                                student.id
+                              )
                                 ? 'outline'
                                 : 'default'
                             }
                             className={
-                              started
+                              isStarted(
+                                student.id
+                              )
                                 ? 'border-orange-400 text-orange-600 hover:bg-orange-50'
                                 : ''
                             }
@@ -1404,7 +1540,9 @@ export function CommunicationView() {
                               )
                             }
                           >
-                            {started ? (
+                            {isStarted(
+                              student.id
+                            ) ? (
                               <>
                                 <RotateCcw className="size-4" />
                                 إعادة إرسال
@@ -1547,28 +1685,8 @@ export function CommunicationView() {
               </h2>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                أضف رابط مجموعة WhatsApp لفتحها مباشرة.
+                حفظ رابط مجموعة WhatsApp وفتحه مباشرة.
               </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                اسم المجموعة
-              </label>
-
-              <input
-                value={groupName}
-                onChange={(
-                  event
-                ) =>
-                  setGroupName(
-                    event.target
-                      .value
-                  )
-                }
-                placeholder="مثال: أولياء أمور الصف الأول"
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              />
             </div>
 
             <div className="space-y-2">
@@ -1580,23 +1698,66 @@ export function CommunicationView() {
                 value={groupUrl}
                 onChange={(
                   event
-                ) =>
+                ) => {
                   setGroupUrl(
-                    event.target
-                      .value
+                    event.target.value
                   )
-                }
+                  setGroupMessage('')
+                }}
                 placeholder="https://chat.whatsapp.com/..."
                 dir="ltr"
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
               />
             </div>
 
-            {groupUrl.trim() && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={
+                  saveGroupUrl
+                }
+                disabled={
+                  groupSaving ||
+                  !groupUrl.trim() ||
+                  !groupChanged
+                }
+              >
+                <Save className="size-4" />
+                {groupSaving
+                  ? 'جاري الحفظ...'
+                  : hasSavedGroup
+                    ? 'تحديث الرابط'
+                    : 'حفظ الرابط'}
+              </Button>
+
+              {hasSavedGroup && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={
+                    deleteGroupUrl
+                  }
+                  disabled={
+                    groupSaving
+                  }
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="size-4" />
+                  مسح الرابط
+                </Button>
+              )}
+            </div>
+
+            {groupMessage && (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                {groupMessage}
+              </div>
+            )}
+
+            {hasSavedGroup && (
               <div className="rounded-md border bg-muted/30 p-4">
                 <div className="mb-1 text-sm font-semibold">
-                  {groupName.trim() ||
-                    'مجموعة WhatsApp'}
+                  رابط المجموعة المحفوظ
                 </div>
 
                 <div
@@ -1604,28 +1765,43 @@ export function CommunicationView() {
                   dir="ltr"
                 >
                   {
-                    groupUrl
+                    savedGroupUrl
                   }
                 </div>
 
-                <Button
-                  type="button"
-                  onClick={() =>
-                    window.open(
-                      groupUrl.trim(),
-                      '_blank',
-                      'noopener,noreferrer'
-                    )
-                  }
-                >
-                  <ExternalLink className="size-4" />
-                  فتح مجموعة WhatsApp
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      window.open(
+                        savedGroupUrl,
+                        '_blank',
+                        'noopener,noreferrer'
+                      )
+                    }
+                  >
+                    <ExternalLink className="size-4" />
+                    فتح مجموعة WhatsApp
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setGroupUrl(
+                        savedGroupUrl
+                      )
+                    }
+                  >
+                    <Pencil className="size-4" />
+                    تعديل الرابط
+                  </Button>
+                </div>
               </div>
             )}
 
             <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              رابط المجموعة يفتح مجموعة WhatsApp الموجودة مسبقًا.
+              الرابط محفوظ في النظام ويمكن تعديله أو استبداله أو مسحه في أي وقت.
             </div>
           </CardContent>
         </Card>
