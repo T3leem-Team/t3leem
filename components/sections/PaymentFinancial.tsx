@@ -275,7 +275,7 @@ export function PaymentFinancial() {
 
   /*
    * ---------------------------------------------------------
-   * جلب السنة الدراسية الحالية من Supabase مباشرة
+   * جلب السنة الدراسية الحالية
    * ---------------------------------------------------------
    */
 
@@ -317,7 +317,13 @@ export function PaymentFinancial() {
     const id =
       yearId || academicYear?.id
 
-    if (!id) return []
+    if (!id) {
+      return {
+        settings: null,
+        transactions: [] as Transaction[],
+        summary: emptySummary,
+      }
+    }
 
     setError('')
 
@@ -343,7 +349,7 @@ export function PaymentFinancial() {
       result.settings || null
 
     const nextTransactions =
-      result.transactions || []
+      (result.transactions || []) as Transaction[]
 
     const nextSummary =
       result.summary || emptySummary
@@ -352,12 +358,32 @@ export function PaymentFinancial() {
     setTransactions(nextTransactions)
     setSummary(nextSummary)
 
-    return nextTransactions as Transaction[]
+    return {
+      settings:
+        nextSettings as FinancialSettings | null,
+      transactions: nextTransactions,
+      summary: nextSummary as Summary,
+    }
   }
 
   /*
    * ---------------------------------------------------------
    * تحميل طلاب السنة ودفعاتهم
+   *
+   * مهم:
+   * ظهور الطالب في جدول الإدارة المالية الحالية
+   * يعتمد على financial_transactions الحالية.
+   *
+   * payments = المدفوعات الأصلية
+   * financial_transactions = سجل الإدارة المالية الحالية
+   *
+   * لذلك بعد Reset:
+   * financial_transactions = فارغ
+   * => جدول الطلاب المالي = فارغ
+   *
+   * وبعد Initialize:
+   * يتم إنشاء معاملات جديدة بحالة pending
+   * => يظهر الطالب من جديد بحالة بانتظار التأكيد.
    * ---------------------------------------------------------
    */
 
@@ -368,31 +394,62 @@ export function PaymentFinancial() {
     const id =
       yearId || academicYear?.id
 
-    if (!id) return
+    if (!id) {
+      return []
+    }
 
-    const {
-      data: enrollments,
-      error: enrollmentsError,
-    } = await supabase
-      .from('enrollments')
-      .select('student_id')
-      .eq('academic_year_id', id)
+    const currentTransactions =
+      transactionsOverride ?? transactions
 
-    if (enrollmentsError) {
-      throw new Error(enrollmentsError.message)
+    /*
+     * لا يوجد أي سجل مالي حالي مرتبط بدفعات الطلاب.
+     * بالتالي لا يوجد شيء لعرضه في جدول الإدارة المالية.
+     */
+    const studentPaymentTransactions =
+      currentTransactions.filter(
+        (transaction) =>
+          transaction.source_type ===
+            'student_payment' &&
+          Boolean(transaction.payment_id) &&
+          Boolean(transaction.student_id)
+      )
+
+    if (
+      studentPaymentTransactions.length ===
+      0
+    ) {
+      setStudentPayments([])
+      return []
     }
 
     const studentIds = Array.from(
       new Set(
-        (enrollments || [])
-          .map((item) => item.student_id)
-          .filter(Boolean)
+        studentPaymentTransactions
+          .map(
+            (transaction) =>
+              transaction.student_id
+          )
+          .filter(Boolean) as string[]
       )
     )
 
-    if (studentIds.length === 0) {
+    const paymentIds = Array.from(
+      new Set(
+        studentPaymentTransactions
+          .map(
+            (transaction) =>
+              transaction.payment_id
+          )
+          .filter(Boolean) as string[]
+      )
+    )
+
+    if (
+      studentIds.length === 0 ||
+      paymentIds.length === 0
+    ) {
       setStudentPayments([])
-      return
+      return []
     }
 
     const [
@@ -406,6 +463,10 @@ export function PaymentFinancial() {
         )
         .in('id', studentIds),
 
+      /*
+       * نحتاج جميع دفعات الطلاب الأصلية
+       * حتى نحسب الإجمالي والمدفوع والمتبقي.
+       */
       supabase
         .from('payments')
         .select(
@@ -451,15 +512,18 @@ export function PaymentFinancial() {
       )
     }
 
+    /*
+     * ربط payment_id بالمعاملة المالية الحالية.
+     */
     const transactionsByPaymentId =
       new Map<string, Transaction>()
 
-    const currentTransactions =
-      transactionsOverride ??
-      transactions
-
     for (const transaction of currentTransactions) {
-      if (transaction.payment_id) {
+      if (
+        transaction.source_type ===
+          'student_payment' &&
+        transaction.payment_id
+      ) {
         transactionsByPaymentId.set(
           transaction.payment_id,
           transaction
@@ -468,103 +532,136 @@ export function PaymentFinancial() {
     }
 
     const rows: StudentPaymentRow[] =
-      studentRecords.map((student) => {
-        const studentPaymentRows =
-          paymentsByStudent.get(student.id) ||
-          []
+      studentRecords
+        .map((student) => {
+          const studentPaymentRows =
+            paymentsByStudent.get(student.id) ||
+            []
 
-        const paidAmount =
-          studentPaymentRows.reduce(
-            (total, payment) =>
-              total +
-              Number(payment.amount || 0),
-            0
+          /*
+           * فقط الدفعات المرتبطة بالإدارة المالية الحالية.
+           */
+          const linkedPayments =
+            studentPaymentRows.filter(
+              (payment) =>
+                transactionsByPaymentId.has(
+                  payment.id
+                )
+            )
+
+          /*
+           * إذا لم يكن للطالب أي سجل في
+           * الإدارة المالية الحالية، لا يظهر.
+           */
+          if (linkedPayments.length === 0) {
+            return null
+          }
+
+          /*
+           * إجمالي مدفوعات الطالب الأصلية للسنة.
+           * هذا لا يتأثر بإعادة تهيئة الإدارة المالية.
+           */
+          const paidAmount =
+            studentPaymentRows.reduce(
+              (total, payment) =>
+                total +
+                Number(payment.amount || 0),
+              0
+            )
+
+          const feeExempt =
+            Boolean(student.fee_exempt)
+
+          const annualFee = Number(
+            academicYear?.annual_fee || 0
           )
 
-        const feeExempt =
-          Boolean(student.fee_exempt)
+          let status:
+            | 'paid'
+            | 'partial'
+            | 'exempt'
+            | 'unpaid'
 
-        const annualFee = Number(
-          academicYear?.annual_fee || 0
+          if (feeExempt) {
+            status = 'exempt'
+          } else if (
+            annualFee > 0 &&
+            paidAmount >= annualFee
+          ) {
+            status = 'paid'
+          } else if (paidAmount > 0) {
+            status = 'partial'
+          } else {
+            status = 'unpaid'
+          }
+
+          /*
+           * آخر دفعة مرتبطة بالإدارة المالية الحالية،
+           * وليس بالضرورة آخر دفعة أصلية للطالب.
+           */
+          const latestLinkedPayment =
+            linkedPayments[0] || null
+
+          /*
+           * عدد الدفعات الحالية التي تنتظر التأكيد.
+           */
+          const pendingCount =
+            linkedPayments.filter(
+              (payment) =>
+                transactionsByPaymentId.get(
+                  payment.id
+                )?.confirmation_status ===
+                'pending'
+            ).length
+
+          const latestTransaction =
+            latestLinkedPayment
+              ? transactionsByPaymentId.get(
+                  latestLinkedPayment.id
+                ) || null
+              : null
+
+          return {
+            studentId: student.id,
+            name:
+              student.name ||
+              'بدون اسم',
+            personalId:
+              student.personal_id || null,
+            feeExempt,
+            annualFee,
+            paidAmount,
+            remaining: feeExempt
+              ? 0
+              : Math.max(
+                  annualFee - paidAmount,
+                  0
+                ),
+            status,
+            latestPaymentMethod:
+              latestLinkedPayment?.payment_method ||
+              null,
+            latestPaymentDate:
+              latestLinkedPayment?.payment_date ||
+              null,
+            latestPaymentId:
+              latestLinkedPayment?.id || null,
+            latestTransaction,
+            pendingCount,
+          }
+        })
+        .filter(
+          (
+            row
+          ): row is StudentPaymentRow =>
+            row !== null
         )
 
-        let status:
-          | 'paid'
-          | 'partial'
-          | 'exempt'
-          | 'unpaid'
-
-        if (feeExempt) {
-          status = 'exempt'
-        } else if (
-          annualFee > 0 &&
-          paidAmount >= annualFee
-        ) {
-          status = 'paid'
-        } else if (paidAmount > 0) {
-          status = 'partial'
-        } else {
-          status = 'unpaid'
-        }
-
-        const latestPayment =
-          studentPaymentRows[0] || null
-
-        const pendingCount =
-          studentPaymentRows.filter(
-            (payment) =>
-              transactionsByPaymentId.get(
-                payment.id
-              )?.confirmation_status ===
-              'pending'
-          ).length
-
-        const latestTransaction =
-          latestPayment
-            ? transactionsByPaymentId.get(
-                latestPayment.id
-              ) || null
-            : null
-
-        return {
-          studentId: student.id,
-          name:
-            student.name ||
-            'بدون اسم',
-          personalId:
-            student.personal_id || null,
-          feeExempt,
-          annualFee,
-          paidAmount,
-          remaining: feeExempt
-            ? 0
-            : Math.max(
-                annualFee - paidAmount,
-                0
-              ),
-          status,
-          latestPaymentMethod:
-            latestPayment?.payment_method ||
-            null,
-          latestPaymentDate:
-            latestPayment?.payment_date ||
-            null,
-          latestPaymentId:
-            latestPayment?.id || null,
-          latestTransaction,
-          pendingCount,
-        }
-      })
-
     /*
-     * نعرض فقط:
-     * - المدفوع جزئيًا
-     * - المدفوع بالكامل
-     * - المعفي
-     *
-     * أما غير المدفوع فلا يدخل في جدول الدفعات المالية.
+     * لا نعرض غير المدفوع.
+     * ونضيف فقط الطلاب الموجودين فعلياً
+     * في الإدارة المالية الحالية.
      */
-
     const filteredRows =
       rows.filter(
         (row) =>
@@ -580,7 +677,7 @@ export function PaymentFinancial() {
 
   /*
    * ---------------------------------------------------------
-   * حفظ الكاش
+   * تحديث الكاش
    * ---------------------------------------------------------
    */
 
@@ -607,9 +704,9 @@ export function PaymentFinancial() {
         null,
 
       settings:
-        nextSettings ??
-        current?.settings ??
-        null,
+        nextSettings !== undefined
+          ? nextSettings
+          : current?.settings ?? null,
 
       transactions:
         nextTransactions ??
@@ -648,7 +745,7 @@ export function PaymentFinancial() {
       const year =
         await loadAcademicYear()
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           year.id
         )
@@ -656,45 +753,19 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           year.id,
-          loadedTransactions
+          financial.transactions
         )
 
-      const currentSettings =
-        paymentFinancialCache?.settings ??
-        null
-
-      /*
-       * نقرأ القيم الحالية من الـ state
-       * التي تم تحميلها قبل بناء الكاش.
-       */
-      updateFinancialCache({
-        academicYear: year,
-        settings:
-          currentSettings,
-        transactions:
-          loadedTransactions,
-        studentPayments:
-          loadedStudents || [],
-        summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
-      })
-
-      /*
-       * تحديث الكاش بالقيم الفعلية
-       * الموجودة في الواجهة.
-       */
       paymentFinancialCache = {
         academicYear: year,
         settings:
-          currentSettings,
+          financial.settings,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
     } catch (err) {
       setError(
@@ -740,7 +811,7 @@ export function PaymentFinancial() {
       const year =
         await loadAcademicYear()
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           year.id
         )
@@ -748,24 +819,19 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           year.id,
-          loadedTransactions
+          financial.transactions
         )
 
-      /*
-       * تحديث الكاش بعد التحديث اليدوي.
-       */
       paymentFinancialCache = {
         academicYear: year,
         settings:
-          paymentFinancialCache?.settings ??
-          null,
+          financial.settings,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
     } catch (err) {
       setError(
@@ -846,7 +912,7 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           academicYear.id
         )
@@ -854,22 +920,21 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           academicYear.id,
-          loadedTransactions
+          financial.transactions
         )
 
       paymentFinancialCache = {
         academicYear,
         settings:
+          financial.settings ??
           result.settings ??
-          paymentFinancialCache?.settings ??
           null,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
     } catch (err) {
       setError(
@@ -933,6 +998,11 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
+      /*
+       * مهم جداً:
+       * نحدث الكاش أيضاً حتى لو انتقل المستخدم
+       * من الصفحة ثم رجع لها، لا ترجع بيانات الإدارة القديمة.
+       */
       paymentFinancialCache = {
         academicYear,
         settings: null,
@@ -1042,7 +1112,7 @@ export function PaymentFinancial() {
       setTransactionType('in')
       setAdjustmentDirection('plus')
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           academicYear.id
         )
@@ -1050,21 +1120,19 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           academicYear.id,
-          loadedTransactions
+          financial.transactions
         )
 
       paymentFinancialCache = {
         academicYear,
         settings:
-          paymentFinancialCache?.settings ??
-          null,
+          financial.settings,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
     } catch (err) {
       setError(
@@ -1126,7 +1194,7 @@ export function PaymentFinancial() {
         )
       }
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           academicYear.id
         )
@@ -1134,27 +1202,21 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           academicYear.id,
-          loadedTransactions
+          financial.transactions
         )
 
       paymentFinancialCache = {
         academicYear,
         settings:
-          paymentFinancialCache?.settings ??
-          null,
+          financial.settings,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
 
-      /*
-       * إذا كانت نافذة التفاصيل مفتوحة،
-       * نغلقها حتى لا تبقى البيانات القديمة.
-       */
       if (modal === 'details') {
         setModal('none')
         setSelectedTransaction(null)
@@ -1218,7 +1280,7 @@ export function PaymentFinancial() {
       setModal('none')
       setSelectedDeleteId(null)
 
-      const loadedTransactions =
+      const financial =
         await loadFinancialData(
           academicYear.id
         )
@@ -1226,21 +1288,19 @@ export function PaymentFinancial() {
       const loadedStudents =
         await loadStudentPayments(
           academicYear.id,
-          loadedTransactions
+          financial.transactions
         )
 
       paymentFinancialCache = {
         academicYear,
         settings:
-          paymentFinancialCache?.settings ??
-          null,
+          financial.settings,
         transactions:
-          loadedTransactions,
+          financial.transactions,
         studentPayments:
-          loadedStudents || [],
+          loadedStudents,
         summary:
-          paymentFinancialCache?.summary ??
-          emptySummary,
+          financial.summary,
       }
     } catch (err) {
       setError(
@@ -1705,10 +1765,18 @@ export function PaymentFinancial() {
             />
           </div>
 
-          {/* دفعات الطلاب */}
+          {/* =================================================
+              جدول واحد فقط
+              ================================================= */}
 
           {settings.financial_mode ===
-            'student_payments' && (
+          'student_payments' ? (
+            /*
+             * =================================================
+             * جدول الطلاب والدفع
+             * =================================================
+             */
+
             <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
               <div className="border-b px-5 py-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1718,9 +1786,8 @@ export function PaymentFinancial() {
                     </h3>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      الطلاب المدفوع لهم جزئيًا
-                      أو بالكامل والمعفيون من
-                      الرسوم.
+                      هذه القائمة تمثل الإدارة
+                      المالية الحالية فقط.
                     </p>
                   </div>
 
@@ -1734,8 +1801,8 @@ export function PaymentFinancial() {
               {studentPayments.length ===
               0 ? (
                 <div className="px-5 py-12 text-center text-sm text-gray-500">
-                  لا توجد دفعات أو إعفاءات
-                  مسجلة لهذه السنة.
+                  لا توجد دفعات مرتبطة
+                  بالإدارة المالية الحالية.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1912,32 +1979,228 @@ export function PaymentFinancial() {
                 </div>
               )}
             </div>
+          ) : (
+            /*
+             * =================================================
+             * جدول العمليات المالية
+             *
+             * يظهر فقط في الوضع اليدوي.
+             * =================================================
+             */
+
+            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+              <div className="border-b px-5 py-4">
+                <h3 className="font-bold">
+                  العمليات المالية
+                </h3>
+              </div>
+
+              {transactions.length === 0 ? (
+                <div className="px-5 py-16 text-center text-sm text-gray-500">
+                  لا توجد عمليات مالية حتى الآن.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1100px] text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50 text-right">
+                        <th className="px-4 py-3">
+                          التاريخ
+                        </th>
+
+                        <th className="px-4 py-3">
+                          النوع
+                        </th>
+
+                        <th className="px-4 py-3">
+                          المبلغ
+                        </th>
+
+                        <th className="px-4 py-3">
+                          المصدر
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الطالب
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الحالة
+                        </th>
+
+                        <th className="px-4 py-3">
+                          الرصيد
+                        </th>
+
+                        <th className="px-4 py-3">
+                          التفاصيل
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {transactions.map(
+                        (transaction) => {
+                          const student =
+                            studentPayments.find(
+                              (item) =>
+                                item.studentId ===
+                                transaction.student_id
+                            )
+
+                          return (
+                            <tr
+                              key={
+                                transaction.id
+                              }
+                              className="border-b last:border-b-0 hover:bg-gray-50"
+                            >
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                {formatDate(
+                                  transaction.created_at
+                                )}
+                              </td>
+
+                              <td
+                                className={`px-4 py-4 font-semibold ${getTypeClass(
+                                  transaction
+                                )}`}
+                              >
+                                {getTransactionLabel(
+                                  transaction
+                                )}
+                              </td>
+
+                              <td className="px-4 py-4 font-semibold">
+                                {money(
+                                  transaction.amount
+                                )}
+                              </td>
+
+                              <td className="px-4 py-4">
+                                {transaction.source ||
+                                  (transaction.source_type ===
+                                  'student_payment'
+                                    ? 'دفعة طالب'
+                                    : transaction.source_type ===
+                                      'opening'
+                                    ? 'الرصيد الافتتاحي'
+                                    : '-')}
+                              </td>
+
+                              <td className="px-4 py-4">
+                                {student?.name ||
+                                  '-'}
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <StatusBadge
+                                  status={
+                                    transaction.confirmation_status
+                                  }
+                                />
+                              </td>
+
+                              <td className="px-4 py-4 font-semibold">
+                                {transaction.balance_after !==
+                                undefined
+                                  ? money(
+                                      transaction.balance_after
+                                    )
+                                  : '-'}
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedTransaction(
+                                        transaction
+                                      )
+                                      setModal(
+                                        'details'
+                                      )
+                                    }}
+                                    className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
+                                  >
+                                    تفاصيل
+                                  </button>
+
+                                  {transaction.confirmation_status ===
+                                    'pending' && (
+                                    <button
+                                      type="button"
+                                      disabled={
+                                        saving
+                                      }
+                                      onClick={() =>
+                                        confirmTransaction(
+                                          transaction
+                                        )
+                                      }
+                                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50"
+                                    >
+                                      تأكيد
+                                    </button>
+                                  )}
+
+                                  {transaction.source_type !==
+                                    'opening' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDeleteId(
+                                          transaction.id
+                                        )
+                                        setModal(
+                                          'delete'
+                                        )
+                                      }}
+                                      className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        }
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
 
           {/* العمليات المعلقة */}
 
-          {pendingTransactions.length > 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h3 className="font-bold text-amber-900">
-                    دفعات بانتظار تأكيد الاستلام
-                  </h3>
+          {settings.financial_mode ===
+            'student_payments' &&
+            pendingTransactions.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="font-bold text-amber-900">
+                      دفعات بانتظار تأكيد الاستلام
+                    </h3>
 
-                  <p className="mt-1 text-sm text-amber-800">
-                    هذه الدفعات لا تدخل في
-                    الرصيد المالي حتى يتم
-                    تأكيد استلامها.
-                  </p>
-                </div>
+                    <p className="mt-1 text-sm text-amber-800">
+                      هذه الدفعات لا تدخل في
+                      الرصيد المالي حتى يتم
+                      تأكيد استلامها.
+                    </p>
+                  </div>
 
-                <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
-                  {pendingTransactions.length}{' '}
-                  معلقة
+                  <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900">
+                    {pendingTransactions.length}{' '}
+                    معلقة
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* شريط الإجراءات */}
 
@@ -1979,194 +2242,6 @@ export function PaymentFinancial() {
               <Plus className="h-4 w-4" />
               إضافة تسوية
             </button>
-          </div>
-
-          {/* جدول العمليات */}
-
-          <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-            <div className="border-b px-5 py-4">
-              <h3 className="font-bold">
-                العمليات المالية
-              </h3>
-            </div>
-
-            {transactions.length === 0 ? (
-              <div className="px-5 py-16 text-center text-sm text-gray-500">
-                لا توجد عمليات مالية حتى الآن.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] text-sm">
-                  <thead>
-                    <tr className="border-b bg-gray-50 text-right">
-                      <th className="px-4 py-3">
-                        التاريخ
-                      </th>
-
-                      <th className="px-4 py-3">
-                        النوع
-                      </th>
-
-                      <th className="px-4 py-3">
-                        المبلغ
-                      </th>
-
-                      <th className="px-4 py-3">
-                        المصدر
-                      </th>
-
-                      <th className="px-4 py-3">
-                        الطالب
-                      </th>
-
-                      <th className="px-4 py-3">
-                        الحالة
-                      </th>
-
-                      <th className="px-4 py-3">
-                        الرصيد
-                      </th>
-
-                      <th className="px-4 py-3">
-                        التفاصيل
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {transactions.map(
-                      (transaction) => {
-                        const student =
-                          studentPayments.find(
-                            (item) =>
-                              item.studentId ===
-                              transaction.student_id
-                          )
-
-                        return (
-                          <tr
-                            key={
-                              transaction.id
-                            }
-                            className="border-b last:border-b-0 hover:bg-gray-50"
-                          >
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              {formatDate(
-                                transaction.created_at
-                              )}
-                            </td>
-
-                            <td
-                              className={`px-4 py-4 font-semibold ${getTypeClass(
-                                transaction
-                              )}`}
-                            >
-                              {getTransactionLabel(
-                                transaction
-                              )}
-                            </td>
-
-                            <td className="px-4 py-4 font-semibold">
-                              {money(
-                                transaction.amount
-                              )}
-                            </td>
-
-                            <td className="px-4 py-4">
-                              {transaction.source ||
-                                (transaction.source_type ===
-                                'student_payment'
-                                  ? 'دفعة طالب'
-                                  : transaction.source_type ===
-                                    'opening'
-                                  ? 'الرصيد الافتتاحي'
-                                  : '-')}
-                            </td>
-
-                            <td className="px-4 py-4">
-                              {student?.name ||
-                                '-'}
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <StatusBadge
-                                status={
-                                  transaction.confirmation_status
-                                }
-                              />
-                            </td>
-
-                            <td className="px-4 py-4 font-semibold">
-                              {transaction.balance_after !==
-                              undefined
-                                ? money(
-                                    transaction.balance_after
-                                  )
-                                : '-'}
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTransaction(
-                                      transaction
-                                    )
-                                    setModal(
-                                      'details'
-                                    )
-                                  }}
-                                  className="rounded-lg border px-3 py-2 text-xs hover:bg-gray-50"
-                                >
-                                  تفاصيل
-                                </button>
-
-                                {transaction.confirmation_status ===
-                                  'pending' && (
-                                  <button
-                                    type="button"
-                                    disabled={
-                                      saving
-                                    }
-                                    onClick={() =>
-                                      confirmTransaction(
-                                        transaction
-                                      )
-                                    }
-                                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white hover:opacity-90 disabled:opacity-50"
-                                  >
-                                    تأكيد
-                                  </button>
-                                )}
-
-                                {transaction.source_type !==
-                                  'opening' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedDeleteId(
-                                        transaction.id
-                                      )
-                                      setModal(
-                                        'delete'
-                                      )
-                                    }}
-                                    className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      }
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         </>
       )}
