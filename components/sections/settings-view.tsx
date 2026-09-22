@@ -34,20 +34,44 @@ type ManagementOption = {
   badge?: string
 }
 
-const quickLinks = [
+type QuickLink = {
+  title: string
+  description: string
+  href: string
+  icon: typeof Settings2
+  external?: boolean
+}
+
+const quickLinks: QuickLink[] = [
   {
     title: 'التسجيل الخارجي',
     description:
-      'فتح صفحة التسجيل الخارجي التي يستخدمها أولياء الأمور والطلاب للتسجيل.',
-    href: '/register',
-    icon: ExternalLink,
+      'فتح ومراجعة إعدادات التسجيل الخارجي.',
+    href: '/settings/registration',
+    icon: ClipboardCheck,
   },
   {
-    title: 'متابعة الطالب',
+    title: 'حالة الطلاب',
     description:
-      'فتح صفحة متابعة الطالب باستخدام الرقم الشخصي (CPR) لعرض بياناته وحضوره.',
-    href: '/student-status',
+      'إدارة حالات الطلاب والبيانات المرتبطة بهم.',
+    href: '/students',
     icon: GraduationCap,
+  },
+  {
+    title: 'رابط التسجيل الخارجي',
+    description:
+      'فتح صفحة التسجيل الخارجي العامة التي يستخدمها أولياء الأمور والطلاب.',
+    href: 'https://t3leem-school-management-dashboard-3h4x-azdb231oe-t3leem.vercel.app/register',
+    icon: ExternalLink,
+    external: true,
+  },
+  {
+    title: 'رابط متابعة الطالب',
+    description:
+      'فتح صفحة متابعة الطالب العامة باستخدام الرقم الشخصي (CPR).',
+    href: 'https://t3leem-school-management-dashboard-3h4x-azdb231oe-t3leem.vercel.app/student-status',
+    icon: ExternalLink,
+    external: true,
   },
 ]
 
@@ -143,13 +167,43 @@ export function SettingsView() {
           </h2>
 
           <p className="text-sm text-muted-foreground">
-            الوصول السريع إلى أكثر الإعدادات استخدامًا.
+            الوصول السريع إلى أكثر الإعدادات والروابط استخدامًا.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           {quickLinks.map((item) => {
             const Icon = item.icon
+
+            if (item.external) {
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <Card className="cursor-pointer transition hover:shadow-md">
+                    <CardContent className="flex items-center gap-4 p-5">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-6 w-6" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3 className="font-semibold">
+                          {item.title}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {item.description}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </a>
+              )
+            }
 
             return (
               <Card
