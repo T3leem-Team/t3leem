@@ -535,6 +535,28 @@ export function EnrollmentImport({
     setErrors([])
 
     try {
+      const {
+        data: academicYear,
+        error: academicYearError,
+      } = await supabase
+        .from('academic_years')
+        .select('id, name')
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (academicYearError) {
+        throw new Error(
+          `تعذر تحميل السنة الدراسية الحالية: ${academicYearError.message}`,
+        )
+      }
+
+      if (!academicYear) {
+        throw new Error(
+          'لا توجد سنة دراسية حالية ونشطة. افتح إعدادات السنوات الدراسية وحدد السنة الحالية أولاً.',
+        )
+      }
+
       const levelMap =
         new Map(
           levels.map((level) => [
@@ -633,6 +655,9 @@ export function EnrollmentImport({
                 : 'not_required',
 
             source: 'import',
+
+            academic_year_id:
+              academicYear.id,
           }
         })
 
