@@ -51,10 +51,7 @@ export type AttendanceStatusName =
   | 'متأخر'
   | 'مستأذن'
 
-export type AttendanceNotes = Record<
-  string,
-  string
->
+export type AttendanceNotes = Record<string, string>
 
 const attendanceStatusNames: AttendanceStatusName[] = [
   'حاضر',
@@ -103,8 +100,7 @@ function getStatusIdByName(
 ) {
   const status = statuses.find(
     (item) =>
-      normalizeStatusName(item.name) ===
-      statusName,
+      normalizeStatusName(item.name) === statusName,
   )
 
   return status?.id ?? null
@@ -184,20 +180,11 @@ function getAttendancePercentage(
   let counted = 0
 
   studentRecords.forEach((record) => {
-    /*
-     * مهم:
-     * ترتيب الوسائط الصحيح هو:
-     *
-     * getStatusName(statuses, statusId)
-     */
     const status = getStatusName(
       attendanceStatuses,
       record.statusId,
     )
 
-    /*
-     * حاضر + متأخر + مستأذن = حضور
-     */
     if (
       status === 'حاضر' ||
       status === 'متأخر' ||
@@ -207,16 +194,9 @@ function getAttendancePercentage(
       counted += 1
     }
 
-    /*
-     * غائب يدخل في الحساب ويخفض النسبة
-     */
     if (status === 'غائب') {
       counted += 1
     }
-
-    /*
-     * لم يسجل لا يدخل في الحساب
-     */
   })
 
   if (counted === 0) {
@@ -259,11 +239,6 @@ function formatDateForDisplay(
   return `${day}/${month}/${year}`
 }
 
-/**
- * الحصول على تاريخ اليوم بصيغة YYYY-MM-DD
- * بدون استخدام toISOString حتى لا تحصل مشكلة
- * اختلاف المنطقة الزمنية.
- */
 function getTodayString() {
   const today = new Date()
 
@@ -278,17 +253,6 @@ function getTodayString() {
   ].join('-')
 }
 
-/**
- * يرجع رقم يوم الأسبوع:
- *
- * 0 = الأحد
- * 1 = الاثنين
- * 2 = الثلاثاء
- * 3 = الأربعاء
- * 4 = الخميس
- * 5 = الجمعة
- * 6 = السبت
- */
 function getDayOfWeek(
   date: string,
 ) {
@@ -316,10 +280,6 @@ function getDayOfWeek(
   ).getUTCDay()
 }
 
-/**
- * تحويل قيمة اليوم الموجودة في courses.days
- * إلى رقم يوم الأسبوع.
- */
 function normalizeCourseDay(
   value: string,
 ): number | null {
@@ -388,9 +348,6 @@ function normalizeCourseDay(
   )
 }
 
-/**
- * هل التاريخ المحدد هو أحد أيام الدراسة للدورة؟
- */
 function isCourseStudyDay(
   date: string,
   courseDays: string[],
@@ -488,9 +445,6 @@ export function AttendanceView({
     setSearchTerm,
   ] = useState('')
 
-  /*
-   * التاريخ الافتراضي هو تاريخ اليوم.
-   */
   const todayString =
     getTodayString()
 
@@ -498,9 +452,6 @@ export function AttendanceView({
     selectedAttendanceDate ||
     todayString
 
-  /*
-   * تحديد حالة التاريخ.
-   */
   const dateState = useMemo(() => {
     if (!currentCourse) {
       return 'no-course' as const
@@ -645,9 +596,6 @@ export function AttendanceView({
       },
     )
 
-  /**
-   * حفظ حالة الحضور.
-   */
   const saveAttendance = async (
     student: Student,
     date: string,
@@ -921,25 +869,12 @@ export function AttendanceView({
     }
   }
 
-  /**
-   * حفظ ملاحظة المعلم.
-   *
-   * إذا كان هناك سجل حضور:
-   * يتم حفظها مباشرة في Supabase.
-   *
-   * إذا لم يوجد سجل حضور:
-   * تبقى محليًا حتى يختار المعلم حالة
-   * الحضور، ثم تحفظ مع سجل الحضور.
-   */
   const saveNote = async (
     student: Student,
     date: string,
     value: string,
   ) => {
     const key = `${date}:${student.id}`
-
-    const cleanValue =
-      value.trim()
 
     setAttendanceNotes(
       (current) => ({
@@ -954,10 +889,6 @@ export function AttendanceView({
         date,
       )
 
-    /*
-     * إذا لم يوجد سجل حضور،
-     * نخزن الملاحظة محليًا فقط.
-     */
     if (!existing) {
       return
     }
@@ -985,7 +916,7 @@ export function AttendanceView({
         .from('attendance')
         .update({
           note:
-            cleanValue || null,
+            value.trim() || null,
         })
         .eq('id', existing.id)
         .select(
@@ -1334,22 +1265,20 @@ export function AttendanceView({
 
                             <textarea
                               value={note}
-                              onChange={(
-                                event,
-                              ) =>
+                              onChange={(event) => {
                                 setAttendanceNotes(
                                   (current) => ({
                                     ...current,
                                     [key]:
-                                      event
-                                        .target
+                                      event.currentTarget
                                         .value,
                                   }),
                                 )
-                              }
+                              }}
                               placeholder="اكتب ملاحظة عن الطالب..."
                               rows={3}
                               className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                              dir="rtl"
                             />
 
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -1432,33 +1361,28 @@ export function AttendanceView({
 
                           <textarea
                             value={note}
-                            onChange={(
-                              event,
-                            ) =>
+                            onChange={(event) => {
                               setAttendanceNotes(
                                 (current) => ({
                                   ...current,
                                   [key]:
-                                    event
-                                      .target
+                                    event.currentTarget
                                       .value,
                                 }),
                               )
-                            }
-                            onBlur={(event) =>
-                              saveNote(
+                            }}
+                            onBlur={(event) => {
+                              void saveNote(
                                 student,
                                 activeDate,
-                                event.target
+                                event.currentTarget
                                   .value,
                               )
-                            }
+                            }}
                             placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
                             rows={3}
-                            disabled={
-                              savingNote
-                            }
-                            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-wait disabled:opacity-60"
+                            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            dir="rtl"
                           />
 
                           <div className="mt-1 flex items-center justify-between">
