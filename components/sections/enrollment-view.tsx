@@ -282,6 +282,16 @@ export function EnrollmentView() {
       null,
     )
 
+  const [
+    selectedRequestIds,
+    setSelectedRequestIds,
+  ] = useState<string[]>([])
+
+  const [
+    bulkApproving,
+    setBulkApproving,
+  ] = useState(false)
+
   const [showReview, setShowReview] =
     useState(false)
 
@@ -414,7 +424,7 @@ export function EnrollmentView() {
       )
     } catch (error) {
       console.warn(
-        'Could not save column settings:',
+        'Could not save saved column settings:',
         error,
       )
     }
@@ -727,11 +737,6 @@ export function EnrollmentView() {
       setLoading(true)
     }
 
-    /*
-     * نجيب السنة الأكاديمية الحالية أولًا.
-     * طلبات التسجيل في هذه الصفحة يجب أن تكون
-     * مرتبطة بهذه السنة فقط.
-     */
     const {
       data: academicYear,
       error: academicYearError,
@@ -777,9 +782,6 @@ export function EnrollmentView() {
       return
     }
 
-    /*
-     * نعرض فقط الطلبات المرتبطة بالسنة الحالية.
-     */
     const {
       data,
       error,
@@ -1012,6 +1014,62 @@ export function EnrollmentView() {
 
   /*
    * =========================================================
+   * Selection
+   * =========================================================
+   */
+
+  const selectableRequests =
+    filteredRequests.filter(
+      (request) =>
+        request.status ===
+          'pending' ||
+        request.status ===
+          'under_review',
+    )
+
+  const toggleRequestSelection = (
+    requestId: string,
+  ) => {
+    setSelectedRequestIds(
+      (current) =>
+        current.includes(requestId)
+          ? current.filter(
+              (id) =>
+                id !== requestId,
+            )
+          : [
+              ...current,
+              requestId,
+            ],
+    )
+  }
+
+  const selectAllRequests = (
+    selectedRequests: RegistrationRequest[],
+  ) => {
+    const ids =
+      selectedRequests
+        .filter(
+          (request) =>
+            request.status ===
+              'pending' ||
+            request.status ===
+              'under_review',
+        )
+        .map(
+          (request) =>
+            request.id,
+        )
+
+    setSelectedRequestIds(ids)
+  }
+
+  const clearSelectedRequests = () => {
+    setSelectedRequestIds([])
+  }
+
+  /*
+   * =========================================================
    * Review
    * =========================================================
    */
@@ -1035,46 +1093,40 @@ export function EnrollmentView() {
 
   /*
    * =========================================================
-   * Approve
+   * Approval helper
    * =========================================================
    */
 
-  const approveRequest =
+  const approveRequestInternal =
     async (
       request: RegistrationRequest,
-    ) => {
+    ): Promise<{
+      success: boolean
+      alreadyProcessed: boolean
+      errorMessage?: string
+    }> => {
       if (
         request.status !==
           'pending' &&
         request.status !==
           'under_review'
       ) {
-        return
+        return {
+          success: false,
+          alreadyProcessed: false,
+          errorMessage:
+            'الطلب لم يعد قابلاً للقبول.',
+        }
       }
 
       if (!request.levelId) {
-        setStatusMessage(
-          'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
-        )
-
-        return
+        return {
+          success: false,
+          alreadyProcessed: false,
+          errorMessage:
+            'المستوى الدراسي غير محدد.',
+        }
       }
-
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من قبول طلب ${
-            request.requestNumber ||
-            request.name
-          }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
-        )
-
-      if (!confirmed) return
-
-      setSaving(true)
-
-      setStatusMessage(
-        'جاري قبول الطلب وترحيله إلى الطلاب...',
-      )
 
       try {
         const {
@@ -1094,11 +1146,12 @@ export function EnrollmentView() {
             error,
           )
 
-          setStatusMessage(
-            `تعذر ترحيل الطلب: ${error.message}`,
-          )
-
-          return
+          return {
+            success: false,
+            alreadyProcessed: false,
+            errorMessage:
+              error.message,
+          }
         }
 
         const studentId =
@@ -1153,11 +1206,91 @@ export function EnrollmentView() {
             deleteError,
           )
 
-          setStatusMessage(
-            'تم إنشاء الطالب بنجاح، لكن تعذر حذف طلب التسجيل من قائمة الطلبات. سيتم إعادة المحاولة لاحقاً.',
+          return {
+            success: false,
+            alreadyProcessed,
+            errorMessage:
+              'تم إنشاء الطالب، لكن تعذر حذف طلب التسجيل.',
+          }
+        }
+
+        return {
+          success: true,
+          alreadyProcessed,
+        }
+      } catch (error) {
+        console.error(
+          'Unexpected approval error:',
+          error,
+        )
+
+        return {
+          success: false,
+          alreadyProcessed: false,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : 'خطأ غير معروف',
+        }
+      }
+    }
+
+  /*
+   * =========================================================
+   * Approve single request
+   * =========================================================
+   */
+
+  const approveRequest =
+    async (
+      request: RegistrationRequest,
+    ) => {
+      if (
+        request.status !==
+          'pending' &&
+        request.status !==
+          'under_review'
+      ) {
+        return
+      }
+
+      if (!request.levelId) {
+        setStatusMessage(
+          'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من قبول طلب ${
+            request.requestNumber ||
+            request.name
+          }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
+        )
+
+      if (!confirmed) return
+
+      setSaving(true)
+
+      setStatusMessage(
+        'جاري قبول الطلب وترحيله إلى الطلاب...',
+      )
+
+      try {
+        const result =
+          await approveRequestInternal(
+            request,
           )
 
-          await loadRequests()
+        if (!result.success) {
+          setStatusMessage(
+            `تعذر ترحيل الطلب: ${
+              result.errorMessage ??
+              'خطأ غير معروف'
+            }`,
+          )
 
           return
         }
@@ -1179,13 +1312,21 @@ export function EnrollmentView() {
           },
         )
 
+        setSelectedRequestIds(
+          (current) =>
+            current.filter(
+              (id) =>
+                id !== request.id,
+            ),
+        )
+
         setShowReview(false)
         setSelectedRequest(
           null,
         )
 
         setStatusMessage(
-          alreadyProcessed
+          result.alreadyProcessed
             ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
             : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
         )
@@ -1205,6 +1346,293 @@ export function EnrollmentView() {
           }`,
         )
       } finally {
+        setSaving(false)
+      }
+    }
+
+  /*
+   * =========================================================
+   * Bulk approval
+   * =========================================================
+   */
+
+  const approveSelectedRequests =
+    async () => {
+      const selectedRequests =
+        requests.filter(
+          (request) =>
+            selectedRequestIds.includes(
+              request.id,
+            ) &&
+            (request.status ===
+              'pending' ||
+              request.status ===
+                'under_review'),
+        )
+
+      if (
+        selectedRequests.length ===
+        0
+      ) {
+        setStatusMessage(
+          'لم يتم تحديد أي طلب قابل للقبول.',
+        )
+
+        return
+      }
+
+      const requestsWithoutLevel =
+        selectedRequests.filter(
+          (request) =>
+            !request.levelId,
+        )
+
+      if (
+        requestsWithoutLevel.length >
+        0
+      ) {
+        setStatusMessage(
+          `لا يمكن تنفيذ القبول الجماعي. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من قبول ${selectedRequests.length} طلب؟\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      setBulkApproving(true)
+      setSaving(true)
+
+      setStatusMessage(
+        `جاري قبول ${selectedRequests.length} طلب...`,
+      )
+
+      let successCount = 0
+      let failedCount = 0
+      let alreadyProcessedCount =
+        0
+
+      const failedRequests: string[] =
+        []
+
+      try {
+        for (
+          const request of selectedRequests
+        ) {
+          const result =
+            await approveRequestInternal(
+              request,
+            )
+
+          if (result.success) {
+            successCount += 1
+
+            if (
+              result.alreadyProcessed
+            ) {
+              alreadyProcessedCount +=
+                1
+            }
+          } else {
+            failedCount += 1
+
+            failedRequests.push(
+              request.requestNumber ||
+                request.name ||
+                request.id,
+            )
+          }
+        }
+
+        setSelectedRequestIds([])
+
+        await loadRequests()
+
+        if (failedCount === 0) {
+          if (
+            alreadyProcessedCount >
+            0
+          ) {
+            setStatusMessage(
+              `تم قبول ${successCount} طلب بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
+            )
+          } else {
+            setStatusMessage(
+              `تم قبول وترحيل ${successCount} طلب بنجاح إلى قسم الطلاب ✅`,
+            )
+          }
+        } else {
+          setStatusMessage(
+            `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
+          )
+
+          console.warn(
+            'Bulk approval failed requests:',
+            failedRequests,
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Unexpected bulk approval error:',
+          error,
+        )
+
+        await loadRequests()
+
+        setStatusMessage(
+          `حدث خطأ أثناء القبول الجماعي. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
+        )
+      } finally {
+        setBulkApproving(false)
+        setSaving(false)
+      }
+    }
+
+  /*
+   * =========================================================
+   * Approve all
+   * =========================================================
+   */
+
+  const approveAllRequests =
+    async () => {
+      const allPendingRequests =
+        requests.filter(
+          (request) =>
+            request.status ===
+              'pending' ||
+            request.status ===
+              'under_review',
+        )
+
+      if (
+        allPendingRequests.length ===
+        0
+      ) {
+        setStatusMessage(
+          'لا توجد طلبات قابلة للقبول.',
+        )
+
+        return
+      }
+
+      const requestsWithoutLevel =
+        allPendingRequests.filter(
+          (request) =>
+            !request.levelId,
+        )
+
+      if (
+        requestsWithoutLevel.length >
+        0
+      ) {
+        setStatusMessage(
+          `لا يمكن تنفيذ قبول الكل. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
+        )
+
+        return
+      }
+
+      const confirmed =
+        window.confirm(
+          `هل أنت متأكد من قبول جميع الطلبات القابلة للقبول؟\n\nعدد الطلبات: ${allPendingRequests.length}\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      setBulkApproving(true)
+      setSaving(true)
+
+      setStatusMessage(
+        `جاري قبول جميع الطلبات (${allPendingRequests.length})...`,
+      )
+
+      let successCount = 0
+      let failedCount = 0
+      let alreadyProcessedCount =
+        0
+
+      const failedRequests: string[] =
+        []
+
+      try {
+        for (
+          const request of allPendingRequests
+        ) {
+          const result =
+            await approveRequestInternal(
+              request,
+            )
+
+          if (result.success) {
+            successCount += 1
+
+            if (
+              result.alreadyProcessed
+            ) {
+              alreadyProcessedCount +=
+                1
+            }
+          } else {
+            failedCount += 1
+
+            failedRequests.push(
+              request.requestNumber ||
+                request.name ||
+                request.id,
+            )
+          }
+        }
+
+        setSelectedRequestIds([])
+
+        await loadRequests()
+
+        if (failedCount === 0) {
+          if (
+            alreadyProcessedCount >
+            0
+          ) {
+            setStatusMessage(
+              `تم قبول جميع الطلبات (${successCount}) بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
+            )
+          } else {
+            setStatusMessage(
+              `تم قبول وترحيل جميع الطلبات (${successCount}) بنجاح إلى قسم الطلاب ✅`,
+            )
+          }
+        } else {
+          setStatusMessage(
+            `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
+          )
+
+          console.warn(
+            'Approve all failed requests:',
+            failedRequests,
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Unexpected approve all error:',
+          error,
+        )
+
+        await loadRequests()
+
+        setStatusMessage(
+          `حدث خطأ أثناء قبول الكل. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
+        )
+      } finally {
+        setBulkApproving(false)
         setSaving(false)
       }
     }
@@ -1292,6 +1720,14 @@ export function EnrollmentView() {
 
           return next
         },
+      )
+
+      setSelectedRequestIds(
+        (current) =>
+          current.filter(
+            (id) =>
+              id !== request.id,
+          ),
       )
 
       setSelectedRequest(
@@ -1525,14 +1961,16 @@ export function EnrollmentView() {
             }}
             disabled={
               loading ||
-              permissionsLoading
+              permissionsLoading ||
+              bulkApproving
             }
             className="gap-2"
           >
             <RefreshCw
               className={`size-4 ${
                 loading ||
-                permissionsLoading
+                permissionsLoading ||
+                bulkApproving
                   ? 'animate-spin'
                   : ''
               }`}
@@ -1592,6 +2030,27 @@ export function EnrollmentView() {
             }
             hasSpecialInformation={
               hasSpecialInformation
+            }
+            selectedRequestIds={
+              selectedRequestIds
+            }
+            toggleRequestSelection={
+              toggleRequestSelection
+            }
+            selectAllRequests={
+              selectAllRequests
+            }
+            clearSelectedRequests={
+              clearSelectedRequests
+            }
+            approveSelectedRequests={
+              approveSelectedRequests
+            }
+            approveAllRequests={
+              approveAllRequests
+            }
+            bulkApproving={
+              bulkApproving
             }
           />
 
@@ -2192,7 +2651,8 @@ export function EnrollmentView() {
                           )
                         }
                         disabled={
-                          saving
+                          saving ||
+                          bulkApproving
                         }
                         className="gap-2"
                       >
@@ -2211,7 +2671,8 @@ export function EnrollmentView() {
                           )
                         }
                         disabled={
-                          saving
+                          saving ||
+                          bulkApproving
                         }
                         className="gap-2"
                       >
