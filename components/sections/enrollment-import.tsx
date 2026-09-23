@@ -507,6 +507,8 @@ export function EnrollmentImport({
   }
 
   const importRows = async () => {
+    if (saving) return
+
     if (rows.length === 0) {
       setMessage(
         'لا توجد سجلات جاهزة للاستيراد.',
@@ -541,13 +543,32 @@ export function EnrollmentImport({
           ]),
         )
 
+      const missingLevels = Array.from(
+        new Set(
+          rows
+            .filter(
+              (row) =>
+                !levelMap.has(row.level),
+            )
+            .map((row) => row.level),
+        ),
+      )
+
+      if (missingLevels.length > 0) {
+        throw new Error(
+          `المستويات التالية غير موجودة في النظام: ${missingLevels.join(
+            '، ',
+          )}`,
+        )
+      }
+
       const timestamp =
         Date.now()
 
       const payload =
         rows.map((row, index) => {
           const levelId =
-            levelMap.get(row.level) ?? null
+            levelMap.get(row.level)
 
           return {
             request_number:
@@ -559,22 +580,34 @@ export function EnrollmentImport({
               crypto.randomUUID(),
 
             name: row.name,
+
             personal_id:
               row.personalId || null,
-            gender: row.gender || null,
+
+            gender:
+              row.gender || null,
+
             age: row.age,
-            phone: row.phone || null,
+
+            phone:
+              row.phone || null,
+
             whatsapp:
               row.whatsapp || null,
 
-            level_id: levelId,
+            level_id:
+              levelId,
+
             class_id: null,
 
-            notes: row.notes || null,
+            notes:
+              row.notes || null,
+
             health_notes:
               row.healthNotes || null,
 
             status: 'pending',
+
             processing_mode: 'review',
 
             payment_method:
@@ -603,18 +636,41 @@ export function EnrollmentImport({
           }
         })
 
+      setMessage(
+        `جاري استيراد ${payload.length} طلب...`,
+      )
+
+      await new Promise<void>(
+        (resolve) => {
+          setTimeout(resolve, 50)
+        },
+      )
+
       const {
+        data,
         error,
       } = await supabase
         .from('registration_requests')
         .insert(payload)
+        .select('id')
 
       if (error) {
         throw error
       }
 
+      if (
+        !data ||
+        data.length !== payload.length
+      ) {
+        throw new Error(
+          `تم إرسال الطلب لكن لم يتم تأكيد إضافة جميع السجلات. المتوقع: ${payload.length}، المضاف: ${
+            data?.length ?? 0
+          }`,
+        )
+      }
+
       setMessage(
-        `تم استيراد ${rows.length} طلب بنجاح ✅`,
+        `تم استيراد ${payload.length} طلب بنجاح ✅`,
       )
 
       setRows([])
@@ -627,13 +683,26 @@ export function EnrollmentImport({
         error,
       )
 
-      setErrors([
-        `تعذر استيراد السجلات: ${
-          error instanceof Error
-            ? error.message
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'message' in error
+            ? String(
+                (
+                  error as {
+                    message?: unknown
+                  }
+                ).message ?? '',
+              )
             : 'خطأ غير معروف'
-        }`,
+
+      setErrors([
+        `تعذر استيراد السجلات: ${errorMessage}`,
       ])
+
+      setMessage('')
     } finally {
       setSaving(false)
     }
@@ -685,7 +754,7 @@ export function EnrollmentImport({
                 onClick={
                   downloadTemplate
                 }
-                disabled={loadingLevels}
+                disabled={loadingLevels || saving}
                 className="gap-2"
               >
                 {loadingLevels ? (
@@ -721,17 +790,31 @@ export function EnrollmentImport({
                 </p>
               </div>
 
-              <label className="flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-8 transition hover:bg-muted/30">
+              <label
+                className={`flex items-center justify-center rounded-lg border-2 border-dashed p-8 transition ${
+                  saving
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'cursor-pointer hover:bg-muted/30'
+                }`}
+              >
                 <div className="text-center">
-                  <Upload className="mx-auto size-8 text-muted-foreground" />
+                  {saving ? (
+                    <Loader2 className="mx-auto size-8 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Upload className="mx-auto size-8 text-muted-foreground" />
+                  )}
 
                   <p className="mt-2 font-medium">
-                    اختر ملف Excel
+                    {saving
+                      ? 'جاري الاستيراد...'
+                      : 'اختر ملف Excel'}
                   </p>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    XLSX
-                  </p>
+                  {!saving && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      XLSX
+                    </p>
+                  )}
 
                   <input
                     type="file"
@@ -739,6 +822,7 @@ export function EnrollmentImport({
                     onChange={
                       handleFileChange
                     }
+                    disabled={saving}
                     className="hidden"
                   />
                 </div>
@@ -786,6 +870,10 @@ export function EnrollmentImport({
 
           {message && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              {saving && (
+                <Loader2 className="ml-2 inline size-4 animate-spin" />
+              )}
+
               {message}
             </div>
           )}
@@ -910,12 +998,16 @@ export function EnrollmentImport({
               className="gap-2"
             >
               {saving ? (
-                <Loader2 className="size-4 animate-spin" />
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  جاري الاستيراد...
+                </>
               ) : (
-                <Upload className="size-4" />
+                <>
+                  <Upload className="size-4" />
+                  استيراد {rows.length || ''} طلب
+                </>
               )}
-
-              استيراد {rows.length || ''} طلب
             </Button>
           </div>
         </div>
