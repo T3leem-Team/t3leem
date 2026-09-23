@@ -76,6 +76,8 @@ export default function Page() {
   const [loadingTeachers, setLoadingTeachers] = useState(true)
 
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
   const [supabaseStatus, setSupabaseStatus] = useState('')
 
   const [showForm, setShowForm] = useState(false)
@@ -566,9 +568,6 @@ export default function Page() {
     setSaving(true)
     setSupabaseStatus('جاري الحفظ...')
 
-    /*
-     * تعديل سنة موجودة
-     */
     if (editingId !== null) {
       const {
         data: updatedYear,
@@ -595,11 +594,6 @@ export default function Page() {
         return
       }
 
-      /*
-       * نحفظ كل دورة بشكل مستقل.
-       * الموجودة يتم تحديثها.
-       * الجديدة يتم إدخالها.
-       */
       const savedCourses: Course[] = []
 
       for (const course of courses) {
@@ -669,20 +663,19 @@ export default function Page() {
           courseId = insertedCourse.id
         }
 
-            if (!courseId) {
-      setSupabaseStatus(
-        `تعذر تحديد رقم الدورة "${course.name}".`,
-      )
-      setSaving(false)
-      return
-    }
+        if (!courseId) {
+          setSupabaseStatus(
+            `تعذر تحديد رقم الدورة "${course.name}".`,
+          )
+          setSaving(false)
+          return
+        }
 
-    const relationError =
-      await saveCourseTeachers(
-        courseId,
-        course.teacherIds,
-      )
-  
+        const relationError =
+          await saveCourseTeachers(
+            courseId,
+            course.teacherIds,
+          )
 
         if (relationError) {
           setSupabaseStatus(
@@ -734,9 +727,6 @@ export default function Page() {
       return
     }
 
-    /*
-     * إضافة سنة جديدة
-     */
     const {
       error: resetCurrentError,
     } = await supabase
@@ -782,9 +772,6 @@ export default function Page() {
 
     const savedCourses: Course[] = []
 
-    /*
-     * إذا ما فيه دورات، ما نسوي أي INSERT على courses.
-     */
     for (const course of courses) {
       const {
         data: insertedCourse,
@@ -881,12 +868,12 @@ export default function Page() {
       year.name || 'هذه السنة الدراسية'
 
     const confirmed = window.confirm(
-  `هل أنت متأكد من حذف السنة الدراسية "${displayName}"؟\n\nسيتم حذف جميع البيانات التابعة لهذه السنة، بما فيها:\n- الطلاب\n- التسجيلات\n- الفصول\n- الدورات\n- المدفوعات\n- الحضور\n- توزيع الطلاب على المعلمين\n\nهذا الإجراء لا يمكن التراجع عنه.`,
-)
+      `هل أنت متأكد من حذف السنة الدراسية "${displayName}"؟\n\nسيتم حذف جميع البيانات التابعة لهذه السنة، بما فيها:\n- الطلاب\n- التسجيلات\n- الفصول\n- الدورات\n- المدفوعات\n- الحضور\n- توزيع الطلاب على المعلمين\n\nهذا الإجراء لا يمكن التراجع عنه.`,
+    )
 
     if (!confirmed) return
 
-    setSaving(true)
+    setDeletingId(id)
     setSupabaseStatus('جاري المسح...')
 
     const { error } = await supabase
@@ -898,7 +885,7 @@ export default function Page() {
       setSupabaseStatus(
         `خطأ في مسح السنة الدراسية: ${error.message}`,
       )
-      setSaving(false)
+      setDeletingId(null)
       return
     }
 
@@ -912,7 +899,7 @@ export default function Page() {
       'تم مسح السنة الدراسية من Supabase ✅',
     )
 
-    setSaving(false)
+    setDeletingId(null)
   }
 
   return (
@@ -933,7 +920,7 @@ export default function Page() {
           <Button
             type="button"
             onClick={openAddForm}
-            disabled={saving}
+            disabled={saving || deletingId !== null}
           >
             <Plus className="size-4" />
             إضافة سنة جديدة
@@ -1607,7 +1594,10 @@ export default function Page() {
                               year,
                             )
                           }
-                          disabled={saving}
+                          disabled={
+                            saving ||
+                            deletingId !== null
+                          }
                         >
                           <Plus className="size-4" />
                           إضافة دورة
@@ -1620,7 +1610,10 @@ export default function Page() {
                           onClick={() =>
                             openEditForm(year)
                           }
-                          disabled={saving}
+                          disabled={
+                            saving ||
+                            deletingId !== null
+                          }
                         >
                           <Edit3 className="size-4" />
                           تعديل
@@ -1635,10 +1628,14 @@ export default function Page() {
                               year.id,
                             )
                           }
-                          disabled={saving}
+                          disabled={
+                            deletingId !== null
+                          }
                         >
                           <Trash2 className="size-4" />
-                          مسح
+                          {deletingId === year.id
+                            ? 'جاري المسح...'
+                            : 'مسح'}
                         </Button>
                       </div>
                     </div>
@@ -1748,7 +1745,10 @@ export default function Page() {
                               year,
                             )
                           }
-                          disabled={saving}
+                          disabled={
+                            saving ||
+                            deletingId !== null
+                          }
                         >
                           <Plus className="size-4" />
                           إضافة دورة
