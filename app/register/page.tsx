@@ -159,7 +159,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  // Popup التحقق من الرقم الشخصي
   const [checkingPersonalId, setCheckingPersonalId] =
     useState(false)
 
@@ -224,10 +223,15 @@ export default function RegisterPage() {
 
       setSettings(loadedSettings)
 
+      /*
+       * مستويات التسجيل الخارجية مستقلة عن جدول levels.
+       *
+       * يتم تحميل المستويات المفعلة فقط.
+       */
       const levelsResult = await supabase
-        .from('levels')
+        .from('registration_levels')
         .select('id, name, sort_order')
-        .eq('is_active', true)
+        .eq('is_enabled', true)
         .order('sort_order', {
           ascending: true,
         })
@@ -236,7 +240,7 @@ export default function RegisterPage() {
         console.error(levelsResult.error)
 
         setErrorMessage(
-          `تعذر تحميل المستويات: ${levelsResult.error.message}`,
+          `تعذر تحميل مستويات التسجيل: ${levelsResult.error.message}`,
         )
 
         return
@@ -246,14 +250,6 @@ export default function RegisterPage() {
 
       /*
        * تحميل الحقول الإضافية المتاحة للتسجيل.
-       *
-       * availability:
-       * custom_fields.available_in_registration = true
-       *
-       * visibility:
-       * custom_field_visibility.section = registration
-       *
-       * الحقل لا يظهر إلا إذا كان is_visible = true.
        */
       const customFieldsResult = await supabase
         .from('custom_fields')
@@ -284,6 +280,7 @@ export default function RegisterPage() {
 
       if (loadedCustomFields.length === 0) {
         setCustomFields([])
+        setCustomFieldValues({})
         return
       }
 
@@ -708,9 +705,6 @@ export default function RegisterPage() {
     setSubmitting(true)
 
     try {
-      /*
-       * فحص الرقم الشخصي قبل إنشاء طلب التسجيل.
-       */
       if (
         settings.show_personal_id &&
         personalId.trim()
@@ -772,9 +766,23 @@ export default function RegisterPage() {
       const trackingToken =
         crypto.randomUUID()
 
+      const selectedLevel =
+        levels.find(
+          (level) =>
+            level.id === levelId,
+        )
+
       /*
-       * إنشاء الطلب عن طريق RPC.
+       * ملاحظة:
+       * selectedLevel?.name هو اسم المستوى المستقل
+       * من registration_levels.
+       *
+       * لا نرسل ID الخاص بـ registration_levels
+       * إلى p_level_id لأنه مرتبط بجدول levels.
        */
+      const registrationLevelName =
+        selectedLevel?.name ?? null
+
       const rpcResult =
         await supabase.rpc(
           'create_registration_request',
@@ -818,10 +826,15 @@ export default function RegisterPage() {
                   null
                 : null,
 
-            p_level_id:
-              settings.show_level
-                ? levelId || null
-                : null,
+            /*
+             * مؤقتًا نحافظ على p_level_id = null
+             * لأن registration_levels مستقلة عن levels.
+             *
+             * سيتم ربط registrationLevelName
+             * بعمود registration_level_name
+             * بعد تعديل RPC وقاعدة البيانات.
+             */
+            p_level_id: null,
 
             p_notes:
               settings.show_notes
@@ -854,6 +867,13 @@ export default function RegisterPage() {
               settings.payment_enabled
                 ? 'pending'
                 : 'not_required',
+
+            /*
+             * إذا كان الـRPC الجديد يدعم هذا المتغير
+             * سيتم حفظ اسم مستوى التسجيل المستقل.
+             */
+            p_registration_level_name:
+              registrationLevelName,
           },
         )
 
@@ -868,15 +888,6 @@ export default function RegisterPage() {
         )
       }
 
-      /*
-       * RPC يرجع صفًا واحدًا:
-       *
-       * {
-       *   id,
-       *   request_number,
-       *   tracking_token
-       * }
-       */
       const createdRequest =
         Array.isArray(
           rpcResult.data,
@@ -893,17 +904,10 @@ export default function RegisterPage() {
         )
       }
 
-      /*
-       * حفظ الحقول الإضافية المرتبطة
-       * بطلب التسجيل.
-       */
       await saveCustomFieldValues(
         createdRequest.id,
       )
 
-      /*
-       * رفع إثبات الدفع بعد إنشاء الطلب.
-       */
       if (
         settings.payment_enabled &&
         settings.payment_proof_enabled &&
@@ -915,9 +919,6 @@ export default function RegisterPage() {
             createdRequest.id,
           )
 
-        /*
-         * تحديث payment_proof_url عن طريق RPC.
-         */
         const proofResult =
           await supabase.rpc(
             'set_registration_payment_proof',
@@ -951,9 +952,6 @@ export default function RegisterPage() {
         'تم إرسال طلب التسجيل بنجاح.',
       )
 
-      /*
-       * تصفير الحقول بعد نجاح التسجيل.
-       */
       setName('')
       setPersonalId('')
       setGender('')
@@ -1235,9 +1233,6 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10">
-      {/* =========================================================
-          Popup التحقق من الرقم الشخصي
-          ========================================================= */}
       {checkingPersonalId && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 px-4 backdrop-blur-[2px]"
@@ -1581,9 +1576,6 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                {/* =================================================
-                    الحقول الإضافية الديناميكية
-                    ================================================= */}
                 {customFields.length > 0 && (
                   <div className="space-y-5 border-t pt-6">
                     <div>
