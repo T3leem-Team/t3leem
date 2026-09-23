@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
-  CalendarDays,
   Check,
   ChevronDown,
   CreditCard,
@@ -201,6 +200,13 @@ type CustomField = {
   }
 }
 
+type RegistrationLevel = {
+  id: string
+  name: string
+  is_enabled: boolean
+  sort_order: number
+}
+
 type FieldType =
   | 'text'
   | 'number'
@@ -287,6 +293,19 @@ export default function RegistrationSettingsPage() {
 
   const [settingsId, setSettingsId] = useState<string | null>(null)
 
+  const [registrationLevels, setRegistrationLevels] = useState<
+    RegistrationLevel[]
+  >([])
+
+  const [registrationLevelsLoading, setRegistrationLevelsLoading] =
+    useState(false)
+
+  const [savingRegistrationLevel, setSavingRegistrationLevel] =
+    useState(false)
+
+  const [newRegistrationLevelName, setNewRegistrationLevelName] =
+    useState('')
+
   const [customFields, setCustomFields] = useState<CustomField[]>([])
   const [customFieldsLoading, setCustomFieldsLoading] = useState(false)
 
@@ -313,6 +332,7 @@ export default function RegistrationSettingsPage() {
   useEffect(() => {
     loadSettings()
     loadCustomFields()
+    loadRegistrationLevels()
   }, [])
 
   async function loadSettings() {
@@ -403,6 +423,184 @@ export default function RegistrationSettingsPage() {
     )
 
     setLoading(false)
+  }
+
+  async function loadRegistrationLevels() {
+    setRegistrationLevelsLoading(true)
+
+    const { data, error } = await supabase
+      .from('registration_levels')
+      .select('id, name, is_enabled, sort_order')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error(
+        'Error loading registration levels:',
+        error,
+      )
+
+      setErrorMessage(
+        `تعذر تحميل مستويات التسجيل: ${error.message}`,
+      )
+
+      setRegistrationLevelsLoading(false)
+      return
+    }
+
+    setRegistrationLevels(data ?? [])
+    setRegistrationLevelsLoading(false)
+  }
+
+  async function addRegistrationLevel() {
+    const name = newRegistrationLevelName.trim()
+
+    if (!name) {
+      setErrorMessage('اكتب اسم المستوى أولاً.')
+      return
+    }
+
+    const exists = registrationLevels.some(
+      (level) =>
+        level.name.trim().toLowerCase() ===
+        name.toLowerCase(),
+    )
+
+    if (exists) {
+      setErrorMessage('هذا المستوى موجود بالفعل.')
+      return
+    }
+
+    setSavingRegistrationLevel(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const nextSortOrder =
+      registrationLevels.length > 0
+        ? Math.max(
+            ...registrationLevels.map(
+              (level) => level.sort_order ?? 0,
+            ),
+          ) + 1
+        : 1
+
+    const { error } = await supabase
+      .from('registration_levels')
+      .insert({
+        name,
+        is_enabled: true,
+        sort_order: nextSortOrder,
+      })
+
+    if (error) {
+      console.error(
+        'Error adding registration level:',
+        error,
+      )
+
+      setErrorMessage(
+        `تعذر إضافة المستوى: ${error.message}`,
+      )
+
+      setSavingRegistrationLevel(false)
+      return
+    }
+
+    setNewRegistrationLevelName('')
+
+    await loadRegistrationLevels()
+
+    setSuccessMessage('تمت إضافة المستوى بنجاح.')
+    setSavingRegistrationLevel(false)
+  }
+
+  async function toggleRegistrationLevel(
+    level: RegistrationLevel,
+  ) {
+    setSavingRegistrationLevel(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const { error } = await supabase
+      .from('registration_levels')
+      .update({
+        is_enabled: !level.is_enabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', level.id)
+
+    if (error) {
+      console.error(
+        'Error updating registration level:',
+        error,
+      )
+
+      setErrorMessage(
+        `تعذر تحديث المستوى: ${error.message}`,
+      )
+
+      setSavingRegistrationLevel(false)
+      return
+    }
+
+    setRegistrationLevels((current) =>
+      current.map((item) =>
+        item.id === level.id
+          ? {
+              ...item,
+              is_enabled: !item.is_enabled,
+            }
+          : item,
+      ),
+    )
+
+    setSuccessMessage(
+      level.is_enabled
+        ? 'تم إخفاء المستوى من التسجيل الخارجي.'
+        : 'تم إظهار المستوى في التسجيل الخارجي.',
+    )
+
+    setSavingRegistrationLevel(false)
+  }
+
+  async function deleteRegistrationLevel(
+    level: RegistrationLevel,
+  ) {
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف المستوى "${level.name}"؟`,
+    )
+
+    if (!confirmed) return
+
+    setSavingRegistrationLevel(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const { error } = await supabase
+      .from('registration_levels')
+      .delete()
+      .eq('id', level.id)
+
+    if (error) {
+      console.error(
+        'Error deleting registration level:',
+        error,
+      )
+
+      setErrorMessage(
+        `تعذر حذف المستوى: ${error.message}`,
+      )
+
+      setSavingRegistrationLevel(false)
+      return
+    }
+
+    setRegistrationLevels((current) =>
+      current.filter((item) => item.id !== level.id),
+    )
+
+    setSuccessMessage('تم حذف المستوى بنجاح.')
+    setSavingRegistrationLevel(false)
   }
 
   async function loadCustomFields() {
@@ -608,7 +806,10 @@ export default function RegistrationSettingsPage() {
     }
 
     if (error) {
-      console.error('Error saving registration settings:', error)
+      console.error(
+        'Error saving registration settings:',
+        error,
+      )
 
       setErrorMessage(
         `تعذر حفظ إعدادات التسجيل: ${error.message}`,
@@ -1023,6 +1224,122 @@ export default function RegistrationSettingsPage() {
               <Badge variant="danger">التسجيل مغلق</Badge>
             )}
           </div>
+
+          {registrationOpen && (
+            <div className="mt-5 border-t pt-5">
+              <div>
+                <p className="font-semibold">
+                  المستوى
+                </p>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  أضف أسماء المستويات التي تريد إظهارها في التسجيل
+                  الخارجي، ثم فعّل أو عطّل ظهور كل مستوى.
+                </p>
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  value={newRegistrationLevelName}
+                  onChange={(event) =>
+                    setNewRegistrationLevelName(
+                      event.target.value,
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      addRegistrationLevel()
+                    }
+                  }}
+                  placeholder="اسم المستوى"
+                  className="flex h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  disabled={savingRegistrationLevel}
+                />
+
+                <Button
+                  type="button"
+                  onClick={addRegistrationLevel}
+                  disabled={savingRegistrationLevel}
+                >
+                  {savingRegistrationLevel ? (
+                    <Loader2 className="ml-2 size-4 animate-spin" />
+                  ) : (
+                    <Plus className="ml-2 size-4" />
+                  )}
+                  إضافة
+                </Button>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {registrationLevelsLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    جاري تحميل المستويات...
+                  </div>
+                ) : registrationLevels.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-5 text-center">
+                    <p className="font-medium">
+                      لا توجد مستويات مضافة
+                    </p>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      اكتب اسم المستوى في الأعلى واضغط إضافة.
+                    </p>
+                  </div>
+                ) : (
+                  registrationLevels.map((level) => (
+                    <div
+                      key={level.id}
+                      className="flex items-center justify-between rounded-xl border p-3"
+                    >
+                      <span className="font-medium">
+                        {level.name}
+                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={level.is_enabled}
+                          disabled={savingRegistrationLevel}
+                          onClick={() =>
+                            toggleRegistrationLevel(level)
+                          }
+                          className={`relative inline-flex h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            level.is_enabled
+                              ? 'bg-primary'
+                              : 'bg-muted-foreground/30'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${
+                              level.is_enabled
+                                ? 'right-1'
+                                : 'right-6'
+                            }`}
+                          />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            deleteRegistrationLevel(level)
+                          }
+                          disabled={savingRegistrationLevel}
+                          className="rounded-lg p-2 text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="حذف المستوى"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1187,7 +1504,6 @@ export default function RegistrationSettingsPage() {
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {/* نموذج إضافة حقل */}
           {showAddField && (
             <div className="rounded-2xl border-2 border-dashed p-5">
               <div className="mb-5 flex items-center justify-between">
