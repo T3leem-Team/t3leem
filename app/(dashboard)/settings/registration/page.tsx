@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
@@ -104,7 +103,6 @@ function FieldControl({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-semibold">{title}</p>
-
             <Badge variant="secondary">أساسي</Badge>
           </div>
 
@@ -419,12 +417,7 @@ export default function RegistrationSettingsPage() {
     )
 
     setPaymentLink(data.payment_link ?? '')
-
     setShowPaymentQr(data.show_payment_qr ?? false)
-
-    setSuccessMessage(
-      'تم تحميل إعدادات التسجيل بنجاح.',
-    )
 
     setLoading(false)
   }
@@ -437,7 +430,6 @@ export default function RegistrationSettingsPage() {
       .select(
         'id, name, is_active, registration_enabled, sort_order',
       )
-      .eq('is_active', true)
       .order('sort_order', { ascending: true })
 
     if (error) {
@@ -447,14 +439,18 @@ export default function RegistrationSettingsPage() {
       )
 
       setErrorMessage(
-        `تعذر تحميل مستويات التسجيل: ${error.message}`,
+        `تعذر تحميل المستويات: ${error.message}`,
       )
 
       setRegistrationLevelsLoading(false)
       return
     }
 
-    setRegistrationLevels(data ?? [])
+    const activeLevels = (data ?? []).filter(
+      (level) => level.is_active === true,
+    )
+
+    setRegistrationLevels(activeLevels)
     setRegistrationLevelsLoading(false)
   }
 
@@ -533,7 +529,7 @@ export default function RegistrationSettingsPage() {
     cancelEditingRegistrationLevel()
 
     setSuccessMessage(
-      'تم تعديل اسم المستوى بنجاح مع الحفاظ على نفس المستوى والعلاقات المرتبطة به.',
+      'تم تعديل اسم المستوى بنجاح.',
     )
 
     setSavingRegistrationLevel(false)
@@ -582,8 +578,8 @@ export default function RegistrationSettingsPage() {
 
     setSuccessMessage(
       nextValue
-        ? 'تم إظهار المستوى في التسجيل الخارجي.'
-        : 'تم إخفاء المستوى من التسجيل الخارجي.',
+        ? `تم إظهار "${level.name}" في التسجيل الخارجي.`
+        : `تم إخفاء "${level.name}" من التسجيل الخارجي.`,
     )
 
     setSavingRegistrationLevel(false)
@@ -1014,7 +1010,7 @@ export default function RegistrationSettingsPage() {
     setShowAddField(false)
 
     setSuccessMessage(
-      'تمت إضافة الحقل بنجاح. الحقل متاح في الأقسام المختارة ومخفي افتراضياً.',
+      'تمت إضافة الحقل بنجاح.',
     )
 
     await loadCustomFields()
@@ -1177,15 +1173,15 @@ export default function RegistrationSettingsPage() {
       )}
 
       <div>
-        <Link href="/settings">
-          <Button variant="outline">
-            <ArrowRight className="ml-2 size-4" />
-            العودة للإعدادات
-          </Button>
-        </Link>
+        <Button
+          variant="outline"
+          onClick={() => window.history.back()}
+        >
+          <ArrowRight className="ml-2 size-4" />
+          العودة
+        </Button>
       </div>
 
-      {/* التسجيل العام */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1219,15 +1215,15 @@ export default function RegistrationSettingsPage() {
                 </p>
 
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  هذه هي المستويات الموجودة في النظام. يمكنك تعديل
-                  اسم المستوى أو التحكم في ظهوره في التسجيل الخارجي،
-                  مع الحفاظ على نفس المستوى ومعرّفه وعلاقاته الحالية.
+                  تحكم في أسماء المستويات وظهورها في التسجيل الخارجي.
+                  هذه المستويات هي نفسها الموجودة في النظام ولن يتم
+                  إنشاء مستويات جديدة.
                 </p>
               </div>
 
               <div className="mt-4 space-y-2">
                 {registrationLevelsLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 rounded-xl border p-5 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" />
                     جاري تحميل المستويات...
                   </div>
@@ -1238,7 +1234,7 @@ export default function RegistrationSettingsPage() {
                     </p>
 
                     <p className="mt-1 text-sm text-muted-foreground">
-                      تأكد من وجود مستويات فعالة في جدول المستويات.
+                      لا يوجد أي مستوى نشط في جدول المستويات.
                     </p>
                   </div>
                 ) : (
@@ -1248,8 +1244,7 @@ export default function RegistrationSettingsPage() {
                       className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0 flex-1">
-                        {editingRegistrationLevelId ===
-                        level.id ? (
+                        {editingRegistrationLevelId === level.id ? (
                           <input
                             type="text"
                             value={editingRegistrationLevelName}
@@ -1271,7 +1266,7 @@ export default function RegistrationSettingsPage() {
                             }}
                             autoFocus
                             disabled={savingRegistrationLevel}
-                            className="flex h-10 w-full rounded-xl border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            className="h-10 w-full rounded-xl border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                           />
                         ) : (
                           <button
@@ -1281,7 +1276,6 @@ export default function RegistrationSettingsPage() {
                             }
                             disabled={savingRegistrationLevel}
                             className="w-full text-right font-medium hover:text-primary disabled:cursor-not-allowed"
-                            title="اضغط لتعديل اسم المستوى"
                           >
                             {level.name}
                           </button>
@@ -1289,8 +1283,7 @@ export default function RegistrationSettingsPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {editingRegistrationLevelId ===
-                        level.id ? (
+                        {editingRegistrationLevelId === level.id ? (
                           <>
                             <Button
                               type="button"
@@ -1336,11 +1329,6 @@ export default function RegistrationSettingsPage() {
                                 ? 'bg-primary'
                                 : 'bg-muted-foreground/30'
                             }`}
-                            title={
-                              level.registration_enabled
-                                ? 'إخفاء المستوى من التسجيل الخارجي'
-                                : 'إظهار المستوى في التسجيل الخارجي'
-                            }
                           >
                             <span
                               className={`absolute top-1 size-4 rounded-full bg-white shadow-sm transition-transform ${
@@ -1361,7 +1349,6 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* الحقول الأساسية */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1370,8 +1357,8 @@ export default function RegistrationSettingsPage() {
           </CardTitle>
 
           <p className="text-sm leading-6 text-muted-foreground">
-            هذه الحقول جزء أساسي من نظام T3LEEM ولا تعتبر حقولاً إضافية.
-            يمكنك التحكم في ظهورها وإلزاميتها في التسجيل.
+            هذه الحقول جزء أساسي من نظام T3LEEM ويمكن التحكم في ظهورها
+            وإلزاميتها.
           </p>
         </CardHeader>
 
@@ -1495,7 +1482,6 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* الحقول الإضافية */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1503,8 +1489,7 @@ export default function RegistrationSettingsPage() {
               <CardTitle>الحقول الإضافية</CardTitle>
 
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                أضف أي معلومة جديدة بدون الحاجة إلى تعديل قاعدة البيانات
-                أو إنشاء عمود جديد كل مرة.
+                أضف أي معلومة جديدة بدون الحاجة إلى تعديل قاعدة البيانات.
               </p>
             </div>
 
@@ -1531,8 +1516,7 @@ export default function RegistrationSettingsPage() {
                   </h3>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    الحقل سيكون متاحاً في الأقسام التي تختارها،
-                    لكنه سيكون مخفياً افتراضياً.
+                    الحقل سيكون متاحاً في الأقسام التي تختارها.
                   </p>
                 </div>
 
@@ -1582,13 +1566,13 @@ export default function RegistrationSettingsPage() {
                       className="flex h-11 w-full appearance-none rounded-xl border bg-background px-3 py-2 pl-10 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                       disabled={savingField}
                     >
-                      {Object.entries(
-                        FIELD_TYPE_LABELS,
-                      ).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
+                      {Object.entries(FIELD_TYPE_LABELS).map(
+                        ([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ),
+                      )}
                     </select>
 
                     <ChevronDown className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
@@ -1599,11 +1583,6 @@ export default function RegistrationSettingsPage() {
               <div className="mt-5">
                 <p className="text-sm font-medium">
                   أين تريد استخدام الحقل؟
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  عند اختيار القسم، سيضاف الحقل إلى قائمة تخصيص ذلك
-                  القسم، لكنه سيبقى مخفياً حتى تقوم بتفعيله.
                 </p>
 
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -1617,9 +1596,7 @@ export default function RegistrationSettingsPage() {
                         type="button"
                         disabled={savingField}
                         onClick={() =>
-                          toggleNewFieldSection(
-                            section.key,
-                          )
+                          toggleNewFieldSection(section.key)
                         }
                         className={`flex items-center justify-between rounded-xl border p-4 text-right transition ${
                           selected
@@ -1660,10 +1637,6 @@ export default function RegistrationSettingsPage() {
                     <div>
                       <p className="font-medium">
                         خيارات القائمة
-                      </p>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        أضف الخيارات التي سيختار منها المستخدم.
                       </p>
                     </div>
 
@@ -1767,11 +1740,6 @@ export default function RegistrationSettingsPage() {
               <p className="mt-3 font-medium">
                 لا توجد حقول إضافية
               </p>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                أضف أول حقل إضافي وسيصبح قابلاً للتخصيص في الأقسام
-                التي تختارها.
-              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -1798,16 +1766,7 @@ export default function RegistrationSettingsPage() {
                             ]
                           }
                         </Badge>
-
-                        <Badge variant="secondary">
-                          إضافي
-                        </Badge>
                       </div>
-
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        اختر من الأسفل أماكن ظهور الحقل. الحقل متاح
-                        فقط في الأقسام التي تم تحديدها عند إنشائه.
-                      </p>
                     </div>
 
                     <Button
@@ -1833,9 +1792,7 @@ export default function RegistrationSettingsPage() {
                         )
 
                       const visibility =
-                        field.visibility?.[
-                          section.key
-                        ] ?? {
+                        field.visibility?.[section.key] ?? {
                           is_visible: false,
                           is_required: false,
                           sort_order: field.sort_order,
@@ -1855,23 +1812,7 @@ export default function RegistrationSettingsPage() {
                               <p className="font-medium">
                                 {section.label}
                               </p>
-
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {available
-                                  ? 'متاح لهذا القسم'
-                                  : 'غير محدد لهذا القسم'}
-                              </p>
                             </div>
-
-                            {available ? (
-                              <span className="rounded-full bg-green-500/10 px-2 py-1 text-xs text-green-700 dark:text-green-400">
-                                متاح
-                              </span>
-                            ) : (
-                              <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                                غير متاح
-                              </span>
-                            )}
                           </div>
 
                           {available && (
@@ -1881,10 +1822,7 @@ export default function RegistrationSettingsPage() {
                                 checked={
                                   visibility.is_visible
                                 }
-                                disabled={false}
-                                onChange={async (
-                                  value,
-                                ) => {
+                                onChange={async (value) => {
                                   await updateCustomFieldVisibility(
                                     field,
                                     section.key,
@@ -1903,9 +1841,7 @@ export default function RegistrationSettingsPage() {
                                 disabled={
                                   !visibility.is_visible
                                 }
-                                onChange={async (
-                                  value,
-                                ) => {
+                                onChange={async (value) => {
                                   await updateCustomFieldVisibility(
                                     field,
                                     section.key,
@@ -1928,7 +1864,6 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* الدفع */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1961,7 +1896,6 @@ export default function RegistrationSettingsPage() {
                   type="number"
                   min="0"
                   step="0.001"
-                  placeholder="مثال: 50"
                   value={paymentAmount}
                   onChange={(event) =>
                     setPaymentAmount(event.target.value)
@@ -2062,31 +1996,28 @@ export default function RegistrationSettingsPage() {
                 </div>
               )}
 
-              <div className="space-y-3">
+              <SettingRow
+                title="إرفاق إثبات الدفع"
+                description="السماح للطالب برفع صورة إثبات الدفع."
+                checked={paymentProofEnabled}
+                onChange={setPaymentProofEnabled}
+                disabled={loading}
+              />
+
+              {paymentProofEnabled && (
                 <SettingRow
-                  title="إرفاق إثبات الدفع"
-                  description="السماح للطالب برفع صورة إثبات الدفع."
-                  checked={paymentProofEnabled}
-                  onChange={setPaymentProofEnabled}
+                  title="إثبات الدفع إجباري"
+                  description="لا يمكن إرسال طلب التسجيل بدون إثبات الدفع."
+                  checked={paymentProofRequired}
+                  onChange={setPaymentProofRequired}
                   disabled={loading}
                 />
-
-                {paymentProofEnabled && (
-                  <SettingRow
-                    title="إثبات الدفع إجباري"
-                    description="لا يمكن إرسال طلب التسجيل بدون إثبات الدفع."
-                    checked={paymentProofRequired}
-                    onChange={setPaymentProofRequired}
-                    disabled={loading}
-                  />
-                )}
-              </div>
+              )}
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* ملخص */}
       <Card>
         <CardHeader>
           <CardTitle>ملخص الإعدادات</CardTitle>
@@ -2149,7 +2080,6 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* حفظ */}
       <div className="flex justify-end pb-6">
         <Button
           size="lg"
