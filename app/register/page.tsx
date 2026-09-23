@@ -223,15 +223,11 @@ export default function RegisterPage() {
 
       setSettings(loadedSettings)
 
-      /*
-       * مستويات التسجيل الخارجية مستقلة عن جدول levels.
-       *
-       * يتم تحميل المستويات المفعلة فقط.
-       */
       const levelsResult = await supabase
-        .from('registration_levels')
+        .from('levels')
         .select('id, name, sort_order')
-        .eq('is_enabled', true)
+        .eq('is_active', true)
+        .eq('registration_enabled', true)
         .order('sort_order', {
           ascending: true,
         })
@@ -766,23 +762,6 @@ export default function RegisterPage() {
       const trackingToken =
         crypto.randomUUID()
 
-      const selectedLevel =
-        levels.find(
-          (level) =>
-            level.id === levelId,
-        )
-
-      /*
-       * ملاحظة:
-       * selectedLevel?.name هو اسم المستوى المستقل
-       * من registration_levels.
-       *
-       * لا نرسل ID الخاص بـ registration_levels
-       * إلى p_level_id لأنه مرتبط بجدول levels.
-       */
-      const registrationLevelName =
-        selectedLevel?.name ?? null
-
       const rpcResult =
         await supabase.rpc(
           'create_registration_request',
@@ -826,15 +805,8 @@ export default function RegisterPage() {
                   null
                 : null,
 
-            /*
-             * مؤقتًا نحافظ على p_level_id = null
-             * لأن registration_levels مستقلة عن levels.
-             *
-             * سيتم ربط registrationLevelName
-             * بعمود registration_level_name
-             * بعد تعديل RPC وقاعدة البيانات.
-             */
-            p_level_id: null,
+            p_level_id:
+              levelId || null,
 
             p_notes:
               settings.show_notes
@@ -867,13 +839,6 @@ export default function RegisterPage() {
               settings.payment_enabled
                 ? 'pending'
                 : 'not_required',
-
-            /*
-             * إذا كان الـRPC الجديد يدعم هذا المتغير
-             * سيتم حفظ اسم مستوى التسجيل المستقل.
-             */
-            p_registration_level_name:
-              registrationLevelName,
           },
         )
 
