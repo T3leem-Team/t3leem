@@ -98,13 +98,6 @@ const managementOptions: ManagementOption[] = [
     icon: Users,
   },
   {
-    title: 'إشراف الدوام والدروس',
-    description:
-      'إعدادات الحضور والدوام ومتابعة تسجيل الدروس.',
-    href: '/settings/supervision',
-    icon: ShieldCheck,
-  },
-  {
     title: 'المواد الدراسية',
     description:
       'إضافة وتعديل وحذف المواد الدراسية المستخدمة في النظام.',
