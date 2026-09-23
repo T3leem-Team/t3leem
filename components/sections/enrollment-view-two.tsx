@@ -3,8 +3,11 @@
 import type { ReactNode } from 'react'
 
 import {
+  Check,
+  CheckSquare,
   Eye,
   Loader2,
+  Square,
 } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/status-badge'
@@ -205,6 +208,17 @@ type EnrollmentTablesProps = {
   hasSpecialInformation: (
     request: RegistrationRequest,
   ) => boolean
+
+  selectedRequestIds: string[]
+  toggleRequestSelection: (
+    requestId: string,
+  ) => void
+  selectAllRequests: (
+    requests: RegistrationRequest[],
+  ) => void
+  clearSelectedRequests: () => void
+  approveSelectedRequests: () => void
+  bulkApproving: boolean
 }
 
 function renderCell(
@@ -344,6 +358,12 @@ type RequestTableProps = {
     request: RegistrationRequest,
   ) => boolean
   showFilters: boolean
+
+  selectedRequestIds: string[]
+  toggleRequestSelection: (
+    requestId: string,
+  ) => void
+  bulkApproving: boolean
 }
 
 function RequestTable({
@@ -363,24 +383,10 @@ function RequestTable({
   hasNotes,
   hasSpecialInformation,
   showFilters,
+  selectedRequestIds,
+  toggleRequestSelection,
+  bulkApproving,
 }: RequestTableProps) {
-  /*
-   * مهم:
-   * لا نستخدم اسم visibleColumns هنا للنتيجة المفلترة.
-   *
-   * كان الخطأ السابق بسبب:
-   *
-   * const visibleColumns =
-   *   allBaseColumns.filter(
-   *     (column) =>
-   *       visibleColumns[column.key],
-   *   )
-   *
-   * وهذا يقرأ المتغير أثناء إنشائه.
-   *
-   * لذلك استخدمنا اسم:
-   * displayedBaseColumns
-   */
   const displayedBaseColumns =
     BASE_COLUMNS.filter(
       (column) =>
@@ -398,6 +404,7 @@ function RequestTable({
     )
 
   const totalColumns =
+    1 +
     1 +
     displayedBaseColumns.length +
     displayedCustomFields.length +
@@ -449,16 +456,60 @@ function RequestTable({
               request,
             )
 
+          const canSelect =
+            request.status ===
+              'pending' ||
+            request.status ===
+              'under_review'
+
+          const selected =
+            selectedRequestIds.includes(
+              request.id,
+            )
+
           return (
             <tr
               key={request.id}
               className={`border-b last:border-0 transition-colors ${
-                special
-                  ? 'bg-amber-50/70 hover:bg-amber-100/70'
-                  : 'hover:bg-muted/30'
+                selected
+                  ? 'bg-primary/5'
+                  : special
+                    ? 'bg-amber-50/70 hover:bg-amber-100/70'
+                    : 'hover:bg-muted/30'
               }`}
             >
-              {/* التسلسل */}
+              <td className="px-4 py-4 text-center">
+                {canSelect ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toggleRequestSelection(
+                        request.id,
+                      )
+                    }
+                    disabled={
+                      bulkApproving
+                    }
+                    className="inline-flex items-center justify-center rounded-md p-1 hover:bg-muted"
+                    title={
+                      selected
+                        ? 'إلغاء التحديد'
+                        : 'تحديد الطلب'
+                    }
+                  >
+                    {selected ? (
+                      <CheckSquare className="size-5 text-primary" />
+                    ) : (
+                      <Square className="size-5 text-muted-foreground" />
+                    )}
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground">
+                    —
+                  </span>
+                )}
+              </td>
+
               <td className="px-4 py-4 text-center text-muted-foreground tabular-nums">
                 {index + 1}
               </td>
@@ -528,6 +579,9 @@ function RequestTable({
                       request,
                     )
                   }
+                  disabled={
+                    bulkApproving
+                  }
                   className="gap-2"
                 >
                   <Eye className="size-4" />
@@ -576,6 +630,10 @@ function TableHeader({
 
   return (
     <tr className="border-b bg-muted/40">
+      <th className="w-12 px-4 py-3 text-center font-medium">
+        #
+      </th>
+
       <th className="w-16 px-4 py-3 text-center font-medium">
         #
       </th>
@@ -757,6 +815,8 @@ export function EnrollmentTables({
   loading,
   visibleColumns,
   customFields,
+  customFieldValues,
+  levels,
   filters,
   updateFilter,
   openReview,
@@ -768,11 +828,131 @@ export function EnrollmentTables({
   hasHealthNotes,
   hasNotes,
   hasSpecialInformation,
+  selectedRequestIds,
+  toggleRequestSelection,
+  selectAllRequests,
+  clearSelectedRequests,
+  approveSelectedRequests,
+  bulkApproving,
 }: EnrollmentTablesProps) {
+  const allRequests = [
+    ...externalRequests,
+    ...importedRequests,
+  ]
+
+  const selectableRequests =
+    allRequests.filter(
+      (request) =>
+        request.status ===
+          'pending' ||
+        request.status ===
+          'under_review',
+    )
+
+  const selectedCount =
+    selectedRequestIds.length
+
+  const allSelected =
+    selectableRequests.length > 0 &&
+    selectableRequests.every(
+      (request) =>
+        selectedRequestIds.includes(
+          request.id,
+        ),
+    )
+
   return (
     <>
+      {selectableRequests.length >
+        0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (allSelected) {
+                  clearSelectedRequests()
+                } else {
+                  selectAllRequests(
+                    selectableRequests,
+                  )
+                }
+              }}
+              disabled={bulkApproving}
+              className="gap-2"
+            >
+              {allSelected ? (
+                <CheckSquare className="size-4" />
+              ) : (
+                <Square className="size-4" />
+              )}
+
+              {allSelected
+                ? 'إلغاء تحديد الكل'
+                : 'تحديد الكل'}
+            </Button>
+
+            {selectedCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={
+                  clearSelectedRequests
+                }
+                disabled={
+                  bulkApproving
+                }
+              >
+                إلغاء التحديد
+              </Button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedCount > 0 && (
+              <>
+                <span className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                  تم تحديد{' '}
+                  <span className="font-semibold">
+                    {selectedCount}
+                  </span>{' '}
+                  طلب
+                </span>
+
+                <Button
+                  size="sm"
+                  onClick={
+                    approveSelectedRequests
+                  }
+                  disabled={
+                    bulkApproving
+                  }
+                  className="gap-2"
+                >
+                  {bulkApproving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Check className="size-4" />
+                  )}
+
+                  {bulkApproving
+                    ? 'جاري القبول...'
+                    : `قبول المحدد (${selectedCount})`}
+                </Button>
+              </>
+            )}
+
+            <span className="text-xs text-muted-foreground">
+              الطلبات القابلة للقبول:{' '}
+              {selectableRequests.length}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1050px] text-sm">
+        <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <TableHeader
               visibleColumns={
@@ -833,6 +1013,15 @@ export function EnrollmentTables({
                 hasSpecialInformation
               }
               showFilters={true}
+              selectedRequestIds={
+                selectedRequestIds
+              }
+              toggleRequestSelection={
+                toggleRequestSelection
+              }
+              bulkApproving={
+                bulkApproving
+              }
             />
           </tbody>
         </table>
@@ -852,7 +1041,7 @@ export function EnrollmentTables({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <TableHeader
                   visibleColumns={
@@ -918,6 +1107,15 @@ export function EnrollmentTables({
                   }
                   showFilters={
                     false
+                  }
+                  selectedRequestIds={
+                    selectedRequestIds
+                  }
+                  toggleRequestSelection={
+                    toggleRequestSelection
+                  }
+                  bulkApproving={
+                    bulkApproving
                   }
                 />
               </tbody>
