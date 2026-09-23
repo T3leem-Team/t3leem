@@ -1,10 +1,10 @@
 'use client'
 
 import {
-  ArrowRight,
   CalendarCheck,
   Users,
   UserCheck,
+  X,
 } from 'lucide-react'
 
 export type TeacherAttendanceDetail = {
@@ -81,14 +81,12 @@ export function AttendanceDetails({
             </div>
           </div>
 
-          {/* زر الرجوع */}
           <button
             type="button"
             onClick={onClose}
-            aria-label="رجوع"
             className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <ArrowRight className="size-5" />
+            <X className="size-5" />
           </button>
         </div>
 
@@ -125,53 +123,66 @@ export function AttendanceDetails({
             </div>
           ) : (
             <div className="space-y-3">
-              {details.map((teacher) => (
-                <div
-                  key={teacher.teacherId}
-                  className="rounded-xl border p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">
-                        {teacher.teacherName}
-                      </p>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        عدد الطلاب:{' '}
-                        {teacher.studentCount}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-left">
-                        <p className="text-xs text-muted-foreground">
-                          الحضور
+              {details.map(
+                (teacher) => (
+                  <div
+                    key={
+                      teacher.teacherId
+                    }
+                    className="rounded-xl border p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">
+                          {
+                            teacher.teacherName
+                          }
                         </p>
 
-                        <p className="mt-1 font-semibold">
-                          {teacher.presentCount}{' '}
-                          /{' '}
-                          {teacher.studentCount}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          عدد الطلاب:{' '}
+                          {
+                            teacher.studentCount
+                          }
                         </p>
                       </div>
 
-                      <div className="h-10 w-px bg-border" />
+                      <div className="flex items-center gap-3">
+                        <div className="text-left">
+                          <p className="text-xs text-muted-foreground">
+                            الحضور
+                          </p>
 
-                      <div className="min-w-[70px] text-left">
-                        <p className="text-xs text-muted-foreground">
-                          النسبة
-                        </p>
+                          <p className="mt-1 font-semibold">
+                            {
+                              teacher.presentCount
+                            }{' '}
+                            /{' '}
+                            {
+                              teacher.studentCount
+                            }
+                          </p>
+                        </div>
 
-                        <p className="mt-1 text-lg font-bold">
-                          {teacher.percentage === null
-                            ? '—'
-                            : `${teacher.percentage}%`}
-                        </p>
+                        <div className="h-10 w-px bg-border" />
+
+                        <div className="min-w-[70px] text-left">
+                          <p className="text-xs text-muted-foreground">
+                            النسبة
+                          </p>
+
+                          <p className="mt-1 text-lg font-bold">
+                            {teacher.percentage ===
+                            null
+                              ? '—'
+                              : `${teacher.percentage}%`}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
         </div>
