@@ -52,24 +52,6 @@ const emptyFilters: Filters = {
   status: '',
 }
 
-/*
- * =========================================================
- * Cache
- * =========================================================
- *
- * الكاش خاص ببيانات الصفحة فقط.
- *
- * لا نخزن:
- * - النوافذ
- * - الفلاتر
- * - الطلب المحدد
- * - حالة الحفظ
- * - الرسائل
- * - إعدادات الأعمدة
- *
- * هذه كلها حالة مؤقتة للواجهة.
- */
-
 type EnrollmentCache = {
   requests: RegistrationRequest[]
   customFields: CustomField[]
@@ -287,12 +269,6 @@ type KeyRow = {
 }
 
 export function EnrollmentView() {
-  /*
-   * =========================================================
-   * Initial state from cache
-   * =========================================================
-   */
-
   const [requests, setRequests] =
     useState<RegistrationRequest[]>(
       enrollmentCache?.requests ?? [],
@@ -323,9 +299,6 @@ export function EnrollmentView() {
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
-  /*
-   * إذا يوجد كاش، لا نعرض loading.
-   */
   const [loading, setLoading] =
     useState(
       enrollmentCache === null,
@@ -337,10 +310,6 @@ export function EnrollmentView() {
   const [statusMessage, setStatusMessage] =
     useState('')
 
-  /*
-   * إذا يوجد كاش للصلاحيات، لا ننتظر
-   * استعلام الصلاحيات حتى تظهر الصفحة.
-   */
   const [
     permissionsLoading,
     setPermissionsLoading,
@@ -466,10 +435,6 @@ export function EnrollmentView() {
       const silent =
         options?.silent === true
 
-      /*
-       * عند وجود كاش، لا نظهر loading
-       * أثناء التحديث الخلفي.
-       */
       if (!silent) {
         setPermissionsLoading(
           true,
@@ -495,11 +460,6 @@ export function EnrollmentView() {
           error,
         )
 
-        /*
-         * إذا عندنا كاش، نحافظ عليه.
-         * لا نختفي الأزرار بسبب خطأ مؤقت
-         * أثناء التحديث الخلفي.
-         */
         if (
           enrollmentCache === null
         ) {
@@ -610,10 +570,6 @@ export function EnrollmentView() {
           error,
         )
 
-        /*
-         * لا نمسح الكاش أثناء refresh
-         * إذا فشل الاستعلام.
-         */
         if (
           enrollmentCache === null
         ) {
@@ -662,9 +618,6 @@ export function EnrollmentView() {
         error,
       )
 
-      /*
-       * نحافظ على الكاش إذا كان موجودًا.
-       */
       if (
         enrollmentCache === null
       ) {
@@ -734,10 +687,6 @@ export function EnrollmentView() {
           error,
         )
 
-        /*
-         * لا نمسح البيانات القديمة
-         * أثناء تحديث خلفي فاشل.
-         */
         if (
           enrollmentCache === null
         ) {
@@ -774,17 +723,63 @@ export function EnrollmentView() {
     const hasCache =
       enrollmentCache !== null
 
-    /*
-     * أول دخول فقط يظهر loading.
-     *
-     * عند الرجوع للصفحة:
-     * البيانات موجودة أصلًا ولا نعرض شاشة
-     * تحميل جديدة.
-     */
     if (!hasCache) {
       setLoading(true)
     }
 
+    /*
+     * نجيب السنة الأكاديمية الحالية أولًا.
+     * طلبات التسجيل في هذه الصفحة يجب أن تكون
+     * مرتبطة بهذه السنة فقط.
+     */
+    const {
+      data: academicYear,
+      error: academicYearError,
+    } = await supabase
+      .from('academic_years')
+      .select('id, name')
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (academicYearError) {
+      console.error(
+        'Could not load current academic year:',
+        academicYearError,
+      )
+
+      setStatusMessage(
+        `خطأ في تحميل السنة الأكاديمية الحالية: ${academicYearError.message}`,
+      )
+
+      if (!hasCache) {
+        setRequests([])
+        setCustomFieldValues([])
+      }
+
+      setLoading(false)
+
+      return
+    }
+
+    if (!academicYear) {
+      setStatusMessage(
+        'لا توجد سنة أكاديمية حالية مفعلة.',
+      )
+
+      if (!hasCache) {
+        setRequests([])
+        setCustomFieldValues([])
+      }
+
+      setLoading(false)
+
+      return
+    }
+
+    /*
+     * نعرض فقط الطلبات المرتبطة بالسنة الحالية.
+     */
     const {
       data,
       error,
@@ -818,8 +813,13 @@ export function EnrollmentView() {
         verified_payment_amount,
         payment_rejection_reason,
         created_at,
-        source
+        source,
+        academic_year_id
       `)
+      .eq(
+        'academic_year_id',
+        academicYear.id,
+      )
       .order(
         'created_at',
         {
@@ -832,10 +832,6 @@ export function EnrollmentView() {
         `خطأ في تحميل طلبات التسجيل: ${error.message}`,
       )
 
-      /*
-       * مهم:
-       * إذا عندنا كاش، لا نمسح الطلبات القديمة.
-       */
       if (!hasCache) {
         setRequests([])
         setCustomFieldValues([])
@@ -878,10 +874,6 @@ export function EnrollmentView() {
 
   useEffect(() => {
     const loadPage = async () => {
-      /*
-       * إذا عندنا كاش، البيانات ظهرت بالفعل.
-       * الآن نعمل تحديث صامت بالخلفية.
-       */
       await Promise.all([
         loadRequests({
           silent:
@@ -1117,14 +1109,6 @@ export function EnrollmentView() {
           data?.already_processed ===
           true
 
-        /*
-         * الدالة في Supabase أصبحت تسجل
-         * source = registration بنفسها.
-         *
-         * نخلي هذا التحديث الاحتياطي موجودًا
-         * للتوافق مع أي طالب تم إنشاؤه
-         * بالدالة السابقة.
-         */
         if (studentId) {
           const {
             error:
@@ -1178,10 +1162,6 @@ export function EnrollmentView() {
           return
         }
 
-        /*
-         * نحذف الطلب من الكاش مباشرة.
-         * وبعدها loadRequests يعمل مزامنة كاملة.
-         */
         setRequests(
           (current) => {
             const next =
@@ -1649,12 +1629,6 @@ export function EnrollmentView() {
           onImported={async () => {
             setShowImport(false)
 
-            /*
-             * بعد الاستيراد نعيد جلب الطلبات.
-             * بما أن الصفحة لديها كاش، لن تظهر
-             * شاشة loading؛ سيتم تحديث الجدول
-             * مباشرة بعد رجوع البيانات.
-             */
             await loadRequests()
           }}
         />
