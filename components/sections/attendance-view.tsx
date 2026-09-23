@@ -173,22 +173,31 @@ function getAttendancePercentage(
   attendanceRecords: AttendanceRecord[],
   attendanceStatuses: AttendanceStatus[],
 ) {
-  const studentRecords = attendanceRecords.filter(
-    (record) =>
-      record.studentId === studentId &&
-      record.courseId === courseId,
-  )
+  const studentRecords =
+    attendanceRecords.filter(
+      (record) =>
+        record.studentId === studentId &&
+        record.courseId === courseId,
+    )
 
   let attended = 0
   let counted = 0
 
   studentRecords.forEach((record) => {
+    /*
+     * مهم:
+     * ترتيب الوسائط الصحيح هو:
+     *
+     * getStatusName(statuses, statusId)
+     */
     const status = getStatusName(
-      record.statusId,
       attendanceStatuses,
+      record.statusId,
     )
 
-    // حاضر + متأخر + مستأذن = حضور
+    /*
+     * حاضر + متأخر + مستأذن = حضور
+     */
     if (
       status === 'حاضر' ||
       status === 'متأخر' ||
@@ -198,21 +207,26 @@ function getAttendancePercentage(
       counted += 1
     }
 
-    // غائب يدخل في الحساب ويخفض النسبة
+    /*
+     * غائب يدخل في الحساب ويخفض النسبة
+     */
     if (status === 'غائب') {
       counted += 1
     }
 
-    // لم يسجل لا يدخل في الحساب
+    /*
+     * لم يسجل لا يدخل في الحساب
+     */
   })
 
   if (counted === 0) {
     return 0
   }
 
-  return Math.round((attended / counted) * 100)
+  return Math.round(
+    (attended / counted) * 100,
+  )
 }
-
 
 function getPercentageClass(
   percentage: number,
@@ -293,10 +307,6 @@ function getDayOfWeek(
     return null
   }
 
-  /**
-   * نستخدم UTC هنا حتى لا يتغير اليوم
-   * بسبب المنطقة الزمنية.
-   */
   return new Date(
     Date.UTC(
       year,
@@ -309,12 +319,6 @@ function getDayOfWeek(
 /**
  * تحويل قيمة اليوم الموجودة في courses.days
  * إلى رقم يوم الأسبوع.
- *
- * يدعم:
- * الأحد / الاثنين / ...
- * وكذلك:
- * Sunday / Monday / ...
- * وكذلك الأرقام 0 - 6.
  */
 function normalizeCourseDay(
   value: string,
@@ -463,6 +467,11 @@ export function AttendanceView({
   ] = useState<string | null>(null)
 
   const [
+    savingNoteKey,
+    setSavingNoteKey,
+  ] = useState<string | null>(null)
+
+  const [
     editingStatusKey,
     setEditingStatusKey,
   ] = useState<string | null>(null)
@@ -480,12 +489,7 @@ export function AttendanceView({
   ] = useState('')
 
   /*
-   * التاريخ الافتراضي هو تاريخ اليوم نفسه.
-   *
-   * هذا مهم جدًا:
-   * إذا كانت الدورة لم تبدأ بعد،
-   * لا نرجع لأول يوم في الدورة ونعرض
-   * للمعلم شاشة تسجيل الحضور.
+   * التاريخ الافتراضي هو تاريخ اليوم.
    */
   const todayString =
     getTodayString()
@@ -495,7 +499,7 @@ export function AttendanceView({
     todayString
 
   /*
-   * تحديد حالة التاريخ الحالي.
+   * تحديد حالة التاريخ.
    */
   const dateState = useMemo(() => {
     if (!currentCourse) {
@@ -522,11 +526,6 @@ export function AttendanceView({
       return 'after-course' as const
     }
 
-    /*
-     * التاريخ داخل فترة الدورة.
-     *
-     * الآن نتحقق من أيام الدراسة.
-     */
     if (
       !isCourseStudyDay(
         activeDate,
@@ -536,15 +535,6 @@ export function AttendanceView({
       return 'no-lesson' as const
     }
 
-    /*
-     * إذا كان اليوم هو اليوم الحالي
-     * أو تاريخًا سابقًا صحيحًا:
-     * نسمح بعرض الحضور.
-     *
-     * إذا كان التاريخ مستقبلًا داخل الدورة
-     * لكنه يوم دراسة، لا نسمح بتسجيل حضور
-     * قبل أن يأتي اليوم.
-     */
     if (activeDate > todayString) {
       return 'future-lesson' as const
     }
@@ -655,6 +645,9 @@ export function AttendanceView({
       },
     )
 
+  /**
+   * حفظ حالة الحضور.
+   */
   const saveAttendance = async (
     student: Student,
     date: string,
@@ -664,11 +657,6 @@ export function AttendanceView({
       return
     }
 
-    /*
-     * حماية إضافية:
-     * حتى لو استدعى المستخدم الدالة بطريقة غير متوقعة،
-     * لا نحفظ حضورًا في يوم غير صالح.
-     */
     if (
       !isAttendanceAvailable ||
       date !== activeDate
@@ -769,6 +757,10 @@ export function AttendanceView({
                     student.enrollmentId ||
                     record.enrollmentId ||
                     null,
+                  note:
+                    attendanceNotes[key] ??
+                    record.note ??
+                    '',
                 }
               : record,
         )
@@ -788,8 +780,8 @@ export function AttendanceView({
               student.enrollmentId ||
               null,
             note:
-              existing.note ||
-              attendanceNotes[key] ||
+              attendanceNotes[key] ??
+              existing.note ??
               null,
           })
           .eq('id', existing.id)
@@ -929,12 +921,25 @@ export function AttendanceView({
     }
   }
 
+  /**
+   * حفظ ملاحظة المعلم.
+   *
+   * إذا كان هناك سجل حضور:
+   * يتم حفظها مباشرة في Supabase.
+   *
+   * إذا لم يوجد سجل حضور:
+   * تبقى محليًا حتى يختار المعلم حالة
+   * الحضور، ثم تحفظ مع سجل الحضور.
+   */
   const saveNote = async (
     student: Student,
     date: string,
     value: string,
   ) => {
     const key = `${date}:${student.id}`
+
+    const cleanValue =
+      value.trim()
 
     setAttendanceNotes(
       (current) => ({
@@ -950,18 +955,13 @@ export function AttendanceView({
       )
 
     /*
-     * إذا لم يوجد سجل بعد،
+     * إذا لم يوجد سجل حضور،
      * نخزن الملاحظة محليًا فقط.
      */
     if (!existing) {
       return
     }
 
-    /*
-     * لا نحتاج منع تعديل ملاحظة
-     * في الأرشيف؛ الأرشيف قابل للعرض والتعديل
-     * طالما أن اليوم يوم دراسة صحيح.
-     */
     if (
       !isCourseStudyDay(
         date,
@@ -971,6 +971,12 @@ export function AttendanceView({
       return
     }
 
+    if (savingNoteKey === key) {
+      return
+    }
+
+    setSavingNoteKey(key)
+
     try {
       const {
         data,
@@ -978,7 +984,8 @@ export function AttendanceView({
       } = await supabase
         .from('attendance')
         .update({
-          note: value || null,
+          note:
+            cleanValue || null,
         })
         .eq('id', existing.id)
         .select(
@@ -1020,6 +1027,10 @@ export function AttendanceView({
             ),
         )
       }
+
+      setStatusMessage(
+        `تم حفظ ملاحظة ${student.name}`,
+      )
     } catch (error: any) {
       setStatusMessage(
         `تعذر حفظ الملاحظة: ${
@@ -1027,6 +1038,8 @@ export function AttendanceView({
           'خطأ غير معروف'
         }`,
       )
+    } finally {
+      setSavingNoteKey(null)
     }
   }
 
@@ -1171,12 +1184,12 @@ export function AttendanceView({
       {/* رسالة الحفظ */}
       {statusMessage &&
         isAttendanceAvailable && (
-          <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-            {statusMessage}
-          </div>
-        )}
+        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          {statusMessage}
+        </div>
+      )}
 
-      {/* محتوى الحضور فقط في يوم دراسة صحيح */}
+      {/* محتوى الحضور */}
       {isAttendanceAvailable && (
         <>
           {/* البحث */}
@@ -1193,7 +1206,7 @@ export function AttendanceView({
           />
 
           {/* قائمة الطلبة */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             {filteredStudents.length ===
             0 ? (
               <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
@@ -1229,11 +1242,14 @@ export function AttendanceView({
                   const saving =
                     savingKey === key
 
+                  const savingNote =
+                    savingNoteKey === key
+
                   const editing =
                     editingStatusKey === key
 
                   /*
-                   * قبل اختيار الحالة
+                   * لم يتم اختيار حالة بعد
                    */
                   if (
                     !status ||
@@ -1244,52 +1260,101 @@ export function AttendanceView({
                         key={student.id}
                         className="rounded-xl border bg-card p-4"
                       >
-                        <div className="flex flex-col gap-3">
-                          <div className="font-semibold">
-                            {
-                              student.name
-                            }
+                        <div className="space-y-4">
+                          {/* اسم الطالب */}
+                          <div>
+                            <div className="font-semibold">
+                              {
+                                student.name
+                              }
+                            </div>
+
+                            {student.levelName && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {
+                                  student.levelName
+                                }
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            {attendanceStatusNames.map(
-                              (
-                                statusName,
-                              ) => {
-                                const styles =
-                                  getStatusClasses(
-                                    statusName,
-                                  )
+                          {/* حالات الحضور */}
+                          <div>
+                            <div className="mb-2 text-xs font-medium text-muted-foreground">
+                              حالة الحضور
+                            </div>
 
-                                return (
-                                  <button
-                                    key={
-                                      statusName
-                                    }
-                                    type="button"
-                                    disabled={
-                                      saving
-                                    }
-                                    onClick={() =>
-                                      saveAttendance(
-                                        student,
-                                        activeDate,
-                                        statusName,
-                                      )
-                                    }
-                                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.normal} ${
-                                      saving
-                                        ? 'cursor-not-allowed opacity-50'
-                                        : ''
-                                    }`}
-                                  >
-                                    {
-                                      statusName
-                                    }
-                                  </button>
+                            <div className="flex flex-wrap gap-2">
+                              {attendanceStatusNames.map(
+                                (
+                                  statusName,
+                                ) => {
+                                  const styles =
+                                    getStatusClasses(
+                                      statusName,
+                                    )
+
+                                  return (
+                                    <button
+                                      key={
+                                        statusName
+                                      }
+                                      type="button"
+                                      disabled={
+                                        saving
+                                      }
+                                      onClick={() =>
+                                        saveAttendance(
+                                          student,
+                                          activeDate,
+                                          statusName,
+                                        )
+                                      }
+                                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.normal} ${
+                                        saving
+                                          ? 'cursor-not-allowed opacity-50'
+                                          : ''
+                                      }`}
+                                    >
+                                      {
+                                        statusName
+                                      }
+                                    </button>
+                                  )
+                                },
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ملاحظات المعلم */}
+                          <div>
+                            <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                              ملاحظات المعلم
+                            </label>
+
+                            <textarea
+                              value={note}
+                              onChange={(
+                                event,
+                              ) =>
+                                setAttendanceNotes(
+                                  (current) => ({
+                                    ...current,
+                                    [key]:
+                                      event
+                                        .target
+                                        .value,
+                                  }),
                                 )
-                              },
-                            )}
+                              }
+                              placeholder="اكتب ملاحظة عن الطالب..."
+                              rows={3}
+                              className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            />
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              سيتم حفظ الملاحظة عند اختيار حالة الحضور.
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -1297,7 +1362,7 @@ export function AttendanceView({
                   }
 
                   /*
-                   * بعد اختيار الحالة
+                   * تم اختيار الحالة
                    */
                   const selectedStyles =
                     getStatusClasses(
@@ -1307,81 +1372,106 @@ export function AttendanceView({
                   return (
                     <div
                       key={student.id}
-                      className="rounded-xl border bg-card px-4 py-3"
+                      className="rounded-xl border bg-card px-4 py-4"
                     >
-                      <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-                        {/* اسم الطالب */}
-                        <div className="min-w-0 xl:flex-1">
-                          <div className="font-semibold">
-                            {
-                              student.name
-                            }
-                          </div>
-
-                          {student.levelName && (
-                            <div className="mt-0.5 text-xs text-muted-foreground">
+                      <div className="space-y-4">
+                        {/* الصف العلوي */}
+                        <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                          {/* اسم الطالب */}
+                          <div className="min-w-0 xl:flex-1">
+                            <div className="font-semibold">
                               {
-                                student.levelName
+                                student.name
                               }
                             </div>
-                          )}
+
+                            {student.levelName && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {
+                                  student.levelName
+                                }
+                              </div>
+                            )}
+                          </div>
+
+                          {/* الحالة */}
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() =>
+                              setEditingStatusKey(
+                                key,
+                              )
+                            }
+                            className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
+                              saving
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'cursor-pointer'
+                            }`}
+                          >
+                            {status}
+                          </button>
+
+                          {/* نسبة الحضور */}
+                          <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
+                            <span
+                              className={`text-sm font-bold ${getPercentageClass(
+                                percentage,
+                              )}`}
+                            >
+                              {percentage}%
+                            </span>
+                          </div>
                         </div>
 
-                        {/* الحالة */}
-                        <button
-                          type="button"
-                          disabled={saving}
-                          onClick={() =>
-                            setEditingStatusKey(
-                              key,
-                            )
-                          }
-                          className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
-                            saving
-                              ? 'cursor-not-allowed opacity-50'
-                              : 'cursor-pointer'
-                          }`}
-                        >
-                          {status}
-                        </button>
+                        {/* ملاحظات المعلم */}
+                        <div>
+                          <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                            ملاحظات المعلم
+                          </label>
 
-                        {/* الملاحظات */}
-                        <input
-                          type="text"
-                          value={note}
-                          onChange={(
-                            event,
-                          ) =>
-                            setAttendanceNotes(
-                              (current) => ({
-                                ...current,
-                                [key]:
-                                  event.target
-                                    .value,
-                              }),
-                            )
-                          }
-                          onBlur={(event) =>
-                            saveNote(
-                              student,
-                              activeDate,
-                              event.target
-                                .value,
-                            )
-                          }
-                          placeholder="الملاحظات"
-                          className="h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 xl:max-w-[350px]"
-                        />
+                          <textarea
+                            value={note}
+                            onChange={(
+                              event,
+                            ) =>
+                              setAttendanceNotes(
+                                (current) => ({
+                                  ...current,
+                                  [key]:
+                                    event
+                                      .target
+                                      .value,
+                                }),
+                              )
+                            }
+                            onBlur={(event) =>
+                              saveNote(
+                                student,
+                                activeDate,
+                                event.target
+                                  .value,
+                              )
+                            }
+                            placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
+                            rows={3}
+                            disabled={
+                              savingNote
+                            }
+                            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-wait disabled:opacity-60"
+                          />
 
-                        {/* نسبة الحضور */}
-                        <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
-                          <span
-                            className={`text-sm font-bold ${getPercentageClass(
-                              percentage,
-                            )}`}
-                          >
-                            {percentage}%
-                          </span>
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              اضغط خارج الخانة لحفظ الملاحظة
+                            </span>
+
+                            {savingNote && (
+                              <span className="text-xs text-muted-foreground">
+                                جارٍ الحفظ...
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
