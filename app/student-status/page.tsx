@@ -29,6 +29,7 @@ type AcademicYear = {
   id: string
   name: string
   is_active: boolean
+  is_current: boolean
 }
 
 type Enrollment = {
@@ -87,8 +88,12 @@ function getTodayString() {
   const today = new Date()
 
   const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
+  const month = String(
+    today.getMonth() + 1,
+  ).padStart(2, '0')
+  const day = String(
+    today.getDate(),
+  ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -100,10 +105,15 @@ function normalizeArabicDay(day: string) {
     .replace('أ', 'ا')
     .replace('إ', 'ا')
     .replace('آ', 'ا')
+    .replace('ى', 'ي')
+    .toLowerCase()
 }
 
 function getDayOfWeek(dateString: string) {
-  const date = new Date(`${dateString}T00:00:00`)
+  const date = new Date(
+    `${dateString}T00:00:00`,
+  )
+
   const day = date.getDay()
 
   const days = [
@@ -123,18 +133,55 @@ function isCourseStudyDay(
   dateString: string,
   course: Course,
 ) {
-  if (!course.days || course.days.length === 0) {
+  if (
+    !course.days ||
+    course.days.length === 0
+  ) {
     return true
   }
 
-  const currentDay = normalizeArabicDay(
-    getDayOfWeek(dateString),
-  )
+  const currentDay =
+    normalizeArabicDay(
+      getDayOfWeek(dateString),
+    )
 
   return course.days.some(
-    (day) =>
-      normalizeArabicDay(day) === currentDay,
+    (day) => {
+      const normalized =
+        normalizeArabicDay(day)
+
+      return (
+        normalized === currentDay ||
+        normalized ===
+          normalizeArabicDay(
+            getEnglishDayName(
+              getDayOfWeek(dateString),
+            ),
+          )
+      )
+    },
   )
+}
+
+function getEnglishDayName(
+  arabicDay: string,
+) {
+  const map: Record<
+    string,
+    string
+  > = {
+    الاحد: 'sunday',
+    الاثنين: 'monday',
+    الثلاثاء: 'tuesday',
+    الاربعاء: 'wednesday',
+    الخميس: 'thursday',
+    الجمعة: 'friday',
+    السبت: 'saturday',
+  }
+
+  return map[
+    normalizeArabicDay(arabicDay)
+  ] ?? arabicDay
 }
 
 function formatDate(date: string) {
@@ -153,7 +200,8 @@ function calculateCourseSummary(
   attendanceRecords: AttendanceRecord[],
   attendanceStatuses: AttendanceStatus[],
 ): CourseSummary {
-  const today = getTodayString()
+  const today =
+    getTodayString()
 
   let totalDays = 0
   let present = 0
@@ -162,9 +210,13 @@ function calculateCourseSummary(
   let excused = 0
   let notRecorded = 0
 
-  const records: CourseSummary['records'] = []
+  const records: CourseSummary['records'] =
+    []
 
-  if (course.start_date && course.end_date) {
+  if (
+    course.start_date &&
+    course.end_date
+  ) {
     const start = new Date(
       `${course.start_date}T00:00:00`,
     )
@@ -173,66 +225,103 @@ function calculateCourseSummary(
       `${course.end_date}T00:00:00`,
     )
 
-    const current = new Date(start)
+    const current =
+      new Date(start)
 
     while (current <= end) {
       const dateString = [
         current.getFullYear(),
-        String(current.getMonth() + 1).padStart(2, '0'),
-        String(current.getDate()).padStart(2, '0'),
+        String(
+          current.getMonth() + 1,
+        ).padStart(2, '0'),
+        String(
+          current.getDate(),
+        ).padStart(2, '0'),
       ].join('-')
 
       if (
         dateString <= today &&
-        isCourseStudyDay(dateString, course)
+        isCourseStudyDay(
+          dateString,
+          course,
+        )
       ) {
         totalDays += 1
 
-        const record = attendanceRecords.find(
-          (item) =>
-            item.student_id === studentId &&
-            item.course_id === course.id &&
-            item.attendance_date === dateString,
-        )
+        const record =
+          attendanceRecords.find(
+            (item) =>
+              item.student_id ===
+                studentId &&
+              item.course_id ===
+                course.id &&
+              item.attendance_date ===
+                dateString,
+          )
 
         if (!record) {
           notRecorded += 1
 
-          // يظهر اليوم في التفاصيل كـ "لم يسجل"
           records.push({
             date: dateString,
             status: 'لم يسجل',
             note: '',
           })
         } else {
-          const status = attendanceStatuses.find(
-            (item) => item.id === record.status_id,
-          )
+          const status =
+            attendanceStatuses.find(
+              (item) =>
+                item.id ===
+                record.status_id,
+            )
 
-          const statusName = status?.name ?? ''
+          const statusName =
+            status?.name ?? ''
 
-          if (statusName === 'حاضر') {
+          if (
+            statusName === 'حاضر'
+          ) {
             present += 1
-          } else if (statusName === 'غائب') {
+          } else if (
+            statusName === 'غائب'
+          ) {
             absent += 1
-          } else if (statusName === 'متأخر') {
+          } else if (
+            statusName === 'متأخر'
+          ) {
             late += 1
-          } else if (statusName === 'مستأذن') {
+          } else if (
+            statusName === 'مستأذن'
+          ) {
             excused += 1
           }
 
           records.push({
             date: dateString,
-            status: statusName || 'غير معروف',
-            note: record.note ?? '',
+            status:
+              statusName ||
+              'غير معروف',
+            note:
+              record.note ?? '',
           })
         }
       }
 
-      current.setDate(current.getDate() + 1)
+      current.setDate(
+        current.getDate() + 1,
+      )
     }
   }
 
+  /*
+   * لم يسجل لا يدخل في نسبة الحضور.
+   *
+   * حاضر + متأخر + مستأذن
+   * = حضور
+   *
+   * غائب
+   * = يؤثر على النسبة
+   */
   const denominator =
     present +
     late +
@@ -242,7 +331,9 @@ function calculateCourseSummary(
   const percentage =
     denominator > 0
       ? Math.round(
-          ((present + late + excused) /
+          ((present +
+            late +
+            excused) /
             denominator) *
             100,
         )
@@ -257,8 +348,11 @@ function calculateCourseSummary(
     excused,
     notRecorded,
     percentage,
-    records: records.sort((a, b) =>
-      b.date.localeCompare(a.date),
+    records: records.sort(
+      (a, b) =>
+        b.date.localeCompare(
+          a.date,
+        ),
     ),
   }
 }
@@ -282,21 +376,35 @@ export default function StudentStatusPage() {
   const [level, setLevel] =
     useState<Level | null>(null)
 
-  const [currentCourses, setCurrentCourses] =
-    useState<CourseSummary[]>([])
+  const [
+    currentCourses,
+    setCurrentCourses,
+  ] = useState<CourseSummary[]>([])
 
-  const [previousCourses, setPreviousCourses] =
-    useState<CourseSummary[]>([])
+  const [
+    previousCourses,
+    setPreviousCourses,
+  ] = useState<CourseSummary[]>([])
 
   const [
     selectedCourse,
     setSelectedCourse,
-  ] = useState<CourseSummary | null>(null)
+  ] =
+    useState<CourseSummary | null>(
+      null,
+    )
 
   const handleSearch = async () => {
-    const personalId = searchValue.trim()
+    const personalId =
+      searchValue.trim()
 
-    if (!personalId) return
+    if (!personalId) {
+      setError(
+        'أدخل الرقم الشخصي أولاً.',
+      )
+      setSearched(true)
+      return
+    }
 
     setLoading(true)
     setSearched(false)
@@ -309,9 +417,9 @@ export default function StudentStatusPage() {
 
     try {
       /*
-       * ============================
-       * 1. البحث عن الطالب بالـ CPR
-       * ============================
+       * =====================================================
+       * 1. الطالب الحقيقي من students
+       * =====================================================
        */
 
       const {
@@ -332,7 +440,11 @@ export default function StudentStatusPage() {
             health_notes
           `,
         )
-        .eq('personal_id', personalId)
+        .eq(
+          'personal_id',
+          personalId,
+        )
+        .limit(1)
         .maybeSingle()
 
       if (studentError) {
@@ -347,141 +459,217 @@ export default function StudentStatusPage() {
         return
       }
 
-      setStudent(studentData)
+      const realStudent =
+        studentData as Student
+
+      setStudent(realStudent)
 
       /*
-       * ============================
-       * 2. السنة الدراسية الحالية
-       * ============================
+       * =====================================================
+       * 2. السنة الحالية الحقيقية
+       * =====================================================
        */
 
       const {
-        data: currentYear,
+        data: currentYearData,
         error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, is_active',
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+      } =
+        await supabase
+          .from('academic_years')
+          .select(
+            `
+              id,
+              name,
+              is_active,
+              is_current
+            `,
+          )
+          .eq(
+            'is_current',
+            true,
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+          .limit(1)
+          .maybeSingle()
 
       if (yearError) {
         throw yearError
       }
 
+      const currentYear =
+        currentYearData as AcademicYear | null
+
       /*
-       * ============================
-       * 3. تسجيل الطالب في السنوات
-       * ============================
+       * =====================================================
+       * 3. تسجيلات الطالب الحقيقية
+       * =====================================================
        */
 
       const {
-        data: enrollments,
+        data: enrollmentData,
         error: enrollmentError,
       } = await supabase
         .from('enrollments')
         .select(
-          'id, academic_year_id, level_id, status',
+          `
+            id,
+            academic_year_id,
+            level_id,
+            status
+          `,
         )
-        .eq('student_id', studentData.id)
+        .eq(
+          'student_id',
+          realStudent.id,
+        )
 
       if (enrollmentError) {
         throw enrollmentError
       }
 
+      const enrollments =
+        (enrollmentData ??
+          []) as Enrollment[]
+
+      /*
+       * =====================================================
+       * 4. مستوى الطالب الحالي
+       * =====================================================
+       */
+
       const currentEnrollment =
         currentYear
-          ? (enrollments ?? []).find(
+          ? enrollments.find(
               (item) =>
                 item.academic_year_id ===
                 currentYear.id,
             )
           : null
 
-      /*
-       * ============================
-       * 4. المستوى الحالي
-       * ============================
-       */
-
-      if (currentEnrollment?.level_id) {
+      if (
+        currentEnrollment?.level_id
+      ) {
         const {
           data: levelData,
           error: levelError,
         } = await supabase
           .from('levels')
-          .select('id, name')
+          .select(
+            'id, name',
+          )
           .eq(
             'id',
             currentEnrollment.level_id,
           )
+          .limit(1)
           .maybeSingle()
 
         if (levelError) {
           throw levelError
         }
 
-        setLevel(levelData)
+        setLevel(
+          (levelData ??
+            null) as Level | null,
+        )
       }
 
       /*
-       * ============================
-       * 5. تحميل حالات الحضور
-       * ============================
+       * =====================================================
+       * 5. حالات الحضور الحقيقية
+       * =====================================================
        */
 
       const {
-        data: statuses,
-        error: statusesError,
+        data: statusData,
+        error: statusError,
       } = await supabase
-        .from('attendance_statuses')
-        .select(
-          'id, name, sort_order',
+        .from(
+          'attendance_statuses',
         )
-        .eq('is_active', true)
-        .order('sort_order')
+        .select(
+          `
+            id,
+            name,
+            sort_order
+          `,
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+        .order(
+          'sort_order',
+          {
+            ascending: true,
+          },
+        )
 
-      if (statusesError) {
-        throw statusesError
+      if (statusError) {
+        throw statusError
       }
 
       const attendanceStatuses =
-        statuses ?? []
+        (statusData ??
+          []) as AttendanceStatus[]
 
       /*
-       * ============================
-       * 6. الدورات المرتبطة بالطالب
-       * ============================
+       * =====================================================
+       * 6. توزيع الطالب الحقيقي على الدورات
+       * =====================================================
        *
-       * لا نعرض جميع دورات النظام.
-       * فقط الدورات التي تم توزيع الطالب
-       * عليها فعليًا.
+       * هذه هي العلاقة الفعلية:
+       *
+       * teacher_student_assignments
+       * student_id -> course_id
        */
 
       const {
-        data: assignments,
-        error: assignmentsError,
+        data: assignmentData,
+        error: assignmentError,
       } = await supabase
-        .from('teacher_student_assignments')
-        .select('course_id')
+        .from(
+          'teacher_student_assignments',
+        )
+        .select(
+          `
+            course_id
+          `,
+        )
         .eq(
           'student_id',
-          studentData.id,
+          realStudent.id,
         )
 
-      if (assignmentsError) {
-        throw assignmentsError
+      if (assignmentError) {
+        throw assignmentError
       }
 
-      const studentCourseIds = new Set(
-        (assignments ?? [])
-          .map((item) => item.course_id)
-          .filter(Boolean),
-      )
+      const studentCourseIds =
+        Array.from(
+          new Set(
+            (assignmentData ?? [])
+              .map(
+                (item) =>
+                  item.course_id,
+              )
+              .filter(
+                Boolean,
+              ),
+          ),
+        )
 
-      if (studentCourseIds.size === 0) {
+      /*
+       * لا توجد دورات مرتبطة فعليًا
+       */
+
+      if (
+        studentCourseIds.length ===
+        0
+      ) {
         setCurrentCourses([])
         setPreviousCourses([])
         setSearched(true)
@@ -489,14 +677,14 @@ export default function StudentStatusPage() {
       }
 
       /*
-       * ============================
-       * 7. تحميل الدورات المرتبطة فقط
-       * ============================
+       * =====================================================
+       * 7. الدورات الحقيقية فقط
+       * =====================================================
        */
 
       const {
-        data: courses,
-        error: coursesError,
+        data: courseData,
+        error: courseError,
       } = await supabase
         .from('courses')
         .select(
@@ -511,7 +699,7 @@ export default function StudentStatusPage() {
         )
         .in(
           'id',
-          Array.from(studentCourseIds),
+          studentCourseIds,
         )
         .order(
           'start_date',
@@ -520,21 +708,24 @@ export default function StudentStatusPage() {
           },
         )
 
-      if (coursesError) {
-        throw coursesError
+      if (courseError) {
+        throw courseError
       }
 
       const studentCourses =
-        courses ?? []
+        (courseData ??
+          []) as Course[]
 
       /*
-       * ============================
-       * 8. تحميل حضور الطالب
-       * ============================
+       * =====================================================
+       * 8. حضور الطالب الحقيقي
+       * =====================================================
+       *
+       * نجيب سجلات هذا الطالب فقط.
        */
 
       const {
-        data: attendance,
+        data: attendanceData,
         error: attendanceError,
       } = await supabase
         .from('attendance')
@@ -550,7 +741,7 @@ export default function StudentStatusPage() {
         )
         .eq(
           'student_id',
-          studentData.id,
+          realStudent.id,
         )
 
       if (attendanceError) {
@@ -558,14 +749,16 @@ export default function StudentStatusPage() {
       }
 
       const attendanceRecords =
-        attendance ?? []
+        (attendanceData ??
+          []) as AttendanceRecord[]
 
-      const today = getTodayString()
+      const today =
+        getTodayString()
 
       /*
-       * ============================
-       * 9. الدورة الحالية
-       * ============================
+       * =====================================================
+       * 9. الدورات الحالية
+       * =====================================================
        */
 
       const currentCourseList =
@@ -587,8 +780,10 @@ export default function StudentStatusPage() {
             }
 
             return (
-              course.start_date <= today &&
-              course.end_date >= today
+              course.start_date <=
+                today &&
+              course.end_date >=
+                today
             )
           },
         )
@@ -597,7 +792,7 @@ export default function StudentStatusPage() {
         currentCourseList.map(
           (course) =>
             calculateCourseSummary(
-              studentData.id,
+              realStudent.id,
               course,
               attendanceRecords,
               attendanceStatuses,
@@ -609,19 +804,24 @@ export default function StudentStatusPage() {
       )
 
       /*
-       * ============================
+       * =====================================================
        * 10. الدورات السابقة
-       * ============================
+       * =====================================================
        */
 
       const previousCourseList =
         studentCourses.filter(
           (course) => {
-            if (!course.end_date) {
+            if (
+              !course.end_date
+            ) {
               return false
             }
 
-            return course.end_date < today
+            return (
+              course.end_date <
+              today
+            )
           },
         )
 
@@ -629,7 +829,7 @@ export default function StudentStatusPage() {
         previousCourseList.map(
           (course) =>
             calculateCourseSummary(
-              studentData.id,
+              realStudent.id,
               course,
               attendanceRecords,
               attendanceStatuses,
@@ -662,7 +862,6 @@ export default function StudentStatusPage() {
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10">
       <div className="mx-auto max-w-4xl">
-        {/* Header */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
             <UserRound className="size-7" />
@@ -674,11 +873,11 @@ export default function StudentStatusPage() {
 
           <p className="mt-2 text-sm text-muted-foreground">
             أدخل الرقم الشخصي للطالب
-            لعرض بياناته ومتابعة الحضور
+            لعرض بياناته الحقيقية
+            ومتابعة الحضور
           </p>
         </div>
 
-        {/* Search */}
         <div className="rounded-2xl border bg-background p-5 shadow-sm">
           <label className="mb-2 block text-sm font-medium">
             الرقم الشخصي (CPR)
@@ -694,8 +893,10 @@ export default function StudentStatusPage() {
                 )
               }
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleSearch()
+                if (
+                  e.key === 'Enter'
+                ) {
+                  void handleSearch()
                 }
               }}
               placeholder="أدخل الرقم الشخصي"
@@ -705,7 +906,9 @@ export default function StudentStatusPage() {
 
             <button
               type="button"
-              onClick={handleSearch}
+              onClick={() =>
+                void handleSearch()
+              }
               disabled={loading}
               className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -720,7 +923,6 @@ export default function StudentStatusPage() {
           </div>
         </div>
 
-        {/* Error */}
         {searched && error && (
           <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
             <div className="flex items-start gap-3">
@@ -739,12 +941,10 @@ export default function StudentStatusPage() {
           </div>
         )}
 
-        {/* Student */}
         {searched &&
           !error &&
           student && (
             <div className="mt-5 space-y-5">
-              {/* Student info */}
               <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                 <div className="border-b px-5 py-4">
                   <h2 className="font-semibold">
@@ -755,7 +955,10 @@ export default function StudentStatusPage() {
                 <div className="grid gap-4 p-5 sm:grid-cols-2">
                   <InfoItem
                     label="اسم الطالب"
-                    value={student.name}
+                    value={
+                      student.name ||
+                      '—'
+                    }
                   />
 
                   <InfoItem
@@ -769,7 +972,8 @@ export default function StudentStatusPage() {
                   <InfoItem
                     label="المستوى"
                     value={
-                      level?.name ?? '—'
+                      level?.name ??
+                      '—'
                     }
                   />
 
@@ -780,10 +984,25 @@ export default function StudentStatusPage() {
                       '—'
                     }
                   />
+
+                  <InfoItem
+                    label="رقم الهاتف"
+                    value={
+                      student.phone ??
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="الواتساب"
+                    value={
+                      student.whatsapp ??
+                      '—'
+                    }
+                  />
                 </div>
               </div>
 
-              {/* Current courses */}
               <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                 <div className="border-b px-5 py-4">
                   <h2 className="font-semibold">
@@ -791,14 +1010,17 @@ export default function StudentStatusPage() {
                   </h2>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    ملخص حضور الطالب
+                    ملخص حضور الطالب من
+                    سجلات الحضور الفعلية
                   </p>
                 </div>
 
-                {currentCourses.length === 0 ? (
+                {currentCourses.length ===
+                0 ? (
                   <div className="p-5 text-sm text-muted-foreground">
                     لا توجد دورة حالية
-                    مسجلة للطالب حاليًا.
+                    مرتبطة بهذا الطالب
+                    حاليًا.
                   </div>
                 ) : (
                   <div className="space-y-5 p-5">
@@ -806,7 +1028,8 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <CurrentCourseCard
                           key={
-                            summary.course.id
+                            summary.course
+                              .id
                           }
                           summary={
                             summary
@@ -823,8 +1046,8 @@ export default function StudentStatusPage() {
                 )}
               </div>
 
-              {/* Previous courses */}
-              {previousCourses.length > 0 && (
+              {previousCourses.length >
+                0 && (
                 <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                   <div className="border-b px-5 py-4">
                     <h2 className="font-semibold">
@@ -832,7 +1055,8 @@ export default function StudentStatusPage() {
                     </h2>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      نسبة الحضور في الدورات السابقة
+                      نسبة الحضور في
+                      الدورات السابقة
                     </p>
                   </div>
 
@@ -841,7 +1065,8 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <div
                           key={
-                            summary.course.id
+                            summary.course
+                              .id
                           }
                           className="flex flex-wrap items-center justify-between gap-4 p-5"
                         >
@@ -855,7 +1080,8 @@ export default function StudentStatusPage() {
                             </p>
 
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {summary.course
+                              {summary
+                                .course
                                 .start_date
                                 ? formatDate(
                                     summary
@@ -864,7 +1090,8 @@ export default function StudentStatusPage() {
                                   )
                                 : '—'}
                               {' — '}
-                              {summary.course
+                              {summary
+                                .course
                                 .end_date
                                 ? formatDate(
                                     summary
@@ -876,7 +1103,10 @@ export default function StudentStatusPage() {
                           </div>
 
                           <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
-                            {summary.percentage}%
+                            {
+                              summary.percentage
+                            }
+                            %
                             حضور
                           </div>
                         </div>
@@ -888,7 +1118,6 @@ export default function StudentStatusPage() {
             </div>
           )}
 
-        {/* Footer */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
           <CalendarDays className="size-3.5" />
 
@@ -898,7 +1127,6 @@ export default function StudentStatusPage() {
         </div>
       </div>
 
-      {/* Attendance Details Modal */}
       {selectedCourse && (
         <AttendanceDetailsModal
           summary={selectedCourse}
@@ -920,7 +1148,6 @@ function CurrentCourseCard({
 }) {
   return (
     <div className="space-y-4">
-      {/* Course header */}
       <div className="rounded-xl border bg-muted/20 p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -944,12 +1171,12 @@ function CurrentCourseCard({
           </div>
 
           <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
-            {summary.percentage}% حضور
+            {summary.percentage}%
+            حضور
           </div>
         </div>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <AttendanceBox
           label="حاضر"
@@ -977,7 +1204,6 @@ function CurrentCourseCard({
         />
       </div>
 
-      {/* Details button */}
       <button
         type="button"
         onClick={onDetails}
@@ -1009,7 +1235,6 @@ function AttendanceDetailsModal({
           e.stopPropagation()
         }
       >
-        {/* Modal header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <h2 className="font-semibold">
@@ -1031,7 +1256,6 @@ function AttendanceDetailsModal({
           </button>
         </div>
 
-        {/* Modal summary */}
         <div className="border-b bg-muted/20 p-5">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <AttendanceBox
@@ -1061,11 +1285,12 @@ function AttendanceDetailsModal({
           </div>
         </div>
 
-        {/* Daily attendance */}
         <div className="max-h-[55vh] overflow-y-auto p-5">
-          {summary.records.length === 0 ? (
+          {summary.records.length ===
+          0 ? (
             <div className="rounded-xl border p-4 text-sm text-muted-foreground">
-              لا توجد أيام حضور مسجلة.
+              لا توجد أيام حضور
+              مسجلة.
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">
@@ -1089,7 +1314,10 @@ function AttendanceDetailsModal({
 
                   <tbody>
                     {summary.records.map(
-                      (record, index) => (
+                      (
+                        record,
+                        index,
+                      ) => (
                         <tr
                           key={`${record.date}-${index}`}
                           className="border-b last:border-b-0"
