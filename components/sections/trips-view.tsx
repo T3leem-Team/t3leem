@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   CalendarDays,
   ChevronLeft,
@@ -67,12 +66,16 @@ const statusLabels: Record<TripStatus, string> = {
 const statusClasses: Record<TripStatus, string> = {
   draft:
     'bg-muted text-muted-foreground border-border',
+
   pending_approval:
     'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400',
+
   published:
     'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-400',
+
   rejected:
     'bg-destructive/10 text-destructive border-destructive/20',
+
   closed:
     'bg-slate-500/10 text-slate-700 border-slate-500/20 dark:text-slate-400',
 }
@@ -95,6 +98,7 @@ function formatDate(value: string | null) {
 
 function formatTime(value: string | null) {
   if (!value) return null
+
   return value.slice(0, 5)
 }
 
@@ -106,10 +110,10 @@ function formatFee(value: number) {
 }
 
 export function TripsView() {
-  const router = useRouter()
-
   const [trips, setTrips] = useState<Trip[]>([])
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
+  const [academicYears, setAcademicYears] = useState<
+    AcademicYear[]
+  >([])
   const [courses, setCourses] = useState<Course[]>([])
 
   const [loading, setLoading] = useState(true)
@@ -124,12 +128,16 @@ export function TripsView() {
   const [formOpen, setFormOpen] = useState(false)
 
   // الرحلة التي نريد تعديلها
-  const [editingTrip, setEditingTrip] = useState<Trip | null>(null)
+  const [editingTrip, setEditingTrip] =
+    useState<Trip | null>(null)
 
   // الرحلة التي يتم حذفها حالياً
-  const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
+  const [deletingTripId, setDeletingTripId] =
+    useState<string | null>(null)
 
-  async function loadTrips(options?: { silent?: boolean }) {
+  async function loadTrips(options?: {
+    silent?: boolean
+  }) {
     const silent = options?.silent ?? false
 
     if (silent) {
@@ -276,6 +284,7 @@ export function TripsView() {
   function handleTripSaved() {
     setFormOpen(false)
     setEditingTrip(null)
+
     loadTrips({ silent: true })
   }
 
@@ -316,7 +325,9 @@ export function TripsView() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => loadTrips({ silent: true })}
+            onClick={() =>
+              loadTrips({ silent: true })
+            }
             disabled={refreshing}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -501,16 +512,17 @@ export function TripsView() {
               : 'لم تتم إضافة أي رحلة حتى الآن.'}
           </p>
 
-          {!search && statusFilter === 'all' && (
-            <button
-              type="button"
-              onClick={handleCreateTrip}
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
-              <CirclePlus className="size-4" />
-              إضافة أول رحلة
-            </button>
-          )}
+          {!search &&
+            statusFilter === 'all' && (
+              <button
+                type="button"
+                onClick={handleCreateTrip}
+                className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                <CirclePlus className="size-4" />
+                إضافة أول رحلة
+              </button>
+            )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -618,7 +630,8 @@ export function TripsView() {
                         </span>
                       </div>
 
-                      {trip.attendance_min !== null && (
+                      {trip.attendance_min !==
+                        null && (
                         <div className="flex items-center gap-2 text-sm">
                           <span className="text-muted-foreground">
                             الحضور:
@@ -640,9 +653,9 @@ export function TripsView() {
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() =>
-                        router.push(`/trips/${trip.id}`)
-                      }
+                      onClick={() => {
+                        window.location.href = `/trips/${trip.id}`
+                      }}
                       className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition hover:bg-muted"
                     >
                       التفاصيل
