@@ -14,10 +14,10 @@ import {
 
 type TripStatus =
   | 'draft'
-  |  'pending_approval'
-  |  'published'
-  |  'rejected'
-  |  'closed'
+  | 'pending_approval'
+  | 'published'
+  | 'rejected'
+  | 'closed'
 
 type Trip = {
   id: string
@@ -45,6 +45,11 @@ type Level = {
   name: string
 }
 
+type CourseNote = {
+  note: string
+  source: string
+}
+
 type Student = {
   id: string
   name: string
@@ -58,7 +63,7 @@ type Student = {
   attendance_late: number
   attendance_excused: number
   attendance_not_recorded: number
-  course_notes: string[]
+  course_notes: CourseNote[]
   eligible: boolean
   eligibility_note: string | null
   selected: boolean
@@ -226,9 +231,15 @@ export function TripDetailsView({
   }, [data])
 
   const filteredStudents = useMemo(() => {
+    if (!data) return []
+
     const normalizedSearch = search.trim().toLowerCase()
 
-    return eligibleStudents.filter((student) => {
+    return data.students.filter((student) => {
+      if (showEligibleOnly && !student.eligible) {
+        return false
+      }
+
       const matchesSearch =
         !normalizedSearch ||
         student.name.toLowerCase().includes(normalizedSearch) ||
@@ -245,7 +256,12 @@ export function TripDetailsView({
 
       return matchesSearch && matchesLevel
     })
-  }, [eligibleStudents, search, levelFilter])
+  }, [
+    data,
+    search,
+    levelFilter,
+    showEligibleOnly,
+  ])
 
   const selectedCount = selectedIds.length
 
@@ -271,7 +287,9 @@ export function TripDetailsView({
       const next = new Set(current)
 
       filteredStudents.forEach((student) => {
-        next.add(student.id)
+        if (student.eligible) {
+          next.add(student.id)
+        }
       })
 
       return Array.from(next)
@@ -341,7 +359,10 @@ export function TripDetailsView({
 
   if (loading) {
     return (
-      <div dir="rtl" className="flex min-h-[400px] items-center justify-center">
+      <div
+        dir="rtl"
+        className="flex min-h-[400px] items-center justify-center"
+      >
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>جاري تحميل الرحلة...</span>
@@ -411,7 +432,9 @@ export function TripDetailsView({
           className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw
-            className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`}
+            className={`h-4 w-4 ${
+              refreshing ? 'animate-spin' : ''
+            }`}
           />
           تحديث
         </button>
@@ -502,7 +525,9 @@ export function TripDetailsView({
 
         {trip.note && (
           <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
-            <span className="font-medium">ملاحظة الرحلة:</span>{' '}
+            <span className="font-medium">
+              ملاحظة الرحلة:
+            </span>{' '}
             {trip.note}
           </div>
         )}
@@ -612,7 +637,12 @@ export function TripDetailsView({
             <button
               type="button"
               onClick={selectAllVisible}
-              disabled={!canEdit || filteredStudents.length === 0}
+              disabled={
+                !canEdit ||
+                filteredStudents.filter(
+                  (student) => student.eligible,
+                ).length === 0
+              }
               className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckSquare className="h-4 w-4" />
@@ -622,7 +652,10 @@ export function TripDetailsView({
             <button
               type="button"
               onClick={clearVisibleSelection}
-              disabled={!canEdit || filteredStudents.length === 0}
+              disabled={
+                !canEdit ||
+                filteredStudents.length === 0
+              }
               className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               إلغاء تحديد الظاهر
@@ -666,183 +699,152 @@ export function TripDetailsView({
             </thead>
 
             <tbody>
-              {(() => {
-                const studentsToShow = showEligibleOnly
-                  ? filteredStudents
-                  : data.students.filter((student) => {
-                      const normalizedSearch =
-                        search.trim().toLowerCase()
+              {filteredStudents.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-12 text-center text-muted-foreground"
+                  >
+                    لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
+                  </td>
+                </tr>
+              ) : (
+                filteredStudents.map((student, index) => {
+                  const isSelected =
+                    selectedIds.includes(student.id)
 
-                      const matchesSearch =
-                        !normalizedSearch ||
-                        student.name
-                          .toLowerCase()
-                          .includes(normalizedSearch) ||
-                        (student.personal_id ?? '')
-                          .toLowerCase()
-                          .includes(normalizedSearch) ||
-                        (student.phone ?? '')
-                          .toLowerCase()
-                          .includes(normalizedSearch)
-
-                      const matchesLevel =
-                        levelFilter === 'all' ||
-                        student.level_id === levelFilter
-
-                      return matchesSearch && matchesLevel
-                    })
-
-                if (studentsToShow.length === 0) {
                   return (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 py-12 text-center text-muted-foreground"
-                      >
-                        لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
+                    <tr
+                      key={student.id}
+                      className={`border-b last:border-0 ${
+                        isSelected
+                          ? 'bg-primary/5'
+                          : 'hover:bg-muted/20'
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {index + 1}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div className="font-medium">
+                          {student.name}
+                        </div>
+
+                        {student.personal_id && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {student.personal_id}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        {student.level_name || 'غير محدد'}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <div
+                          className={`font-semibold ${getAttendanceClass(
+                            student.attendance_percentage,
+                          )}`}
+                        >
+                          {student.attendance_percentage.toFixed(
+                            1,
+                          )}
+                          %
+                        </div>
+
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          حاضر {student.attendance_present}
+                          {' · '}
+                          غائب {student.attendance_absent}
+                          {' · '}
+                          متأخر {student.attendance_late}
+                          {' · '}
+                          مستأذن {student.attendance_excused}
+                        </div>
+                      </td>
+
+                      <td className="max-w-[260px] px-4 py-3">
+                        {student.course_notes.length > 0 ? (
+                          <div className="space-y-1">
+                            {student.course_notes
+                              .slice(0, 2)
+                              .map((note, noteIndex) => (
+                                <div
+                                  key={`${student.id}-${noteIndex}`}
+                                  className="rounded-md bg-muted/50 px-2 py-1 text-xs"
+                                >
+                                  {note.note}
+                                </div>
+                              ))}
+
+                            {student.course_notes.length > 2 && (
+                              <div className="text-xs text-muted-foreground">
+                                +
+                                {student.course_notes.length - 2}{' '}
+                                ملاحظات أخرى
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            لا توجد ملاحظات
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
+                          {getResponseLabel(
+                            student.response,
+                          )}
+                        </span>
+
+                        {student.response_note && (
+                          <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                            {student.response_note}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3 text-center">
+                        {student.eligible ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleStudent(student.id)
+                            }
+                            disabled={!canEdit}
+                            aria-label={
+                              isSelected
+                                ? 'إلغاء اختيار الطالب'
+                                : 'اختيار الطالب'
+                            }
+                            className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                              isSelected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'bg-background hover:bg-muted'
+                            } ${
+                              !canEdit
+                                ? 'cursor-not-allowed opacity-50'
+                                : ''
+                            }`}
+                          >
+                            {isSelected && (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            غير مؤهل
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
-                }
-
-                return studentsToShow.map(
-                  (student, index) => {
-                    const isSelected =
-                      selectedIds.includes(student.id)
-
-                    return (
-                      <tr
-                        key={student.id}
-                        className={`border-b last:border-0 ${
-                          isSelected
-                            ? 'bg-primary/5'
-                            : 'hover:bg-muted/20'
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {index + 1}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="font-medium">
-                            {student.name}
-                          </div>
-
-                          {student.personal_id && (
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                              {student.personal_id}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {student.level_name || 'غير محدد'}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div
-                            className={`font-semibold ${getAttendanceClass(
-                              student.attendance_percentage,
-                            )}`}
-                          >
-                            {student.attendance_percentage.toFixed(
-                              1,
-                            )}
-                            %
-                          </div>
-
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            حاضر {student.attendance_present}
-                            {' · '}
-                            غائب {student.attendance_absent}
-                            {' · '}
-                            متأخر {student.attendance_late}
-                            {' · '}
-                            مستأذن {student.attendance_excused}
-                          </div>
-                        </td>
-
-                        <td className="max-w-[260px] px-4 py-3">
-                          {student.course_notes.length > 0 ? (
-                            <div className="space-y-1">
-                              {student.course_notes
-                                .slice(0, 2)
-                                .map((note, noteIndex) => (
-                                  <div
-                                    key={`${student.id}-${noteIndex}`}
-                                    className="rounded-md bg-muted/50 px-2 py-1 text-xs"
-                                  >
-                                    {note}
-                                  </div>
-                                ))}
-
-                              {student.course_notes.length > 2 && (
-                                <div className="text-xs text-muted-foreground">
-                                  +
-                                  {student.course_notes.length - 2}{' '}
-                                  ملاحظات أخرى
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              لا توجد ملاحظات
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
-                            {getResponseLabel(
-                              student.response,
-                            )}
-                          </span>
-
-                          {student.response_note && (
-                            <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
-                              {student.response_note}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-center">
-                          {student.eligible ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleStudent(student.id)
-                              }
-                              disabled={!canEdit}
-                              aria-label={
-                                isSelected
-                                  ? 'إلغاء اختيار الطالب'
-                                  : 'اختيار الطالب'
-                              }
-                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
-                                isSelected
-                                  ? 'border-primary bg-primary text-primary-foreground'
-                                  : 'bg-background hover:bg-muted'
-                              } ${
-                                !canEdit
-                                  ? 'cursor-not-allowed opacity-50'
-                                  : ''
-                              }`}
-                            >
-                              {isSelected && (
-                                <Check className="h-4 w-4" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              غير مؤهل
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  },
-                )
-              })()}
+                })
+              )}
             </tbody>
           </table>
         </div>
