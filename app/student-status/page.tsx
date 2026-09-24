@@ -459,13 +459,20 @@ export default function StudentStatusPage() {
         return
       }
 
-      console.log('SEARCHED PERSONAL ID:', personalId)
-        console.log('SUPABASE STUDENT RESULT:', studentData)
-        
-        const realStudent =
-          studentData as Student
-        
-        setStudent(realStudent)
+      console.log(
+        'SEARCHED PERSONAL ID:',
+        personalId,
+      )
+
+      console.log(
+        'SUPABASE STUDENT RESULT:',
+        studentData,
+      )
+
+      const realStudent =
+        studentData as Student
+
+      setStudent(realStudent)
 
       /*
        * =====================================================
@@ -724,36 +731,33 @@ export default function StudentStatusPage() {
        * 8. حضور الطالب الحقيقي
        * =====================================================
        *
-       * نجيب سجلات هذا الطالب فقط.
+       * رابط متابعة الطالب يعمل بدون تسجيل دخول،
+       * لذلك لا نقرأ attendance مباشرة بسبب RLS.
+       *
+       * نستخدم RPC مخصصة للرقم الشخصي وترجع
+       * سجلات حضور هذا الطالب فقط.
        */
 
       const {
-        data: attendanceData,
+        data: attendanceResult,
         error: attendanceError,
-      } = await supabase
-        .from('attendance')
-        .select(
-          `
-            id,
-            student_id,
-            course_id,
-            attendance_date,
-            status_id,
-            note
-          `,
-        )
-        .eq(
-          'student_id',
-          realStudent.id,
-        )
+      } = await supabase.rpc(
+        'get_student_status_by_personal_id',
+        {
+          p_personal_id: personalId,
+        },
+      )
 
       if (attendanceError) {
         throw attendanceError
       }
 
       const attendanceRecords =
-        (attendanceData ??
-          []) as AttendanceRecord[]
+        Array.isArray(
+          attendanceResult?.attendance,
+        )
+          ? (attendanceResult.attendance as AttendanceRecord[])
+          : []
 
       const today =
         getTodayString()
