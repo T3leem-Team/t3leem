@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { requireAuth } from '@/lib/auth'
+import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 type RouteContext = {
@@ -9,87 +9,128 @@ type RouteContext = {
   }>
 }
 
-function calculateAttendance(
-  records: Array<{
-    student_id: string
-    attendance_date: string
-    status_id: string
-    note: string | null
-  }>,
-  statusMap: Map<string, string>,
-  lessonDates: string[],
-) {
-  const recordsByDate = new Map<
-    string,
-    {
-      status: string
-      note: string | null
-    }
-  >()
+type AttendanceStatus = {
+  id: string
+  name: string
+}
 
-  for (const record of records) {
-    recordsByDate.set(record.attendance_date, {
-      status:
-        statusMap.get(record.status_id) ?? '',
-      note: record.note ?? null,
-    })
+type StudentRow = {
+  id: string
+  name: string
+  personal_id: string | null
+  phone: string | null
+  whatsapp: string | null
+  notes: string | null
+}
+
+type EnrollmentRow = {
+  id: string
+  student_id: string
+  academic_year_id: string
+  level_id: string
+  class_id: string | null
+  status: string | null
+}
+
+type AttendanceRow = {
+  id: string
+  student_id: string
+  enrollment_id: string | null
+  attendance_date: string
+  status_id: string
+  note: string | null
+  course_id: string | null
+}
+
+type TripStudentRow = {
+  id: string
+  trip_id: string
+  student_id: string
+  enrollment_id: string | null
+  attendance_percentage: number | null
+  attendance_present: number | null
+  attendance_absent: number | null
+  attendance_late: number | null
+  attendance_excused: number | null
+  attendance_not_recorded: number | null
+  eligibility_note: string | null
+  selected: boolean | null
+  response: string | null
+  response_note: string | null
+  responded_at: string | null
+}
+
+function normalizePercentage(
+  value: number | null | undefined,
+) {
+  if (value === null || value === undefined) {
+    return null
   }
 
+  return Math.round(Number(value) * 100) / 100
+}
+
+/*
+ * حساب الحضور بنفس قاعدة النظام:
+ *
+ * حاضر + متأخر + مستأذن = حضور
+ * غائب = ضمن المقام
+ * لم يسجل = خارج المقام
+ */
+function calculateAttendance(
+  records: AttendanceRow[],
+  statusMap: Map<string, string>,
+) {
   let present = 0
   let absent = 0
   let late = 0
   let excused = 0
   let notRecorded = 0
 
-  const courseNotes: string[] = []
+  for (const record of records) {
+    const statusName =
+      statusMap.get(record.status_id) ?? ''
 
-  for (const date of lessonDates) {
-    const record = recordsByDate.get(date)
-
-    if (!record) {
-      notRecorded += 1
+    if (statusName === 'حاضر') {
+      present += 1
       continue
     }
 
-    if (record.note?.trim()) {
-      courseNotes.push(record.note.trim())
+    if (statusName === 'غائب') {
+      absent += 1
+      continue
     }
 
-    switch (record.status) {
-      case 'حاضر':
-        present += 1
-        break
-
-      case 'غائب':
-        absent += 1
-        break
-
-      case 'متأخر':
-        late += 1
-        break
-
-      case 'مستأذن':
-        excused += 1
-        break
-
-      default:
-        break
+    if (statusName === 'متأخر') {
+      late += 1
+      continue
     }
+
+    if (statusName === 'مستأذن') {
+      excused += 1
+      continue
+    }
+
+    /*
+     * أي حالة أخرى لا تدخل في النسبة.
+     */
+    notRecorded += 1
   }
 
   const denominator =
-    present + absent + late + excused
+    present +
+    absent +
+    late +
+    excused
 
   const attended =
-    present + late + excused
+    present +
+    late +
+    excused
 
   const percentage =
     denominator > 0
-      ? Number(
-          ((attended / denominator) * 100).toFixed(
-            2,
-          ),
-        )
+      ? (attended / denominator) * 100
       : null
 
   return {
@@ -98,9 +139,121 @@ function calculateAttendance(
     late,
     excused,
     notRecorded,
-    percentage,
-    courseNotes,
+    percentage:
+      percentage === null
+        ? null
+        : normalizePercentage(percentage),
   }
+}
+
+function isAttendanceEligible(
+  percentage: number | null,
+  min: number | null,
+  max: number | null,
+) {
+  if (percentage === null) {
+    return min === null
+  }
+
+  if (
+    min !== null &&
+    percentage < min
+  ) {
+    return false
+  }
+
+  if (
+    max !== null &&
+    percentage > max
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function isNotesEligible(
+  notes: string | null,
+  requirement: string,
+) {
+  const hasNotes =
+    typeof notes === 'string' &&
+    notes.trim().length > 0
+
+  if (requirement === 'required') {
+    return hasNotes
+  }
+
+  if (requirement === 'none') {
+    return !hasNotes
+  }
+
+  return true
+}
+
+function getEligibilityNote(
+  attendancePercentage: number | null,
+  attendanceMin: number | null,
+  attendanceMax: number | null,
+  studentNotes: string | null,
+  notesRequirement: string,
+) {
+  const reasons: string[] = []
+
+  if (
+    attendancePercentage === null &&
+    attendanceMin !== null
+  ) {
+    reasons.push(
+      'لا توجد بيانات حضور كافية',
+    )
+  }
+
+  if (
+    attendancePercentage !== null &&
+    attendanceMin !== null &&
+    attendancePercentage < attendanceMin
+  ) {
+    reasons.push(
+      `نسبة الحضور أقل من الحد الأدنى (${attendanceMin}%)`,
+    )
+  }
+
+  if (
+    attendancePercentage !== null &&
+    attendanceMax !== null &&
+    attendancePercentage > attendanceMax
+  ) {
+    reasons.push(
+      `نسبة الحضور أعلى من الحد الأعلى (${attendanceMax}%)`,
+    )
+  }
+
+  const hasNotes =
+    typeof studentNotes === 'string' &&
+    studentNotes.trim().length > 0
+
+  if (
+    notesRequirement === 'required' &&
+    !hasNotes
+  ) {
+    reasons.push(
+      'لا توجد ملاحظات لهذا الطالب',
+    )
+  }
+
+  if (
+    notesRequirement === 'none' &&
+    hasNotes
+  ) {
+    reasons.push(
+      'يوجد للطالب ملاحظات',
+    )
+  }
+
+  return reasons.length
+    ? reasons.join('، ')
+    : null
 }
 
 export async function GET(
@@ -108,668 +261,755 @@ export async function GET(
   { params }: RouteContext,
 ) {
   try {
-    await requireAuth()
+    const { access, response } =
+      await requireAuth()
+
+    if (response) return response
+
+    if (!access) {
+      return NextResponse.json(
+        {
+          error:
+            'غير مصرح بالوصول',
+        },
+        { status: 401 },
+      )
+    }
 
     const { id } = await params
 
     if (!id) {
       return NextResponse.json(
         {
-          error: 'معرّف الرحلة غير موجود.',
+          error:
+            'معرف الرحلة مطلوب',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
     const supabase =
       await createSupabaseServerClient()
 
-    const [
-      tripResult,
-      tripLevelsResult,
-      existingStudentsResult,
-    ] = await Promise.all([
-      supabase
-        .from('trips')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle(),
+    /*
+     * -------------------------------------------------------
+     * الرحلة
+     * -------------------------------------------------------
+     */
 
-      supabase
-        .from('trip_levels')
-        .select('id, trip_id, level_id')
-        .eq('trip_id', id),
+    const {
+      data: trip,
+      error: tripError,
+    } = await supabase
+      .from('trips')
+      .select(`
+        id,
+        name,
+        description,
+        location,
+        trip_date,
+        meeting_time,
+        return_time,
+        fee,
+        note,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status,
+        created_at,
+        updated_at
+      `)
+      .eq('id', id)
+      .maybeSingle()
 
-      supabase
-        .from('trip_students')
-        .select(
-          `
-            id,
-            trip_id,
-            student_id,
-            enrollment_id,
-            attendance_percentage,
-            attendance_present,
-            attendance_absent,
-            attendance_late,
-            attendance_excused,
-            attendance_not_recorded,
-            eligibility_note,
-            selected,
-            response,
-            response_note,
-            responded_at
-          `,
-        )
-        .eq('trip_id', id),
-    ])
-
-    if (tripResult.error) {
+    if (tripError) {
       console.error(
-        'Get trip error:',
-        tripResult.error,
+        'GET /api/trips/[id]/students - trip error:',
+        tripError,
       )
 
       return NextResponse.json(
         {
           error:
-            tripResult.error.message ??
-            'تعذر تحميل الرحلة.',
+            'تعذر تحميل الرحلة',
+          details:
+            tripError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
-
-    const trip = tripResult.data
 
     if (!trip) {
       return NextResponse.json(
         {
-          error: 'الرحلة غير موجودة.',
+          error:
+            'الرحلة غير موجودة',
         },
-        {
-          status: 404,
-        },
+        { status: 404 },
       )
     }
 
-    if (tripLevelsResult.error) {
+    /*
+     * -------------------------------------------------------
+     * الدورة
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: course,
+      error: courseError,
+    } = await supabase
+      .from('courses')
+      .select(`
+        id,
+        name,
+        academic_year_id,
+        start_date,
+        end_date,
+        days
+      `)
+      .eq('id', trip.course_id)
+      .maybeSingle()
+
+    if (courseError) {
       console.error(
-        'Get trip levels error:',
-        tripLevelsResult.error,
+        'GET /api/trips/[id]/students - course error:',
+        courseError,
       )
 
       return NextResponse.json(
         {
           error:
-            tripLevelsResult.error.message ??
-            'تعذر تحميل مستويات الرحلة.',
+            'تعذر تحميل الدورة',
+          details:
+            courseError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
-    if (existingStudentsResult.error) {
+    /*
+     * -------------------------------------------------------
+     * مستويات الرحلة
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: tripLevels,
+      error: tripLevelsError,
+    } = await supabase
+      .from('trip_levels')
+      .select(`
+        id,
+        trip_id,
+        level_id
+      `)
+      .eq('trip_id', id)
+
+    if (tripLevelsError) {
       console.error(
-        'Get trip students error:',
-        existingStudentsResult.error,
+        'GET /api/trips/[id]/students - trip levels error:',
+        tripLevelsError,
       )
 
       return NextResponse.json(
         {
           error:
-            existingStudentsResult.error.message ??
-            'تعذر تحميل طلاب الرحلة.',
+            'تعذر تحميل مستويات الرحلة',
+          details:
+            tripLevelsError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
-    const tripLevels =
-      tripLevelsResult.data ?? []
+    const levelIds =
+      (tripLevels ?? []).map(
+        (item) => item.level_id,
+      )
 
-    const levelIds = tripLevels.map(
-      (item) => item.level_id,
+    /*
+     * -------------------------------------------------------
+     * المستويات
+     * -------------------------------------------------------
+     */
+
+    let levels: Array<{
+      id: string
+      name: string
+      sort_order: number | null
+    }> = []
+
+    if (levelIds.length > 0) {
+      const {
+        data: levelRows,
+        error: levelsError,
+      } = await supabase
+        .from('levels')
+        .select(`
+          id,
+          name,
+          sort_order
+        `)
+        .in('id', levelIds)
+
+      if (levelsError) {
+        console.error(
+          'GET /api/trips/[id]/students - levels error:',
+          levelsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل المستويات',
+            details:
+              levelsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      levels = levelRows ?? []
+    }
+
+    const levelMap = new Map(
+      levels.map((level) => [
+        level.id,
+        level,
+      ]),
     )
 
-    const [
-      courseResult,
-      levelsResult,
-      enrollmentsResult,
-      statusesResult,
-    ] = await Promise.all([
-      supabase
-        .from('courses')
-        .select(
-          'id, name, academic_year_id, start_date, end_date, days',
-        )
-        .eq('id', trip.course_id)
-        .maybeSingle(),
+    /*
+     * -------------------------------------------------------
+     * طلاب السنة الحالية
+     * -------------------------------------------------------
+     *
+     * نستخدم enrollments لمعرفة مستوى الطالب
+     * داخل السنة الدراسية الخاصة بالرحلة.
+     */
 
-      levelIds.length > 0
-        ? supabase
-            .from('levels')
-            .select(
-              'id, name, sort_order, is_active',
-            )
-            .in('id', levelIds)
-        : Promise.resolve({
-            data: [],
-            error: null,
-          }),
+    const {
+      data: enrollments,
+      error: enrollmentsError,
+    } = await supabase
+      .from('enrollments')
+      .select(`
+        id,
+        student_id,
+        academic_year_id,
+        level_id,
+        class_id,
+        status
+      `)
+      .eq(
+        'academic_year_id',
+        trip.academic_year_id,
+      )
+      .in(
+        'level_id',
+        levelIds.length > 0
+          ? levelIds
+          : ['00000000-0000-0000-0000-000000000000'],
+      )
 
-      levelIds.length > 0
-        ? supabase
-            .from('enrollments')
-            .select(
-              `
-                id,
-                student_id,
-                academic_year_id,
-                level_id,
-                class_id,
-                status
-              `,
-            )
-            .eq(
-              'academic_year_id',
-              trip.academic_year_id,
-            )
-            .in('level_id', levelIds)
-        : Promise.resolve({
-            data: [],
-            error: null,
-          }),
-
-      supabase
-        .from('attendance_statuses')
-        .select('id, name'),
-    ])
-
-    if (courseResult.error) {
+    if (enrollmentsError) {
       console.error(
-        'Get course error:',
-        courseResult.error,
+        'GET /api/trips/[id]/students - enrollments error:',
+        enrollmentsError,
       )
 
       return NextResponse.json(
         {
           error:
-            courseResult.error.message ??
-            'تعذر تحميل الدورة.',
+            'تعذر تحميل تسجيلات الطلاب',
+          details:
+            enrollmentsError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
-    if (levelsResult.error) {
-      console.error(
-        'Get levels error:',
-        levelsResult.error,
+    const enrollmentRows =
+      (enrollments ??
+        []) as EnrollmentRow[]
+
+    const enrollmentIds =
+      enrollmentRows.map(
+        (item) => item.id,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            levelsResult.error.message ??
-            'تعذر تحميل المستويات.',
-        },
-        {
-          status: 500,
-        },
-      )
-    }
-
-    if (enrollmentsResult.error) {
-      console.error(
-        'Get enrollments error:',
-        enrollmentsResult.error,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            enrollmentsResult.error.message ??
-            'تعذر تحميل تسجيلات الطلاب.',
-        },
-        {
-          status: 500,
-        },
-      )
-    }
-
-    if (statusesResult.error) {
-      console.error(
-        'Get attendance statuses error:',
-        statusesResult.error,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            statusesResult.error.message ??
-            'تعذر تحميل حالات الحضور.',
-        },
-        {
-          status: 500,
-        },
-      )
-    }
-
-    const course = courseResult.data
-
-    if (!course) {
-      return NextResponse.json(
-        {
-          error: 'الدورة المرتبطة بالرحلة غير موجودة.',
-        },
-        {
-          status: 404,
-        },
-      )
-    }
-
-    const enrollments =
-      enrollmentsResult.data ?? []
-
-    const studentIds = Array.from(
-      new Set(
-        enrollments.map(
-          (enrollment) => enrollment.student_id,
+    const studentIds = [
+      ...new Set(
+        enrollmentRows.map(
+          (item) => item.student_id,
         ),
       ),
-    )
+    ]
 
-    const [
-      studentsResult,
-      attendanceResult,
-    ] = await Promise.all([
-      studentIds.length > 0
-        ? supabase
-            .from('students')
-            .select(
-              `
-                id,
-                name,
-                personal_id,
-                phone,
-                whatsapp,
-                notes
-              `,
-            )
-            .in('id', studentIds)
-        : Promise.resolve({
-            data: [],
-            error: null,
-          }),
+    /*
+     * -------------------------------------------------------
+     * الطلاب
+     * -------------------------------------------------------
+     */
 
-      studentIds.length > 0
-        ? supabase
-            .from('attendance')
-            .select(
-              `
-                id,
-                student_id,
-                enrollment_id,
-                attendance_date,
-                status_id,
-                note
-              `,
-            )
-            .eq('course_id', trip.course_id)
-            .in('student_id', studentIds)
-        : Promise.resolve({
-            data: [],
-            error: null,
-          }),
-    ])
+    let students: StudentRow[] = []
 
-    if (studentsResult.error) {
+    if (studentIds.length > 0) {
+      const {
+        data: studentRows,
+        error: studentsError,
+      } = await supabase
+        .from('students')
+        .select(`
+          id,
+          name,
+          personal_id,
+          phone,
+          whatsapp,
+          notes
+        `)
+        .in('id', studentIds)
+
+      if (studentsError) {
+        console.error(
+          'GET /api/trips/[id]/students - students error:',
+          studentsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل الطلاب',
+            details:
+              studentsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      students =
+        (studentRows ??
+          []) as StudentRow[]
+    }
+
+    /*
+     * -------------------------------------------------------
+     * حالات الحضور
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: attendanceStatuses,
+      error: attendanceStatusesError,
+    } = await supabase
+      .from('attendance_statuses')
+      .select(`
+        id,
+        name
+      `)
+
+    if (attendanceStatusesError) {
       console.error(
-        'Get students error:',
-        studentsResult.error,
+        'GET /api/trips/[id]/students - attendance statuses error:',
+        attendanceStatusesError,
       )
 
       return NextResponse.json(
         {
           error:
-            studentsResult.error.message ??
-            'تعذر تحميل الطلاب.',
+            'تعذر تحميل حالات الحضور',
+          details:
+            attendanceStatusesError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
-    if (attendanceResult.error) {
+    const statusMap =
+      new Map<string, string>(
+        (
+          (attendanceStatuses ??
+            []) as AttendanceStatus[]
+        ).map((status) => [
+          status.id,
+          status.name,
+        ]),
+      )
+
+    /*
+     * -------------------------------------------------------
+     * الحضور
+     * -------------------------------------------------------
+     *
+     * نقرأ سجلات الحضور للدورة والسنة
+     * للطلاب المرشحين.
+     */
+
+    let attendance: AttendanceRow[] = []
+
+    if (
+      studentIds.length > 0
+    ) {
+      let attendanceQuery =
+        supabase
+          .from('attendance')
+          .select(`
+            id,
+            student_id,
+            enrollment_id,
+            attendance_date,
+            status_id,
+            note,
+            course_id
+          `)
+          .eq(
+            'course_id',
+            trip.course_id,
+          )
+          .in(
+            'student_id',
+            studentIds,
+          )
+
+      /*
+       * إذا كانت الدورة لها تاريخ نهاية،
+       * لا نستخدم سجلات بعد تاريخ النهاية.
+       */
+      if (course?.end_date) {
+        attendanceQuery =
+          attendanceQuery.lte(
+            'attendance_date',
+            course.end_date,
+          )
+      }
+
+      const {
+        data: attendanceRows,
+        error: attendanceError,
+      } = await attendanceQuery
+
+      if (attendanceError) {
+        console.error(
+          'GET /api/trips/[id]/students - attendance error:',
+          attendanceError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل الحضور',
+            details:
+              attendanceError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      attendance =
+        (attendanceRows ??
+          []) as AttendanceRow[]
+    }
+
+    /*
+     * -------------------------------------------------------
+     * الملاحظات الخاصة بالرحلة الموجودة مسبقاً
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: tripStudents,
+      error: tripStudentsError,
+    } = await supabase
+      .from('trip_students')
+      .select(`
+        id,
+        trip_id,
+        student_id,
+        enrollment_id,
+        attendance_percentage,
+        attendance_present,
+        attendance_absent,
+        attendance_late,
+        attendance_excused,
+        attendance_not_recorded,
+        eligibility_note,
+        selected,
+        response,
+        response_note,
+        responded_at
+      `)
+      .eq('trip_id', id)
+
+    if (tripStudentsError) {
       console.error(
-        'Get attendance error:',
-        attendanceResult.error,
+        'GET /api/trips/[id]/students - trip students error:',
+        tripStudentsError,
       )
 
       return NextResponse.json(
         {
           error:
-            attendanceResult.error.message ??
-            'تعذر تحميل الحضور.',
+            'تعذر تحميل طلاب الرحلة',
+          details:
+            tripStudentsError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
+
+    const savedTripStudents =
+      (tripStudents ??
+        []) as TripStudentRow[]
+
+    const savedTripStudentMap =
+      new Map(
+        savedTripStudents.map(
+          (item) => [
+            item.student_id,
+            item,
+          ],
+        ),
+      )
 
     /*
-     * نحاول تحديد أيام الدروس المنتهية.
-     *
-     * إذا كانت الدورة تحتوي على start_date / end_date
-     * نستخدم نطاق الدورة.
-     *
-     * الأيام الفعلية للحضور الموجودة في جدول attendance
-     * تدخل ضمن الحساب كذلك.
+     * -------------------------------------------------------
+     * تجميع الحضور لكل طالب
+     * -------------------------------------------------------
      */
-    const today = new Date()
-
-    const lessonDates = new Set<string>()
-
-    for (const record of attendanceResult.data ?? []) {
-      if (
-        record.attendance_date &&
-        new Date(
-          `${record.attendance_date}T00:00:00`,
-        ) <= today
-      ) {
-        lessonDates.add(
-          record.attendance_date,
-        )
-      }
-    }
-
-    /*
-     * إذا كانت هناك سجلات حضور، فهذه هي الأيام التي
-     * نحتاجها للحساب. الأيام التي لم يسجل فيها الطالب
-     * داخل هذه الفترة لا يمكن معرفتها من attendance وحده.
-     *
-     * لذلك نستخدم أيام الحضور الموجودة كأيام الدروس
-     * المتاحة حاليًا.
-     */
-    const lessonDateList = Array.from(
-      lessonDates,
-    ).sort()
-
-    const statusMap = new Map<string, string>()
-
-    for (const status of
-      statusesResult.data ?? []) {
-      statusMap.set(
-        status.id,
-        status.name,
-      )
-    }
-
-    const levelMap = new Map<
-      string,
-      string
-    >()
-
-    for (const level of
-      levelsResult.data ?? []) {
-      levelMap.set(
-        level.id,
-        level.name,
-      )
-    }
-
-    const enrollmentByStudent =
-      new Map<string, (typeof enrollments)[number]>()
-
-    for (const enrollment of enrollments) {
-      if (
-        !enrollmentByStudent.has(
-          enrollment.student_id,
-        )
-      ) {
-        enrollmentByStudent.set(
-          enrollment.student_id,
-          enrollment,
-        )
-      }
-    }
-
-    const studentMap = new Map<
-      string,
-      (typeof studentsResult.data)[number]
-    >()
-
-    for (const student of
-      studentsResult.data ?? []) {
-      studentMap.set(student.id, student)
-    }
 
     const attendanceByStudent =
       new Map<
         string,
-        Array<{
-          student_id: string
-          attendance_date: string
-          status_id: string
-          note: string | null
-        }>
+        AttendanceRow[]
       >()
 
-    for (const record of
-      attendanceResult.data ?? []) {
-      const list =
+    for (const record of attendance) {
+      const current =
         attendanceByStudent.get(
           record.student_id,
         ) ?? []
 
-      list.push({
-        student_id: record.student_id,
-        attendance_date:
-          record.attendance_date,
-        status_id: record.status_id,
-        note: record.note,
-      })
+      current.push(record)
 
       attendanceByStudent.set(
         record.student_id,
-        list,
+        current,
       )
     }
 
-    const existingMap = new Map<
-      string,
-      (typeof existingStudentsResult.data)[number]
-    >()
+    /*
+     * -------------------------------------------------------
+     * تجهيز القائمة النهائية
+     * -------------------------------------------------------
+     */
 
-    for (const item of
-      existingStudentsResult.data ?? []) {
-      existingMap.set(
-        item.student_id,
-        item,
-      )
-    }
+    const resultStudents =
+      students
+        .map((student) => {
+          const enrollment =
+            enrollmentRows.find(
+              (item) =>
+                item.student_id ===
+                student.id,
+            )
 
-    const students = Array.from(
-      enrollmentByStudent.entries(),
-    )
-      .map(([studentId, enrollment]) => {
-        const student =
-          studentMap.get(studentId)
+          if (!enrollment) {
+            return null
+          }
 
-        if (!student) {
-          return null
-        }
-
-        const attendance =
-          calculateAttendance(
-            attendanceByStudent.get(
-              studentId,
-            ) ?? [],
-            statusMap,
-            lessonDateList,
-          )
-
-        let eligible = true
-
-        let eligibilityNote: string | null =
-          null
-
-        if (
-          trip.attendance_min !== null &&
-          (
-            attendance.percentage === null ||
-            attendance.percentage <
-              Number(trip.attendance_min)
-          )
-        ) {
-          eligible = false
-
-          eligibilityNote =
-            `نسبة الحضور أقل من الحد الأدنى ${trip.attendance_min}%.`
-        }
-
-        if (
-          trip.attendance_max !== null &&
-          attendance.percentage !== null &&
-          attendance.percentage >
-            Number(trip.attendance_max)
-        ) {
-          eligible = false
-
-          eligibilityNote =
-            `نسبة الحضور أعلى من الحد الأعلى ${trip.attendance_max}%.`
-        }
-
-        const hasNotes =
-          attendance.courseNotes.length >
-          0
-
-        if (
-          trip.notes_requirement ===
-            'required' &&
-          !hasNotes
-        ) {
-          eligible = false
-
-          eligibilityNote =
-            'الرحلة تتطلب وجود ملاحظات لهذه الدورة.'
-        }
-
-        if (
-          trip.notes_requirement ===
-            'none' &&
-          hasNotes
-        ) {
-          eligible = false
-
-          eligibilityNote =
-            'الرحلة لا تسمح بالطلاب الذين لديهم ملاحظات لهذه الدورة.'
-        }
-
-        const existing =
-          existingMap.get(studentId)
-
-        return {
-          id: student.id,
-          name: student.name,
-          personal_id:
-            student.personal_id,
-          phone: student.phone,
-          whatsapp: student.whatsapp,
-
-          level_id: enrollment.level_id,
-          level_name:
+          const level =
             levelMap.get(
               enrollment.level_id,
-            ) ?? 'غير محدد',
+            )
 
-          attendance_percentage:
-            attendance.percentage,
+          const records =
+            attendanceByStudent.get(
+              student.id,
+            ) ?? []
 
-          attendance_present:
-            attendance.present,
+          const attendanceSummary =
+            calculateAttendance(
+              records,
+              statusMap,
+            )
 
-          attendance_absent:
-            attendance.absent,
+          const attendanceEligible =
+            isAttendanceEligible(
+              attendanceSummary.percentage,
+              trip.attendance_min,
+              trip.attendance_max,
+            )
 
-          attendance_late:
-            attendance.late,
+          /*
+           * حالياً notes الموجودة في students
+           * هي مصدر الملاحظات العامة للطالب.
+           *
+           * لا ننشئ مصدراً جديداً للملاحظات.
+           */
+          const notesEligible =
+            isNotesEligible(
+              student.notes,
+              trip.notes_requirement,
+            )
 
-          attendance_excused:
-            attendance.excused,
+          const eligible =
+            attendanceEligible &&
+            notesEligible
 
-          attendance_not_recorded:
-            attendance.notRecorded,
+          const saved =
+            savedTripStudentMap.get(
+              student.id,
+            )
 
-          course_notes:
-            attendance.courseNotes,
+          const eligibilityNote =
+            getEligibilityNote(
+              attendanceSummary.percentage,
+              trip.attendance_min,
+              trip.attendance_max,
+              student.notes,
+              trip.notes_requirement,
+            )
 
-          eligible,
-          eligibility_note:
-            eligibilityNote,
+          return {
+            id: student.id,
+            name: student.name,
+            personal_id:
+              student.personal_id,
+            phone: student.phone,
+            whatsapp:
+              student.whatsapp,
 
-          selected:
-            existing?.selected ?? false,
+            level: level
+              ? {
+                  id: level.id,
+                  name: level.name,
+                  sort_order:
+                    level.sort_order,
+                }
+              : null,
 
-          response:
-            existing?.response ??
-            'pending',
+            enrollment_id:
+              enrollment.id,
 
-          response_note:
-            existing?.response_note ??
-            null,
+            enrollment_status:
+              enrollment.status,
 
-          responded_at:
-            existing?.responded_at ??
-            null,
-        }
-      })
-      .filter(
-        (
-          student,
-        ): student is NonNullable<
-          typeof student
-        > => student !== null,
-      )
+            attendance_percentage:
+              attendanceSummary.percentage,
+
+            attendance_present:
+              attendanceSummary.present,
+
+            attendance_absent:
+              attendanceSummary.absent,
+
+            attendance_late:
+              attendanceSummary.late,
+
+            attendance_excused:
+              attendanceSummary.excused,
+
+            attendance_not_recorded:
+              attendanceSummary.notRecorded,
+
+            /*
+             * نرسل ملاحظات الطالب للعرض
+             * داخل صفحة الرحلة.
+             */
+            course_notes:
+              student.notes
+                ? [
+                    {
+                      note: student.notes,
+                      source: 'student',
+                    },
+                  ]
+                : [],
+
+            eligible,
+
+            eligibility_note:
+              eligibilityNote,
+
+            selected:
+              saved
+                ? Boolean(
+                    saved.selected,
+                  )
+                : eligible,
+
+            response:
+              saved?.response ??
+              'pending',
+
+            response_note:
+              saved?.response_note ??
+              null,
+
+            responded_at:
+              saved?.responded_at ??
+              null,
+
+            trip_student_id:
+              saved?.id ?? null,
+          }
+        })
+        .filter(
+          (
+            item,
+          ): item is NonNullable<
+            typeof item
+          > => item !== null,
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(
+            b.name,
+            'ar',
+          ),
+        )
+
+    /*
+     * -------------------------------------------------------
+     * تواريخ الحضور الموجودة فعلياً
+     * -------------------------------------------------------
+     *
+     * نرسلها للواجهة للاستفادة منها
+     * في التفاصيل.
+     */
+
+    const lessonDates = [
+      ...new Set(
+        attendance.map(
+          (item) =>
+            item.attendance_date,
+        ),
+      ),
+    ].sort()
 
     return NextResponse.json({
       trip,
       course,
-      levels:
-        levelsResult.data ?? [],
-      lesson_dates:
-        lessonDateList,
-      students,
+      levels,
+      tripLevels:
+        tripLevels ?? [],
+      lesson_dates: lessonDates,
+      students: resultStudents,
     })
   } catch (error) {
     console.error(
-      'GET trip students error:',
+      'GET /api/trips/[id]/students error:',
       error,
     )
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'حدث خطأ غير متوقع.',
+          'حدث خطأ أثناء تحميل طلاب الرحلة',
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     )
   }
 }
@@ -779,76 +1019,83 @@ export async function POST(
   { params }: RouteContext,
 ) {
   try {
-    await requireAuth()
+    const { access, response } =
+      await requireAuth()
+
+    if (response) return response
+
+    if (!access) {
+      return NextResponse.json(
+        {
+          error:
+            'غير مصرح بالوصول',
+        },
+        { status: 401 },
+      )
+    }
 
     const { id } = await params
 
     if (!id) {
       return NextResponse.json(
         {
-          error: 'معرّف الرحلة غير موجود.',
+          error:
+            'معرف الرحلة مطلوب',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
-
-    const body = await request.json()
-
-    const studentIds = Array.isArray(
-      body?.student_ids,
-    )
-      ? body.student_ids.filter(
-          (value: unknown): value is string =>
-            typeof value === 'string' &&
-            value.length > 0,
-        )
-      : []
 
     const supabase =
       await createSupabaseServerClient()
 
-    const { data: trip, error: tripError } =
-      await supabase
-        .from('trips')
-        .select(
-          `
-            id,
-            academic_year_id,
-            course_id,
-            status
-          `,
-        )
-        .eq('id', id)
-        .maybeSingle()
+    /*
+     * -------------------------------------------------------
+     * التحقق من الرحلة
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: trip,
+      error: tripError,
+    } = await supabase
+      .from('trips')
+      .select(`
+        id,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status
+      `)
+      .eq('id', id)
+      .maybeSingle()
 
     if (tripError) {
       console.error(
-        'Get trip for save error:',
+        'POST /api/trips/[id]/students - trip error:',
         tripError,
       )
 
       return NextResponse.json(
         {
           error:
-            tripError.message ??
-            'تعذر تحميل الرحلة.',
+            'تعذر التحقق من الرحلة',
+          details:
+            tripError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
     if (!trip) {
       return NextResponse.json(
         {
-          error: 'الرحلة غير موجودة.',
+          error:
+            'الرحلة غير موجودة',
         },
-        {
-          status: 404,
-        },
+        { status: 404 },
       )
     }
 
@@ -856,238 +1103,511 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            'لا يمكن تعديل الطلاب في رحلة مغلقة.',
+            'لا يمكن تعديل رحلة مغلقة',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
-    const { data: tripLevels, error: levelsError } =
-      await supabase
-        .from('trip_levels')
-        .select('level_id')
-        .eq('trip_id', id)
+    /*
+     * -------------------------------------------------------
+     * قراءة الطلب
+     * -------------------------------------------------------
+     */
 
-    if (levelsError) {
+    let body: any
+
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            'بيانات الطلب غير صحيحة',
+        },
+        { status: 400 },
+      )
+    }
+
+    const selectedStudentIds =
+      Array.isArray(
+        body.student_ids,
+      )
+        ? [
+            ...new Set(
+              body.student_ids.filter(
+                (
+                  value: unknown,
+                ): value is string =>
+                  typeof value ===
+                    'string' &&
+                  value.trim()
+                    .length > 0,
+              ),
+            ),
+          ]
+        : []
+
+    /*
+     * -------------------------------------------------------
+     * المستويات التابعة للرحلة
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: tripLevels,
+      error: tripLevelsError,
+    } = await supabase
+      .from('trip_levels')
+      .select(`
+        level_id
+      `)
+      .eq('trip_id', id)
+
+    if (tripLevelsError) {
       console.error(
-        'Get trip levels for save error:',
-        levelsError,
+        'POST /api/trips/[id]/students - trip levels error:',
+        tripLevelsError,
       )
 
       return NextResponse.json(
         {
           error:
-            levelsError.message ??
-            'تعذر تحميل مستويات الرحلة.',
+            'تعذر تحميل مستويات الرحلة',
+          details:
+            tripLevelsError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
     const levelIds =
-      tripLevels?.map(
+      (tripLevels ?? []).map(
         (item) => item.level_id,
-      ) ?? []
+      )
 
     if (levelIds.length === 0) {
       return NextResponse.json(
         {
           error:
-            'يجب أن تحتوي الرحلة على مستوى واحد على الأقل.',
+            'لا توجد مستويات مرتبطة بالرحلة',
         },
+        { status: 400 },
+      )
+    }
+
+    /*
+     * -------------------------------------------------------
+     * الطلاب المؤهلون فعلياً
+     * -------------------------------------------------------
+     *
+     * نعيد التحقق من أن الطالب:
+     * - في السنة الصحيحة
+     * - في مستوى الرحلة
+     *
+     * ثم نحفظ المختارين فقط.
+     */
+
+    const {
+      data: enrollments,
+      error: enrollmentsError,
+    } = await supabase
+      .from('enrollments')
+      .select(`
+        id,
+        student_id,
+        academic_year_id,
+        level_id,
+        class_id,
+        status
+      `)
+      .eq(
+        'academic_year_id',
+        trip.academic_year_id,
+      )
+      .in(
+        'level_id',
+        levelIds,
+      )
+
+    if (enrollmentsError) {
+      console.error(
+        'POST /api/trips/[id]/students - enrollments error:',
+        enrollmentsError,
+      )
+
+      return NextResponse.json(
         {
-          status: 400,
+          error:
+            'تعذر التحقق من تسجيلات الطلاب',
+          details:
+            enrollmentsError.message,
         },
+        { status: 500 },
       )
     }
 
-    let validStudentIds: string[] = []
+    const enrollmentRows =
+      (enrollments ??
+        []) as EnrollmentRow[]
 
-    if (studentIds.length > 0) {
-      const { data: enrollments, error } =
-        await supabase
-          .from('enrollments')
-          .select(
-            `
-              id,
-              student_id,
-              academic_year_id,
-              level_id
-            `,
-          )
-          .eq(
-            'academic_year_id',
-            trip.academic_year_id,
-          )
-          .in('level_id', levelIds)
-          .in('student_id', studentIds)
+    const validEnrollmentMap =
+      new Map<
+        string,
+        EnrollmentRow
+      >()
 
-      if (error) {
-        console.error(
-          'Validate enrollments error:',
-          error,
-        )
+    for (const enrollment of enrollmentRows) {
+      validEnrollmentMap.set(
+        enrollment.student_id,
+        enrollment,
+      )
+    }
 
-        return NextResponse.json(
-          {
-            error:
-              error.message ??
-              'تعذر التحقق من الطلاب.',
-          },
-          {
-            status: 500,
-          },
-        )
-      }
-
-      validStudentIds = Array.from(
-        new Set(
-          (enrollments ?? []).map(
-            (item) => item.student_id,
+    const invalidStudentIds =
+      selectedStudentIds.filter(
+        (studentId) =>
+          !validEnrollmentMap.has(
+            studentId,
           ),
-        ),
+      )
+
+    if (invalidStudentIds.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            'يوجد طالب غير مرتبط بالسنة أو المستوى المحدد للرحلة',
+        },
+        { status: 400 },
       )
     }
 
-    const { error: deleteError } =
-      await supabase
-        .from('trip_students')
-        .delete()
-        .eq('trip_id', id)
+    /*
+     * -------------------------------------------------------
+     * حذف الاختيارات السابقة
+     * -------------------------------------------------------
+     */
+
+    const {
+      error: deleteError,
+    } = await supabase
+      .from('trip_students')
+      .delete()
+      .eq('trip_id', id)
 
     if (deleteError) {
       console.error(
-        'Delete old trip students error:',
+        'POST /api/trips/[id]/students - delete old students error:',
         deleteError,
       )
 
       return NextResponse.json(
         {
           error:
-            deleteError.message ??
-            'تعذر تحديث طلاب الرحلة.',
+            'تعذر تحديث طلاب الرحلة',
+          details:
+            deleteError.message,
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
-    if (validStudentIds.length > 0) {
-      const { data: enrollments, error } =
-        await supabase
-          .from('enrollments')
-          .select(
-            `
-              id,
-              student_id,
-              academic_year_id,
-              level_id
-            `,
-          )
-          .eq(
-            'academic_year_id',
-            trip.academic_year_id,
-          )
-          .in('level_id', levelIds)
-          .in(
-            'student_id',
-            validStudentIds,
-          )
+    /*
+     * -------------------------------------------------------
+     * حفظ الطلاب المختارين
+     * -------------------------------------------------------
+     */
 
-      if (error) {
-        console.error(
-          'Get enrollments for insert error:',
-          error,
-        )
+    if (selectedStudentIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        tripId: id,
+        students: [],
+      })
+    }
 
-        return NextResponse.json(
-          {
-            error:
-              error.message ??
-              'تعذر تجهيز الطلاب للحفظ.',
-          },
-          {
-            status: 500,
-          },
-        )
-      }
+    /*
+     * نحصل على النسب الحالية قبل الحفظ
+     * حتى تبقى بيانات trip_students متزامنة
+     * مع العرض.
+     */
 
-      const enrollmentMap =
-        new Map<
-          string,
-          string
-        >()
+    const studentIds =
+      selectedStudentIds
 
-      for (const enrollment of
-        enrollments ?? []) {
-        enrollmentMap.set(
-          enrollment.student_id,
-          enrollment.id,
-        )
-      }
+    const {
+      data: attendanceStatuses,
+    } = await supabase
+      .from('attendance_statuses')
+      .select(`
+        id,
+        name
+      `)
 
-      const rows = validStudentIds.map(
-        (studentId) => ({
-          trip_id: id,
-          student_id: studentId,
-          enrollment_id:
-            enrollmentMap.get(
-              studentId,
-            ) ?? null,
-          selected: true,
-          response: 'pending',
-        }),
+    const statusMap =
+      new Map<string, string>(
+        (
+          (attendanceStatuses ??
+            []) as AttendanceStatus[]
+        ).map((status) => [
+          status.id,
+          status.name,
+        ]),
       )
 
-      const { error: insertError } =
-        await supabase
-          .from('trip_students')
-          .insert(rows)
+    const {
+      data: attendanceRows,
+      error: attendanceError,
+    } = await supabase
+      .from('attendance')
+      .select(`
+        id,
+        student_id,
+        enrollment_id,
+        attendance_date,
+        status_id,
+        note,
+        course_id
+      `)
+      .eq(
+        'course_id',
+        trip.course_id,
+      )
+      .in(
+        'student_id',
+        studentIds,
+      )
 
-      if (insertError) {
-        console.error(
-          'Insert trip students error:',
-          insertError,
-        )
+    if (attendanceError) {
+      console.error(
+        'POST /api/trips/[id]/students - attendance error:',
+        attendanceError,
+      )
 
-        return NextResponse.json(
-          {
-            error:
-              insertError.message ??
-              'تعذر حفظ طلاب الرحلة.',
-          },
-          {
-            status: 500,
-          },
-        )
-      }
+      return NextResponse.json(
+        {
+          error:
+            'تعذر حساب حضور الطلاب',
+          details:
+            attendanceError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    const attendanceByStudent =
+      new Map<
+        string,
+        AttendanceRow[]
+      >()
+
+    for (const record of (
+      (attendanceRows ??
+        []) as AttendanceRow[]
+    )) {
+      const current =
+        attendanceByStudent.get(
+          record.student_id,
+        ) ?? []
+
+      current.push(record)
+
+      attendanceByStudent.set(
+        record.student_id,
+        current,
+      )
+    }
+
+    const {
+      data: studentRows,
+      error: studentsError,
+    } = await supabase
+      .from('students')
+      .select(`
+        id,
+        notes
+      `)
+      .in(
+        'id',
+        studentIds,
+      )
+
+    if (studentsError) {
+      console.error(
+        'POST /api/trips/[id]/students - student notes error:',
+        studentsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل ملاحظات الطلاب',
+          details:
+            studentsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    const studentNotesMap =
+      new Map<string, string | null>(
+        (
+          studentRows ?? []
+        ).map((student) => [
+          student.id,
+          student.notes,
+        ]),
+      )
+
+    const rows =
+      selectedStudentIds.map(
+        (studentId) => {
+          const enrollment =
+            validEnrollmentMap.get(
+              studentId,
+            )!
+
+          const records =
+            attendanceByStudent.get(
+              studentId,
+            ) ?? []
+
+          const summary =
+            calculateAttendance(
+              records,
+              statusMap,
+            )
+
+          const notes =
+            studentNotesMap.get(
+              studentId,
+            ) ?? null
+
+          const attendanceEligible =
+            isAttendanceEligible(
+              summary.percentage,
+              trip.attendance_min,
+              trip.attendance_max,
+            )
+
+          const notesEligible =
+            isNotesEligible(
+              notes,
+              trip.notes_requirement,
+            )
+
+          const eligible =
+            attendanceEligible &&
+            notesEligible
+
+          return {
+            trip_id: id,
+            student_id: studentId,
+            enrollment_id:
+              enrollment.id,
+
+            attendance_percentage:
+              summary.percentage,
+
+            attendance_present:
+              summary.present,
+
+            attendance_absent:
+              summary.absent,
+
+            attendance_late:
+              summary.late,
+
+            attendance_excused:
+              summary.excused,
+
+            attendance_not_recorded:
+              summary.notRecorded,
+
+            eligibility_note:
+              getEligibilityNote(
+                summary.percentage,
+                trip.attendance_min,
+                trip.attendance_max,
+                notes,
+                trip.notes_requirement,
+              ),
+
+            selected: true,
+
+            response: 'pending',
+          }
+        },
+      )
+
+    /*
+     * مهم:
+     * الاختيار النهائي يتم من الإدارة.
+     *
+     * لذلك لا نمنع الحفظ إذا كانت بعض الشروط
+     * غير متحققة، لكن نحفظ eligibility_note
+     * حتى تكون الحالة واضحة للمستخدم.
+     */
+
+    const {
+      data: insertedStudents,
+      error: insertError,
+    } = await supabase
+      .from('trip_students')
+      .insert(rows)
+      .select(`
+        id,
+        trip_id,
+        student_id,
+        enrollment_id,
+        attendance_percentage,
+        attendance_present,
+        attendance_absent,
+        attendance_late,
+        attendance_excused,
+        attendance_not_recorded,
+        eligibility_note,
+        selected,
+        response,
+        response_note,
+        responded_at
+      `)
+
+    if (insertError) {
+      console.error(
+        'POST /api/trips/[id]/students - insert error:',
+        insertError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر حفظ طلاب الرحلة',
+          details:
+            insertError.message,
+        },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({
       success: true,
-      student_ids: validStudentIds,
+      tripId: id,
+      students:
+        insertedStudents ?? [],
     })
   } catch (error) {
     console.error(
-      'POST trip students error:',
+      'POST /api/trips/[id]/students error:',
       error,
     )
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'حدث خطأ غير متوقع.',
+          'حدث خطأ أثناء حفظ طلاب الرحلة',
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     )
   }
 }
