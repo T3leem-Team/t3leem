@@ -1,7 +1,7 @@
 'use client'
 
-import { Filter, Settings2 } from 'lucide-react'
-import { useState } from 'react'
+import { Filter, Settings2, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
 import {
   Table,
@@ -105,6 +105,14 @@ type Props = {
   ) => void
 
   onOpenColumns?: () => void
+
+  /*
+   * الحذف يتم من StudentsView حتى يبقى مصدر البيانات
+   * وإعادة التحميل في مكان واحد.
+   */
+  onDeleteSelected: (
+    studentIds: string[]
+  ) => Promise<void> | void
 }
 
 const baseColumns = [
@@ -197,6 +205,56 @@ function getPaymentStatusLabel(status: string) {
   }
 }
 
+function normalizePaymentStatus(status: string) {
+  const label = getPaymentStatusLabel(status)
+
+  if (
+    label === 'مدفوع جزئيًا' ||
+    label === 'مدفوع جزئياً'
+  ) {
+    return 'مدفوع جزئيًا'
+  }
+
+  return label
+}
+
+function normalizeAttendanceStatus(
+  status: string | null | undefined
+) {
+  const value = String(status || '').trim()
+
+  if (!value) {
+    return 'لم يسجل'
+  }
+
+  switch (value) {
+    case 'present':
+      return 'حاضر'
+
+    case 'absent':
+      return 'غائب'
+
+    case 'late':
+      return 'متأخر'
+
+    case 'excused':
+      return 'مستأذن'
+
+    case 'not_recorded':
+      return 'لم يسجل'
+
+    case 'حاضر':
+    case 'غائب':
+    case 'متأخر':
+    case 'مستأذن':
+    case 'لم يسجل':
+      return value
+
+    default:
+      return value
+  }
+}
+
 export function StudentsTable({
   students,
   courses,
@@ -211,6 +269,7 @@ export function StudentsTable({
   onToggleColumn,
   onOpenNotes,
   onOpenAttendance,
+  onDeleteSelected,
 }: Props) {
   const [showColumns, setShowColumns] =
     useState(false)
@@ -250,6 +309,88 @@ export function StudentsTable({
   const [paymentMessage, setPaymentMessage] =
     useState('')
 
+  const [showDeleteConfirm, setShowDeleteConfirm] =
+    useState(false)
+
+  const [deleteSaving, setDeleteSaving] =
+    useState(false)
+
+  const [deleteMessage, setDeleteMessage] =
+    useState('')
+
+  /*
+   * ================================
+   * الخيارات الحقيقية للفلاتر
+   * ================================
+   */
+
+  const gradeOptions = useMemo(() => {
+    const values = new Set<string>()
+
+    students.forEach((student) => {
+      const value = String(
+        student.grade || ''
+      ).trim()
+
+      if (value) {
+        values.add(value)
+      }
+    })
+
+    /*
+     * نستخدم academicLevels فقط لترتيب الخيارات
+     * الموجودة فعليًا في الطلاب.
+     *
+     * لا نضيف مستوى غير موجود في القائمة.
+     */
+    const existingValues = Array.from(values)
+
+    const ordered = academicLevels.filter(
+      (level) =>
+        existingValues.includes(level)
+    )
+
+    const remaining = existingValues.filter(
+      (value) =>
+        !ordered.includes(value)
+    )
+
+    return [...ordered, ...remaining]
+  }, [students, academicLevels])
+
+  const paymentStatusOptions = useMemo(() => {
+    const values = new Set<string>()
+
+    students.forEach((student) => {
+      const value = normalizePaymentStatus(
+        student.paymentStatus
+      )
+
+      if (value && value !== '-') {
+        values.add(value)
+      }
+    })
+
+    return Array.from(values)
+  }, [students])
+
+  const attendanceOptions = useMemo(() => {
+    const values = new Set<string>()
+
+    students.forEach((student) => {
+      const value =
+        normalizeAttendanceStatus(
+          student.attendance
+        )
+
+      if (value) {
+        values.add(value)
+      }
+    })
+
+    return Array.from(values)
+  }, [students])
+
   const toggleStudentSelection = (
     studentId: string
   ) => {
@@ -283,6 +424,57 @@ export function StudentsTable({
   const exitSelectionMode = () => {
     setSelectionMode(false)
     setSelectedStudentIds([])
+    setShowDeleteConfirm(false)
+    setDeleteMessage('')
+  }
+
+  const openDeleteConfirmation = () => {
+    if (
+      selectedStudentIds.length === 0 ||
+      deleteSaving
+    ) {
+      return
+    }
+
+    setDeleteMessage('')
+    setShowDeleteConfirm(true)
+  }
+
+  const closeDeleteConfirmation = () => {
+    if (deleteSaving) return
+
+    setShowDeleteConfirm(false)
+    setDeleteMessage('')
+  }
+
+  const confirmDeleteSelected = async () => {
+    if (
+      selectedStudentIds.length === 0 ||
+      deleteSaving
+    ) {
+      return
+    }
+
+    setDeleteSaving(true)
+    setDeleteMessage('')
+
+    try {
+      await onDeleteSelected(
+        selectedStudentIds
+      )
+
+      setSelectedStudentIds([])
+      setSelectionMode(false)
+      setShowDeleteConfirm(false)
+    } catch (error) {
+      setDeleteMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر حذف الطلاب المحددين.'
+      )
+    } finally {
+      setDeleteSaving(false)
+    }
   }
 
   const openPayment = (
@@ -358,23 +550,29 @@ export function StudentsTable({
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
-            student_id: paymentStudent.id,
+            student_id:
+              paymentStudent.id,
             academic_year_id:
               paymentStudent.academicYearId,
             amount,
-            payment_method: paymentMethod,
-            payment_date: paymentDate,
+            payment_method:
+              paymentMethod,
+            payment_date:
+              paymentDate,
             reference_number:
               paymentReference || null,
-            notes: paymentNotes || null,
+            notes:
+              paymentNotes || null,
           }),
         }
       )
 
-      const data = await response.json()
+      const data =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -384,14 +582,17 @@ export function StudentsTable({
       }
 
       const newPaid =
-        Number(paymentStudent.amountPaid) +
-        amount
+        Number(
+          paymentStudent.amountPaid
+        ) + amount
 
-      const newRemaining = Math.max(
-        Number(paymentStudent.amountDue) -
-          newPaid,
-        0
-      )
+      const newRemaining =
+        Math.max(
+          Number(
+            paymentStudent.amountDue
+          ) - newPaid,
+          0
+        )
 
       const newStatus =
         paymentStudent.feeExempt
@@ -405,7 +606,8 @@ export function StudentsTable({
       setPaymentStudent({
         ...paymentStudent,
         amountPaid: newPaid,
-        paymentStatus: newStatus,
+        paymentStatus:
+          newStatus,
       })
 
       setPaymentAmount('')
@@ -432,6 +634,9 @@ export function StudentsTable({
     }
   }
 
+  /*
+   * فلتر نصي عادي
+   */
   const filterInput = (
     key: keyof StudentTableFilters,
     placeholder: string
@@ -454,6 +659,48 @@ export function StudentsTable({
             event.stopPropagation()
           }
         />
+      </div>
+    )
+  }
+
+  /*
+   * فلتر اختيار حقيقي
+   */
+  const filterSelect = (
+    key: keyof StudentTableFilters,
+    placeholder: string,
+    options: string[]
+  ) => {
+    return (
+      <div className="flex items-center gap-1">
+        <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
+
+        <select
+          value={filters[key]}
+          onChange={(event) =>
+            onUpdateFilter(
+              key,
+              event.target.value
+            )
+          }
+          onClick={(event) =>
+            event.stopPropagation()
+          }
+          className="h-7 w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1"
+        >
+          <option value="">
+            {placeholder}
+          </option>
+
+          {options.map((option) => (
+            <option
+              key={option}
+              value={option}
+            >
+              {option}
+            </option>
+          ))}
+        </select>
       </div>
     )
   }
@@ -495,8 +742,13 @@ export function StudentsTable({
   const allStudentsSelected =
     students.length > 0 &&
     students.every((student) =>
-      selectedStudentIds.includes(student.id)
+      selectedStudentIds.includes(
+        student.id
+      )
     )
+
+  const selectedCount =
+    selectedStudentIds.length
 
   return (
     <>
@@ -524,15 +776,35 @@ export function StudentsTable({
             </button>
 
             {selectionMode && (
-              <button
-                type="button"
-                onClick={toggleSelectAll}
-                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
-              >
-                {allStudentsSelected
-                  ? 'إلغاء تحديد الكل'
-                  : 'تحديد الكل'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+                >
+                  {allStudentsSelected
+                    ? 'إلغاء تحديد الكل'
+                    : 'تحديد الكل'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    openDeleteConfirmation
+                  }
+                  disabled={
+                    selectedCount === 0 ||
+                    deleteSaving
+                  }
+                  className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="h-4 w-4" />
+
+                  {selectedCount > 0
+                    ? `مسح المحدد (${selectedCount})`
+                    : 'مسح المحدد'}
+                </button>
+              </>
             )}
 
             <button
@@ -545,10 +817,22 @@ export function StudentsTable({
               className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
             >
               <Settings2 className="h-4 w-4" />
+
               تخصيص الأعمدة
             </button>
           </div>
         </div>
+
+        {selectionMode &&
+          selectedCount > 0 && (
+            <div className="rounded-lg border bg-muted/20 px-4 py-2 text-sm">
+              تم تحديد{' '}
+              <span className="font-semibold">
+                {selectedCount}
+              </span>{' '}
+              طالب
+            </div>
+          )}
 
         {showColumns && (
           <div className="rounded-lg border bg-muted/20 p-4">
@@ -695,8 +979,12 @@ export function StudentsTable({
                   <TableHead className="w-[55px] text-center">
                     <input
                       type="checkbox"
-                      checked={allStudentsSelected}
-                      onChange={toggleSelectAll}
+                      checked={
+                        allStudentsSelected
+                      }
+                      onChange={
+                        toggleSelectAll
+                      }
                       aria-label="تحديد الكل"
                     />
                   </TableHead>
@@ -721,10 +1009,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.grade !== false && (
-                  <TableHead className="min-w-[150px]">
-                    {filterInput(
+                  <TableHead className="min-w-[170px]">
+                    {filterSelect(
                       'grade',
-                      'المرحلة / المستوى'
+                      'كل المستويات',
+                      gradeOptions
                     )}
                   </TableHead>
                 )}
@@ -739,10 +1028,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.paymentStatus !== false && (
-                  <TableHead className="min-w-[150px]">
-                    {filterInput(
+                  <TableHead className="min-w-[170px]">
+                    {filterSelect(
                       'paymentStatus',
-                      'حالة السداد'
+                      'كل حالات السداد',
+                      paymentStatusOptions
                     )}
                   </TableHead>
                 )}
@@ -757,10 +1047,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.attendance !== false && (
-                  <TableHead className="min-w-[130px]">
-                    {filterInput(
+                  <TableHead className="min-w-[150px]">
+                    {filterSelect(
                       'attendance',
-                      'الحضور'
+                      'كل حالات الحضور',
+                      attendanceOptions
                     )}
                   </TableHead>
                 )}
@@ -849,7 +1140,9 @@ export function StudentsTable({
                         <TableCell className="text-center">
                           <input
                             type="checkbox"
-                            checked={isSelected}
+                            checked={
+                              isSelected
+                            }
                             onChange={() =>
                               toggleStudentSelection(
                                 student.id
@@ -909,6 +1202,7 @@ export function StudentsTable({
                               event
                             ) => {
                               event.stopPropagation()
+
                               openPayment(
                                 student
                               )
@@ -932,6 +1226,7 @@ export function StudentsTable({
                               event
                             ) => {
                               event.stopPropagation()
+
                               onOpenNotes(
                                 student
                               )
@@ -952,13 +1247,15 @@ export function StudentsTable({
                               event
                             ) => {
                               event.stopPropagation()
+
                               onOpenAttendance(
                                 student
                               )
                             }}
                           >
-                            {student.attendance ||
-                              'لم يسجل'}
+                            {normalizeAttendanceStatus(
+                              student.attendance
+                            )}
                           </button>
                         </TableCell>
                       )}
@@ -1131,12 +1428,10 @@ export function StudentsTable({
               {students.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={
-                      Math.max(
-                        totalColumns,
-                        1
-                      )
-                    }
+                    colSpan={Math.max(
+                      totalColumns,
+                      1
+                    )}
                     className="h-32 text-center text-muted-foreground"
                   >
                     لا توجد بيانات
@@ -1148,7 +1443,96 @@ export function StudentsTable({
         </div>
       </div>
 
-      {/* نافذة تفاصيل الدفع */}
+      {/* =========================================
+          نافذة تأكيد مسح الطلاب المحددين
+         ========================================= */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeDeleteConfirmation()
+            }
+          }}
+        >
+          <div
+            dir="rtl"
+            className="w-full max-w-md rounded-xl bg-background p-5 shadow-xl"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="mb-5">
+              <div className="mb-2 flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+
+                <h2 className="text-lg font-semibold">
+                  تأكيد المسح
+                </h2>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                هل أنت متأكد من مسح الطلاب
+                المحددين؟
+              </p>
+
+              <div className="mt-3 rounded-lg border bg-muted/30 p-3 text-sm">
+                سيتم مسح{' '}
+                <span className="font-semibold">
+                  {selectedCount}
+                </span>{' '}
+                طالب محدد.
+              </div>
+
+              <p className="mt-3 text-xs text-destructive">
+                هذه العملية قد تؤدي إلى حذف
+                بيانات الطلاب المرتبطة بهم.
+              </p>
+            </div>
+
+            {deleteMessage && (
+              <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {deleteMessage}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={
+                  confirmDeleteSelected
+                }
+                disabled={deleteSaving}
+                className="flex-1 rounded-md bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {deleteSaving
+                  ? 'جاري المسح...'
+                  : 'نعم، مسح المحدد'}
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  closeDeleteConfirmation
+                }
+                disabled={deleteSaving}
+                className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================
+          نافذة تفاصيل الدفع
+         ========================================= */}
       {paymentStudent && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
