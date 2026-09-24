@@ -4,10 +4,13 @@ import { useState } from 'react'
 import {
   AlertCircle,
   CalendarDays,
+  Check,
   Clock3,
   Eye,
+  MapPin,
   Search,
   UserRound,
+  WalletCards,
   X,
 } from 'lucide-react'
 
@@ -82,6 +85,32 @@ type StudentStatusResponse = {
   attendance: AttendanceRecord[] | null
 }
 
+type TripResponse =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+
+type StudentTrip = {
+  trip_student_id: string
+  trip_id: string
+  trip_name: string
+  trip_description: string | null
+  trip_location: string | null
+  trip_date: string | null
+  meeting_time: string | null
+  return_time: string | null
+  trip_fee: number | string | null
+  trip_note: string | null
+  trip_status: string
+  response: TripResponse
+  response_note: string | null
+  responded_at: string | null
+  course_id: string
+  course_name: string
+  level_id: string | null
+  level_name: string | null
+}
+
 function getTodayString() {
   const today = new Date()
 
@@ -98,15 +127,6 @@ function getTodayString() {
   return `${year}-${month}-${day}`
 }
 
-/*
- * تحويل اسم اليوم إلى قيمة موحدة.
- *
- * يدعم:
- * sunday / monday / ...
- *
- * وكذلك:
- * الأحد / الاثنين / الثلاثاء / الأربعاء / ...
- */
 function normalizeCourseDay(day: string) {
   const value = day
     .trim()
@@ -136,13 +156,6 @@ function normalizeCourseDay(day: string) {
   return arabicDays[value] ?? value
 }
 
-/*
- * الحصول على اسم اليوم بالإنجليزية
- * مباشرة من التاريخ.
- *
- * هذا يتجنب مشكلة تحويل الأربعاء
- * من العربية إلى الإنجليزية.
- */
 function getEnglishDayName(dateString: string) {
   const date = new Date(
     `${dateString}T00:00:00`,
@@ -161,16 +174,6 @@ function getEnglishDayName(dateString: string) {
   return days[date.getDay()]
 }
 
-/*
- * التأكد أن التاريخ من أيام الدورة.
- *
- * مثال:
- * course.days = ["monday", "wednesday"]
- *
- * وتاريخ 2026-09-23 = Wednesday
- *
- * النتيجة = true
- */
 function isCourseStudyDay(
   dateString: string,
   course: Course,
@@ -202,6 +205,64 @@ function formatDate(date: string) {
   })
 }
 
+function formatTime(time: string | null) {
+  if (!time) {
+    return '—'
+  }
+
+  const [hourString, minuteString] =
+    time.split(':')
+
+  const hour = Number(hourString)
+  const minute = Number(minuteString)
+
+  if (
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute)
+  ) {
+    return time
+  }
+
+  const date = new Date()
+
+  date.setHours(
+    hour,
+    minute,
+    0,
+    0,
+  )
+
+  return date.toLocaleTimeString(
+    'ar-BH',
+    {
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  )
+}
+
+function formatTripFee(
+  value: number | string | null,
+) {
+  const fee = Number(value ?? 0)
+
+  if (!Number.isFinite(fee)) {
+    return '—'
+  }
+
+  if (fee === 0) {
+    return 'مجانية'
+  }
+
+  return `${new Intl.NumberFormat(
+    'ar-BH',
+    {
+      minimumFractionDigits: 3,
+      maximumFractionDigits: 3,
+    },
+  ).format(fee)} د.ب`
+}
+
 function calculateCourseSummary(
   studentId: string,
   course: Course,
@@ -219,12 +280,6 @@ function calculateCourseSummary(
 
   const records: CourseSummary['records'] = []
 
-  /*
-   * Map لحالات الحضور.
-   *
-   * المفتاح هو status_id
-   * حتى لا نعتمد على ترتيب الحالات.
-   */
   const statusMap = new Map(
     attendanceStatuses.map(
       (status) => [
@@ -248,9 +303,6 @@ function calculateCourseSummary(
       `${course.end_date}T00:00:00`,
     )
 
-    /*
-     * لا نحسب الأيام المستقبلية.
-     */
     const effectiveEnd =
       end >
       new Date(
@@ -274,9 +326,6 @@ function calculateCourseSummary(
         ).padStart(2, '0'),
       ].join('-')
 
-      /*
-       * نحسب فقط أيام الدراسة الفعلية.
-       */
       if (
         isCourseStudyDay(
           dateString,
@@ -285,10 +334,6 @@ function calculateCourseSummary(
       ) {
         totalDays += 1
 
-        /*
-         * نبحث عن سجل الطالب
-         * في نفس الدورة ونفس التاريخ.
-         */
         const record =
           attendanceRecords.find(
             (item) =>
@@ -309,9 +354,6 @@ function calculateCourseSummary(
             note: '',
           })
         } else {
-          /*
-           * تحويل status_id إلى اسم الحالة.
-           */
           const statusName =
             statusMap.get(
               record.status_id,
@@ -334,10 +376,6 @@ function calculateCourseSummary(
           ) {
             excused += 1
           } else {
-            /*
-             * أي حالة أخرى لا تدخل
-             * في نسبة الحضور.
-             */
             notRecorded += 1
           }
 
@@ -356,18 +394,6 @@ function calculateCourseSummary(
     }
   }
 
-  /*
-   * نسبة الحضور:
-   *
-   * حاضر + متأخر + مستأذن
-   * = حضور
-   *
-   * غائب
-   * = يدخل في المقام ويخفض النسبة
-   *
-   * لم يسجل
-   * = لا يدخل في المقام
-   */
   const attendedDays =
     present +
     late +
@@ -440,14 +466,31 @@ export default function StudentStatusPage() {
       null,
     )
 
+  const [trips, setTrips] =
+    useState<StudentTrip[]>([])
+
+  const [
+    tripsLoading,
+    setTripsLoading,
+  ] = useState(false)
+
+  const [tripsError, setTripsError] =
+    useState('')
+
+  const [
+    respondingTripId,
+    setRespondingTripId,
+  ] = useState<string | null>(null)
+
+  const [
+    activePersonalId,
+    setActivePersonalId,
+  ] = useState('')
+
   const handleSearch = async () => {
     const personalId =
       searchValue.trim()
 
-    /*
-     * الرقم الشخصي يجب أن يكون
-     * 9 أرقام فقط.
-     */
     if (!/^\d{9}$/.test(personalId)) {
       setError(
         'أدخل الرقم الشخصي المكون من 9 أرقام.',
@@ -466,13 +509,11 @@ export default function StudentStatusPage() {
     setPreviousCourses([])
     setSelectedCourse(null)
 
+    setTrips([])
+    setTripsError('')
+    setActivePersonalId('')
+
     try {
-      /*
-       * الصفحة العامة تعتمد على RPC واحد فقط.
-       *
-       * لا يوجد SELECT مباشر
-       * على جداول النظام من المتصفح.
-       */
       const {
         data,
         error: rpcError,
@@ -533,17 +574,13 @@ export default function StudentStatusPage() {
 
       setStudent(studentData)
       setLevel(levelData)
+      setActivePersonalId(
+        personalId,
+      )
 
       const today =
         getTodayString()
 
-      /*
-       * الدورات الحالية:
-       *
-       * - مرتبطة بالسنة الحالية
-       * - بدأت بالفعل
-       * - لم تنتهِ
-       */
       const currentCourseList =
         courses.filter(
           (course) => {
@@ -591,9 +628,6 @@ export default function StudentStatusPage() {
         currentSummaries,
       )
 
-      /*
-       * الدورات السابقة.
-       */
       const previousCourseList =
         courses.filter(
           (course) => {
@@ -625,6 +659,53 @@ export default function StudentStatusPage() {
         previousSummaries,
       )
 
+      /*
+       * جلب الرحلات المخصصة للطالب.
+       *
+       * الرحلة تظهر فقط إذا:
+       * selected = true
+       * status = published
+       */
+      setTripsLoading(true)
+
+      try {
+        const {
+          data: tripsData,
+          error: tripsRpcError,
+        } =
+          await supabase.rpc(
+            'get_student_trips_by_personal_id',
+            {
+              p_personal_id:
+                personalId,
+            },
+          )
+
+        if (tripsRpcError) {
+          throw tripsRpcError
+        }
+
+        setTrips(
+          Array.isArray(
+            tripsData,
+          )
+            ? (tripsData as StudentTrip[])
+            : [],
+        )
+      } catch (tripError) {
+        console.error(
+          'Student trips error:',
+          tripError,
+        )
+
+        setTrips([])
+        setTripsError(
+          'تعذر تحميل الرحلات المخصصة للطالب.',
+        )
+      } finally {
+        setTripsLoading(false)
+      }
+
       setSearched(true)
     } catch (err) {
       console.error(
@@ -639,6 +720,64 @@ export default function StudentStatusPage() {
       setSearched(true)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleTripResponse = async (
+    tripId: string,
+    response: TripResponse,
+  ) => {
+    if (!activePersonalId) {
+      return
+    }
+
+    setRespondingTripId(tripId)
+    setTripsError('')
+
+    try {
+      const {
+        error: responseError,
+      } =
+        await supabase.rpc(
+          'respond_to_trip',
+          {
+            p_personal_id:
+              activePersonalId,
+            p_trip_id: tripId,
+            p_response: response,
+            p_response_note: null,
+          },
+        )
+
+      if (responseError) {
+        throw responseError
+      }
+
+      setTrips((current) =>
+        current.map((trip) =>
+          trip.trip_id === tripId
+            ? {
+                ...trip,
+                response,
+                response_note:
+                  null,
+                responded_at:
+                  new Date().toISOString(),
+              }
+            : trip,
+        ),
+      )
+    } catch (err) {
+      console.error(
+        'Trip response error:',
+        err,
+      )
+
+      setTripsError(
+        'تعذر حفظ ردك على الرحلة. حاول مرة أخرى.',
+      )
+    } finally {
+      setRespondingTripId(null)
     }
   }
 
@@ -657,7 +796,7 @@ export default function StudentStatusPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             أدخل الرقم الشخصي للطالب
             لعرض بياناته الحقيقية
-            ومتابعة الحضور
+            ومتابعة الحضور والرحلات
           </p>
         </div>
 
@@ -771,6 +910,66 @@ export default function StudentStatusPage() {
                       '—'
                     }
                   />
+                </div>
+              </div>
+
+              {/* الرحلات */}
+              <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+                <div className="border-b px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="size-5 text-primary" />
+
+                    <div>
+                      <h2 className="font-semibold">
+                        الرحلات المخصصة للطالب
+                      </h2>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        الرحلات التي تم اختيار الطالب
+                        للمشاركة فيها
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5">
+                  {tripsLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                      <Clock3 className="size-4 animate-spin" />
+
+                      جاري تحميل الرحلات...
+                    </div>
+                  ) : tripsError ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="size-4" />
+
+                        {tripsError}
+                      </div>
+                    </div>
+                  ) : trips.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      لا توجد رحلات مخصصة لك حاليًا.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {trips.map((trip) => (
+                        <StudentTripCard
+                          key={
+                            trip.trip_student_id
+                          }
+                          trip={trip}
+                          responding={
+                            respondingTripId ===
+                            trip.trip_id
+                          }
+                          onRespond={
+                            handleTripResponse
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -911,6 +1110,233 @@ export default function StudentStatusPage() {
         />
       )}
     </main>
+  )
+}
+
+function StudentTripCard({
+  trip,
+  responding,
+  onRespond,
+}: {
+  trip: StudentTrip
+  responding: boolean
+  onRespond: (
+    tripId: string,
+    response: TripResponse,
+  ) => void
+}) {
+  const responseLabel =
+    trip.response === 'accepted'
+      ? 'تمت الموافقة'
+      : trip.response === 'rejected'
+        ? 'تم الاعتذار'
+        : 'بانتظار الرد'
+
+  const responseClass =
+    trip.response === 'accepted'
+      ? 'bg-green-100 text-green-800'
+      : trip.response === 'rejected'
+        ? 'bg-red-100 text-red-800'
+        : 'bg-yellow-100 text-yellow-800'
+
+  return (
+    <div className="overflow-hidden rounded-2xl border">
+      <div className="bg-muted/20 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold">
+              {trip.trip_name}
+            </h3>
+
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarDays className="size-3.5" />
+
+                {trip.trip_date
+                  ? formatDate(
+                      trip.trip_date,
+                    )
+                  : 'التاريخ غير محدد'}
+              </span>
+
+              {trip.meeting_time && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock3 className="size-3.5" />
+
+                  التجمع:{' '}
+                  {formatTime(
+                    trip.meeting_time,
+                  )}
+                </span>
+              )}
+
+              {trip.trip_location && (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="size-3.5" />
+
+                  {trip.trip_location}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <span
+            className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${responseClass}`}
+          >
+            {responseLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <TripInfoItem
+            label="المقرر"
+            value={
+              trip.course_name ||
+              '—'
+            }
+          />
+
+          <TripInfoItem
+            label="المستوى"
+            value={
+              trip.level_name ||
+              '—'
+            }
+          />
+
+          <TripInfoItem
+            label="الرسوم"
+            value={formatTripFee(
+              trip.trip_fee,
+            )}
+            icon={
+              <WalletCards className="size-3.5" />
+            }
+          />
+        </div>
+
+        {(trip.trip_description ||
+          trip.trip_note) && (
+          <div className="space-y-2">
+            {trip.trip_description && (
+              <div className="rounded-xl border bg-background p-3">
+                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                  وصف الرحلة
+                </p>
+
+                <p className="text-sm leading-6">
+                  {
+                    trip.trip_description
+                  }
+                </p>
+              </div>
+            )}
+
+            {trip.trip_note && (
+              <div className="rounded-xl border bg-background p-3">
+                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                  ملاحظة
+                </p>
+
+                <p className="text-sm leading-6">
+                  {trip.trip_note}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {trip.response_note && (
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <p className="mb-1 text-xs font-semibold text-muted-foreground">
+              ملاحظتك
+            </p>
+
+            <p className="text-sm">
+              {trip.response_note}
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row">
+          <button
+            type="button"
+            disabled={responding}
+            onClick={() =>
+              onRespond(
+                trip.trip_id,
+                'accepted',
+              )
+            }
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              trip.response ===
+              'accepted'
+                ? 'bg-green-600 text-white'
+                : 'border bg-background hover:bg-muted'
+            }`}
+          >
+            <Check className="size-4" />
+
+            {responding &&
+            trip.response !==
+              'accepted'
+              ? 'جاري الحفظ...'
+              : 'أوافق'}
+          </button>
+
+          <button
+            type="button"
+            disabled={responding}
+            onClick={() =>
+              onRespond(
+                trip.trip_id,
+                'rejected',
+              )
+            }
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              trip.response ===
+              'rejected'
+                ? 'bg-red-600 text-white'
+                : 'border bg-background hover:bg-muted'
+            }`}
+          >
+            <X className="size-4" />
+
+            {responding &&
+            trip.response !==
+              'rejected'
+              ? 'جاري الحفظ...'
+              : 'أعتذر'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TripInfoItem({
+  label,
+  value,
+  icon,
+}: {
+  label: string
+  value: string
+  icon?: React.ReactNode
+}) {
+  return (
+    <div className="rounded-xl border p-3">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {icon}
+
+        <span>{label}</span>
+      </div>
+
+      <p className="mt-1 text-sm font-medium">
+        {value}
+      </p>
+    </div>
   )
 }
 
