@@ -1129,6 +1129,12 @@ export function EnrollmentView() {
       }
 
       try {
+        /*
+         * =====================================================
+         * 1) تنفيذ الترحيل عبر RPC
+         * =====================================================
+         */
+
         const {
           data,
           error,
@@ -1154,6 +1160,11 @@ export function EnrollmentView() {
           }
         }
 
+        console.log(
+          'approve_registration_request result:',
+          data,
+        )
+
         const studentId =
           data?.student_id ??
           null
@@ -1162,34 +1173,62 @@ export function EnrollmentView() {
           data?.already_processed ===
           true
 
-        if (studentId) {
-          const {
-            error:
-              studentUpdateError,
-          } = await supabase
-            .from('students')
-            .update({
-              source:
-                'registration',
-            })
-            .eq(
-              'id',
-              studentId,
-            )
+        /*
+         * =====================================================
+         * 2) التأكد من وجود الطالب
+         * =====================================================
+         */
 
-          if (
-            studentUpdateError
-          ) {
-            console.warn(
-              'Could not update student source:',
-              studentUpdateError,
-            )
+        if (!studentId) {
+          return {
+            success: false,
+            alreadyProcessed,
+            errorMessage:
+              'تم تنفيذ عملية الموافقة، لكن لم يتم إرجاع رقم الطالب.',
           }
         }
 
+        /*
+         * =====================================================
+         * 3) تحديث مصدر الطالب
+         * =====================================================
+         */
+
         const {
           error:
-            deleteError,
+            studentUpdateError,
+        } = await supabase
+          .from('students')
+          .update({
+            source:
+              'registration',
+          })
+          .eq(
+            'id',
+            studentId,
+          )
+
+        if (
+          studentUpdateError
+        ) {
+          console.warn(
+            'Could not update student source:',
+            studentUpdateError,
+          )
+        }
+
+        /*
+         * =====================================================
+         * 4) حذف طلب التسجيل
+         *
+         * select('id') مهم جدًا لأنه يجعلنا نتأكد
+         * أن صف الطلب تم حذفه فعليًا.
+         * =====================================================
+         */
+
+        const {
+          data: deletedRows,
+          error: deleteError,
         } = await supabase
           .from(
             'registration_requests',
@@ -1199,6 +1238,7 @@ export function EnrollmentView() {
             'id',
             request.id,
           )
+          .select('id')
 
         if (deleteError) {
           console.error(
@@ -1210,9 +1250,57 @@ export function EnrollmentView() {
             success: false,
             alreadyProcessed,
             errorMessage:
-              'تم إنشاء الطالب، لكن تعذر حذف طلب التسجيل.',
+              `تم إنشاء الطالب، لكن تعذر حذف طلب التسجيل: ${deleteError.message}`,
           }
         }
+
+        /*
+         * إذا لم يتم حذف أي صف فهذا يعني أن العملية
+         * لم تصل فعليًا إلى سجل الطلب.
+         */
+
+        if (
+          !deletedRows ||
+          deletedRows.length === 0
+        ) {
+          console.error(
+            'Registration request was NOT deleted:',
+            {
+              requestId:
+                request.id,
+              requestNumber:
+                request.requestNumber,
+              studentId,
+                deletedRows,
+              alreadyProcessed,
+            },
+          )
+
+          return {
+            success: false,
+            alreadyProcessed,
+            errorMessage:
+              'تم إنشاء الطالب، لكن سجل طلب التسجيل لم يُحذف. تحقق من صلاحية DELETE أو RLS.',
+          }
+        }
+
+        /*
+         * =====================================================
+         * 5) نجاح كامل
+         * =====================================================
+         */
+
+        console.log(
+          'Registration request deleted successfully:',
+          {
+            requestId:
+              request.id,
+            requestNumber:
+              request.requestNumber,
+            studentId,
+            deletedRows,
+          },
+        )
 
         return {
           success: true,
