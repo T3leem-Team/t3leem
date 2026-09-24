@@ -1,30 +1,67 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Loader2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Check,
+  ChevronDown,
+  Loader2,
+  X,
+} from 'lucide-react'
 
 type AcademicYear = {
   id: string
   name: string
   is_current?: boolean
+  is_active?: boolean
 }
 
 type Course = {
   id: string
   name: string
   academic_year_id: string
+  start_date?: string | null
+  end_date?: string | null
+  days?: string[] | null
 }
 
 type Level = {
   id: string
   name: string
-  sort_order: number
-  is_active: boolean
+  sort_order?: number | null
+  is_active?: boolean
+  registration_enabled?: boolean
+}
+
+type Trip = {
+  id: string
+  name: string
+  description: string | null
+  location: string | null
+  trip_date: string | null
+  meeting_time: string | null
+  return_time: string | null
+  fee: number
+  note: string | null
+  academic_year_id: string
+  course_id: string
+  attendance_min: number | null
+  attendance_max: number | null
+  notes_requirement:
+    | 'any'
+    | 'required'
+    | 'none'
+  status:
+    | 'draft'
+    | 'pending_approval'
+    | 'published'
+    | 'rejected'
+    | 'closed'
 }
 
 type TripsFormProps = {
   academicYears: AcademicYear[]
   courses: Course[]
+  trip?: Trip | null
   onClose: () => void
   onCreated: () => void
 }
@@ -32,9 +69,12 @@ type TripsFormProps = {
 export function TripsForm({
   academicYears,
   courses,
+  trip = null,
   onClose,
   onCreated,
 }: TripsFormProps) {
+  const isEdit = Boolean(trip)
+
   const currentYear =
     academicYears.find(
       (year) => year.is_current,
@@ -42,64 +82,107 @@ export function TripsForm({
     academicYears[0] ??
     null
 
-  const [name, setName] = useState('')
+  const [name, setName] = useState(
+    trip?.name ?? '',
+  )
+
   const [description, setDescription] =
-    useState('')
+    useState(trip?.description ?? '')
+
   const [location, setLocation] =
-    useState('')
+    useState(trip?.location ?? '')
+
   const [tripDate, setTripDate] =
-    useState('')
+    useState(trip?.trip_date ?? '')
+
   const [meetingTime, setMeetingTime] =
-    useState('')
-  const [returnTime, setReturnTime] =
-    useState('')
-  const [fee, setFee] =
-    useState('0')
-  const [note, setNote] =
-    useState('')
-
-  const [academicYearId, setAcademicYearId] =
-    useState(currentYear?.id ?? '')
-
-  const [courseId, setCourseId] =
-    useState('')
-
-  const [selectedLevelIds, setSelectedLevelIds] =
-    useState<string[]>([])
-
-  const [levels, setLevels] =
-    useState<Level[]>([])
-
-  const [levelsLoading, setLevelsLoading] =
-    useState(false)
-
-  const [attendanceMin, setAttendanceMin] =
-    useState('')
-
-  const [attendanceMax, setAttendanceMax] =
-    useState('')
-
-  const [notesRequirement, setNotesRequirement] =
-    useState<
-      'any' | 'required' | 'none'
-    >('any')
-
-  const [saving, setSaving] =
-    useState(false)
-
-  const [error, setError] =
-    useState('')
-
-  const availableCourses =
-    courses.filter(
-      (course) =>
-        course.academic_year_id ===
-        academicYearId,
+    useState(
+      trip?.meeting_time
+        ? trip.meeting_time.slice(0, 5)
+        : '',
     )
 
+  const [returnTime, setReturnTime] =
+    useState(
+      trip?.return_time
+        ? trip.return_time.slice(0, 5)
+        : '',
+    )
+
+  const [fee, setFee] = useState(
+    trip?.fee != null
+      ? String(trip.fee)
+      : '0',
+  )
+
+  const [note, setNote] = useState(
+    trip?.note ?? '',
+  )
+
+  const [academicYearId, setAcademicYearId] =
+    useState(
+      trip?.academic_year_id ??
+        currentYear?.id ??
+        '',
+    )
+
+  const [courseId, setCourseId] = useState(
+    trip?.course_id ?? '',
+  )
+
+  const [
+    selectedLevelIds,
+    setSelectedLevelIds,
+  ] = useState<string[]>([])
+
+  const [levels, setLevels] = useState<
+    Level[]
+  >([])
+
+  const [
+    attendanceMin,
+    setAttendanceMin,
+  ] = useState(
+    trip?.attendance_min != null
+      ? String(trip.attendance_min)
+      : '',
+  )
+
+  const [
+    attendanceMax,
+    setAttendanceMax,
+  ] = useState(
+    trip?.attendance_max != null
+      ? String(trip.attendance_max)
+      : '',
+  )
+
+  const [
+    notesRequirement,
+    setNotesRequirement,
+  ] = useState<
+    'any' | 'required' | 'none'
+  >(
+    trip?.notes_requirement ?? 'any',
+  )
+
+  const [loading, setLoading] =
+    useState(false)
+
+  const [loadingData, setLoadingData] =
+    useState(true)
+
+  const [error, setError] = useState('')
+
+  /*
+   * تحميل المستويات + مستويات الرحلة
+   * في حالة التعديل.
+   */
   useEffect(() => {
-    async function loadLevels() {
-      setLevelsLoading(true)
+    let cancelled = false
+
+    async function loadData() {
+      setLoadingData(true)
 
       try {
         const response = await fetch(
@@ -116,73 +199,135 @@ export function TripsForm({
         if (!response.ok) {
           throw new Error(
             data?.error ??
-              'تعذر تحميل المستويات.',
+              'تعذر تحميل بيانات الرحلة.',
           )
         }
 
-        setLevels(
+        if (cancelled) return
+
+        const loadedLevels =
           Array.isArray(data?.levels)
             ? data.levels
-            : [],
-        )
+            : []
+
+        setLevels(loadedLevels)
+
+        if (trip?.id) {
+          const tripLevels =
+            Array.isArray(
+              data?.tripLevels,
+            )
+              ? data.tripLevels
+              : []
+
+          const currentTripLevelIds =
+            tripLevels
+              .filter(
+                (item: {
+                  trip_id: string
+                  level_id: string
+                }) =>
+                  item.trip_id ===
+                  trip.id,
+              )
+              .map(
+                (item: {
+                  trip_id: string
+                  level_id: string
+                }) => item.level_id,
+              )
+
+          setSelectedLevelIds(
+            currentTripLevelIds,
+          )
+        }
       } catch (error) {
         console.error(
-          'Load trip levels error:',
+          'Load trip form data error:',
           error,
         )
 
-        setError(
-          error instanceof Error
-            ? error.message
-            : 'تعذر تحميل المستويات.',
-        )
+        if (!cancelled) {
+          setError(
+            error instanceof Error
+              ? error.message
+              : 'تعذر تحميل بيانات الرحلة.',
+          )
+        }
       } finally {
-        setLevelsLoading(false)
+        if (!cancelled) {
+          setLoadingData(false)
+        }
       }
     }
 
-    loadLevels()
-  }, [])
+    loadData()
 
+    return () => {
+      cancelled = true
+    }
+  }, [trip?.id])
+
+  /*
+   * الدورات التابعة للسنة المختارة فقط.
+   */
+  const filteredCourses =
+    useMemo(() => {
+      if (!academicYearId) {
+        return []
+      }
+
+      return courses.filter(
+        (course) =>
+          course.academic_year_id ===
+          academicYearId,
+      )
+    }, [
+      courses,
+      academicYearId,
+    ])
+
+  /*
+   * إذا تغيرت السنة، نتأكد أن الدورة
+   * المختارة تابعة لها.
+   */
   useEffect(() => {
-    if (
-      courseId &&
-      !availableCourses.some(
+    if (!courseId) return
+
+    const exists =
+      filteredCourses.some(
         (course) =>
           course.id === courseId,
       )
-    ) {
+
+    if (!exists) {
       setCourseId('')
     }
   }, [
     academicYearId,
+    filteredCourses,
     courseId,
-    courses,
   ])
 
   function toggleLevel(
     levelId: string,
   ) {
-    setSelectedLevelIds(
-      (current) =>
-        current.includes(levelId)
-          ? current.filter(
-              (id) =>
-                id !== levelId,
-            )
-          : [...current, levelId],
+    setSelectedLevelIds((current) =>
+      current.includes(levelId)
+        ? current.filter(
+            (id) => id !== levelId,
+          )
+        : [...current, levelId],
     )
   }
 
   function selectAllLevels() {
     setSelectedLevelIds(
-      levels.map(
-        (level) => level.id,
-      ),
+      levels.map((level) => level.id),
     )
   }
 
-  function clearLevels() {
+  function clearAllLevels() {
     setSelectedLevelIds([])
   }
 
@@ -193,97 +338,143 @@ export function TripsForm({
 
     setError('')
 
-    if (!name.trim()) {
-      setError(
-        'اسم الرحلة مطلوب.',
-      )
+    const cleanName = name.trim()
+
+    if (!cleanName) {
+      setError('اسم الرحلة مطلوب.')
       return
     }
 
     if (!academicYearId) {
       setError(
-        'السنة الدراسية مطلوبة.',
+        'اختر السنة الدراسية.',
       )
       return
     }
 
     if (!courseId) {
-      setError(
-        'الدورة مطلوبة.',
-      )
+      setError('اختر الدورة.')
       return
     }
 
-    if (
-      selectedLevelIds.length === 0
-    ) {
+    if (selectedLevelIds.length === 0) {
       setError(
         'اختر مستوى واحدًا على الأقل.',
       )
       return
     }
 
-    setSaving(true)
+    const numericFee =
+      fee.trim() === ''
+        ? 0
+        : Number(fee)
+
+    if (
+      !Number.isFinite(numericFee) ||
+      numericFee < 0
+    ) {
+      setError(
+        'رسوم الرحلة غير صحيحة.',
+      )
+      return
+    }
+
+    const numericMin =
+      attendanceMin.trim() === ''
+        ? null
+        : Number(attendanceMin)
+
+    const numericMax =
+      attendanceMax.trim() === ''
+        ? null
+        : Number(attendanceMax)
+
+    if (
+      numericMin !== null &&
+      (!Number.isFinite(
+        numericMin,
+      ) ||
+        numericMin < 0 ||
+        numericMin > 100)
+    ) {
+      setError(
+        'الحد الأدنى للحضور يجب أن يكون بين 0 و100.',
+      )
+      return
+    }
+
+    if (
+      numericMax !== null &&
+      (!Number.isFinite(
+        numericMax,
+      ) ||
+        numericMax < 0 ||
+        numericMax > 100)
+    ) {
+      setError(
+        'الحد الأعلى للحضور يجب أن يكون بين 0 و100.',
+      )
+      return
+    }
+
+    if (
+      numericMin !== null &&
+      numericMax !== null &&
+      numericMin > numericMax
+    ) {
+      setError(
+        'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى.',
+      )
+      return
+    }
+
+    setLoading(true)
 
     try {
-      const response =
-        await fetch('/api/trips', {
-          method: 'POST',
+      const payload = {
+        ...(isEdit
+          ? { id: trip?.id }
+          : {}),
+        name: cleanName,
+        description:
+          description.trim() || null,
+        location:
+          location.trim() || null,
+        trip_date:
+          tripDate || null,
+        meeting_time:
+          meetingTime || null,
+        return_time:
+          returnTime || null,
+        fee: numericFee,
+        note:
+          note.trim() || null,
+        academic_year_id:
+          academicYearId,
+        course_id: courseId,
+        attendance_min:
+          numericMin,
+        attendance_max:
+          numericMax,
+        notes_requirement:
+          notesRequirement,
+        level_ids:
+          selectedLevelIds,
+      }
+
+      const response = await fetch(
+        '/api/trips',
+        {
+          method: isEdit
+            ? 'PATCH'
+            : 'POST',
           headers: {
             'Content-Type':
               'application/json',
           },
-          body: JSON.stringify({
-            name: name.trim(),
-
-            description:
-              description.trim() ||
-              null,
-
-            location:
-              location.trim() ||
-              null,
-
-            trip_date:
-              tripDate || null,
-
-            meeting_time:
-              meetingTime || null,
-
-            return_time:
-              returnTime || null,
-
-            fee: Number(fee || 0),
-
-            note:
-              note.trim() || null,
-
-            academic_year_id:
-              academicYearId,
-
-            course_id: courseId,
-
-            level_ids:
-              selectedLevelIds,
-
-            attendance_min:
-              attendanceMin === ''
-                ? null
-                : Number(
-                    attendanceMin,
-                  ),
-
-            attendance_max:
-              attendanceMax === ''
-                ? null
-                : Number(
-                    attendanceMax,
-                  ),
-
-            notes_requirement:
-              notesRequirement,
-          }),
-        })
+          body: JSON.stringify(payload),
+        },
+      )
 
       const data =
         await response.json()
@@ -291,215 +482,367 @@ export function TripsForm({
       if (!response.ok) {
         throw new Error(
           data?.error ??
-            'تعذر إنشاء الرحلة.',
+            (isEdit
+              ? 'تعذر تعديل الرحلة.'
+              : 'تعذر إنشاء الرحلة.'),
         )
       }
 
       onCreated()
     } catch (error) {
       console.error(
-        'Create trip error:',
+        'Save trip error:',
         error,
       )
 
       setError(
         error instanceof Error
           ? error.message
-          : 'تعذر إنشاء الرحلة.',
+          : isEdit
+            ? 'تعذر تعديل الرحلة.'
+            : 'تعذر إنشاء الرحلة.',
       )
     } finally {
-      setSaving(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      onMouseDown={(event) => {
-        if (
-          event.target ===
-            event.currentTarget &&
-          !saving
-        ) {
-          onClose()
-        }
-      }}
-    >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-border bg-background shadow-2xl"
+        dir="rtl"
+      >
         {/* الرأس */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
             <h2 className="text-lg font-bold">
-              إضافة رحلة
+              {isEdit
+                ? 'تعديل الرحلة'
+                : 'إضافة رحلة'}
             </h2>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              أدخل بيانات الرحلة
-              والمستويات المستهدفة.
+              {isEdit
+                ? 'تعديل بيانات الرحلة والمستويات المشاركة'
+                : 'إدخال بيانات الرحلة وتحديد المستويات المشاركة'}
             </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            disabled={saving}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-muted disabled:opacity-50"
+            disabled={loading}
+            className="flex size-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             aria-label="إغلاق"
           >
             <X className="size-5" />
           </button>
         </div>
 
+        {/* المحتوى */}
         <form
           onSubmit={handleSubmit}
-          className="max-h-[calc(90vh-80px)] overflow-y-auto"
+          className="overflow-y-auto"
         >
-          <div className="space-y-5 p-5">
-            {/* اسم الرحلة */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                اسم الرحلة
-                <span className="text-destructive">
-                  {' '}
-                  *
-                </span>
-              </label>
-
-              <input
-                type="text"
-                value={name}
-                onChange={(event) =>
-                  setName(
-                    event.target.value,
-                  )
-                }
-                placeholder="مثال: رحلة إلى متحف البحرين"
-                disabled={saving}
-                className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* السنة + الدورة */}
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* السنة */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  السنة الدراسية
-                  <span className="text-destructive">
-                    {' '}
-                    *
-                  </span>
-                </label>
-
-                <select
-                  value={
-                    academicYearId
-                  }
-                  onChange={(event) =>
-                    setAcademicYearId(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={saving}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">
-                    اختر السنة
-                  </option>
-
-                  {academicYears.map(
-                    (year) => (
-                      <option
-                        key={year.id}
-                        value={year.id}
-                      >
-                        {year.name}
-                        {year.is_current
-                          ? ' — الحالية'
-                          : ''}
-                      </option>
-                    ),
-                  )}
-                </select>
+          <div className="space-y-6 p-5">
+            {error && (
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error}
               </div>
+            )}
 
-              {/* الدورة */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  الدورة
-                  <span className="text-destructive">
-                    {' '}
-                    *
-                  </span>
-                </label>
-
-                <select
-                  value={courseId}
-                  onChange={(event) =>
-                    setCourseId(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={
-                    saving ||
-                    !academicYearId
-                  }
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="">
-                    {availableCourses.length ===
-                    0
-                      ? 'لا توجد دورات لهذه السنة'
-                      : 'اختر الدورة'}
-                  </option>
-
-                  {availableCourses.map(
-                    (course) => (
-                      <option
-                        key={course.id}
-                        value={course.id}
-                      >
-                        {course.name}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-            </div>
-
-            {/* المستويات */}
-            <div className="rounded-2xl border border-border bg-muted/20 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold">
-                    مستويات الطلبة
-                    <span className="text-destructive">
-                      {' '}
-                      *
-                    </span>
-                  </h3>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    اختر المستويات التي
-                    يسمح لها بالمشاركة في
-                    الرحلة.
-                  </p>
+            {loadingData ? (
+              <div className="flex min-h-[260px] items-center justify-center">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  جاري تحميل بيانات الرحلة...
                 </div>
+              </div>
+            ) : (
+              <>
+                {/* البيانات الأساسية */}
+                <section className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      بيانات الرحلة
+                    </h3>
 
-                {!levelsLoading &&
-                  levels.length > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      البيانات الأساسية للرحلة.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="mb-1.5 block text-sm font-medium">
+                        اسم الرحلة
+                      </label>
+
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(event) =>
+                          setName(
+                            event.target.value,
+                          )
+                        }
+                        placeholder="مثال: رحلة ترفيهية"
+                        className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        السنة الدراسية
+                      </label>
+
+                      <div className="relative">
+                        <select
+                          value={
+                            academicYearId
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setAcademicYearId(
+                              event.target
+                                .value,
+                            )
+                          }
+                          className="w-full appearance-none rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        >
+                          <option value="">
+                            اختر السنة
+                          </option>
+
+                          {academicYears.map(
+                            (year) => (
+                              <option
+                                key={
+                                  year.id
+                                }
+                                value={
+                                  year.id
+                                }
+                              >
+                                {year.name}
+                                {year.is_current
+                                  ? ' — الحالية'
+                                  : ''}
+                              </option>
+                            ),
+                          )}
+                        </select>
+
+                        <ChevronDown className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        الدورة
+                      </label>
+
+                      <div className="relative">
+                        <select
+                          value={courseId}
+                          onChange={(
+                            event,
+                          ) =>
+                            setCourseId(
+                              event.target
+                                .value,
+                            )
+                          }
+                          disabled={
+                            !academicYearId
+                          }
+                          className="w-full appearance-none rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted"
+                        >
+                          <option value="">
+                            {!academicYearId
+                              ? 'اختر السنة أولاً'
+                              : 'اختر الدورة'}
+                          </option>
+
+                          {filteredCourses.map(
+                            (course) => (
+                              <option
+                                key={
+                                  course.id
+                                }
+                                value={
+                                  course.id
+                                }
+                              >
+                                {course.name}
+                              </option>
+                            ),
+                          )}
+                        </select>
+
+                        <ChevronDown className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        تاريخ الرحلة
+                      </label>
+
+                      <input
+                        type="date"
+                        value={tripDate}
+                        onChange={(event) =>
+                          setTripDate(
+                            event.target.value,
+                          )
+                        }
+                        className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        الموقع
+                      </label>
+
+                      <input
+                        type="text"
+                        value={location}
+                        onChange={(event) =>
+                          setLocation(
+                            event.target.value,
+                          )
+                        }
+                        placeholder="مثال: منتزه..."
+                        className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        وقت التجمع
+                      </label>
+
+                      <input
+                        type="time"
+                        value={meetingTime}
+                        onChange={(event) =>
+                          setMeetingTime(
+                            event.target.value,
+                          )
+                        }
+                        className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        وقت العودة
+                      </label>
+
+                      <input
+                        type="time"
+                        value={returnTime}
+                        onChange={(event) =>
+                          setReturnTime(
+                            event.target.value,
+                          )
+                        }
+                        className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        رسوم الرحلة
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={fee}
+                          onChange={(event) =>
+                            setFee(
+                              event.target
+                                .value,
+                            )
+                          }
+                          className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-14 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          د.ب
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">
+                      الوصف
+                    </label>
+
+                    <textarea
+                      value={description}
+                      onChange={(event) =>
+                        setDescription(
+                          event.target.value,
+                        )
+                      }
+                      rows={3}
+                      placeholder="وصف مختصر للرحلة..."
+                      className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">
+                      ملاحظة الرحلة
+                    </label>
+
+                    <textarea
+                      value={note}
+                      onChange={(event) =>
+                        setNote(
+                          event.target.value,
+                        )
+                      }
+                      rows={2}
+                      placeholder="أي ملاحظات إضافية..."
+                      className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </section>
+
+                {/* المستويات */}
+                <section className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">
+                        المستويات المشاركة
+                      </h3>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        اختر المستويات التي يسمح لطلبتها بالمشاركة.
+                      </p>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={
                           selectAllLevels
                         }
-                        disabled={saving}
-                        className="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                        disabled={
+                          levels.length ===
+                          0
+                        }
+                        className="rounded-lg border border-input px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       >
                         تحديد الكل
                       </button>
@@ -507,372 +850,274 @@ export function TripsForm({
                       <button
                         type="button"
                         onClick={
-                          clearLevels
+                          clearAllLevels
                         }
-                        disabled={saving}
-                        className="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                        disabled={
+                          selectedLevelIds.length ===
+                          0
+                        }
+                        className="rounded-lg border border-input px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       >
                         إلغاء الكل
                       </button>
                     </div>
-                  )}
-              </div>
+                  </div>
 
-              {levelsLoading ? (
-                <div className="mt-4 flex items-center justify-center rounded-xl border border-dashed border-border bg-background py-8 text-sm text-muted-foreground">
-                  <Loader2 className="me-2 size-4 animate-spin" />
-                  جاري تحميل المستويات...
-                </div>
-              ) : levels.length ===
-                0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-border bg-background px-4 py-6 text-center text-sm text-muted-foreground">
-                  لا توجد مستويات نشطة.
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {levels.map(
-                    (level) => {
-                      const checked =
-                        selectedLevelIds.includes(
-                          level.id,
+                  {levels.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                      لا توجد مستويات مفعلة.
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {levels.map(
+                        (level) => {
+                          const selected =
+                            selectedLevelIds.includes(
+                              level.id,
+                            )
+
+                          return (
+                            <button
+                              key={
+                                level.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                toggleLevel(
+                                  level.id,
+                                )
+                              }
+                              className={`flex items-center justify-between rounded-xl border px-3 py-3 text-right transition-colors ${
+                                selected
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border bg-background hover:bg-muted'
+                              }`}
+                            >
+                              <span className="text-sm font-medium">
+                                {level.name}
+                              </span>
+
+                              <span
+                                className={`flex size-5 items-center justify-center rounded-md border ${
+                                  selected
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'border-input'
+                                }`}
+                              >
+                                {selected && (
+                                  <Check className="size-3.5" />
+                                )}
+                              </span>
+                            </button>
+                          )
+                        },
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    تم اختيار{' '}
+                    <span className="font-semibold text-foreground">
+                      {
+                        selectedLevelIds.length
+                      }
+                    </span>{' '}
+                    مستوى.
+                  </p>
+                </section>
+
+                {/* الحضور */}
+                <section className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      شروط الحضور
+                    </h3>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      تستخدم هذه النسب لاحقًا لتحديد الطلبة المؤهلين للرحلة.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        الحد الأدنى للحضور
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={
+                            attendanceMin
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setAttendanceMin(
+                              event.target
+                                .value,
+                            )
+                          }
+                          placeholder="مثال: 80"
+                          className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          %
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        الحد الأعلى للحضور
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={
+                            attendanceMax
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setAttendanceMax(
+                              event.target
+                                .value,
+                            )
+                          }
+                          placeholder="مثال: 100"
+                          className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        />
+
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* الملاحظات */}
+                <section className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      شرط الملاحظات
+                    </h3>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      تحديد كيفية التعامل مع ملاحظات الطلبة عند حساب المؤهلين.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesRequirement(
+                          'any',
                         )
+                      }
+                      className={`rounded-xl border px-4 py-3 text-right transition-colors ${
+                        notesRequirement ===
+                        'any'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold">
+                        الكل
+                      </div>
 
-                      return (
-                        <label
-                          key={level.id}
-                          className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 transition-colors ${
-                            checked
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border bg-background hover:bg-muted/50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={
-                              checked
-                            }
-                            onChange={() =>
-                              toggleLevel(
-                                level.id,
-                              )
-                            }
-                            disabled={
-                              saving
-                            }
-                            className="size-4 accent-primary"
-                          />
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        لا يوجد شرط للملاحظات
+                      </div>
+                    </button>
 
-                          <span className="text-sm font-medium">
-                            {level.name}
-                          </span>
-                        </label>
-                      )
-                    },
-                  )}
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesRequirement(
+                          'required',
+                        )
+                      }
+                      className={`rounded-xl border px-4 py-3 text-right transition-colors ${
+                        notesRequirement ===
+                        'required'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold">
+                        لديه ملاحظة
+                      </div>
 
-              {selectedLevelIds.length >
-                0 && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  تم اختيار{' '}
-                  <span className="font-semibold text-foreground">
-                    {
-                      selectedLevelIds.length
-                    }
-                  </span>{' '}
-                  مستوى.
-                </p>
-              )}
-            </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        يشترط وجود ملاحظة
+                      </div>
+                    </button>
 
-            {/* الموقع */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                الموقع
-              </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesRequirement(
+                          'none',
+                        )
+                      }
+                      className={`rounded-xl border px-4 py-3 text-right transition-colors ${
+                        notesRequirement ===
+                        'none'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold">
+                        بدون ملاحظة
+                      </div>
 
-              <input
-                type="text"
-                value={location}
-                onChange={(event) =>
-                  setLocation(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder="مثال: متحف البحرين الوطني"
-                disabled={saving}
-                className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* التاريخ والأوقات */}
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  تاريخ الرحلة
-                </label>
-
-                <input
-                  type="date"
-                  value={tripDate}
-                  onChange={(event) =>
-                    setTripDate(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={saving}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  وقت التجمع
-                </label>
-
-                <input
-                  type="time"
-                  value={
-                    meetingTime
-                  }
-                  onChange={(event) =>
-                    setMeetingTime(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={saving}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  وقت العودة
-                </label>
-
-                <input
-                  type="time"
-                  value={returnTime}
-                  onChange={(event) =>
-                    setReturnTime(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={saving}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-            </div>
-
-            {/* الرسوم */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                رسوم الرحلة
-              </label>
-
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={fee}
-                  onChange={(event) =>
-                    setFee(
-                      event.target
-                        .value,
-                    )
-                  }
-                  disabled={saving}
-                  className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-14 ps-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  د.ب
-                </span>
-              </div>
-            </div>
-
-            {/* شرط الحضور */}
-            <div className="rounded-2xl border border-border bg-muted/20 p-4">
-              <h3 className="text-sm font-semibold">
-                شرط الحضور
-              </h3>
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                اختياري. اترك الحقول
-                فارغة إذا لم ترغب
-                بتحديد نسبة حضور.
-              </p>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    الحد الأدنى %
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={
-                      attendanceMin
-                    }
-                    onChange={(event) =>
-                      setAttendanceMin(
-                        event.target
-                          .value,
-                      )
-                    }
-                    disabled={saving}
-                    placeholder="مثال: 80"
-                    className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    الحد الأعلى %
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={
-                      attendanceMax
-                    }
-                    onChange={(event) =>
-                      setAttendanceMax(
-                        event.target
-                          .value,
-                      )
-                    }
-                    disabled={saving}
-                    placeholder="مثال: 100"
-                    className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* شرط الملاحظات */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                شرط الملاحظات لهذه
-                الدورة
-              </label>
-
-              <select
-                value={
-                  notesRequirement
-                }
-                onChange={(event) =>
-                  setNotesRequirement(
-                    event.target
-                      .value as
-                      | 'any'
-                      | 'required'
-                      | 'none',
-                  )
-                }
-                disabled={saving}
-                className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="any">
-                  لا يهم وجود ملاحظة
-                </option>
-
-                <option value="required">
-                  يجب أن تكون هناك
-                  ملاحظة
-                </option>
-
-                <option value="none">
-                  يجب ألا توجد ملاحظة
-                </option>
-              </select>
-            </div>
-
-            {/* الوصف */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                وصف الرحلة
-              </label>
-
-              <textarea
-                value={description}
-                onChange={(event) =>
-                  setDescription(
-                    event.target
-                      .value,
-                  )
-                }
-                rows={3}
-                placeholder="وصف مختصر للرحلة..."
-                disabled={saving}
-                className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* الملاحظة */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                ملاحظة داخلية
-              </label>
-
-              <textarea
-                value={note}
-                onChange={(event) =>
-                  setNote(
-                    event.target
-                      .value,
-                  )
-                }
-                rows={2}
-                placeholder="ملاحظة تظهر للإدارة..."
-                disabled={saving}
-                className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            {/* الخطأ */}
-            {error && (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-                {error}
-              </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        يشترط عدم وجود ملاحظة
+                      </div>
+                    </button>
+                  </div>
+                </section>
+              </>
             )}
           </div>
 
           {/* الأزرار */}
-          <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 px-5 py-4">
+          <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-5 py-4 backdrop-blur">
             <button
               type="button"
               onClick={onClose}
-              disabled={saving}
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+              disabled={loading}
+              className="rounded-xl border border-input px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
             >
               إلغاء
             </button>
 
             <button
               type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={
+                loading ||
+                loadingData
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving && (
+              {loading && (
                 <Loader2 className="size-4 animate-spin" />
               )}
 
-              {saving
-                ? 'جاري الحفظ...'
-                : 'حفظ الرحلة'}
+              {isEdit
+                ? 'حفظ التعديلات'
+                : 'إنشاء الرحلة'}
             </button>
           </div>
         </form>
