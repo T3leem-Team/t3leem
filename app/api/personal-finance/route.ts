@@ -132,6 +132,23 @@ function calculateBalance(
   }
 }
 
+function normalizeAmount(
+  value: unknown,
+) {
+  const amount = Number(value)
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    return null
+  }
+
+  return Number(
+    amount.toFixed(3),
+  )
+}
+
 /**
  * GET
  *
@@ -161,10 +178,17 @@ export async function GET(
     )
 
     const action =
-      url.searchParams.get('action') ??
-      'cycles'
+      url.searchParams.get(
+        'action',
+      ) ?? 'cycles'
 
-    if (action === 'cycles') {
+    // =========================================
+    // تحميل الدفاتر
+    // =========================================
+
+    if (
+      action === 'cycles'
+    ) {
       const { data, error } =
         await supabaseAdmin
           .from(
@@ -187,9 +211,12 @@ export async function GET(
             reopen_note,
             updated_at
           `)
-          .order('created_at', {
-            ascending: false,
-          })
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            },
+          )
 
       if (error) {
         throw error
@@ -200,7 +227,14 @@ export async function GET(
       })
     }
 
-    if (action === 'transactions') {
+    // =========================================
+    // تحميل عمليات دفتر
+    // =========================================
+
+    if (
+      action ===
+      'transactions'
+    ) {
       const cycleId =
         url.searchParams.get(
           'cycleId',
@@ -232,7 +266,8 @@ export async function GET(
       const result =
         calculateBalance(
           Number(
-            cycle.initial_balance ?? 0,
+            cycle.initial_balance ??
+              0,
           ),
           transactions,
         )
@@ -271,6 +306,10 @@ export async function GET(
  * action=create-cycle
  *
  * action=add-transaction
+ *
+ * action=update-cycle-status
+ *
+ * action=delete-cycle
  */
 export async function POST(
   request: Request,
@@ -293,7 +332,9 @@ export async function POST(
       await request.json()
 
     const action =
-      body.action
+      String(
+        body.action ?? '',
+      ).trim()
 
     // =========================================
     // إنشاء دفتر جديد
@@ -310,12 +351,13 @@ export async function POST(
 
       const initialBalance =
         Number(
-          body.initial_balance ?? 0,
+          body.initial_balance ??
+            0,
         )
 
       if (!name) {
         return errorResponse(
-          'اسم الطلب أو العملية مطلوب.',
+          'اسم الدفتر مطلوب.',
         )
       }
 
@@ -344,11 +386,15 @@ export async function POST(
                 ),
               ),
             initial_source:
-              body.initial_source ||
-              null,
+              String(
+                body.initial_source ??
+                  '',
+              ).trim() || null,
             initial_note:
-              body.initial_note ||
-              null,
+              String(
+                body.initial_note ??
+                  '',
+              ).trim() || null,
             status: 'open',
           })
           .select()
@@ -383,7 +429,7 @@ export async function POST(
         body.transaction_type
 
       const amount =
-        Number(
+        normalizeAmount(
           body.amount,
         )
 
@@ -412,12 +458,7 @@ export async function POST(
         )
       }
 
-      if (
-        !Number.isFinite(
-          amount,
-        ) ||
-        amount <= 0
-      ) {
+      if (amount === null) {
         return errorResponse(
           'المبلغ يجب أن يكون أكبر من صفر.',
         )
@@ -440,6 +481,10 @@ export async function POST(
           404,
         )
       }
+
+      // =========================================
+      // الدفتر المغلق لا يقبل عمليات جديدة
+      // =========================================
 
       if (
         cycle.status !==
@@ -470,7 +515,7 @@ export async function POST(
             -1
         ) {
           return errorResponse(
-            'يجب تحديد اتجاه تعديل الفرق.',
+            'يجب تحديد اتجاه التسوية.',
           )
         }
       }
@@ -497,16 +542,12 @@ export async function POST(
         'in'
       ) {
         newBalance += amount
-      }
-
-      if (
+      } else if (
         transactionType ===
         'out'
       ) {
         newBalance -= amount
-      }
-
-      if (
+      } else if (
         transactionType ===
         'adjustment'
       ) {
@@ -533,16 +574,12 @@ export async function POST(
               cycleId,
             transaction_type:
               transactionType,
-            amount:
-              Number(
-                amount.toFixed(
-                  3,
-                ),
-              ),
+            amount,
             description,
             note:
-              body.note ||
-              null,
+              String(
+                body.note ?? '',
+              ).trim() || null,
             adjustment_sign:
               adjustmentSign,
             balance_after:
@@ -566,18 +603,23 @@ export async function POST(
         throw error
       }
 
-      await supabaseAdmin
-        .from(
-          'personal_financial_cycles',
-        )
-        .update({
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'id',
-          cycleId,
-        )
+      const { error: updateError } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_cycles',
+          )
+          .update({
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            'id',
+            cycleId,
+          )
+
+      if (updateError) {
+        throw updateError
+      }
 
       return NextResponse.json(
         {
@@ -587,6 +629,191 @@ export async function POST(
         },
         { status: 201 },
       )
+    }
+
+    // =========================================
+    // إغلاق / فتح الدفتر
+    //
+    // هذا هو الـaction المستخدم
+    // من PaymentPersonal.tsx
+    // =========================================
+
+    if (
+      action ===
+      'update-cycle-status'
+    ) {
+      const cycleId =
+        String(
+          body.cycle_id ?? '',
+        ).trim()
+
+      const status =
+        body.status
+
+      if (!cycleId) {
+        return errorResponse(
+          'معرف الدفتر مطلوب.',
+        )
+      }
+
+      if (
+        status !== 'open' &&
+        status !== 'closed'
+      ) {
+        return errorResponse(
+          'حالة الدفتر غير صحيحة.',
+        )
+      }
+
+      const cycle =
+        await getOwnedCycle(
+          cycleId,
+        )
+
+      if (!cycle) {
+        return errorResponse(
+          'الدفتر غير موجود.',
+          404,
+        )
+      }
+
+      if (
+        cycle.status ===
+        status
+      ) {
+        return errorResponse(
+          status === 'closed'
+            ? 'الدفتر مغلق بالفعل.'
+            : 'الدفتر مفتوح بالفعل.',
+        )
+      }
+
+      const now =
+        new Date().toISOString()
+
+      let updateData: Record<
+        string,
+        unknown
+      >
+
+      if (
+        status ===
+        'closed'
+      ) {
+        updateData = {
+          status: 'closed',
+          closed_at: now,
+          updated_at: now,
+        }
+      } else {
+        updateData = {
+          status: 'open',
+          reopened_at: now,
+          updated_at: now,
+        }
+      }
+
+      const { data, error } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_cycles',
+          )
+          .update(updateData)
+          .eq(
+            'id',
+            cycleId,
+          )
+          .select()
+          .single()
+
+      if (error) {
+        throw error
+      }
+
+      return NextResponse.json({
+        success: true,
+        cycle: data,
+      })
+    }
+
+    // =========================================
+    // مسح الدفتر
+    //
+    // نحذف العمليات أولًا ثم الدفتر
+    // حتى لا نعتمد على ON DELETE CASCADE
+    // =========================================
+
+    if (
+      action ===
+      'delete-cycle'
+    ) {
+      const cycleId =
+        String(
+          body.cycle_id ?? '',
+        ).trim()
+
+      if (!cycleId) {
+        return errorResponse(
+          'معرف الدفتر مطلوب.',
+        )
+      }
+
+      const cycle =
+        await getOwnedCycle(
+          cycleId,
+        )
+
+      if (!cycle) {
+        return errorResponse(
+          'الدفتر غير موجود.',
+          404,
+        )
+      }
+
+      // حذف جميع العمليات التابعة للدفتر
+      const {
+        error:
+          transactionsDeleteError,
+      } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_transactions',
+          )
+          .delete()
+          .eq(
+            'cycle_id',
+            cycleId,
+          )
+
+      if (
+        transactionsDeleteError
+      ) {
+        throw transactionsDeleteError
+      }
+
+      // ثم حذف الدفتر
+      const {
+        error: cycleDeleteError,
+      } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_cycles',
+          )
+          .delete()
+          .eq(
+            'id',
+            cycleId,
+          )
+
+      if (cycleDeleteError) {
+        throw cycleDeleteError
+      }
+
+      return NextResponse.json({
+        success: true,
+        deletedCycleId:
+          cycleId,
+      })
     }
 
     return errorResponse(
@@ -611,8 +838,12 @@ export async function POST(
 /**
  * PATCH
  *
+ * يدعم النظام القديم:
+ *
  * action=close
  * action=reopen
+ *
+ * ويمكن استخدامه أيضًا مستقبلًا.
  */
 export async function PATCH(
   request: Request,
@@ -635,7 +866,9 @@ export async function PATCH(
       await request.json()
 
     const action =
-      body.action
+      String(
+        body.action ?? '',
+      ).trim()
 
     const cycleId =
       String(
@@ -650,14 +883,6 @@ export async function PATCH(
     if (!cycleId) {
       return errorResponse(
         'معرف الدفتر مطلوب.',
-      )
-    }
-
-    if (!note) {
-      return errorResponse(
-        action === 'close'
-          ? 'ملاحظة الإغلاق مطلوبة.'
-          : 'ملاحظة إعادة الفتح مطلوبة.',
       )
     }
 
@@ -689,20 +914,29 @@ export async function PATCH(
         )
       }
 
+      const now =
+        new Date().toISOString()
+
+      const updateData: Record<
+        string,
+        unknown
+      > = {
+        status: 'closed',
+        closed_at: now,
+        updated_at: now,
+      }
+
+      if (note) {
+        updateData.close_note =
+          note
+      }
+
       const { data, error } =
         await supabaseAdmin
           .from(
             'personal_financial_cycles',
           )
-          .update({
-            status: 'closed',
-            closed_at:
-              new Date().toISOString(),
-            close_note:
-              note,
-            updated_at:
-              new Date().toISOString(),
-          })
+          .update(updateData)
           .eq(
             'id',
             cycleId,
@@ -715,6 +949,7 @@ export async function PATCH(
       }
 
       return NextResponse.json({
+        success: true,
         cycle: data,
       })
     }
@@ -735,20 +970,29 @@ export async function PATCH(
         )
       }
 
+      const now =
+        new Date().toISOString()
+
+      const updateData: Record<
+        string,
+        unknown
+      > = {
+        status: 'open',
+        reopened_at: now,
+        updated_at: now,
+      }
+
+      if (note) {
+        updateData.reopen_note =
+          note
+      }
+
       const { data, error } =
         await supabaseAdmin
           .from(
             'personal_financial_cycles',
           )
-          .update({
-            status: 'open',
-            reopened_at:
-              new Date().toISOString(),
-            reopen_note:
-              note,
-            updated_at:
-              new Date().toISOString(),
-          })
+          .update(updateData)
           .eq(
             'id',
             cycleId,
@@ -761,6 +1005,93 @@ export async function PATCH(
       }
 
       return NextResponse.json({
+        success: true,
+        cycle: data,
+      })
+    }
+
+    // =========================================
+    // تحديث الحالة بالطريقة العامة
+    // =========================================
+
+    if (
+      action ===
+      'update-cycle-status'
+    ) {
+      const status =
+        body.status
+
+      if (
+        status !== 'open' &&
+        status !== 'closed'
+      ) {
+        return errorResponse(
+          'حالة الدفتر غير صحيحة.',
+        )
+      }
+
+      if (
+        cycle.status ===
+        status
+      ) {
+        return errorResponse(
+          status === 'closed'
+            ? 'الدفتر مغلق بالفعل.'
+            : 'الدفتر مفتوح بالفعل.',
+        )
+      }
+
+      const now =
+        new Date().toISOString()
+
+      const updateData: Record<
+        string,
+        unknown
+      > = {
+        status,
+        updated_at: now,
+      }
+
+      if (
+        status ===
+        'closed'
+      ) {
+        updateData.closed_at =
+          now
+
+        if (note) {
+          updateData.close_note =
+            note
+        }
+      } else {
+        updateData.reopened_at =
+          now
+
+        if (note) {
+          updateData.reopen_note =
+            note
+        }
+      }
+
+      const { data, error } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_cycles',
+          )
+          .update(updateData)
+          .eq(
+            'id',
+            cycleId,
+          )
+          .select()
+          .single()
+
+      if (error) {
+        throw error
+      }
+
+      return NextResponse.json({
+        success: true,
         cycle: data,
       })
     }
@@ -787,8 +1118,14 @@ export async function PATCH(
 /**
  * DELETE
  *
+ * يدعم:
+ *
  * action=delete-cycle
+ *
  * action=delete-transaction
+ *
+ * وهذا موجود أيضًا في POST
+ * للتوافق مع PaymentPersonal الحالي.
  */
 export async function DELETE(
   request: Request,
@@ -811,7 +1148,9 @@ export async function DELETE(
       await request.json()
 
     const action =
-      body.action
+      String(
+        body.action ?? '',
+      ).trim()
 
     // =========================================
     // حذف دفتر كامل
@@ -844,7 +1183,31 @@ export async function DELETE(
         )
       }
 
-      const { error } =
+      // حذف العمليات أولًا
+      const {
+        error:
+          transactionsDeleteError,
+      } =
+        await supabaseAdmin
+          .from(
+            'personal_financial_transactions',
+          )
+          .delete()
+          .eq(
+            'cycle_id',
+            cycleId,
+          )
+
+      if (
+        transactionsDeleteError
+      ) {
+        throw transactionsDeleteError
+      }
+
+      // حذف الدفتر
+      const {
+        error: cycleDeleteError,
+      } =
         await supabaseAdmin
           .from(
             'personal_financial_cycles',
@@ -855,12 +1218,14 @@ export async function DELETE(
             cycleId,
           )
 
-      if (error) {
-        throw error
+      if (cycleDeleteError) {
+        throw cycleDeleteError
       }
 
       return NextResponse.json({
         success: true,
+        deletedCycleId:
+          cycleId,
       })
     }
 
@@ -893,9 +1258,10 @@ export async function DELETE(
           .from(
             'personal_financial_transactions',
           )
-          .select(
-            'id, cycle_id',
-          )
+          .select(`
+            id,
+            cycle_id
+          `)
           .eq(
             'id',
             transactionId,
@@ -925,6 +1291,16 @@ export async function DELETE(
         )
       }
 
+      // احترام حالة الدفتر
+      if (
+        cycle.status !==
+        'open'
+      ) {
+        return errorResponse(
+          'الدفتر مغلق ولا يمكن حذف عمليات منه.',
+        )
+      }
+
       const { error } =
         await supabaseAdmin
           .from(
@@ -940,8 +1316,23 @@ export async function DELETE(
         throw error
       }
 
+      await supabaseAdmin
+        .from(
+          'personal_financial_cycles',
+        )
+        .update({
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          'id',
+          transaction.cycle_id,
+        )
+
       return NextResponse.json({
         success: true,
+        deletedTransactionId:
+          transactionId,
       })
     }
 
