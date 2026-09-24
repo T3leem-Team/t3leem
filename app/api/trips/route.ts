@@ -28,6 +28,7 @@ export async function GET() {
     tripsResult,
     academicYearsResult,
     coursesResult,
+    levelsResult,
   ] = await Promise.all([
     supabase
       .from('trips')
@@ -59,8 +60,9 @@ export async function GET() {
     supabase
       .from('academic_years')
       .select(
-        'id, name, is_current, is_active',
+        'id, name, is_current, is_active, created_at',
       )
+      .eq('is_active', true)
       .order('is_current', {
         ascending: false,
       })
@@ -71,10 +73,20 @@ export async function GET() {
     supabase
       .from('courses')
       .select(
-        'id, name, academic_year_id',
+        'id, name, academic_year_id, start_date, end_date',
       )
       .order('created_at', {
         ascending: false,
+      }),
+
+    supabase
+      .from('levels')
+      .select(
+        'id, name, sort_order, is_active',
+      )
+      .eq('is_active', true)
+      .order('sort_order', {
+        ascending: true,
       }),
   ])
 
@@ -86,8 +98,7 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحميل الرحلات.',
+        error: 'تعذر تحميل الرحلات.',
       },
       { status: 500 },
     )
@@ -116,8 +127,21 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحميل الدورات.',
+        error: 'تعذر تحميل الدورات.',
+      },
+      { status: 500 },
+    )
+  }
+
+  if (levelsResult.error) {
+    console.error(
+      'GET /api/trips levels error:',
+      levelsResult.error,
+    )
+
+    return NextResponse.json(
+      {
+        error: 'تعذر تحميل المستويات.',
       },
       { status: 500 },
     )
@@ -129,6 +153,8 @@ export async function GET() {
       academicYearsResult.data ?? [],
     courses:
       coursesResult.data ?? [],
+    levels:
+      levelsResult.data ?? [],
   })
 }
 
@@ -253,10 +279,7 @@ export async function POST(
 
   if (!name) {
     return NextResponse.json(
-      {
-        error:
-          'اسم الرحلة مطلوب.',
-      },
+      { error: 'اسم الرحلة مطلوب.' },
       { status: 400 },
     )
   }
@@ -274,8 +297,7 @@ export async function POST(
   if (!courseId) {
     return NextResponse.json(
       {
-        error:
-          'الدورة مطلوبة.',
+        error: 'الدورة مطلوبة.',
       },
       { status: 400 },
     )
@@ -360,7 +382,9 @@ export async function POST(
   const { data: academicYear, error: academicYearError } =
     await supabase
       .from('academic_years')
-      .select('id')
+      .select(
+        'id, is_active',
+      )
       .eq('id', academicYearId)
       .maybeSingle()
 
@@ -384,6 +408,16 @@ export async function POST(
       {
         error:
           'السنة الدراسية غير موجودة.',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!academicYear.is_active) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية غير نشطة.',
       },
       { status: 400 },
     )
@@ -416,8 +450,7 @@ export async function POST(
   if (!course) {
     return NextResponse.json(
       {
-        error:
-          'الدورة غير موجودة.',
+        error: 'الدورة غير موجودة.',
       },
       { status: 400 },
     )
@@ -500,9 +533,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    {
-      trip,
-    },
+    { trip },
     { status: 201 },
   )
 }
