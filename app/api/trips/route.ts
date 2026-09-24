@@ -288,8 +288,26 @@ export async function PATCH(
   const supabase =
     await createSupabaseServerClient()
 
-  const { data: existingTrip, error: existingError } =
-    await supabase
+  /*
+   * =========================================================
+   * نشر الرحلة
+   * =========================================================
+   *
+   * إذا كان الطلب:
+   *
+   * {
+   *   id: tripId,
+   *   status: 'published'
+   * }
+   *
+   * نتعامل معه كنشر مباشر، ولا نطلب اسم الرحلة
+   * أو السنة أو الدورة أو المستويات مرة أخرى.
+   */
+  if (body.status === 'published') {
+    const {
+      data: existingTrip,
+      error: existingError,
+    } = await supabase
       .from('trips')
       .select(`
         id,
@@ -297,6 +315,224 @@ export async function PATCH(
       `)
       .eq('id', tripId)
       .maybeSingle()
+
+    if (existingError) {
+      console.error(
+        'PATCH /api/trips - publish trip lookup error:',
+        existingError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من الرحلة',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (!existingTrip) {
+      return NextResponse.json(
+        {
+          error:
+            'الرحلة غير موجودة',
+        },
+        { status: 404 },
+      )
+    }
+
+    if (existingTrip.status === 'closed') {
+      return NextResponse.json(
+        {
+          error:
+            'لا يمكن نشر رحلة مغلقة',
+        },
+        { status: 400 },
+      )
+    }
+
+    if (existingTrip.status !== 'draft') {
+      return NextResponse.json(
+        {
+          error:
+            'لا يمكن نشر الرحلة إلا إذا كانت في حالة مسودة',
+        },
+        { status: 400 },
+      )
+    }
+
+    /*
+     * التحقق من إعداد السماح بالنشر المباشر.
+     */
+    const {
+      data: settings,
+      error: settingsError,
+    } = await supabase
+      .from('student_status_settings')
+      .select(`
+        allow_direct_trip_publish
+      `)
+      .limit(1)
+      .maybeSingle()
+
+    if (settingsError) {
+      console.error(
+        'PATCH /api/trips - publish settings error:',
+        settingsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من إعدادات النشر',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (
+      settings?.allow_direct_trip_publish !==
+      true
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'النشر المباشر موقوف من إعدادات النظام',
+        },
+        { status: 403 },
+      )
+    }
+
+    /*
+     * التأكد من وجود طالب واحد على الأقل
+     * محفوظ ومحدد للرحلة.
+     */
+    const {
+      count: selectedStudentsCount,
+      error: studentsError,
+    } = await supabase
+      .from('trip_students')
+      .select('id', {
+        count: 'exact',
+        head: true,
+      })
+      .eq('trip_id', tripId)
+      .eq('selected', true)
+
+    if (studentsError) {
+      console.error(
+        'PATCH /api/trips - selected students error:',
+        studentsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من طلاب الرحلة',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (
+      !selectedStudentsCount ||
+      selectedStudentsCount === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة',
+        },
+        { status: 400 },
+      )
+    }
+
+    /*
+     * نشر الرحلة.
+     */
+    const {
+      data: publishedTrip,
+      error: publishError,
+    } = await supabase
+      .from('trips')
+      .update({
+        status: 'published',
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq('id', tripId)
+      .eq('status', 'draft')
+      .select(`
+        id,
+        name,
+        description,
+        location,
+        trip_date,
+        meeting_time,
+        return_time,
+        fee,
+        note,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status,
+        created_by,
+        approved_by,
+        approved_at,
+        approval_note,
+        rejected_by,
+        rejected_at,
+        rejection_note,
+        closed_by,
+        closed_at,
+        close_note,
+        created_at,
+        updated_at
+      `)
+      .single()
+
+    if (publishError || !publishedTrip) {
+      console.error(
+        'PATCH /api/trips - publish error:',
+        publishError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر نشر الرحلة',
+          details:
+            publishError?.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    return NextResponse.json({
+      trip: publishedTrip,
+      published: true,
+    })
+  }
+
+  /*
+   * =========================================================
+   * تعديل بيانات الرحلة
+   * =========================================================
+   */
+
+  const {
+    data: existingTrip,
+    error: existingError,
+  } = await supabase
+    .from('trips')
+    .select(`
+      id,
+      status
+    `)
+    .eq('id', tripId)
+    .maybeSingle()
 
   if (existingError) {
     console.error(
@@ -325,6 +561,16 @@ export async function PATCH(
       {
         error:
           'لا يمكن تعديل رحلة مغلقة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (existingTrip.status === 'published') {
+    return NextResponse.json(
+      {
+        error:
+          'لا يمكن تعديل رحلة منشورة',
       },
       { status: 400 },
     )
@@ -606,51 +852,53 @@ export async function PATCH(
     )
   }
 
-  const { data: updatedTrip, error: updateError } =
-    await supabase
-      .from('trips')
-      .update({
-        name,
-        description,
-        location,
-        trip_date: tripDate,
-        meeting_time: meetingTime,
-        return_time: returnTime,
-        fee,
-        note,
-        academic_year_id:
-          academicYearId,
-        course_id: courseId,
-        attendance_min:
-          attendanceMin,
-        attendance_max:
-          attendanceMax,
-        notes_requirement:
-          notesRequirement,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq('id', tripId)
-      .select(`
-        id,
-        name,
-        description,
-        location,
-        trip_date,
-        meeting_time,
-        return_time,
-        fee,
-        note,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status,
-        created_at,
-        updated_at
-      `)
-      .single()
+  const {
+    data: updatedTrip,
+    error: updateError,
+  } = await supabase
+    .from('trips')
+    .update({
+      name,
+      description,
+      location,
+      trip_date: tripDate,
+      meeting_time: meetingTime,
+      return_time: returnTime,
+      fee,
+      note,
+      academic_year_id:
+        academicYearId,
+      course_id: courseId,
+      attendance_min:
+        attendanceMin,
+      attendance_max:
+        attendanceMax,
+      notes_requirement:
+        notesRequirement,
+      updated_at:
+        new Date().toISOString(),
+    })
+    .eq('id', tripId)
+    .select(`
+      id,
+      name,
+      description,
+      location,
+      trip_date,
+      meeting_time,
+      return_time,
+      fee,
+      note,
+      academic_year_id,
+      course_id,
+      attendance_min,
+      attendance_max,
+      notes_requirement,
+      status,
+      created_at,
+      updated_at
+    `)
+    .single()
 
   if (updateError || !updatedTrip) {
     console.error(
@@ -673,11 +921,12 @@ export async function PATCH(
    * تحديث مستويات الرحلة:
    * نحذف القديم ثم نضيف الجديد.
    */
-  const { error: deleteLevelsError } =
-    await supabase
-      .from('trip_levels')
-      .delete()
-      .eq('trip_id', tripId)
+  const {
+    error: deleteLevelsError,
+  } = await supabase
+    .from('trip_levels')
+    .delete()
+    .eq('trip_id', tripId)
 
   if (deleteLevelsError) {
     console.error(
@@ -702,15 +951,17 @@ export async function PATCH(
       level_id: levelId,
     }))
 
-  const { data: insertedLevels, error: levelsError } =
-    await supabase
-      .from('trip_levels')
-      .insert(tripLevelRows)
-      .select(`
-        id,
-        trip_id,
-        level_id
-      `)
+  const {
+    data: insertedLevels,
+    error: levelsError,
+  } = await supabase
+    .from('trip_levels')
+    .insert(tripLevelRows)
+    .select(`
+      id,
+      trip_id,
+      level_id
+    `)
 
   if (levelsError) {
     console.error(
@@ -777,15 +1028,17 @@ export async function DELETE(
   const supabase =
     await createSupabaseServerClient()
 
-  const { data: trip, error: tripError } =
-    await supabase
-      .from('trips')
-      .select(`
-        id,
-        status
-      `)
-      .eq('id', tripId)
-      .maybeSingle()
+  const {
+    data: trip,
+    error: tripError,
+  } = await supabase
+    .from('trips')
+    .select(`
+      id,
+      status
+    `)
+    .eq('id', tripId)
+    .maybeSingle()
 
   if (tripError) {
     console.error(
@@ -824,11 +1077,12 @@ export async function DELETE(
    * عندها ON DELETE CASCADE حسب التصميم،
    * لذلك حذف الرحلة يحذف العلاقات التابعة لها.
    */
-  const { error: deleteError } =
-    await supabase
-      .from('trips')
-      .delete()
-      .eq('id', tripId)
+  const {
+    error: deleteError,
+  } = await supabase
+    .from('trips')
+    .delete()
+    .eq('id', tripId)
 
   if (deleteError) {
     console.error(
@@ -1146,50 +1400,52 @@ async function createTrip(
     )
   }
 
-  const { data: trip, error: tripError } =
-    await supabase
-      .from('trips')
-      .insert({
-        name,
-        description,
-        location,
-        trip_date: tripDate,
-        meeting_time: meetingTime,
-        return_time: returnTime,
-        fee,
-        note,
-        academic_year_id:
-          academicYearId,
-        course_id: courseId,
-        attendance_min:
-          attendanceMin,
-        attendance_max:
-          attendanceMax,
-        notes_requirement:
-          notesRequirement,
-        status: 'draft',
-        created_by: userId,
-      })
-      .select(`
-        id,
-        name,
-        description,
-        location,
-        trip_date,
-        meeting_time,
-        return_time,
-        fee,
-        note,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status,
-        created_at,
-        updated_at
-      `)
-      .single()
+  const {
+    data: trip,
+    error: tripError,
+  } = await supabase
+    .from('trips')
+    .insert({
+      name,
+      description,
+      location,
+      trip_date: tripDate,
+      meeting_time: meetingTime,
+      return_time: returnTime,
+      fee,
+      note,
+      academic_year_id:
+        academicYearId,
+      course_id: courseId,
+      attendance_min:
+        attendanceMin,
+      attendance_max:
+        attendanceMax,
+      notes_requirement:
+        notesRequirement,
+      status: 'draft',
+      created_by: userId,
+    })
+    .select(`
+      id,
+      name,
+      description,
+      location,
+      trip_date,
+      meeting_time,
+      return_time,
+      fee,
+      note,
+      academic_year_id,
+      course_id,
+      attendance_min,
+      attendance_max,
+      notes_requirement,
+      status,
+      created_at,
+      updated_at
+    `)
+    .single()
 
   if (tripError || !trip) {
     console.error(
