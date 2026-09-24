@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   CalendarDays,
   ChevronLeft,
@@ -105,6 +106,8 @@ function formatFee(value: number) {
 }
 
 export function TripsView() {
+  const router = useRouter()
+
   const [trips, setTrips] = useState<Trip[]>([])
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -637,6 +640,9 @@ export function TripsView() {
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      onClick={() =>
+                        router.push(`/trips/${trip.id}`)
+                      }
                       className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition hover:bg-muted"
                     >
                       التفاصيل
