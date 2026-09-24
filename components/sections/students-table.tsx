@@ -1,7 +1,7 @@
 'use client'
 
 import { Filter, Settings2 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   Table,
@@ -105,6 +105,8 @@ type Props = {
   ) => void
 
   onOpenColumns?: () => void
+
+  onSelectionChange?: (studentIds: string[]) => void
 }
 
 const baseColumns = [
@@ -136,6 +138,21 @@ const extraColumns = [
   { key: 'academicYearName', label: 'العام الدراسي' },
 ]
 
+const PAYMENT_STATUS_OPTIONS = [
+  'مدفوع بالكامل',
+  'مدفوع جزئيًا',
+  'غير مدفوع',
+  'معفي',
+]
+
+const ATTENDANCE_OPTIONS = [
+  'حاضر',
+  'غائب',
+  'متأخر',
+  'مستأذن',
+  'لم يسجل',
+]
+
 function formatDate(value: string | null) {
   if (!value) return '-'
 
@@ -159,7 +176,6 @@ function getSourceLabel(source: string | null) {
     case 'import':
       return 'مستورد من Excel'
 
-    // توافق مع أي بيانات قديمة موجودة
     case 'external':
       return 'التسجيل من الرابط الخارجي'
 
@@ -212,9 +228,14 @@ export function StudentsTable({
   onToggleColumn,
   onOpenNotes,
   onOpenAttendance,
+  onSelectionChange,
 }: Props) {
-  const [showColumns, setShowColumns] =
-    useState(false)
+  const [showColumns, setShowColumns] = useState(false)
+
+  const [selectionMode, setSelectionMode] = useState(false)
+
+  const [selectedStudentIds, setSelectedStudentIds] =
+    useState<string[]>([])
 
   const [paymentStudent, setPaymentStudent] =
     useState<StudentTableStudent | null>(null)
@@ -244,6 +265,96 @@ export function StudentsTable({
 
   const [paymentMessage, setPaymentMessage] =
     useState('')
+
+  const availableAcademicLevels = useMemo(() => {
+    const values = new Set<string>()
+
+    academicLevels.forEach((level) => {
+      if (level?.trim()) {
+        values.add(level.trim())
+      }
+    })
+
+    students.forEach((student) => {
+      if (student.grade?.trim()) {
+        values.add(student.grade.trim())
+      }
+    })
+
+    return Array.from(values)
+  }, [academicLevels, students])
+
+  const visibleStudentIds = students.map(
+    (student) => student.id
+  )
+
+  const allVisibleSelected =
+    students.length > 0 &&
+    students.every((student) =>
+      selectedStudentIds.includes(student.id)
+    )
+
+  const someVisibleSelected =
+    students.some((student) =>
+      selectedStudentIds.includes(student.id)
+    )
+
+  const updateSelection = (ids: string[]) => {
+    setSelectedStudentIds(ids)
+    onSelectionChange?.(ids)
+  }
+
+  const toggleSelectionMode = () => {
+    setSelectionMode((current) => {
+      const next = !current
+
+      if (!next) {
+        updateSelection([])
+      }
+
+      return next
+    })
+  }
+
+  const toggleStudentSelection = (
+    studentId: string
+  ) => {
+    const exists =
+      selectedStudentIds.includes(studentId)
+
+    const next = exists
+      ? selectedStudentIds.filter(
+          (id) => id !== studentId
+        )
+      : [...selectedStudentIds, studentId]
+
+    updateSelection(next)
+  }
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      const visibleSet = new Set(
+        visibleStudentIds
+      )
+
+      updateSelection(
+        selectedStudentIds.filter(
+          (id) => !visibleSet.has(id)
+        )
+      )
+
+      return
+    }
+
+    const merged = Array.from(
+      new Set([
+        ...selectedStudentIds,
+        ...visibleStudentIds,
+      ])
+    )
+
+    updateSelection(merged)
+  }
 
   const openPayment = (
     student: StudentTableStudent
@@ -418,6 +529,45 @@ export function StudentsTable({
     )
   }
 
+  const filterSelect = (
+    key: keyof StudentTableFilters,
+    placeholder: string,
+    options: string[]
+  ) => {
+    return (
+      <div className="flex items-center gap-1">
+        <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
+
+        <select
+          value={filters[key]}
+          onChange={(event) =>
+            onUpdateFilter(
+              key,
+              event.target.value
+            )
+          }
+          onClick={(event) =>
+            event.stopPropagation()
+          }
+          className="h-7 w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1"
+        >
+          <option value="">
+            {placeholder}
+          </option>
+
+          {options.map((option) => (
+            <option
+              key={option}
+              value={option}
+            >
+              {option}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
   const visibleExtraColumns =
     extraColumns.filter(
       (column) =>
@@ -442,6 +592,8 @@ export function StudentsTable({
     )
 
   const totalColumns =
+    1 +
+    (selectionMode ? 1 : 0) +
     baseColumns.filter(
       (column) =>
         visibleColumns[column.key] !== false
@@ -453,23 +605,89 @@ export function StudentsTable({
   return (
     <>
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">
-            الطلاب ({students.length})
+        {/* شريط التحكم العلوي */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">
+              الطلاب ({students.length})
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleSelectionMode}
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted ${
+                selectionMode
+                  ? 'bg-muted'
+                  : ''
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selectionMode}
+                onChange={() => {}}
+                tabIndex={-1}
+                className="pointer-events-none h-3.5 w-3.5"
+              />
+
+              تحديد
+            </button>
+
+            {selectionMode && (
+              <button
+                type="button"
+                onClick={toggleSelectAll}
+                disabled={students.length === 0}
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(element) => {
+                    if (element) {
+                      element.indeterminate =
+                        !allVisibleSelected &&
+                        someVisibleSelected
+                    }
+                  }}
+                  onChange={() =>
+                    toggleSelectAll()
+                  }
+                  onClick={(event) =>
+                    event.stopPropagation()
+                  }
+                  className="h-3.5 w-3.5"
+                />
+
+                {allVisibleSelected
+                  ? 'إلغاء تحديد الكل'
+                  : 'تحديد الكل'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowColumns(
+                  (current) => !current
+                )
+              }
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted ${
+                showColumns
+                  ? 'bg-muted'
+                  : ''
+              }`}
+            >
+              <Settings2 className="h-4 w-4" />
+
+              تخصيص الأعمدة
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              setShowColumns(
-                (current) => !current
-              )
-            }
-            className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
-          >
-            <Settings2 className="h-4 w-4" />
-            تخصيص الأعمدة
-          </button>
+          {selectionMode && (
+            <div className="text-xs text-muted-foreground">
+              تم تحديد {selectedStudentIds.length} طالب
+            </div>
+          )}
         </div>
 
         {showColumns && (
@@ -609,6 +827,35 @@ export function StudentsTable({
           <Table>
             <TableHeader>
               <TableRow>
+                {/* الرقم التسلسلي */}
+                <TableHead className="w-[60px] text-center">
+                  #
+                </TableHead>
+
+                {/* checkbox يظهر فقط في وضع التحديد */}
+                {selectionMode && (
+                  <TableHead className="w-[55px] text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        allVisibleSelected
+                      }
+                      ref={(element) => {
+                        if (element) {
+                          element.indeterminate =
+                            !allVisibleSelected &&
+                            someVisibleSelected
+                        }
+                      }}
+                      onChange={
+                        toggleSelectAll
+                      }
+                      aria-label="تحديد الكل"
+                      className="h-4 w-4"
+                    />
+                  </TableHead>
+                )}
+
                 {visibleColumns.name !== false && (
                   <TableHead className="min-w-[220px]">
                     {filterInput(
@@ -628,10 +875,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.grade !== false && (
-                  <TableHead className="min-w-[150px]">
-                    {filterInput(
+                  <TableHead className="min-w-[170px]">
+                    {filterSelect(
                       'grade',
-                      'المرحلة / المستوى'
+                      'المرحلة / المستوى',
+                      availableAcademicLevels
                     )}
                   </TableHead>
                 )}
@@ -646,10 +894,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.paymentStatus !== false && (
-                  <TableHead className="min-w-[150px]">
-                    {filterInput(
+                  <TableHead className="min-w-[170px]">
+                    {filterSelect(
                       'paymentStatus',
-                      'حالة السداد'
+                      'حالة السداد',
+                      PAYMENT_STATUS_OPTIONS
                     )}
                   </TableHead>
                 )}
@@ -664,10 +913,11 @@ export function StudentsTable({
                 )}
 
                 {visibleColumns.attendance !== false && (
-                  <TableHead className="min-w-[130px]">
-                    {filterInput(
+                  <TableHead className="min-w-[150px]">
+                    {filterSelect(
                       'attendance',
-                      'الحضور'
+                      'الحضور',
+                      ATTENDANCE_OPTIONS
                     )}
                   </TableHead>
                 )}
@@ -706,7 +956,7 @@ export function StudentsTable({
 
             <TableBody>
               {students.map(
-                (student) => {
+                (student, index) => {
                   const remaining =
                     student.feeExempt
                       ? 0
@@ -720,22 +970,62 @@ export function StudentsTable({
                           0
                         )
 
+                  const isSelected =
+                    selectedStudentIds.includes(
+                      student.id
+                    )
+
                   return (
                     <TableRow
                       key={student.id}
                       data-state={
                         selectedStudentId ===
-                        student.id
+                        student.id ||
+                        isSelected
                           ? 'selected'
                           : undefined
                       }
                       className="cursor-pointer"
-                      onClick={() =>
+                      onClick={() => {
+                        if (selectionMode) {
+                          toggleStudentSelection(
+                            student.id
+                          )
+                          return
+                        }
+
                         onSelectStudent(
                           student.id
                         )
-                      }
+                      }}
                     >
+                      {/* الرقم التسلسلي */}
+                      <TableCell className="text-center text-xs text-muted-foreground">
+                        {index + 1}
+                      </TableCell>
+
+                      {/* checkbox */}
+                      {selectionMode && (
+                        <TableCell className="text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              isSelected
+                            }
+                            onChange={() =>
+                              toggleStudentSelection(
+                                student.id
+                              )
+                            }
+                            onClick={(event) =>
+                              event.stopPropagation()
+                            }
+                            aria-label={`تحديد ${student.name}`}
+                            className="h-4 w-4"
+                          />
+                        </TableCell>
+                      )}
+
                       {visibleColumns.name !== false && (
                         <TableCell className="font-medium">
                           {student.name}
@@ -1004,12 +1294,10 @@ export function StudentsTable({
               {students.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={
-                      Math.max(
-                        totalColumns,
-                        1
-                      )
-                    }
+                    colSpan={Math.max(
+                      totalColumns,
+                      1
+                    )}
                     className="h-32 text-center text-muted-foreground"
                   >
                     لا توجد بيانات
