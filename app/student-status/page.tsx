@@ -100,54 +100,79 @@ function getTodayString() {
   return `${year}-${month}-${day}`
 }
 
-function normalizeArabicDay(day: string) {
-  return day
+/*
+ * تحويل اسم اليوم إلى قيمة موحدة.
+ *
+ * يدعم:
+ * sunday / monday / ...
+ *
+ * وكذلك:
+ * الأحد / الاثنين / الثلاثاء / الأربعاء / ...
+ */
+function normalizeCourseDay(day: string) {
+  const value = day
     .trim()
-    .replace(/^ال/, '')
-    .replace('أ', 'ا')
-    .replace('إ', 'ا')
-    .replace('آ', 'ا')
-    .replace('ى', 'ي')
     .toLowerCase()
+    .replace(/\s+/g, ' ')
+
+  const arabicDays: Record<string, string> = {
+    الاحد: 'sunday',
+    الأحد: 'sunday',
+
+    الاثنين: 'monday',
+    الإثنين: 'monday',
+    الإِثنين: 'monday',
+
+    الثلاثاء: 'tuesday',
+
+    الاربعاء: 'wednesday',
+    الأربعاء: 'wednesday',
+
+    الخميس: 'thursday',
+
+    الجمعة: 'friday',
+
+    السبت: 'saturday',
+  }
+
+  return arabicDays[value] ?? value
 }
 
-function getDayOfWeek(dateString: string) {
+/*
+ * الحصول على اسم اليوم بالإنجليزية
+ * مباشرة من التاريخ.
+ *
+ * هذا يتجنب مشكلة تحويل الأربعاء
+ * من العربية إلى الإنجليزية.
+ */
+function getEnglishDayName(dateString: string) {
   const date = new Date(
     `${dateString}T00:00:00`,
   )
 
-  const day = date.getDay()
-
   const days = [
-    'الاحد',
-    'الاثنين',
-    'الثلاثاء',
-    'الاربعاء',
-    'الخميس',
-    'الجمعة',
-    'السبت',
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
   ]
 
-  return days[day]
+  return days[date.getDay()]
 }
 
-function getEnglishDayName(arabicDay: string) {
-  const map: Record<string, string> = {
-    الاحد: 'sunday',
-    الاثنين: 'monday',
-    الثلاثاء: 'tuesday',
-    الاربعاء: 'wednesday',
-    الخميس: 'thursday',
-    الجمعة: 'friday',
-    السبت: 'saturday',
-  }
-
-  return (
-    map[normalizeArabicDay(arabicDay)] ??
-    arabicDay
-  )
-}
-
+/*
+ * التأكد أن التاريخ من أيام الدورة.
+ *
+ * مثال:
+ * course.days = ["monday", "wednesday"]
+ *
+ * وتاريخ 2026-09-23 = Wednesday
+ *
+ * النتيجة = true
+ */
 function isCourseStudyDay(
   dateString: string,
   course: Course,
@@ -159,24 +184,14 @@ function isCourseStudyDay(
     return true
   }
 
-  const arabicDay = getDayOfWeek(dateString)
+  const currentDay =
+    getEnglishDayName(dateString)
 
-  const currentArabicDay =
-    normalizeArabicDay(arabicDay)
-
-  const currentEnglishDay =
-    getEnglishDayName(arabicDay).toLowerCase()
-
-  return course.days.some((day) => {
-    const normalizedDay =
-      normalizeArabicDay(day)
-
-    return (
-      normalizedDay === currentArabicDay ||
-      normalizedDay ===
-        currentEnglishDay.toLowerCase()
-    )
-  })
+  return course.days.some(
+    (day) =>
+      normalizeCourseDay(day) ===
+      currentDay,
+  )
 }
 
 function formatDate(date: string) {
@@ -206,6 +221,23 @@ function calculateCourseSummary(
 
   const records: CourseSummary['records'] = []
 
+  /*
+   * Map لحالات الحضور.
+   *
+   * المفتاح هو status_id
+   * حتى لا نعتمد على ترتيب الحالات.
+   */
+  const statusMap = new Map(
+    attendanceStatuses.map(
+      (status) => [
+        status.id,
+        status.name
+          .trim()
+          .replace(/\s+/g, ' '),
+      ],
+    ),
+  )
+
   if (
     course.start_date &&
     course.end_date
@@ -218,9 +250,22 @@ function calculateCourseSummary(
       `${course.end_date}T00:00:00`,
     )
 
+    /*
+     * لا نحسب الأيام المستقبلية.
+     */
+    const effectiveEnd =
+      end >
+      new Date(
+        `${today}T00:00:00`,
+      )
+        ? new Date(
+            `${today}T00:00:00`,
+          )
+        : end
+
     const current = new Date(start)
 
-    while (current <= end) {
+    while (current <= effectiveEnd) {
       const dateString = [
         current.getFullYear(),
         String(
@@ -231,8 +276,10 @@ function calculateCourseSummary(
         ).padStart(2, '0'),
       ].join('-')
 
+      /*
+       * نحسب فقط أيام الدراسة الفعلية.
+       */
       if (
-        dateString <= today &&
         isCourseStudyDay(
           dateString,
           course,
@@ -240,6 +287,10 @@ function calculateCourseSummary(
       ) {
         totalDays += 1
 
+        /*
+         * نبحث عن سجل الطالب
+         * في نفس الدورة ونفس التاريخ.
+         */
         const record =
           attendanceRecords.find(
             (item) =>
@@ -260,15 +311,13 @@ function calculateCourseSummary(
             note: '',
           })
         } else {
-          const status =
-            attendanceStatuses.find(
-              (item) =>
-                item.id ===
-                record.status_id,
-            )
-
+          /*
+           * تحويل status_id إلى اسم الحالة.
+           */
           const statusName =
-            status?.name ?? ''
+            statusMap.get(
+              record.status_id,
+            ) ?? 'غير معروف'
 
           if (
             statusName === 'حاضر'
@@ -287,14 +336,16 @@ function calculateCourseSummary(
           ) {
             excused += 1
           } else {
+            /*
+             * أي حالة أخرى لا تدخل
+             * في نسبة الحضور.
+             */
             notRecorded += 1
           }
 
           records.push({
             date: dateString,
-            status:
-              statusName ||
-              'غير معروف',
+            status: statusName,
             note:
               record.note ?? '',
           })
@@ -308,27 +359,29 @@ function calculateCourseSummary(
   }
 
   /*
+   * نسبة الحضور:
+   *
    * حاضر + متأخر + مستأذن
    * = حضور
    *
    * غائب
-   * = يدخل في النسبة ويخفضها
+   * = يدخل في المقام ويخفض النسبة
    *
    * لم يسجل
    * = لا يدخل في المقام
    */
-  const denominator =
+  const attendedDays =
     present +
     late +
-    excused +
-    absent
+    excused
+
+  const denominator =
+    attendedDays + absent
 
   const percentage =
     denominator > 0
       ? Math.round(
-          ((present +
-            late +
-            excused) /
+          (attendedDays /
             denominator) *
             100,
         )
@@ -394,8 +447,8 @@ export default function StudentStatusPage() {
       searchValue.trim()
 
     /*
-     * الرقم الشخصي:
-     * 9 أرقام فقط
+     * الرقم الشخصي يجب أن يكون
+     * 9 أرقام فقط.
      */
     if (!/^\d{9}$/.test(personalId)) {
       setError(
@@ -419,8 +472,8 @@ export default function StudentStatusPage() {
       /*
        * الصفحة العامة تعتمد على RPC واحد فقط.
        *
-       * لا يوجد أي SELECT مباشر
-       * من المتصفح على جداول النظام.
+       * لا يوجد SELECT مباشر
+       * على جداول النظام من المتصفح.
        */
       const {
         data,
@@ -489,7 +542,7 @@ export default function StudentStatusPage() {
       /*
        * الدورات الحالية:
        *
-       * - نفس السنة الحالية
+       * - مرتبطة بالسنة الحالية
        * - بدأت بالفعل
        * - لم تنتهِ
        */
@@ -541,7 +594,7 @@ export default function StudentStatusPage() {
       )
 
       /*
-       * الدورات السابقة
+       * الدورات السابقة.
        */
       const previousCourseList =
         courses.filter(
