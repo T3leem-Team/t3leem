@@ -1183,8 +1183,8 @@ export function AttendanceView({
                     )
 
                   const note =
-                    record?.note ??
                     attendanceNotes[key] ??
+                    record?.note ??
                     ''
 
                   const percentage =
