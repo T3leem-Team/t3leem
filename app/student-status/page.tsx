@@ -18,8 +18,6 @@ type Student = {
   student_id: string | null
   name: string
   personal_id: string | null
-  phone: string | null
-  whatsapp: string | null
   status: string | null
 }
 
@@ -770,22 +768,6 @@ export default function StudentStatusPage() {
                     label="رقم الطالب"
                     value={
                       student.student_id ??
-                      '—'
-                    }
-                  />
-
-                  <InfoItem
-                    label="رقم الهاتف"
-                    value={
-                      student.phone ??
-                      '—'
-                    }
-                  />
-
-                  <InfoItem
-                    label="الواتساب"
-                    value={
-                      student.whatsapp ??
                       '—'
                     }
                   />
