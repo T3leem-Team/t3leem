@@ -13,6 +13,7 @@ import {
   Users,
   CreditCard,
   MessageCircle,
+  Map,
   LogOut,
   ChevronUp,
   Loader2,
@@ -52,6 +53,7 @@ const iconMap = {
   Users,
   CreditCard,
   MessageCircle,
+  Map,
 } as const
 
 function isActive(pathname: string, href: string) {
