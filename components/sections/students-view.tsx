@@ -1728,7 +1728,62 @@ export function StudentsView() {
 
     loadData()
   }, [])
+  const deleteSelectedStudents = async (
+  studentIds: string[]
+) => {
+  const ids = Array.from(
+    new Set(
+      studentIds.filter(Boolean)
+    )
+  )
 
+  if (ids.length === 0) {
+    return
+  }
+
+  const {
+    error,
+  } = await supabase
+    .from('students')
+    .delete()
+    .in('id', ids)
+
+  if (error) {
+    throw new Error(
+      `خطأ في حذف الطلاب: ${error.message}`
+    )
+  }
+
+  setStudentList(
+    (current) => {
+      const next =
+        current.filter(
+          (student) =>
+            !ids.includes(student.id)
+        )
+
+      if (studentsViewCache) {
+        studentsViewCache = {
+          ...studentsViewCache,
+          studentList: next,
+        }
+      }
+
+      return next
+    }
+  )
+
+  if (
+    selectedStudentId &&
+    ids.includes(selectedStudentId)
+  ) {
+    setSelectedStudentId('')
+  }
+
+  setSupabaseStatus(
+    `تم حذف ${ids.length} طالب من Supabase ✅`
+  )
+}
   const updateFilter = (
     key: keyof Filters,
     value: string
