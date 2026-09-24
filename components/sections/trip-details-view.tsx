@@ -55,18 +55,31 @@ type Student = {
   name: string
   personal_id: string | null
   phone: string | null
-  level_id: string
-  level_name: string
-  attendance_percentage: number
+  whatsapp?: string | null
+
+  level: {
+    id: string
+    name: string
+    sort_order: number | null
+  } | null
+
+  enrollment_id: string
+  enrollment_status?: string | null
+
+  attendance_percentage: number | null
   attendance_present: number
   attendance_absent: number
   attendance_late: number
   attendance_excused: number
   attendance_not_recorded: number
+
   course_notes: CourseNote[]
+
   eligible: boolean
   eligibility_note: string | null
+
   selected: boolean
+
   response: 'pending' | 'accepted' | 'rejected'
   response_note: string | null
 }
@@ -97,6 +110,7 @@ function formatDate(value: string | null) {
 
 function formatTime(value: string | null) {
   if (!value) return null
+
   return value.slice(0, 5)
 }
 
@@ -123,14 +137,19 @@ function getStatusLabel(status: TripStatus) {
   switch (status) {
     case 'draft':
       return 'مسودة'
+
     case 'pending_approval':
       return 'بانتظار الموافقة'
+
     case 'published':
       return 'منشورة'
+
     case 'rejected':
       return 'مرفوضة'
+
     case 'closed':
       return 'مغلقة'
+
     default:
       return status
   }
@@ -140,8 +159,10 @@ function getResponseLabel(response: Student['response']) {
   switch (response) {
     case 'accepted':
       return 'موافق'
+
     case 'rejected':
       return 'رافض'
+
     default:
       return 'بانتظار الرد'
   }
@@ -153,6 +174,7 @@ export function TripDetailsView({
   tripId: string
 }) {
   const [data, setData] = useState<ApiResponse | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -227,32 +249,52 @@ export function TripDetailsView({
   const eligibleStudents = useMemo(() => {
     if (!data) return []
 
-    return data.students.filter((student) => student.eligible)
+    return data.students.filter(
+      (student) => student.eligible,
+    )
   }, [data])
 
   const filteredStudents = useMemo(() => {
-    if (!data) return []
+    if (!data || !Array.isArray(data.students)) {
+      return []
+    }
 
     const normalizedSearch = search.trim().toLowerCase()
 
     return data.students.filter((student) => {
-      if (showEligibleOnly && !student.eligible) {
+      if (
+        showEligibleOnly &&
+        student.eligible !== true
+      ) {
         return false
       }
 
+      const name =
+        typeof student.name === 'string'
+          ? student.name
+          : ''
+
+      const personalId =
+        typeof student.personal_id === 'string'
+          ? student.personal_id
+          : ''
+
+      const phone =
+        typeof student.phone === 'string'
+          ? student.phone
+          : ''
+
       const matchesSearch =
         !normalizedSearch ||
-        student.name.toLowerCase().includes(normalizedSearch) ||
-        (student.personal_id ?? '')
+        name.toLowerCase().includes(normalizedSearch) ||
+        personalId
           .toLowerCase()
           .includes(normalizedSearch) ||
-        (student.phone ?? '')
-          .toLowerCase()
-          .includes(normalizedSearch)
+        phone.toLowerCase().includes(normalizedSearch)
 
       const matchesLevel =
         levelFilter === 'all' ||
-        student.level_id === levelFilter
+        student.level?.id === levelFilter
 
       return matchesSearch && matchesLevel
     })
@@ -273,7 +315,9 @@ export function TripDetailsView({
 
     setSelectedIds((current) => {
       if (current.includes(studentId)) {
-        return current.filter((id) => id !== studentId)
+        return current.filter(
+          (id) => id !== studentId,
+        )
       }
 
       return [...current, studentId]
@@ -300,11 +344,15 @@ export function TripDetailsView({
     if (!canEdit) return
 
     const visibleIds = new Set(
-      filteredStudents.map((student) => student.id),
+      filteredStudents.map(
+        (student) => student.id,
+      ),
     )
 
     setSelectedIds((current) =>
-      current.filter((id) => !visibleIds.has(id)),
+      current.filter(
+        (id) => !visibleIds.has(id),
+      ),
     )
   }
 
@@ -337,11 +385,16 @@ export function TripDetailsView({
         )
       }
 
-      setSuccess('تم حفظ الطلاب في الرحلة بنجاح.')
+      setSuccess(
+        'تم حفظ الطلاب في الرحلة بنجاح.',
+      )
 
       await loadData({ silent: true })
     } catch (error) {
-      console.error('Save trip students error:', error)
+      console.error(
+        'Save trip students error:',
+        error,
+      )
 
       setError(
         error instanceof Error
@@ -373,7 +426,10 @@ export function TripDetailsView({
 
   if (!data) {
     return (
-      <div dir="rtl" className="space-y-4">
+      <div
+        dir="rtl"
+        className="space-y-4"
+      >
         <button
           type="button"
           onClick={goBack}
@@ -384,16 +440,24 @@ export function TripDetailsView({
         </button>
 
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center text-destructive">
-          {error || 'تعذر العثور على الرحلة.'}
+          {error ||
+            'تعذر العثور على الرحلة.'}
         </div>
       </div>
     )
   }
 
-  const { trip, course, levels } = data
+  const {
+    trip,
+    course,
+    levels,
+  } = data
 
   return (
-    <div dir="rtl" className="space-y-6">
+    <div
+      dir="rtl"
+      className="space-y-6"
+    >
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
@@ -413,7 +477,9 @@ export function TripDetailsView({
               </h1>
 
               <span className="rounded-full border px-3 py-1 text-xs font-medium">
-                {getStatusLabel(trip.status)}
+                {getStatusLabel(
+                  trip.status,
+                )}
               </span>
             </div>
 
@@ -427,15 +493,20 @@ export function TripDetailsView({
 
         <button
           type="button"
-          onClick={() => loadData({ silent: true })}
+          onClick={() =>
+            loadData({ silent: true })
+          }
           disabled={refreshing}
           className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw
             className={`h-4 w-4 ${
-              refreshing ? 'animate-spin' : ''
+              refreshing
+                ? 'animate-spin'
+                : ''
             }`}
           />
+
           تحديث
         </button>
       </div>
@@ -446,8 +517,10 @@ export function TripDetailsView({
           <p className="text-xs text-muted-foreground">
             المقرر
           </p>
+
           <p className="mt-1 font-semibold">
-            {course?.name ?? 'غير محدد'}
+            {course?.name ??
+              'غير محدد'}
           </p>
         </div>
 
@@ -455,8 +528,11 @@ export function TripDetailsView({
           <p className="text-xs text-muted-foreground">
             التاريخ
           </p>
+
           <p className="mt-1 font-semibold">
-            {formatDate(trip.trip_date)}
+            {formatDate(
+              trip.trip_date,
+            )}
           </p>
         </div>
 
@@ -464,8 +540,10 @@ export function TripDetailsView({
           <p className="text-xs text-muted-foreground">
             المكان
           </p>
+
           <p className="mt-1 font-semibold">
-            {trip.location || 'غير محدد'}
+            {trip.location ||
+              'غير محدد'}
           </p>
         </div>
 
@@ -473,6 +551,7 @@ export function TripDetailsView({
           <p className="text-xs text-muted-foreground">
             الرسوم
           </p>
+
           <p className="mt-1 font-semibold">
             {formatFee(trip.fee)} د.ب
           </p>
@@ -486,8 +565,11 @@ export function TripDetailsView({
             <p className="text-xs text-muted-foreground">
               وقت التجمع
             </p>
+
             <p className="mt-1 font-medium">
-              {formatTime(trip.meeting_time) ?? 'غير محدد'}
+              {formatTime(
+                trip.meeting_time,
+              ) ?? 'غير محدد'}
             </p>
           </div>
 
@@ -495,8 +577,11 @@ export function TripDetailsView({
             <p className="text-xs text-muted-foreground">
               وقت العودة
             </p>
+
             <p className="mt-1 font-medium">
-              {formatTime(trip.return_time) ?? 'غير محدد'}
+              {formatTime(
+                trip.return_time,
+              ) ?? 'غير محدد'}
             </p>
           </div>
 
@@ -504,6 +589,7 @@ export function TripDetailsView({
             <p className="text-xs text-muted-foreground">
               الحد الأدنى للحضور
             </p>
+
             <p className="mt-1 font-medium">
               {trip.attendance_min != null
                 ? `${trip.attendance_min}%`
@@ -515,6 +601,7 @@ export function TripDetailsView({
             <p className="text-xs text-muted-foreground">
               الحد الأعلى للحضور
             </p>
+
             <p className="mt-1 font-medium">
               {trip.attendance_max != null
                 ? `${trip.attendance_max}%`
@@ -544,6 +631,7 @@ export function TripDetailsView({
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
           <X className="mt-0.5 h-4 w-4 shrink-0" />
+
           <span>{error}</span>
         </div>
       )}
@@ -551,6 +639,7 @@ export function TripDetailsView({
       {success && (
         <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
           <Check className="mt-0.5 h-4 w-4 shrink-0" />
+
           <span>{success}</span>
         </div>
       )}
@@ -563,6 +652,7 @@ export function TripDetailsView({
             <div>
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
+
                 <h2 className="text-lg font-semibold">
                   الطلاب المؤهلون
                 </h2>
@@ -576,12 +666,16 @@ export function TripDetailsView({
             <div className="flex flex-wrap items-center gap-2">
               <div className="rounded-lg bg-muted px-3 py-2 text-sm">
                 المؤهلون:{' '}
-                <strong>{eligibleStudents.length}</strong>
+                <strong>
+                  {eligibleStudents.length}
+                </strong>
               </div>
 
               <div className="rounded-lg bg-muted px-3 py-2 text-sm">
                 المحددون:{' '}
-                <strong>{selectedCount}</strong>
+                <strong>
+                  {selectedCount}
+                </strong>
               </div>
             </div>
           </div>
@@ -596,7 +690,9 @@ export function TripDetailsView({
               <input
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value,
+                  )
                 }
                 placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
                 className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
@@ -606,14 +702,21 @@ export function TripDetailsView({
             <select
               value={levelFilter}
               onChange={(event) =>
-                setLevelFilter(event.target.value)
+                setLevelFilter(
+                  event.target.value,
+                )
               }
               className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
             >
-              <option value="all">كل المستويات</option>
+              <option value="all">
+                كل المستويات
+              </option>
 
               {levels.map((level) => (
-                <option key={level.id} value={level.id}>
+                <option
+                  key={level.id}
+                  value={level.id}
+                >
                   {level.name}
                 </option>
               ))}
@@ -622,9 +725,13 @@ export function TripDetailsView({
             <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
               <input
                 type="checkbox"
-                checked={showEligibleOnly}
+                checked={
+                  showEligibleOnly
+                }
                 onChange={(event) =>
-                  setShowEligibleOnly(event.target.checked)
+                  setShowEligibleOnly(
+                    event.target.checked,
+                  )
                 }
                 className="h-4 w-4"
               />
@@ -640,18 +747,22 @@ export function TripDetailsView({
               disabled={
                 !canEdit ||
                 filteredStudents.filter(
-                  (student) => student.eligible,
+                  (student) =>
+                    student.eligible,
                 ).length === 0
               }
               className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckSquare className="h-4 w-4" />
+
               تحديد الظاهر
             </button>
 
             <button
               type="button"
-              onClick={clearVisibleSelection}
+              onClick={
+                clearVisibleSelection
+              }
               disabled={
                 !canEdit ||
                 filteredStudents.length === 0
@@ -709,141 +820,184 @@ export function TripDetailsView({
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((student, index) => {
-                  const isSelected =
-                    selectedIds.includes(student.id)
+                filteredStudents.map(
+                  (student, index) => {
+                    const isSelected =
+                      selectedIds.includes(
+                        student.id,
+                      )
 
-                  return (
-                    <tr
-                      key={student.id}
-                      className={`border-b last:border-0 ${
-                        isSelected
-                          ? 'bg-primary/5'
-                          : 'hover:bg-muted/20'
-                      }`}
-                    >
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {index + 1}
-                      </td>
+                    return (
+                      <tr
+                        key={student.id}
+                        className={`border-b last:border-0 ${
+                          isSelected
+                            ? 'bg-primary/5'
+                            : 'hover:bg-muted/20'
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {index + 1}
+                        </td>
 
-                      <td className="px-4 py-3">
-                        <div className="font-medium">
-                          {student.name}
-                        </div>
-
-                        {student.personal_id && (
-                          <div className="mt-0.5 text-xs text-muted-foreground">
-                            {student.personal_id}
+                        <td className="px-4 py-3">
+                          <div className="font-medium">
+                            {student.name}
                           </div>
-                        )}
-                      </td>
 
-                      <td className="px-4 py-3">
-                        {student.level_name || 'غير محدد'}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div
-                          className={`font-semibold ${getAttendanceClass(
-                            student.attendance_percentage,
-                          )}`}
-                        >
-                          {student.attendance_percentage.toFixed(
-                            1,
+                          {student.personal_id && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {student.personal_id}
+                            </div>
                           )}
-                          %
-                        </div>
+                        </td>
 
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          حاضر {student.attendance_present}
-                          {' · '}
-                          غائب {student.attendance_absent}
-                          {' · '}
-                          متأخر {student.attendance_late}
-                          {' · '}
-                          مستأذن {student.attendance_excused}
-                        </div>
-                      </td>
+                        <td className="px-4 py-3">
+                          {student.level?.name ||
+                            'غير محدد'}
+                        </td>
 
-                      <td className="max-w-[260px] px-4 py-3">
-                        {student.course_notes.length > 0 ? (
-                          <div className="space-y-1">
-                            {student.course_notes
-                              .slice(0, 2)
-                              .map((note, noteIndex) => (
-                                <div
-                                  key={`${student.id}-${noteIndex}`}
-                                  className="rounded-md bg-muted/50 px-2 py-1 text-xs"
-                                >
-                                  {note.note}
-                                </div>
-                              ))}
-
-                            {student.course_notes.length > 2 && (
-                              <div className="text-xs text-muted-foreground">
-                                +
-                                {student.course_notes.length - 2}{' '}
-                                ملاحظات أخرى
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            لا توجد ملاحظات
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
-                          {getResponseLabel(
-                            student.response,
-                          )}
-                        </span>
-
-                        {student.response_note && (
-                          <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
-                            {student.response_note}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-center">
-                        {student.eligible ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggleStudent(student.id)
-                            }
-                            disabled={!canEdit}
-                            aria-label={
-                              isSelected
-                                ? 'إلغاء اختيار الطالب'
-                                : 'اختيار الطالب'
-                            }
-                            className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
-                              isSelected
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'bg-background hover:bg-muted'
-                            } ${
-                              !canEdit
-                                ? 'cursor-not-allowed opacity-50'
-                                : ''
+                        <td className="px-4 py-3">
+                          <div
+                            className={`font-semibold ${
+                              student.attendance_percentage ===
+                              null
+                                ? 'text-muted-foreground'
+                                : getAttendanceClass(
+                                    student.attendance_percentage,
+                                  )
                             }`}
                           >
-                            {isSelected && (
-                              <Check className="h-4 w-4" />
+                            {student.attendance_percentage ===
+                            null
+                              ? 'لا توجد بيانات'
+                              : `${student.attendance_percentage.toFixed(
+                                  1,
+                                )}%`}
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            حاضر{' '}
+                            {
+                              student.attendance_present
+                            }
+                            {' · '}
+                            غائب{' '}
+                            {
+                              student.attendance_absent
+                            }
+                            {' · '}
+                            متأخر{' '}
+                            {
+                              student.attendance_late
+                            }
+                            {' · '}
+                            مستأذن{' '}
+                            {
+                              student.attendance_excused
+                            }
+                          </div>
+                        </td>
+
+                        <td className="max-w-[260px] px-4 py-3">
+                          {student.course_notes
+                            .length > 0 ? (
+                            <div className="space-y-1">
+                              {student.course_notes
+                                .slice(0, 2)
+                                .map(
+                                  (
+                                    note,
+                                    noteIndex,
+                                  ) => (
+                                    <div
+                                      key={`${student.id}-${noteIndex}`}
+                                      className="rounded-md bg-muted/50 px-2 py-1 text-xs"
+                                    >
+                                      {
+                                        note.note
+                                      }
+                                    </div>
+                                  ),
+                                )}
+
+                              {student
+                                .course_notes
+                                .length > 2 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +
+                                  {student
+                                    .course_notes
+                                    .length -
+                                    2}{' '}
+                                  ملاحظات أخرى
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              لا توجد ملاحظات
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
+                            {getResponseLabel(
+                              student.response,
                             )}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            غير مؤهل
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
+
+                          {student.response_note && (
+                            <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                              {
+                                student.response_note
+                              }
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {student.eligible ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleStudent(
+                                  student.id,
+                                )
+                              }
+                              disabled={
+                                !canEdit
+                              }
+                              aria-label={
+                                isSelected
+                                  ? 'إلغاء اختيار الطالب'
+                                  : 'اختيار الطالب'
+                              }
+                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'bg-background hover:bg-muted'
+                              } ${
+                                !canEdit
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : ''
+                              }`}
+                            >
+                              {isSelected && (
+                                <Check className="h-4 w-4" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              غير مؤهل
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  },
+                )
               )}
             </tbody>
           </table>
@@ -866,7 +1020,9 @@ export function TripDetailsView({
           <button
             type="button"
             onClick={saveStudents}
-            disabled={!canEdit || saving}
+            disabled={
+              !canEdit || saving
+            }
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? (
