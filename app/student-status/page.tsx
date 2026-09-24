@@ -88,12 +88,8 @@ function getTodayString() {
   const today = new Date()
 
   const year = today.getFullYear()
-  const month = String(
-    today.getMonth() + 1,
-  ).padStart(2, '0')
-  const day = String(
-    today.getDate(),
-  ).padStart(2, '0')
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -110,9 +106,7 @@ function normalizeArabicDay(day: string) {
 }
 
 function getDayOfWeek(dateString: string) {
-  const date = new Date(
-    `${dateString}T00:00:00`,
-  )
+  const date = new Date(`${dateString}T00:00:00`)
 
   const day = date.getDay()
 
@@ -133,43 +127,31 @@ function isCourseStudyDay(
   dateString: string,
   course: Course,
 ) {
-  if (
-    !course.days ||
-    course.days.length === 0
-  ) {
+  if (!course.days || course.days.length === 0) {
     return true
   }
 
-  const currentDay =
-    normalizeArabicDay(
-      getDayOfWeek(dateString),
-    )
-
-  return course.days.some(
-    (day) => {
-      const normalized =
-        normalizeArabicDay(day)
-
-      return (
-        normalized === currentDay ||
-        normalized ===
-          normalizeArabicDay(
-            getEnglishDayName(
-              getDayOfWeek(dateString),
-            ),
-          )
-      )
-    },
+  const currentDay = normalizeArabicDay(
+    getDayOfWeek(dateString),
   )
+
+  return course.days.some((day) => {
+    const normalized = normalizeArabicDay(day)
+
+    return (
+      normalized === currentDay ||
+      normalized ===
+        normalizeArabicDay(
+          getEnglishDayName(
+            getDayOfWeek(dateString),
+          ),
+        )
+    )
+  })
 }
 
-function getEnglishDayName(
-  arabicDay: string,
-) {
-  const map: Record<
-    string,
-    string
-  > = {
+function getEnglishDayName(arabicDay: string) {
+  const map: Record<string, string> = {
     الاحد: 'sunday',
     الاثنين: 'monday',
     الثلاثاء: 'tuesday',
@@ -179,19 +161,21 @@ function getEnglishDayName(
     السبت: 'saturday',
   }
 
-  return map[
-    normalizeArabicDay(arabicDay)
-  ] ?? arabicDay
+  return (
+    map[normalizeArabicDay(arabicDay)] ??
+    arabicDay
+  )
 }
 
 function formatDate(date: string) {
-  return new Date(
-    `${date}T00:00:00`,
-  ).toLocaleDateString('ar-BH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  return new Date(`${date}T00:00:00`).toLocaleDateString(
+    'ar-BH',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  )
 }
 
 function calculateCourseSummary(
@@ -200,8 +184,7 @@ function calculateCourseSummary(
   attendanceRecords: AttendanceRecord[],
   attendanceStatuses: AttendanceStatus[],
 ): CourseSummary {
-  const today =
-    getTodayString()
+  const today = getTodayString()
 
   let totalDays = 0
   let present = 0
@@ -210,13 +193,9 @@ function calculateCourseSummary(
   let excused = 0
   let notRecorded = 0
 
-  const records: CourseSummary['records'] =
-    []
+  const records: CourseSummary['records'] = []
 
-  if (
-    course.start_date &&
-    course.end_date
-  ) {
+  if (course.start_date && course.end_date) {
     const start = new Date(
       `${course.start_date}T00:00:00`,
     )
@@ -225,39 +204,27 @@ function calculateCourseSummary(
       `${course.end_date}T00:00:00`,
     )
 
-    const current =
-      new Date(start)
+    const current = new Date(start)
 
     while (current <= end) {
       const dateString = [
         current.getFullYear(),
-        String(
-          current.getMonth() + 1,
-        ).padStart(2, '0'),
-        String(
-          current.getDate(),
-        ).padStart(2, '0'),
+        String(current.getMonth() + 1).padStart(2, '0'),
+        String(current.getDate()).padStart(2, '0'),
       ].join('-')
 
       if (
         dateString <= today &&
-        isCourseStudyDay(
-          dateString,
-          course,
-        )
+        isCourseStudyDay(dateString, course)
       ) {
         totalDays += 1
 
-        const record =
-          attendanceRecords.find(
-            (item) =>
-              item.student_id ===
-                studentId &&
-              item.course_id ===
-                course.id &&
-              item.attendance_date ===
-                dateString,
-          )
+        const record = attendanceRecords.find(
+          (item) =>
+            item.student_id === studentId &&
+            item.course_id === course.id &&
+            item.attendance_date === dateString,
+        )
 
         if (!record) {
           notRecorded += 1
@@ -268,60 +235,35 @@ function calculateCourseSummary(
             note: '',
           })
         } else {
-          const status =
-            attendanceStatuses.find(
-              (item) =>
-                item.id ===
-                record.status_id,
-            )
+          const status = attendanceStatuses.find(
+            (item) =>
+              item.id === record.status_id,
+          )
 
-          const statusName =
-            status?.name ?? ''
+          const statusName = status?.name ?? ''
 
-          if (
-            statusName === 'حاضر'
-          ) {
+          if (statusName === 'حاضر') {
             present += 1
-          } else if (
-            statusName === 'غائب'
-          ) {
+          } else if (statusName === 'غائب') {
             absent += 1
-          } else if (
-            statusName === 'متأخر'
-          ) {
+          } else if (statusName === 'متأخر') {
             late += 1
-          } else if (
-            statusName === 'مستأذن'
-          ) {
+          } else if (statusName === 'مستأذن') {
             excused += 1
           }
 
           records.push({
             date: dateString,
-            status:
-              statusName ||
-              'غير معروف',
-            note:
-              record.note ?? '',
+            status: statusName || 'غير معروف',
+            note: record.note ?? '',
           })
         }
       }
 
-      current.setDate(
-        current.getDate() + 1,
-      )
+      current.setDate(current.getDate() + 1)
     }
   }
 
-  /*
-   * لم يسجل لا يدخل في نسبة الحضور.
-   *
-   * حاضر + متأخر + مستأذن
-   * = حضور
-   *
-   * غائب
-   * = يؤثر على النسبة
-   */
   const denominator =
     present +
     late +
@@ -331,9 +273,7 @@ function calculateCourseSummary(
   const percentage =
     denominator > 0
       ? Math.round(
-          ((present +
-            late +
-            excused) /
+          ((present + late + excused) /
             denominator) *
             100,
         )
@@ -348,27 +288,20 @@ function calculateCourseSummary(
     excused,
     notRecorded,
     percentage,
-    records: records.sort(
-      (a, b) =>
-        b.date.localeCompare(
-          a.date,
-        ),
+    records: records.sort((a, b) =>
+      b.date.localeCompare(a.date),
     ),
   }
 }
 
 export default function StudentStatusPage() {
-  const [searchValue, setSearchValue] =
-    useState('')
+  const [searchValue, setSearchValue] = useState('')
 
-  const [loading, setLoading] =
-    useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const [searched, setSearched] =
-    useState(false)
+  const [searched, setSearched] = useState(false)
 
-  const [error, setError] =
-    useState('')
+  const [error, setError] = useState('')
 
   const [student, setStudent] =
     useState<Student | null>(null)
@@ -389,19 +322,13 @@ export default function StudentStatusPage() {
   const [
     selectedCourse,
     setSelectedCourse,
-  ] =
-    useState<CourseSummary | null>(
-      null,
-    )
+  ] = useState<CourseSummary | null>(null)
 
   const handleSearch = async () => {
-    const personalId =
-      searchValue.trim()
+    const personalId = searchValue.trim()
 
     if (!personalId) {
-      setError(
-        'أدخل الرقم الشخصي أولاً.',
-      )
+      setError('أدخل الرقم الشخصي أولاً.')
       setSearched(true)
       return
     }
@@ -417,39 +344,38 @@ export default function StudentStatusPage() {
 
     try {
       /*
-       * =====================================================
-       * 1. الطالب الحقيقي من students
-       * =====================================================
+       * 1. الطالب والحضور من RPC
        */
 
       const {
-        data: studentData,
-        error: studentError,
-      } = await supabase
-        .from('students')
-        .select(
-          `
-            id,
-            student_id,
-            name,
-            personal_id,
-            phone,
-            whatsapp,
-            status,
-            notes,
-            health_notes
-          `,
-        )
-        .eq(
-          'personal_id',
-          personalId,
-        )
-        .limit(1)
-        .maybeSingle()
+        data: attendanceResult,
+        error: attendanceError,
+      } = await supabase.rpc(
+        'get_student_status_by_personal_id',
+        {
+          p_personal_id: personalId,
+        },
+      )
 
-      if (studentError) {
-        throw studentError
+      if (attendanceError) {
+        throw attendanceError
       }
+
+      const attendancePayload =
+        attendanceResult as {
+          student: Student | null
+          attendance: AttendanceRecord[] | null
+        } | null
+
+      const studentData =
+        attendancePayload?.student ?? null
+
+      const attendanceRecords =
+        Array.isArray(
+          attendancePayload?.attendance,
+        )
+          ? attendancePayload.attendance
+          : []
 
       if (!studentData) {
         setError(
@@ -465,8 +391,13 @@ export default function StudentStatusPage() {
       )
 
       console.log(
-        'SUPABASE STUDENT RESULT:',
+        'RPC STUDENT RESULT:',
         studentData,
+      )
+
+      console.log(
+        'RPC ATTENDANCE RESULT:',
+        attendanceRecords,
       )
 
       const realStudent =
@@ -475,9 +406,7 @@ export default function StudentStatusPage() {
       setStudent(realStudent)
 
       /*
-       * =====================================================
        * 2. السنة الحالية الحقيقية
-       * =====================================================
        */
 
       const {
@@ -494,14 +423,8 @@ export default function StudentStatusPage() {
               is_current
             `,
           )
-          .eq(
-            'is_current',
-            true,
-          )
-          .eq(
-            'is_active',
-            true,
-          )
+          .eq('is_current', true)
+          .eq('is_active', true)
           .limit(1)
           .maybeSingle()
 
@@ -513,9 +436,7 @@ export default function StudentStatusPage() {
         currentYearData as AcademicYear | null
 
       /*
-       * =====================================================
        * 3. تسجيلات الطالب الحقيقية
-       * =====================================================
        */
 
       const {
@@ -531,23 +452,17 @@ export default function StudentStatusPage() {
             status
           `,
         )
-        .eq(
-          'student_id',
-          realStudent.id,
-        )
+        .eq('student_id', realStudent.id)
 
       if (enrollmentError) {
         throw enrollmentError
       }
 
       const enrollments =
-        (enrollmentData ??
-          []) as Enrollment[]
+        (enrollmentData ?? []) as Enrollment[]
 
       /*
-       * =====================================================
        * 4. مستوى الطالب الحالي
-       * =====================================================
        */
 
       const currentEnrollment =
@@ -559,17 +474,13 @@ export default function StudentStatusPage() {
             )
           : null
 
-      if (
-        currentEnrollment?.level_id
-      ) {
+      if (currentEnrollment?.level_id) {
         const {
           data: levelData,
           error: levelError,
         } = await supabase
           .from('levels')
-          .select(
-            'id, name',
-          )
+          .select('id, name')
           .eq(
             'id',
             currentEnrollment.level_id,
@@ -582,24 +493,19 @@ export default function StudentStatusPage() {
         }
 
         setLevel(
-          (levelData ??
-            null) as Level | null,
+          (levelData ?? null) as Level | null,
         )
       }
 
       /*
-       * =====================================================
        * 5. حالات الحضور الحقيقية
-       * =====================================================
        */
 
       const {
         data: statusData,
         error: statusError,
       } = await supabase
-        .from(
-          'attendance_statuses',
-        )
+        .from('attendance_statuses')
         .select(
           `
             id,
@@ -607,34 +513,20 @@ export default function StudentStatusPage() {
             sort_order
           `,
         )
-        .eq(
-          'is_active',
-          true,
-        )
-        .order(
-          'sort_order',
-          {
-            ascending: true,
-          },
-        )
+        .eq('is_active', true)
+        .order('sort_order', {
+          ascending: true,
+        })
 
       if (statusError) {
         throw statusError
       }
 
       const attendanceStatuses =
-        (statusData ??
-          []) as AttendanceStatus[]
+        (statusData ?? []) as AttendanceStatus[]
 
       /*
-       * =====================================================
        * 6. توزيع الطالب الحقيقي على الدورات
-       * =====================================================
-       *
-       * هذه هي العلاقة الفعلية:
-       *
-       * teacher_student_assignments
-       * student_id -> course_id
        */
 
       const {
@@ -644,11 +536,7 @@ export default function StudentStatusPage() {
         .from(
           'teacher_student_assignments',
         )
-        .select(
-          `
-            course_id
-          `,
-        )
+        .select('course_id')
         .eq(
           'student_id',
           realStudent.id,
@@ -666,20 +554,11 @@ export default function StudentStatusPage() {
                 (item) =>
                   item.course_id,
               )
-              .filter(
-                Boolean,
-              ),
+              .filter(Boolean),
           ),
         )
 
-      /*
-       * لا توجد دورات مرتبطة فعليًا
-       */
-
-      if (
-        studentCourseIds.length ===
-        0
-      ) {
+      if (studentCourseIds.length === 0) {
         setCurrentCourses([])
         setPreviousCourses([])
         setSearched(true)
@@ -687,9 +566,7 @@ export default function StudentStatusPage() {
       }
 
       /*
-       * =====================================================
        * 7. الدورات الحقيقية فقط
-       * =====================================================
        */
 
       const {
@@ -707,65 +584,22 @@ export default function StudentStatusPage() {
             days
           `,
         )
-        .in(
-          'id',
-          studentCourseIds,
-        )
-        .order(
-          'start_date',
-          {
-            ascending: false,
-          },
-        )
+        .in('id', studentCourseIds)
+        .order('start_date', {
+          ascending: false,
+        })
 
       if (courseError) {
         throw courseError
       }
 
       const studentCourses =
-        (courseData ??
-          []) as Course[]
+        (courseData ?? []) as Course[]
+
+      const today = getTodayString()
 
       /*
-       * =====================================================
-       * 8. حضور الطالب الحقيقي
-       * =====================================================
-       *
-       * رابط متابعة الطالب يعمل بدون تسجيل دخول،
-       * لذلك لا نقرأ attendance مباشرة بسبب RLS.
-       *
-       * نستخدم RPC مخصصة للرقم الشخصي وترجع
-       * سجلات حضور هذا الطالب فقط.
-       */
-
-      const {
-        data: attendanceResult,
-        error: attendanceError,
-      } = await supabase.rpc(
-        'get_student_status_by_personal_id',
-        {
-          p_personal_id: personalId,
-        },
-      )
-
-      if (attendanceError) {
-        throw attendanceError
-      }
-
-      const attendanceRecords =
-        Array.isArray(
-          attendanceResult?.attendance,
-        )
-          ? (attendanceResult.attendance as AttendanceRecord[])
-          : []
-
-      const today =
-        getTodayString()
-
-      /*
-       * =====================================================
-       * 9. الدورات الحالية
-       * =====================================================
+       * 8. الدورات الحالية
        */
 
       const currentCourseList =
@@ -787,10 +621,8 @@ export default function StudentStatusPage() {
             }
 
             return (
-              course.start_date <=
-                today &&
-              course.end_date >=
-                today
+              course.start_date <= today &&
+              course.end_date >= today
             )
           },
         )
@@ -806,29 +638,20 @@ export default function StudentStatusPage() {
             ),
         )
 
-      setCurrentCourses(
-        currentSummaries,
-      )
+      setCurrentCourses(currentSummaries)
 
       /*
-       * =====================================================
-       * 10. الدورات السابقة
-       * =====================================================
+       * 9. الدورات السابقة
        */
 
       const previousCourseList =
         studentCourses.filter(
           (course) => {
-            if (
-              !course.end_date
-            ) {
+            if (!course.end_date) {
               return false
             }
 
-            return (
-              course.end_date <
-              today
-            )
+            return course.end_date < today
           },
         )
 
@@ -843,9 +666,7 @@ export default function StudentStatusPage() {
             ),
         )
 
-      setPreviousCourses(
-        previousSummaries,
-      )
+      setPreviousCourses(previousSummaries)
 
       setSearched(true)
     } catch (err) {
@@ -895,14 +716,10 @@ export default function StudentStatusPage() {
               type="text"
               value={searchValue}
               onChange={(e) =>
-                setSearchValue(
-                  e.target.value,
-                )
+                setSearchValue(e.target.value)
               }
               onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter'
-                ) {
+                if (e.key === 'Enter') {
                   void handleSearch()
                 }
               }}
@@ -963,8 +780,7 @@ export default function StudentStatusPage() {
                   <InfoItem
                     label="اسم الطالب"
                     value={
-                      student.name ||
-                      '—'
+                      student.name || '—'
                     }
                   />
 
@@ -979,8 +795,7 @@ export default function StudentStatusPage() {
                   <InfoItem
                     label="المستوى"
                     value={
-                      level?.name ??
-                      '—'
+                      level?.name ?? '—'
                     }
                   />
 
@@ -995,8 +810,7 @@ export default function StudentStatusPage() {
                   <InfoItem
                     label="رقم الهاتف"
                     value={
-                      student.phone ??
-                      '—'
+                      student.phone ?? '—'
                     }
                   />
 
@@ -1022,8 +836,7 @@ export default function StudentStatusPage() {
                   </p>
                 </div>
 
-                {currentCourses.length ===
-                0 ? (
+                {currentCourses.length === 0 ? (
                   <div className="p-5 text-sm text-muted-foreground">
                     لا توجد دورة حالية
                     مرتبطة بهذا الطالب
@@ -1035,12 +848,9 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <CurrentCourseCard
                           key={
-                            summary.course
-                              .id
+                            summary.course.id
                           }
-                          summary={
-                            summary
-                          }
+                          summary={summary}
                           onDetails={() =>
                             setSelectedCourse(
                               summary,
@@ -1053,8 +863,7 @@ export default function StudentStatusPage() {
                 )}
               </div>
 
-              {previousCourses.length >
-                0 && (
+              {previousCourses.length > 0 && (
                 <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                   <div className="border-b px-5 py-4">
                     <h2 className="font-semibold">
@@ -1072,23 +881,20 @@ export default function StudentStatusPage() {
                       (summary) => (
                         <div
                           key={
-                            summary.course
-                              .id
+                            summary.course.id
                           }
                           className="flex flex-wrap items-center justify-between gap-4 p-5"
                         >
                           <div>
                             <p className="font-medium">
                               {
-                                summary
-                                  .course
+                                summary.course
                                   .name
                               }
                             </p>
 
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {summary
-                                .course
+                              {summary.course
                                 .start_date
                                 ? formatDate(
                                     summary
@@ -1097,8 +903,7 @@ export default function StudentStatusPage() {
                                   )
                                 : '—'}
                               {' — '}
-                              {summary
-                                .course
+                              {summary.course
                                 .end_date
                                 ? formatDate(
                                     summary
@@ -1110,10 +915,7 @@ export default function StudentStatusPage() {
                           </div>
 
                           <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
-                            {
-                              summary.percentage
-                            }
-                            %
+                            {summary.percentage}%
                             حضور
                           </div>
                         </div>
@@ -1178,8 +980,7 @@ function CurrentCourseCard({
           </div>
 
           <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
-            {summary.percentage}%
-            حضور
+            {summary.percentage}% حضور
           </div>
         </div>
       </div>
@@ -1217,7 +1018,6 @@ function CurrentCourseCard({
         className="flex w-full items-center justify-center gap-2 rounded-xl border bg-background px-4 py-3 text-sm font-medium transition hover:bg-muted"
       >
         <Eye className="size-4" />
-
         عرض تفاصيل الحضور
       </button>
     </div>
@@ -1293,11 +1093,9 @@ function AttendanceDetailsModal({
         </div>
 
         <div className="max-h-[55vh] overflow-y-auto p-5">
-          {summary.records.length ===
-          0 ? (
+          {summary.records.length === 0 ? (
             <div className="rounded-xl border p-4 text-sm text-muted-foreground">
-              لا توجد أيام حضور
-              مسجلة.
+              لا توجد أيام حضور مسجلة.
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">
@@ -1321,10 +1119,7 @@ function AttendanceDetailsModal({
 
                   <tbody>
                     {summary.records.map(
-                      (
-                        record,
-                        index,
-                      ) => (
+                      (record, index) => (
                         <tr
                           key={`${record.date}-${index}`}
                           className="border-b last:border-b-0"
