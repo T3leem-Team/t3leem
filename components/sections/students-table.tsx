@@ -72,7 +72,6 @@ export type StudentTableStudent = {
   attendance?: string
   courseStatuses: StudentCourseStatus[]
   dynamicValues?: Record<string, string>
-
   attendanceSummaries?: unknown[]
   attendanceRecords?: unknown[]
 }
@@ -319,9 +318,9 @@ export function StudentsTable({
     useState('')
 
   /*
-   * ================================
+   * =========================================
    * الخيارات الحقيقية للفلاتر
-   * ================================
+   * =========================================
    */
 
   const gradeOptions = useMemo(() => {
@@ -337,12 +336,6 @@ export function StudentsTable({
       }
     })
 
-    /*
-     * نستخدم academicLevels فقط لترتيب الخيارات
-     * الموجودة فعليًا في الطلاب.
-     *
-     * لا نضيف مستوى غير موجود في القائمة.
-     */
     const existingValues = Array.from(values)
 
     const ordered = academicLevels.filter(
@@ -391,6 +384,12 @@ export function StudentsTable({
     return Array.from(values)
   }, [students])
 
+  /*
+   * =========================================
+   * تحديد طالب
+   * =========================================
+   */
+
   const toggleStudentSelection = (
     studentId: string
   ) => {
@@ -402,6 +401,12 @@ export function StudentsTable({
         : [...current, studentId]
     )
   }
+
+  /*
+   * =========================================
+   * تحديد الكل
+   * =========================================
+   */
 
   const toggleSelectAll = () => {
     const allStudentIds = students.map(
@@ -421,12 +426,26 @@ export function StudentsTable({
     }
   }
 
+  /*
+   * =========================================
+   * الخروج من وضع التحديد
+   * =========================================
+   */
+
   const exitSelectionMode = () => {
+    if (deleteSaving) return
+
     setSelectionMode(false)
     setSelectedStudentIds([])
     setShowDeleteConfirm(false)
     setDeleteMessage('')
   }
+
+  /*
+   * =========================================
+   * فتح تأكيد الحذف
+   * =========================================
+   */
 
   const openDeleteConfirmation = () => {
     if (
@@ -440,12 +459,24 @@ export function StudentsTable({
     setShowDeleteConfirm(true)
   }
 
+  /*
+   * =========================================
+   * إغلاق تأكيد الحذف
+   * =========================================
+   */
+
   const closeDeleteConfirmation = () => {
     if (deleteSaving) return
 
     setShowDeleteConfirm(false)
     setDeleteMessage('')
   }
+
+  /*
+   * =========================================
+   * تنفيذ الحذف الجماعي
+   * =========================================
+   */
 
   const confirmDeleteSelected = async () => {
     if (
@@ -459,9 +490,17 @@ export function StudentsTable({
     setDeleteMessage('')
 
     try {
-      await onDeleteSelected(
-        selectedStudentIds
+      const ids = Array.from(
+        new Set(
+          selectedStudentIds.filter(Boolean)
+        )
       )
+
+      if (ids.length === 0) {
+        return
+      }
+
+      await onDeleteSelected(ids)
 
       setSelectedStudentIds([])
       setSelectionMode(false)
@@ -477,25 +516,24 @@ export function StudentsTable({
     }
   }
 
+  /*
+   * =========================================
+   * الدفع
+   * =========================================
+   */
+
   const openPayment = (
     student: StudentTableStudent
   ) => {
     setPaymentStudent(student)
-
     setShowAddPayment(false)
-
     setPaymentAmount('')
-
     setPaymentMethod('نقدي')
-
     setPaymentDate(
       new Date().toISOString().slice(0, 10)
     )
-
     setPaymentReference('')
-
     setPaymentNotes('')
-
     setPaymentMessage('')
   }
 
@@ -503,9 +541,7 @@ export function StudentsTable({
     if (paymentSaving) return
 
     setPaymentStudent(null)
-
     setShowAddPayment(false)
-
     setPaymentMessage('')
   }
 
@@ -611,9 +647,7 @@ export function StudentsTable({
       })
 
       setPaymentAmount('')
-
       setPaymentReference('')
-
       setPaymentNotes('')
 
       setPaymentMessage(
@@ -635,8 +669,11 @@ export function StudentsTable({
   }
 
   /*
-   * فلتر نصي عادي
+   * =========================================
+   * فلتر نصي
+   * =========================================
    */
+
   const filterInput = (
     key: keyof StudentTableFilters,
     placeholder: string
@@ -664,8 +701,11 @@ export function StudentsTable({
   }
 
   /*
-   * فلتر اختيار حقيقي
+   * =========================================
+   * فلتر اختيار
+   * =========================================
    */
+
   const filterSelect = (
     key: keyof StudentTableFilters,
     placeholder: string,
@@ -704,6 +744,12 @@ export function StudentsTable({
       </div>
     )
   }
+
+  /*
+   * =========================================
+   * الأعمدة
+   * =========================================
+   */
 
   const visibleExtraColumns =
     extraColumns.filter(
@@ -753,12 +799,20 @@ export function StudentsTable({
   return (
     <>
       <div className="space-y-3">
+
+        {/* =========================================
+            شريط الأدوات
+           ========================================= */}
+
         <div className="flex items-center justify-between gap-2">
+
           <div className="text-sm font-medium">
             الطلاب ({students.length})
           </div>
 
           <div className="flex items-center gap-2">
+
+            {/* تحديد */}
             <button
               type="button"
               onClick={() => {
@@ -777,9 +831,13 @@ export function StudentsTable({
 
             {selectionMode && (
               <>
+
+                {/* تحديد الكل */}
                 <button
                   type="button"
-                  onClick={toggleSelectAll}
+                  onClick={
+                    toggleSelectAll
+                  }
                   className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
                 >
                   {allStudentsSelected
@@ -787,6 +845,7 @@ export function StudentsTable({
                     : 'تحديد الكل'}
                 </button>
 
+                {/* حذف المحدد */}
                 <button
                   type="button"
                   onClick={
@@ -807,6 +866,7 @@ export function StudentsTable({
               </>
             )}
 
+            {/* تخصيص الأعمدة */}
             <button
               type="button"
               onClick={() =>
@@ -823,6 +883,10 @@ export function StudentsTable({
           </div>
         </div>
 
+        {/* =========================================
+            عدد الطلاب المحددين
+           ========================================= */}
+
         {selectionMode &&
           selectedCount > 0 && (
             <div className="rounded-lg border bg-muted/20 px-4 py-2 text-sm">
@@ -834,14 +898,22 @@ export function StudentsTable({
             </div>
           )}
 
+        {/* =========================================
+            تخصيص الأعمدة
+           ========================================= */}
+
         {showColumns && (
           <div className="rounded-lg border bg-muted/20 p-4">
+
             <div className="mb-3 text-sm font-semibold">
               تخصيص الأعمدة
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
+
+              {/* الأعمدة الأساسية */}
               <div className="space-y-2">
+
                 <div className="text-xs font-semibold text-muted-foreground">
                   الأعمدة الأساسية
                 </div>
@@ -872,7 +944,9 @@ export function StudentsTable({
                 )}
               </div>
 
+              {/* الأعمدة الإضافية */}
               <div className="space-y-2">
+
                 <div className="text-xs font-semibold text-muted-foreground">
                   أعمدة إضافية
                 </div>
@@ -903,7 +977,9 @@ export function StudentsTable({
                 )}
               </div>
 
+              {/* الحقول والدورات */}
               <div className="space-y-2">
+
                 <div className="text-xs font-semibold text-muted-foreground">
                   الحقول والدورات
                 </div>
@@ -967,14 +1043,22 @@ export function StudentsTable({
           </div>
         )}
 
+        {/* =========================================
+            الجدول
+           ========================================= */}
+
         <div className="overflow-x-auto rounded-lg border">
           <Table>
+
             <TableHeader>
               <TableRow>
+
+                {/* رقم الصف */}
                 <TableHead className="w-[55px] text-center">
                   #
                 </TableHead>
 
+                {/* تحديد */}
                 {selectionMode && (
                   <TableHead className="w-[55px] text-center">
                     <input
@@ -990,6 +1074,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* الاسم */}
                 {visibleColumns.name !== false && (
                   <TableHead className="min-w-[220px]">
                     {filterInput(
@@ -999,6 +1084,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* الهوية */}
                 {visibleColumns.personalId !== false && (
                   <TableHead className="min-w-[150px]">
                     {filterInput(
@@ -1008,6 +1094,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* المستوى */}
                 {visibleColumns.grade !== false && (
                   <TableHead className="min-w-[170px]">
                     {filterSelect(
@@ -1018,6 +1105,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* التواصل */}
                 {visibleColumns.contact !== false && (
                   <TableHead className="min-w-[180px]">
                     {filterInput(
@@ -1027,6 +1115,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* السداد */}
                 {visibleColumns.paymentStatus !== false && (
                   <TableHead className="min-w-[170px]">
                     {filterSelect(
@@ -1037,6 +1126,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* الملاحظات */}
                 {visibleColumns.notes !== false && (
                   <TableHead className="min-w-[130px]">
                     {filterInput(
@@ -1046,6 +1136,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* الحضور */}
                 {visibleColumns.attendance !== false && (
                   <TableHead className="min-w-[150px]">
                     {filterSelect(
@@ -1056,6 +1147,7 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {/* أعمدة إضافية */}
                 {visibleExtraColumns.map(
                   (column) => (
                     <TableHead
@@ -1066,6 +1158,7 @@ export function StudentsTable({
                   )
                 )}
 
+                {/* الحقول الديناميكية */}
                 {visibleDynamicFields.map(
                   (field) => (
                     <TableHead
@@ -1076,6 +1169,7 @@ export function StudentsTable({
                   )
                 )}
 
+                {/* الدورات */}
                 {visibleCourses.map(
                   (course) => (
                     <TableHead
@@ -1085,12 +1179,15 @@ export function StudentsTable({
                     </TableHead>
                   )
                 )}
+
               </TableRow>
             </TableHeader>
 
             <TableBody>
+
               {students.map(
                 (student, index) => {
+
                   const remaining =
                     student.feeExempt
                       ? 0
@@ -1118,8 +1215,13 @@ export function StudentsTable({
                           ? 'selected'
                           : undefined
                       }
-                      className="cursor-pointer"
+                      className={
+                        selectionMode
+                          ? 'cursor-pointer'
+                          : 'cursor-pointer'
+                      }
                       onClick={() => {
+
                         if (selectionMode) {
                           toggleStudentSelection(
                             student.id
@@ -1132,10 +1234,13 @@ export function StudentsTable({
                         )
                       }}
                     >
+
+                      {/* رقم */}
                       <TableCell className="text-center text-muted-foreground">
                         {index + 1}
                       </TableCell>
 
+                      {/* checkbox */}
                       {selectionMode && (
                         <TableCell className="text-center">
                           <input
@@ -1156,12 +1261,14 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الاسم */}
                       {visibleColumns.name !== false && (
                         <TableCell className="font-medium">
                           {student.name}
                         </TableCell>
                       )}
 
+                      {/* الهوية */}
                       {visibleColumns.personalId !== false && (
                         <TableCell>
                           {student.personalId ||
@@ -1169,6 +1276,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* المستوى */}
                       {visibleColumns.grade !== false && (
                         <TableCell>
                           {student.grade ||
@@ -1176,9 +1284,11 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* التواصل */}
                       {visibleColumns.contact !== false && (
                         <TableCell>
                           <div className="space-y-1 text-xs">
+
                             <div>
                               {student.phone ||
                                 '-'}
@@ -1189,10 +1299,12 @@ export function StudentsTable({
                                 {student.whatsapp}
                               </div>
                             )}
+
                           </div>
                         </TableCell>
                       )}
 
+                      {/* السداد */}
                       {visibleColumns.paymentStatus !== false && (
                         <TableCell>
                           <button
@@ -1217,6 +1329,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الملاحظات */}
                       {visibleColumns.notes !== false && (
                         <TableCell>
                           <button
@@ -1238,6 +1351,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الحضور */}
                       {visibleColumns.attendance !== false && (
                         <TableCell>
                           <button
@@ -1260,6 +1374,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* رقم الطالب */}
                       {visibleColumns.studentId && (
                         <TableCell>
                           {student.studentId ||
@@ -1267,6 +1382,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الجنس */}
                       {visibleColumns.gender && (
                         <TableCell>
                           {student.gender ||
@@ -1274,6 +1390,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* العمر */}
                       {visibleColumns.age && (
                         <TableCell>
                           {student.age ??
@@ -1281,6 +1398,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الهاتف */}
                       {visibleColumns.phone && (
                         <TableCell>
                           {student.phone ||
@@ -1288,6 +1406,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* واتساب */}
                       {visibleColumns.whatsapp && (
                         <TableCell>
                           {student.whatsapp ||
@@ -1295,6 +1414,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الحالة */}
                       {visibleColumns.status && (
                         <TableCell>
                           <StatusBadge
@@ -1306,6 +1426,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الفصل */}
                       {visibleColumns.className && (
                         <TableCell>
                           {student.className ||
@@ -1313,6 +1434,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* المصدر */}
                       {visibleColumns.source && (
                         <TableCell>
                           {getSourceLabel(
@@ -1321,6 +1443,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* المستحق */}
                       {visibleColumns.amountDue && (
                         <TableCell>
                           {Number(
@@ -1329,6 +1452,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* المدفوع */}
                       {visibleColumns.amountPaid && (
                         <TableCell>
                           {Number(
@@ -1337,6 +1461,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* المتبقي */}
                       {visibleColumns.remaining && (
                         <TableCell>
                           {remaining.toFixed(
@@ -1345,6 +1470,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الإعفاء */}
                       {visibleColumns.feeExempt && (
                         <TableCell>
                           {student.feeExempt
@@ -1353,6 +1479,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الحالات الصحية */}
                       {visibleColumns.chronicDiseases && (
                         <TableCell>
                           {student.chronicDiseases ||
@@ -1360,6 +1487,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* تاريخ الإضافة */}
                       {visibleColumns.createdAt && (
                         <TableCell>
                           {formatDate(
@@ -1368,6 +1496,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* آخر تحديث */}
                       {visibleColumns.updatedAt && (
                         <TableCell>
                           {formatDate(
@@ -1376,6 +1505,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* العام الدراسي */}
                       {visibleColumns.academicYearName && (
                         <TableCell>
                           {student.academicYearName ||
@@ -1383,6 +1513,7 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {/* الحقول الديناميكية */}
                       {visibleDynamicFields.map(
                         (field) => (
                           <TableCell
@@ -1401,8 +1532,10 @@ export function StudentsTable({
                         )
                       )}
 
+                      {/* الدورات */}
                       {visibleCourses.map(
                         (course) => {
+
                           const status =
                             student.courseStatuses?.find(
                               (item) =>
@@ -1420,6 +1553,7 @@ export function StudentsTable({
                           )
                         }
                       )}
+
                     </TableRow>
                   )
                 }
@@ -1438,14 +1572,16 @@ export function StudentsTable({
                   </TableCell>
                 </TableRow>
               )}
+
             </TableBody>
           </Table>
         </div>
       </div>
 
       {/* =========================================
-          نافذة تأكيد مسح الطلاب المحددين
+          تأكيد مسح الطلاب المحددين
          ========================================= */}
+
       {showDeleteConfirm && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
@@ -1458,6 +1594,7 @@ export function StudentsTable({
             }
           }}
         >
+
           <div
             dir="rtl"
             className="w-full max-w-md rounded-xl bg-background p-5 shadow-xl"
@@ -1465,8 +1602,11 @@ export function StudentsTable({
               event.stopPropagation()
             }
           >
+
             <div className="mb-5">
+
               <div className="mb-2 flex items-center gap-2">
+
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
                   <Trash2 className="h-5 w-5 text-destructive" />
                 </div>
@@ -1474,6 +1614,7 @@ export function StudentsTable({
                 <h2 className="text-lg font-semibold">
                   تأكيد المسح
                 </h2>
+
               </div>
 
               <p className="text-sm text-muted-foreground">
@@ -1493,6 +1634,7 @@ export function StudentsTable({
                 هذه العملية قد تؤدي إلى حذف
                 بيانات الطلاب المرتبطة بهم.
               </p>
+
             </div>
 
             {deleteMessage && (
@@ -1502,6 +1644,7 @@ export function StudentsTable({
             )}
 
             <div className="flex gap-2">
+
               <button
                 type="button"
                 onClick={
@@ -1525,14 +1668,16 @@ export function StudentsTable({
               >
                 إلغاء
               </button>
+
             </div>
           </div>
         </div>
       )}
 
       {/* =========================================
-          نافذة تفاصيل الدفع
+          تفاصيل الدفع
          ========================================= */}
+
       {paymentStudent && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1545,6 +1690,7 @@ export function StudentsTable({
             }
           }}
         >
+
           <div
             className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
             dir="rtl"
@@ -1552,7 +1698,9 @@ export function StudentsTable({
               event.stopPropagation()
             }
           >
+
             <div className="mb-5 flex items-start justify-between">
+
               <div>
                 <h2 className="text-lg font-semibold">
                   تفاصيل السداد
@@ -1571,9 +1719,11 @@ export function StudentsTable({
               >
                 إغلاق
               </button>
+
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+
               <div className="rounded-lg border p-3">
                 <div className="text-xs text-muted-foreground">
                   المستحق
@@ -1632,6 +1782,7 @@ export function StudentsTable({
                   />
                 </div>
               </div>
+
             </div>
 
             {!paymentStudent.feeExempt &&
@@ -1642,6 +1793,7 @@ export function StudentsTable({
                   paymentStudent.amountDue
                 ) && (
                 <div className="mt-5">
+
                   {!showAddPayment ? (
                     <button
                       type="button"
@@ -1656,10 +1808,12 @@ export function StudentsTable({
                     </button>
                   ) : (
                     <div className="space-y-4 rounded-lg border p-4">
+
                       <div className="text-sm font-semibold">
                         إضافة دفعة
                       </div>
 
+                      {/* المبلغ */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           المبلغ
@@ -1684,6 +1838,7 @@ export function StudentsTable({
                         />
                       </div>
 
+                      {/* طريقة الدفع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           طريقة الدفع
@@ -1720,6 +1875,7 @@ export function StudentsTable({
                         </select>
                       </div>
 
+                      {/* تاريخ الدفع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           تاريخ الدفع
@@ -1742,6 +1898,7 @@ export function StudentsTable({
                         />
                       </div>
 
+                      {/* رقم المرجع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           رقم المرجع
@@ -1764,6 +1921,7 @@ export function StudentsTable({
                         />
                       </div>
 
+                      {/* الملاحظات */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           ملاحظات
@@ -1794,6 +1952,7 @@ export function StudentsTable({
                       )}
 
                       <div className="flex gap-2">
+
                         <button
                           type="button"
                           onClick={
@@ -1823,9 +1982,11 @@ export function StudentsTable({
                         >
                           إلغاء
                         </button>
+
                       </div>
                     </div>
                   )}
+
                 </div>
               )}
 
@@ -1846,6 +2007,7 @@ export function StudentsTable({
                   تم سداد الرسوم بالكامل.
                 </div>
               )}
+
           </div>
         </div>
       )}
