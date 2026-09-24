@@ -1,5 +1,4 @@
 'use client'
-
 import {
   Archive,
   BookOpen,
@@ -14,9 +13,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-react'
-
 import { useRouter } from 'next/navigation'
-
 import { PageHeader } from '@/components/dashboard/page-header'
 import {
   Card,
@@ -25,7 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-
 type ManagementOption = {
   title: string
   description: string
@@ -33,7 +29,6 @@ type ManagementOption = {
   icon: typeof Settings2
   badge?: string
 }
-
 type QuickLink = {
   title: string
   description: string
@@ -41,13 +36,12 @@ type QuickLink = {
   icon: typeof ExternalLink
   external?: boolean
 }
-
 const quickLinks: QuickLink[] = [
   {
     title: 'رابط التسجيل الخارجي',
     description:
       'فتح صفحة التسجيل الخارجي العامة التي يستخدمها أولياء الأمور والطلاب.',
-    href: 'https://t3leem-school-management-dashboard-3h4x-azdb231oe-t3leem.vercel.app/register',
+    href: 'https://t3leem-school-management-dashboard.vercel.app/register',
     icon: ExternalLink,
     external: true,
   },
@@ -55,12 +49,11 @@ const quickLinks: QuickLink[] = [
     title: 'رابط متابعة الطالب',
     description:
       'فتح صفحة متابعة الطالب العامة باستخدام الرقم الشخصي (CPR).',
-    href: 'https://t3leem-school-management-dashboard-3h4x-azdb231oe-t3leem.vercel.app/student-status',
+    href: 'https://t3leem-school-management-dashboard.vercel.app/student-status',
     icon: ExternalLink,
     external: true,
   },
 ]
-
 const managementOptions: ManagementOption[] = [
   {
     title: 'إعدادات التسجيل',
@@ -127,33 +120,27 @@ const managementOptions: ManagementOption[] = [
     icon: LockKeyhole,
   },
 ]
-
 export function SettingsView() {
   const router = useRouter()
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="الإدارة"
         description="إدارة إعدادات النظام والصلاحيات والوظائف الرئيسية."
       />
-
       {/* روابط سريعة */}
       <section className="space-y-3">
         <div>
           <h2 className="text-lg font-semibold">
             روابط سريعة
           </h2>
-
           <p className="text-sm text-muted-foreground">
             الوصول السريع إلى الروابط العامة المستخدمة.
           </p>
         </div>
-
         <div className="grid gap-4 md:grid-cols-2">
           {quickLinks.map((item) => {
             const Icon = item.icon
-
             return (
               <a
                 key={item.href}
@@ -167,12 +154,10 @@ export function SettingsView() {
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Icon className="h-6 w-6" />
                     </div>
-
                     <div className="min-w-0">
                       <h3 className="font-semibold">
                         {item.title}
                       </h3>
-
                       <p className="mt-1 text-sm text-muted-foreground">
                         {item.description}
                       </p>
@@ -184,23 +169,19 @@ export function SettingsView() {
           })}
         </div>
       </section>
-
       {/* إعدادات الإدارة */}
       <section className="space-y-3">
         <div>
           <h2 className="text-lg font-semibold">
             إعدادات الإدارة
           </h2>
-
           <p className="text-sm text-muted-foreground">
             إدارة أقسام النظام والإعدادات الداخلية.
           </p>
         </div>
-
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {managementOptions.map((item) => {
             const Icon = item.icon
-
             return (
               <Card
                 key={item.href}
@@ -212,18 +193,15 @@ export function SettingsView() {
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Icon className="h-5 w-5" />
                     </div>
-
                     {item.badge && (
                       <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                         {item.badge}
                       </span>
                     )}
                   </div>
-
                   <CardTitle className="pt-2 text-base">
                     {item.title}
                   </CardTitle>
-
                   <CardDescription className="leading-6">
                     {item.description}
                   </CardDescription>
@@ -233,19 +211,16 @@ export function SettingsView() {
           })}
         </div>
       </section>
-
       {/* تنبيه */}
       <Card className="border-dashed">
         <CardContent className="flex items-start gap-3 p-5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
             <FileKey className="h-4 w-4 text-muted-foreground" />
           </div>
-
           <div>
             <p className="font-medium">
               مفاتيح النظام
             </p>
-
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
               سيتم من خلال إدارة المفاتيح التحكم في
               الوظائف الحساسة مثل استيراد سجل الطلاب
@@ -258,3 +233,7 @@ export function SettingsView() {
     </div>
   )
 }
+
+التغيير الوحيد: روابط التسجيل ومتابعة الطالب أصبحت تستخدم الدومين الثابت:
+
+https://t3leem-school-management-dashboard.vercel.app
