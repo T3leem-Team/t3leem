@@ -8,9 +8,12 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Send,
   Users,
   X,
 } from 'lucide-react'
+
+import { supabase } from '@/lib/supabase'
 
 type TripStatus =
   | 'draft'
@@ -178,15 +181,48 @@ export function TripDetailsView({
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+
+  const [directPublishAllowed, setDirectPublishAllowed] =
+    useState(false)
+  const [settingsLoading, setSettingsLoading] =
+    useState(true)
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
-  const [showEligibleOnly, setShowEligibleOnly] = useState(true)
+  const [showEligibleOnly, setShowEligibleOnly] =
+    useState(true)
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  async function loadPublishSetting() {
+    setSettingsLoading(true)
+
+    const { data: settings, error: settingsError } =
+      await supabase
+        .from('student_status_settings')
+        .select('allow_direct_trip_publish')
+        .limit(1)
+        .maybeSingle()
+
+    if (settingsError) {
+      console.error(
+        'Load trip publish setting error:',
+        settingsError,
+      )
+
+      setDirectPublishAllowed(false)
+    } else {
+      setDirectPublishAllowed(
+        settings?.allow_direct_trip_publish === true,
+      )
+    }
+
+    setSettingsLoading(false)
+  }
 
   async function loadData(options?: { silent?: boolean }) {
     const silent = options?.silent ?? false
@@ -213,7 +249,8 @@ export function TripDetailsView({
 
       if (!response.ok) {
         throw new Error(
-          result?.error ?? 'تعذر تحميل بيانات الرحلة.',
+          result?.error ??
+            'تعذر تحميل بيانات الرحلة.',
         )
       }
 
@@ -227,7 +264,10 @@ export function TripDetailsView({
           .map((student) => student.id),
       )
     } catch (error) {
-      console.error('Load trip students error:', error)
+      console.error(
+        'Load trip students error:',
+        error,
+      )
 
       setError(
         error instanceof Error
@@ -244,6 +284,7 @@ export function TripDetailsView({
     if (!tripId) return
 
     loadData()
+    loadPublishSetting()
   }, [tripId])
 
   const eligibleStudents = useMemo(() => {
@@ -259,7 +300,8 @@ export function TripDetailsView({
       return []
     }
 
-    const normalizedSearch = search.trim().toLowerCase()
+    const normalizedSearch =
+      search.trim().toLowerCase()
 
     return data.students.filter((student) => {
       if (
@@ -286,11 +328,15 @@ export function TripDetailsView({
 
       const matchesSearch =
         !normalizedSearch ||
-        name.toLowerCase().includes(normalizedSearch) ||
+        name
+          .toLowerCase()
+          .includes(normalizedSearch) ||
         personalId
           .toLowerCase()
           .includes(normalizedSearch) ||
-        phone.toLowerCase().includes(normalizedSearch)
+        phone
+          .toLowerCase()
+          .includes(normalizedSearch)
 
       const matchesLevel =
         levelFilter === 'all' ||
@@ -308,7 +354,8 @@ export function TripDetailsView({
   const selectedCount = selectedIds.length
 
   const canEdit =
-    data?.trip.status !== 'closed'
+    data?.trip.status !== 'closed' &&
+    data?.trip.status !== 'published'
 
   function toggleStudent(studentId: string) {
     if (!canEdit) return
@@ -381,7 +428,8 @@ export function TripDetailsView({
 
       if (!response.ok) {
         throw new Error(
-          result?.error ?? 'تعذر حفظ الطلاب.',
+          result?.error ??
+            'تعذر حفظ الطلاب.',
         )
       }
 
@@ -403,6 +451,79 @@ export function TripDetailsView({
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function publishTrip() {
+    if (!data) return
+
+    if (data.trip.status !== 'draft') {
+      return
+    }
+
+    if (!directPublishAllowed) {
+      setError(
+        'النشر المباشر موقوف من إعدادات النظام.',
+      )
+      return
+    }
+
+    if (selectedCount === 0) {
+      setError(
+        'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة.',
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المؤهلين في صفحة حالة الطالب.',
+    )
+
+    if (!confirmed) return
+
+    setPublishing(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch('/api/trips', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: tripId,
+          status: 'published',
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر نشر الرحلة.',
+        )
+      }
+
+      setSuccess(
+        'تم نشر الرحلة بنجاح.',
+      )
+
+      await loadData({ silent: true })
+    } catch (error) {
+      console.error(
+        'Publish trip error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر نشر الرحلة.',
+      )
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -623,7 +744,9 @@ export function TripDetailsView({
       {/* Closed notice */}
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-          هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب.
+          {trip.status === 'published'
+            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب.'
+            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب.'}
         </div>
       )}
 
@@ -1004,39 +1127,93 @@ export function TripDetailsView({
         </div>
 
         {/* Bottom actions */}
-        <div className="flex flex-col gap-3 border-t bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-muted-foreground">
-            تم تحديد{' '}
-            <strong className="text-foreground">
-              {selectedCount}
-            </strong>{' '}
-            طالب من أصل{' '}
-            <strong className="text-foreground">
-              {eligibleStudents.length}
-            </strong>{' '}
-            طالب مؤهل.
+        <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              تم تحديد{' '}
+              <strong className="text-foreground">
+                {selectedCount}
+              </strong>{' '}
+              طالب من أصل{' '}
+              <strong className="text-foreground">
+                {eligibleStudents.length}
+              </strong>{' '}
+              طالب مؤهل.
+            </div>
+
+            <button
+              type="button"
+              onClick={saveStudents}
+              disabled={
+                !canEdit || saving
+              }
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  حفظ الطلاب
+                </>
+              )}
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={saveStudents}
-            disabled={
-              !canEdit || saving
-            }
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                جاري الحفظ...
-              </>
-            ) : (
-              <>
-                <Check className="h-4 w-4" />
-                حفظ الطلاب
-              </>
-            )}
-          </button>
+          {/* Publish */}
+          {trip.status === 'draft' && (
+            <div className="border-t pt-4">
+              <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Send className="h-4 w-4" />
+
+                    <p className="font-semibold">
+                      نشر الرحلة
+                    </p>
+                  </div>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
+                  </p>
+
+                  {!settingsLoading &&
+                    !directPublishAllowed && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        النشر المباشر موقوف من إعدادات النظام.
+                      </p>
+                    )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={publishTrip}
+                  disabled={
+                    settingsLoading ||
+                    !directPublishAllowed ||
+                    publishing ||
+                    selectedCount === 0
+                  }
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {publishing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      جاري النشر...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      نشر الرحلة
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
