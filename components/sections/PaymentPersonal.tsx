@@ -187,11 +187,35 @@ export function PaymentPersonal() {
         )
       }
 
-      setSelectedCycle(data.cycle ?? cycle)
-      setTransactions(data.transactions ?? [])
+      const nextCycle: Cycle =
+        data.cycle ?? cycle
+
+      setSelectedCycle(nextCycle)
+      setTransactions(
+        Array.isArray(data.transactions)
+          ? data.transactions
+          : [],
+      )
+
       setCurrentBalance(
         Number(data.currentBalance ?? 0),
       )
+
+      setCycles((current) =>
+        current.map((item) =>
+          item.id === nextCycle.id
+            ? nextCycle
+            : item,
+        ),
+      )
+
+      paymentPersonalCache = {
+        cycles: cycles.map((item) =>
+          item.id === nextCycle.id
+            ? nextCycle
+            : item,
+        ),
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -207,9 +231,14 @@ export function PaymentPersonal() {
       return
     }
 
-    const balance = Number(initialBalance || 0)
+    const balance = Number(
+      initialBalance || 0,
+    )
 
-    if (!Number.isFinite(balance) || balance < 0) {
+    if (
+      !Number.isFinite(balance) ||
+      balance < 0
+    ) {
       setError('الرصيد الأولي غير صحيح.')
       return
     }
@@ -269,18 +298,29 @@ export function PaymentPersonal() {
     }
 
     if (selectedCycle.status !== 'open') {
-      setError('هذا الدفتر مغلق.')
+      setError(
+        'هذا الدفتر مغلق ولا يمكن إضافة عمليات جديدة.',
+      )
       return
     }
 
-    const amount = Number(transactionAmount)
+    const amount = Number(
+      transactionAmount,
+    )
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('المبلغ يجب أن يكون أكبر من صفر.')
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      setError(
+        'المبلغ يجب أن يكون أكبر من صفر.',
+      )
       return
     }
 
-    if (!transactionDescription.trim()) {
+    if (
+      !transactionDescription.trim()
+    ) {
       setError('وصف العملية مطلوب.')
       return
     }
@@ -299,14 +339,17 @@ export function PaymentPersonal() {
           body: JSON.stringify({
             action: 'add-transaction',
             cycle_id: selectedCycle.id,
-            transaction_type: transactionType,
+            transaction_type:
+              transactionType,
             amount,
             description:
               transactionDescription.trim(),
             note:
-              transactionNote.trim() || null,
+              transactionNote.trim() ||
+              null,
             adjustment_sign:
-              transactionType === 'adjustment'
+              transactionType ===
+              'adjustment'
                 ? adjustmentSign
                 : null,
           }),
@@ -317,7 +360,8 @@ export function PaymentPersonal() {
 
       if (!response.ok) {
         throw new Error(
-          data.error || 'تعذر إضافة العملية.',
+          data.error ||
+            'تعذر إضافة العملية.',
         )
       }
 
@@ -340,6 +384,166 @@ export function PaymentPersonal() {
     }
   }
 
+  async function updateCycleStatus(
+    cycle: Cycle,
+    status: 'open' | 'closed',
+  ) {
+    const message =
+      status === 'closed'
+        ? `هل تريد إغلاق الدفتر "${cycle.name}"؟\n\nبعد الإغلاق لن تتمكن من إضافة عمليات جديدة.`
+        : `هل تريد فتح الدفتر "${cycle.name}" مرة أخرى؟`
+
+    if (!window.confirm(message)) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response = await fetch(
+        '/api/personal-finance',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action:
+              'update-cycle-status',
+            cycle_id: cycle.id,
+            status,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            'تعذر تحديث حالة الدفتر.',
+        )
+      }
+
+      const updatedCycle: Cycle = {
+        ...cycle,
+        status,
+        updated_at:
+          data.cycle?.updated_at ??
+          cycle.updated_at,
+      }
+
+      setCycles((current) =>
+        current.map((item) =>
+          item.id === cycle.id
+            ? updatedCycle
+            : item,
+        ),
+      )
+
+      paymentPersonalCache = {
+        cycles: (
+          paymentPersonalCache?.cycles ??
+          cycles
+        ).map((item) =>
+          item.id === cycle.id
+            ? updatedCycle
+            : item,
+        ),
+      }
+
+      if (
+        selectedCycle?.id === cycle.id
+      ) {
+        setSelectedCycle(updatedCycle)
+      }
+
+      if (status === 'closed') {
+        setShowAddTransaction(false)
+      }
+
+      await loadCycles()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر تحديث حالة الدفتر.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteCycle(
+    cycle: Cycle,
+  ) {
+    const confirmed = window.confirm(
+      `هل أنت متأكد من مسح الدفتر "${cycle.name}"؟\n\nسيتم حذف الدفتر وجميع عملياته نهائيًا ولا يمكن التراجع عن ذلك.`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response = await fetch(
+        '/api/personal-finance',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            action: 'delete-cycle',
+            cycle_id: cycle.id,
+          }),
+        },
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            'تعذر مسح الدفتر.',
+        )
+      }
+
+      const nextCycles = cycles.filter(
+        (item) =>
+          item.id !== cycle.id,
+      )
+
+      setCycles(nextCycles)
+
+      paymentPersonalCache = {
+        cycles: nextCycles,
+      }
+
+      if (
+        selectedCycle?.id === cycle.id
+      ) {
+        setSelectedCycle(null)
+        setTransactions([])
+        setCurrentBalance(0)
+        setShowDetails(false)
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر مسح الدفتر.',
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
   useEffect(() => {
     if (paymentPersonalLoading) {
       return
@@ -352,7 +556,8 @@ export function PaymentPersonal() {
     return () => {
       /*
        * لا نلغي الطلب.
-       * التحديث يستمر بالخلفية ويحدث الـ cache.
+       * التحديث يستمر بالخلفية
+       * ويحدث الـ cache.
        */
     }
   }, [])
@@ -445,7 +650,7 @@ export function PaymentPersonal() {
                   </th>
 
                   <th className="px-5 py-4 text-center">
-                    تفاصيل
+                    الإجراءات
                   </th>
                 </tr>
               </thead>
@@ -462,19 +667,22 @@ export function PaymentPersonal() {
 
                     <td className="px-5 py-4">
                       {Number(
-                        cycle.initial_balance ?? 0,
+                        cycle.initial_balance ??
+                          0,
                       ).toFixed(3)}
                     </td>
 
                     <td className="px-5 py-4">
                       <span
                         className={
-                          cycle.status === 'open'
-                            ? 'rounded-full bg-green-100 px-3 py-1 text-xs text-green-700'
-                            : 'rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700'
+                          cycle.status ===
+                          'open'
+                            ? 'rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700'
+                            : 'rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700'
                         }
                       >
-                        {cycle.status === 'open'
+                        {cycle.status ===
+                        'open'
                           ? 'مفتوح'
                           : 'مغلق'}
                       </span>
@@ -486,16 +694,70 @@ export function PaymentPersonal() {
                       )}
                     </td>
 
-                    <td className="px-5 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openDetails(cycle)
-                        }
-                        className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
-                      >
-                        عرض التفاصيل
-                      </button>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openDetails(
+                              cycle,
+                            )
+                          }
+                          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted"
+                        >
+                          التفاصيل
+                        </button>
+
+                        {cycle.status ===
+                        'open' ? (
+                          <button
+                            type="button"
+                            disabled={
+                              saving
+                            }
+                            onClick={() =>
+                              updateCycleStatus(
+                                cycle,
+                                'closed',
+                              )
+                            }
+                            className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            إغلاق
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={
+                              saving
+                            }
+                            onClick={() =>
+                              updateCycleStatus(
+                                cycle,
+                                'open',
+                              )
+                            }
+                            className="rounded-lg border border-green-300 px-3 py-2 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50"
+                          >
+                            فتح
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={
+                            saving
+                          }
+                          onClick={() =>
+                            deleteCycle(
+                              cycle,
+                            )
+                          }
+                          className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          مسح
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -506,201 +768,298 @@ export function PaymentPersonal() {
       </div>
 
       {/* نافذة تفاصيل الدفتر */}
-      {showDetails && selectedCycle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl bg-background shadow-2xl">
+      {showDetails &&
+        selectedCycle && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-2xl bg-background shadow-2xl">
 
-            {/* رأس النافذة */}
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h3 className="text-xl font-bold">
-                  {selectedCycle.name}
-                </h3>
+              {/* رأس النافذة */}
+              <div className="flex items-center justify-between border-b p-5">
+                <div>
+                  <h3 className="text-xl font-bold">
+                    {
+                      selectedCycle.name
+                    }
+                  </h3>
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  تفاصيل الدفتر وجميع العمليات
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowDetails(false)
-                }
-                className="rounded-lg border px-3 py-2 text-sm"
-              >
-                إغلاق
-              </button>
-            </div>
-
-            {/* ملخص الدفتر */}
-            <div className="grid gap-4 border-b p-5 md:grid-cols-3">
-
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-muted-foreground">
-                  الرصيد الأولي
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    تفاصيل الدفتر وجميع العمليات
+                  </p>
                 </div>
 
-                <div className="mt-1 text-xl font-bold">
-                  {Number(
-                    selectedCycle.initial_balance ?? 0,
-                  ).toFixed(3)}
-                </div>
-              </div>
+                <div className="flex items-center gap-2">
 
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-muted-foreground">
-                  الرصيد الحالي
-                </div>
+                  {selectedCycle.status ===
+                  'open' ? (
+                    <button
+                      type="button"
+                      disabled={
+                        saving
+                      }
+                      onClick={() =>
+                        updateCycleStatus(
+                          selectedCycle,
+                          'closed',
+                        )
+                      }
+                      className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      إغلاق الدفتر
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={
+                        saving
+                      }
+                      onClick={() =>
+                        updateCycleStatus(
+                          selectedCycle,
+                          'open',
+                        )
+                      }
+                      className="rounded-lg border border-green-300 px-3 py-2 text-sm font-medium text-green-600 hover:bg-green-50 disabled:opacity-50"
+                    >
+                      فتح الدفتر
+                    </button>
+                  )}
 
-                <div className="mt-1 text-xl font-bold">
-                  {currentBalance.toFixed(3)}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <div className="text-sm text-muted-foreground">
-                  الحالة
-                </div>
-
-                <div className="mt-1 text-xl font-bold">
-                  {selectedCycle.status === 'open'
-                    ? 'مفتوح'
-                    : 'مغلق'}
-                </div>
-              </div>
-
-            </div>
-
-            {/* العمليات */}
-            <div className="flex-1 overflow-auto p-5">
-
-              <div className="mb-4 flex items-center justify-between">
-                <h4 className="font-semibold">
-                  جميع العمليات
-                </h4>
-
-                {selectedCycle.status === 'open' && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setError('')
-                      setShowAddTransaction(true)
-                    }}
-                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    disabled={
+                      saving
+                    }
+                    onClick={() =>
+                      deleteCycle(
+                        selectedCycle,
+                      )
+                    }
+                    className="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
-                    + إضافة عملية
+                    مسح
                   </button>
-                )}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowDetails(
+                        false,
+                      )
+                    }
+                    className="rounded-lg border px-3 py-2 text-sm"
+                  >
+                    إغلاق
+                  </button>
+
+                </div>
               </div>
 
-              {transactions.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                  لا توجد عمليات في هذا الدفتر.
+              {/* ملخص الدفتر */}
+              <div className="grid gap-4 border-b p-5 md:grid-cols-3">
+
+                <div className="rounded-xl border p-4">
+                  <div className="text-sm text-muted-foreground">
+                    الرصيد الأولي
+                  </div>
+
+                  <div className="mt-1 text-xl font-bold">
+                    {Number(
+                      selectedCycle.initial_balance ??
+                        0,
+                    ).toFixed(3)}
+                  </div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto rounded-xl border">
-                  <table className="w-full text-sm">
 
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="px-4 py-3 text-right">
-                          النوع
-                        </th>
+                <div className="rounded-xl border p-4">
+                  <div className="text-sm text-muted-foreground">
+                    الرصيد الحالي
+                  </div>
 
-                        <th className="px-4 py-3 text-right">
-                          الوصف
-                        </th>
+                  <div className="mt-1 text-xl font-bold">
+                    {currentBalance.toFixed(
+                      3,
+                    )}
+                  </div>
+                </div>
 
-                        <th className="px-4 py-3 text-right">
-                          المبلغ
-                        </th>
+                <div className="rounded-xl border p-4">
+                  <div className="text-sm text-muted-foreground">
+                    الحالة
+                  </div>
 
-                        <th className="px-4 py-3 text-right">
-                          الرصيد بعد العملية
-                        </th>
+                  <div
+                    className={
+                      selectedCycle.status ===
+                      'open'
+                        ? 'mt-1 text-xl font-bold text-green-600'
+                        : 'mt-1 text-xl font-bold text-red-600'
+                    }
+                  >
+                    {selectedCycle.status ===
+                    'open'
+                      ? 'مفتوح'
+                      : 'مغلق'}
+                  </div>
+                </div>
 
-                        <th className="px-4 py-3 text-right">
-                          التاريخ
-                        </th>
-                      </tr>
-                    </thead>
+              </div>
 
-                    <tbody>
-                      {transactions.map(
-                        (transaction) => {
-                          const isOut =
-                            transaction.transaction_type ===
-                              'out' ||
-                            (
+              {/* العمليات */}
+              <div className="flex-1 overflow-auto p-5">
+
+                <div className="mb-4 flex items-center justify-between">
+                  <h4 className="font-semibold">
+                    جميع العمليات
+                  </h4>
+
+                  {selectedCycle.status ===
+                    'open' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError('')
+                        setShowAddTransaction(
+                          true,
+                        )
+                      }}
+                      className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                    >
+                      + إضافة عملية
+                    </button>
+                  )}
+                </div>
+
+                {selectedCycle.status ===
+                  'closed' && (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    هذا الدفتر مغلق. لا يمكن إضافة عمليات
+                    جديدة حتى يتم فتحه.
+                  </div>
+                )}
+
+                {transactions.length ===
+                0 ? (
+                  <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+                    لا توجد عمليات في هذا الدفتر.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border">
+                    <table className="w-full text-sm">
+
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-4 py-3 text-right">
+                            النوع
+                          </th>
+
+                          <th className="px-4 py-3 text-right">
+                            الوصف
+                          </th>
+
+                          <th className="px-4 py-3 text-right">
+                            المبلغ
+                          </th>
+
+                          <th className="px-4 py-3 text-right">
+                            الرصيد بعد العملية
+                          </th>
+
+                          <th className="px-4 py-3 text-right">
+                            التاريخ
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {transactions.map(
+                          (
+                            transaction,
+                          ) => {
+                            const isOut =
                               transaction.transaction_type ===
-                                'adjustment' &&
-                              transaction.adjustment_sign ===
-                                -1
-                            )
+                                'out' ||
+                              (
+                                transaction.transaction_type ===
+                                  'adjustment' &&
+                                transaction.adjustment_sign ===
+                                  -1
+                              )
 
-                          return (
-                            <tr
-                              key={transaction.id}
-                              className="border-t"
-                            >
-                              <td className="px-4 py-3">
-                                {transaction.transaction_type ===
-                                'in'
-                                  ? 'إيداع'
-                                  : transaction.transaction_type ===
-                                    'out'
-                                    ? 'مصروف'
-                                    : 'تسوية'}
-                              </td>
-
-                              <td className="px-4 py-3 font-medium">
-                                {transaction.description}
-
-                                {transaction.note && (
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    {transaction.note}
-                                  </div>
-                                )}
-                              </td>
-
-                              <td
-                                className={`px-4 py-3 font-semibold ${
-                                  isOut
-                                    ? 'text-red-600'
-                                    : 'text-green-600'
-                                }`}
+                            return (
+                              <tr
+                                key={
+                                  transaction.id
+                                }
+                                className="border-t"
                               >
-                                {isOut ? '-' : '+'}
-                                {Number(
-                                  transaction.amount,
-                                ).toFixed(3)}
-                              </td>
+                                <td className="px-4 py-3">
+                                  {transaction.transaction_type ===
+                                  'in'
+                                    ? 'إيداع'
+                                    : transaction.transaction_type ===
+                                      'out'
+                                      ? 'مصروف'
+                                      : 'تسوية'}
+                                </td>
 
-                              <td className="px-4 py-3 font-semibold">
-                                {Number(
-                                  transaction.balance_after,
-                                ).toFixed(3)}
-                              </td>
+                                <td className="px-4 py-3 font-medium">
+                                  {
+                                    transaction.description
+                                  }
 
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {formatDateTime(
-                                  transaction.created_at,
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        },
-                      )}
-                    </tbody>
+                                  {transaction.note && (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      {
+                                        transaction.note
+                                      }
+                                    </div>
+                                  )}
+                                </td>
 
-                  </table>
-                </div>
-              )}
+                                <td
+                                  className={`px-4 py-3 font-semibold ${
+                                    isOut
+                                      ? 'text-red-600'
+                                      : 'text-green-600'
+                                  }`}
+                                >
+                                  {isOut
+                                    ? '-'
+                                    : '+'}
+
+                                  {Number(
+                                    transaction.amount,
+                                  ).toFixed(
+                                    3,
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-3 font-semibold">
+                                  {Number(
+                                    transaction.balance_after,
+                                  ).toFixed(
+                                    3,
+                                  )}
+                                </td>
+
+                                <td className="px-4 py-3 text-muted-foreground">
+                                  {formatDateTime(
+                                    transaction.created_at,
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          },
+                        )}
+                      </tbody>
+
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* نافذة إضافة دفتر */}
       {showCreateCycle && (
@@ -716,7 +1075,9 @@ export function PaymentPersonal() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowCreateCycle(false)
+                  setShowCreateCycle(
+                    false,
+                  )
                 }
                 className="rounded-lg border px-3 py-1"
               >
@@ -734,7 +1095,9 @@ export function PaymentPersonal() {
                 <input
                   value={cycleName}
                   onChange={(e) =>
-                    setCycleName(e.target.value)
+                    setCycleName(
+                      e.target.value,
+                    )
                   }
                   placeholder="مثال: مصروفات شخصية"
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -750,7 +1113,9 @@ export function PaymentPersonal() {
                   type="number"
                   min="0"
                   step="0.001"
-                  value={initialBalance}
+                  value={
+                    initialBalance
+                  }
                   onChange={(e) =>
                     setInitialBalance(
                       e.target.value,
@@ -766,7 +1131,9 @@ export function PaymentPersonal() {
                 </label>
 
                 <input
-                  value={initialSource}
+                  value={
+                    initialSource
+                  }
                   onChange={(e) =>
                     setInitialSource(
                       e.target.value,
@@ -783,7 +1150,9 @@ export function PaymentPersonal() {
                 </label>
 
                 <textarea
-                  value={initialNote}
+                  value={
+                    initialNote
+                  }
                   onChange={(e) =>
                     setInitialNote(
                       e.target.value,
@@ -800,7 +1169,9 @@ export function PaymentPersonal() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowCreateCycle(false)
+                  setShowCreateCycle(
+                    false,
+                  )
                 }
                 className="rounded-lg border px-4 py-2"
               >
@@ -810,7 +1181,9 @@ export function PaymentPersonal() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={createCycle}
+                onClick={
+                  createCycle
+                }
                 className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
               >
                 {saving
@@ -839,7 +1212,9 @@ export function PaymentPersonal() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowAddTransaction(false)
+                    setShowAddTransaction(
+                      false,
+                    )
                   }
                   className="rounded-lg border px-3 py-1"
                 >
@@ -855,10 +1230,13 @@ export function PaymentPersonal() {
                   </label>
 
                   <select
-                    value={transactionType}
+                    value={
+                      transactionType
+                    }
                     onChange={(e) =>
                       setTransactionType(
-                        e.target.value as
+                        e.target
+                          .value as
                           | 'in'
                           | 'out'
                           | 'adjustment',
@@ -888,12 +1266,17 @@ export function PaymentPersonal() {
                     </label>
 
                     <select
-                      value={adjustmentSign}
+                      value={
+                        adjustmentSign
+                      }
                       onChange={(e) =>
                         setAdjustmentSign(
                           Number(
-                            e.target.value,
-                          ) as 1 | -1,
+                            e.target
+                              .value,
+                          ) as
+                            | 1
+                            | -1,
                         )
                       }
                       className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -918,10 +1301,13 @@ export function PaymentPersonal() {
                     type="number"
                     min="0"
                     step="0.001"
-                    value={transactionAmount}
+                    value={
+                      transactionAmount
+                    }
                     onChange={(e) =>
                       setTransactionAmount(
-                        e.target.value,
+                        e.target
+                          .value,
                       )
                     }
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
@@ -934,10 +1320,13 @@ export function PaymentPersonal() {
                   </label>
 
                   <input
-                    value={transactionDescription}
+                    value={
+                      transactionDescription
+                    }
                     onChange={(e) =>
                       setTransactionDescription(
-                        e.target.value,
+                        e.target
+                          .value,
                       )
                     }
                     placeholder="مثال: شراء مستلزمات"
@@ -951,10 +1340,13 @@ export function PaymentPersonal() {
                   </label>
 
                   <textarea
-                    value={transactionNote}
+                    value={
+                      transactionNote
+                    }
                     onChange={(e) =>
                       setTransactionNote(
-                        e.target.value,
+                        e.target
+                          .value,
                       )
                     }
                     className="mt-1 min-h-24 w-full rounded-lg border bg-background px-3 py-2"
@@ -968,7 +1360,9 @@ export function PaymentPersonal() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowAddTransaction(false)
+                    setShowAddTransaction(
+                      false,
+                    )
                   }
                   className="rounded-lg border px-4 py-2"
                 >
@@ -978,7 +1372,9 @@ export function PaymentPersonal() {
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={addTransaction}
+                  onClick={
+                    addTransaction
+                  }
                   className="rounded-lg bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
                 >
                   {saving
