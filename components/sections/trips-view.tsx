@@ -1,552 +1,1259 @@
-'use client'
+import { NextResponse } from 'next/server'
 
-import { useEffect, useState } from 'react'
-import {
-  CalendarDays,
-  ChevronLeft,
-  CirclePlus,
-  Clock3,
-  Loader2,
-  Map,
-  RefreshCw,
-  Search,
-  Users,
-} from 'lucide-react'
+import { requireAuth } from '@/lib/require-auth'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
-import { TripsForm } from './trips-form'
+export async function GET() {
+  const { access, response } = await requireAuth()
 
-type TripStatus =
-  | 'draft'
-  | 'pending_approval'
-  | 'published'
-  | 'rejected'
-  | 'closed'
+  if (response) return response
 
-type Trip = {
-  id: string
-  name: string
-  description: string | null
-  location: string | null
-  trip_date: string | null
-  meeting_time: string | null
-  return_time: string | null
-  fee: number
-  note: string | null
-  academic_year_id: string
-  course_id: string
-  attendance_min: number | null
-  attendance_max: number | null
-  notes_requirement: 'any' | 'required' | 'none'
-  status: TripStatus
-  created_at: string
-  updated_at: string
-}
-
-type AcademicYear = {
-  id: string
-  name: string
-}
-
-type Course = {
-  id: string
-  name: string
-  academic_year_id: string
-}
-
-const statusLabels: Record<TripStatus, string> = {
-  draft: 'مسودة',
-  pending_approval: 'بانتظار الموافقة',
-  published: 'منشورة',
-  rejected: 'مرفوضة',
-  closed: 'مغلقة',
-}
-
-const statusClasses: Record<TripStatus, string> = {
-  draft:
-    'bg-muted text-muted-foreground border-border',
-  pending_approval:
-    'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400',
-  published:
-    'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-400',
-  rejected:
-    'bg-destructive/10 text-destructive border-destructive/20',
-  closed:
-    'bg-slate-500/10 text-slate-700 border-slate-500/20 dark:text-slate-400',
-}
-
-function formatDate(value: string | null) {
-  if (!value) return 'بدون تاريخ'
-
-  const date = new Date(`${value}T00:00:00`)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
+  if (!access) {
+    return NextResponse.json(
+      { error: 'غير مصرح بالوصول' },
+      { status: 401 },
+    )
   }
 
-  return new Intl.DateTimeFormat('ar-BH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(date)
-}
+  const supabase =
+    await createSupabaseServerClient()
 
-function formatTime(value: string | null) {
-  if (!value) return null
+  const [
+    tripsResult,
+    academicYearsResult,
+    coursesResult,
+    levelsResult,
+  ] = await Promise.all([
+    supabase
+      .from('trips')
+      .select(`
+        id,
+        name,
+        description,
+        location,
+        trip_date,
+        meeting_time,
+        return_time,
+        fee,
+        note,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status,
+        created_by,
+        approved_by,
+        approved_at,
+        approval_note,
+        rejected_by,
+        rejected_at,
+        rejection_note,
+        closed_by,
+        closed_at,
+        close_note,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', {
+        ascending: false,
+      }),
 
-  return value.slice(0, 5)
-}
+    supabase
+      .from('academic_years')
+      .select(`
+        id,
+        name,
+        start_date,
+        end_date,
+        is_current,
+        is_active,
+        annual_fee
+      `)
+      .eq('is_active', true)
+      .order('is_current', {
+        ascending: false,
+      })
+      .order('start_date', {
+        ascending: false,
+      }),
 
-function formatFee(value: number) {
-  return new Intl.NumberFormat('ar-BH', {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  }).format(value)
-}
+    supabase
+      .from('courses')
+      .select(`
+        id,
+        name,
+        academic_year_id,
+        start_date,
+        end_date,
+        days
+      `)
+      .order('name', {
+        ascending: true,
+      }),
 
-export function TripsView() {
-  const [trips, setTrips] = useState<Trip[]>([])
-  const [academicYears, setAcademicYears] = useState<
-    AcademicYear[]
-  >([])
-  const [courses, setCourses] = useState<Course[]>([])
+    supabase
+      .from('levels')
+      .select(`
+        id,
+        name,
+        sort_order,
+        is_active,
+        registration_enabled
+      `)
+      .eq('is_active', true)
+      .order('sort_order', {
+        ascending: true,
+      }),
+  ])
 
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [error, setError] = useState('')
+  if (tripsResult.error) {
+    console.error(
+      'GET /api/trips - trips error:',
+      tripsResult.error,
+    )
 
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] =
-    useState<'all' | TripStatus>('all')
+    return NextResponse.json(
+      {
+        error: 'تعذر تحميل الرحلات',
+        details: tripsResult.error.message,
+      },
+      { status: 500 },
+    )
+  }
 
-  const [formOpen, setFormOpen] = useState(false)
+  if (academicYearsResult.error) {
+    console.error(
+      'GET /api/trips - academic years error:',
+      academicYearsResult.error,
+    )
 
-  async function loadTrips(options?: {
-    silent?: boolean
-  }) {
-    const silent = options?.silent ?? false
+    return NextResponse.json(
+      {
+        error: 'تعذر تحميل السنوات الدراسية',
+        details:
+          academicYearsResult.error.message,
+      },
+      { status: 500 },
+    )
+  }
 
-    if (silent) {
-      setRefreshing(true)
-    } else {
-      setLoading(true)
-    }
+  if (coursesResult.error) {
+    console.error(
+      'GET /api/trips - courses error:',
+      coursesResult.error,
+    )
 
-    setError('')
+    return NextResponse.json(
+      {
+        error: 'تعذر تحميل الدورات',
+        details:
+          coursesResult.error.message,
+      },
+      { status: 500 },
+    )
+  }
 
-    try {
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
+  if (levelsResult.error) {
+    console.error(
+      'GET /api/trips - levels error:',
+      levelsResult.error,
+    )
 
-      const data = await response.json()
+    return NextResponse.json(
+      {
+        error: 'تعذر تحميل المستويات',
+        details:
+          levelsResult.error.message,
+      },
+      { status: 500 },
+    )
+  }
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ??
-            'تعذر تحميل الرحلات.',
-        )
-      }
+  const trips = tripsResult.data ?? []
 
-      setTrips(
-        Array.isArray(data?.trips)
-          ? data.trips
-          : [],
-      )
+  let tripLevels: Array<{
+    id: string
+    trip_id: string
+    level_id: string
+  }> = []
 
-      setAcademicYears(
-        Array.isArray(data?.academicYears)
-          ? data.academicYears
-          : [],
-      )
+  if (trips.length > 0) {
+    const tripIds = trips.map(
+      (trip) => trip.id,
+    )
 
-      setCourses(
-        Array.isArray(data?.courses)
-          ? data.courses
-          : [],
-      )
-    } catch (error) {
+    const tripLevelsResult =
+      await supabase
+        .from('trip_levels')
+        .select(`
+          id,
+          trip_id,
+          level_id
+        `)
+        .in('trip_id', tripIds)
+
+    if (tripLevelsResult.error) {
       console.error(
-        'Load trips error:',
-        error,
+        'GET /api/trips - trip levels error:',
+        tripLevelsResult.error,
       )
 
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل الرحلات.',
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل مستويات الرحلات',
+          details:
+            tripLevelsResult.error.message,
+        },
+        { status: 500 },
       )
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
     }
+
+    tripLevels =
+      tripLevelsResult.data ?? []
   }
 
-  useEffect(() => {
-    loadTrips()
-  }, [])
+  return NextResponse.json({
+    trips,
+    academicYears:
+      academicYearsResult.data ?? [],
+    courses:
+      coursesResult.data ?? [],
+    levels:
+      levelsResult.data ?? [],
+    tripLevels,
+  })
+}
 
-  const filteredTrips = trips.filter(
-    (trip) => {
-      const normalizedSearch =
-        search.trim().toLowerCase()
+export async function POST(
+  request: Request,
+) {
+  const { access, response } =
+    await requireAuth()
 
-      const matchesSearch =
-        !normalizedSearch ||
-        trip.name
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        (trip.location ?? '')
-          .toLowerCase()
-          .includes(normalizedSearch)
+  if (response) return response
 
-      const matchesStatus =
-        statusFilter === 'all' ||
-        trip.status === statusFilter
+  if (!access) {
+    return NextResponse.json(
+      { error: 'غير مصرح بالوصول' },
+      { status: 401 },
+    )
+  }
 
-      return (
-        matchesSearch &&
-        matchesStatus
+  return createTrip(
+    request,
+    access.userId,
+  )
+}
+
+export async function PATCH(
+  request: Request,
+) {
+  const { access, response } =
+    await requireAuth()
+
+  if (response) return response
+
+  if (!access) {
+    return NextResponse.json(
+      { error: 'غير مصرح بالوصول' },
+      { status: 401 },
+    )
+  }
+
+  let body: any
+
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'بيانات الطلب غير صحيحة' },
+      { status: 400 },
+    )
+  }
+
+  const tripId =
+    typeof body.id === 'string'
+      ? body.id
+      : ''
+
+  if (!tripId) {
+    return NextResponse.json(
+      { error: 'معرف الرحلة مطلوب' },
+      { status: 400 },
+    )
+  }
+
+  const supabase =
+    await createSupabaseServerClient()
+
+  const { data: existingTrip, error: existingError } =
+    await supabase
+      .from('trips')
+      .select(`
+        id,
+        status
+      `)
+      .eq('id', tripId)
+      .maybeSingle()
+
+  if (existingError) {
+    console.error(
+      'PATCH /api/trips - existing trip error:',
+      existingError,
+    )
+
+    return NextResponse.json(
+      {
+        error:
+          'تعذر التحقق من الرحلة',
+      },
+      { status: 500 },
+    )
+  }
+
+  if (!existingTrip) {
+    return NextResponse.json(
+      { error: 'الرحلة غير موجودة' },
+      { status: 404 },
+    )
+  }
+
+  if (existingTrip.status === 'closed') {
+    return NextResponse.json(
+      {
+        error:
+          'لا يمكن تعديل رحلة مغلقة',
+      },
+      { status: 400 },
+    )
+  }
+
+  const name =
+    typeof body.name === 'string'
+      ? body.name.trim()
+      : ''
+
+  const description =
+    typeof body.description === 'string'
+      ? body.description.trim()
+      : null
+
+  const location =
+    typeof body.location === 'string'
+      ? body.location.trim()
+      : null
+
+  const tripDate =
+    typeof body.trip_date === 'string' &&
+    body.trip_date.trim()
+      ? body.trip_date.trim()
+      : null
+
+  const meetingTime =
+    typeof body.meeting_time === 'string' &&
+    body.meeting_time.trim()
+      ? body.meeting_time.trim()
+      : null
+
+  const returnTime =
+    typeof body.return_time === 'string' &&
+    body.return_time.trim()
+      ? body.return_time.trim()
+      : null
+
+  const note =
+    typeof body.note === 'string'
+      ? body.note.trim()
+      : null
+
+  const academicYearId =
+    typeof body.academic_year_id ===
+    'string'
+      ? body.academic_year_id
+      : ''
+
+  const courseId =
+    typeof body.course_id === 'string'
+      ? body.course_id
+      : ''
+
+  const fee =
+    body.fee === null ||
+    body.fee === undefined ||
+    body.fee === ''
+      ? 0
+      : Number(body.fee)
+
+  const attendanceMin =
+    body.attendance_min === null ||
+    body.attendance_min ===
+      undefined ||
+    body.attendance_min === ''
+      ? null
+      : Number(body.attendance_min)
+
+  const attendanceMax =
+    body.attendance_max === null ||
+    body.attendance_max ===
+      undefined ||
+    body.attendance_max === ''
+      ? null
+      : Number(body.attendance_max)
+
+  const notesRequirement =
+    body.notes_requirement ===
+      'required' ||
+    body.notes_requirement ===
+      'none' ||
+    body.notes_requirement === 'any'
+      ? body.notes_requirement
+      : 'any'
+
+  const levelIds = Array.isArray(
+    body.level_ids,
+  )
+    ? [
+        ...new Set(
+          body.level_ids.filter(
+            (
+              id: unknown,
+            ): id is string =>
+              typeof id === 'string' &&
+              id.trim().length > 0,
+          ),
+        ),
+      ]
+    : []
+
+  if (!name) {
+    return NextResponse.json(
+      { error: 'اسم الرحلة مطلوب' },
+      { status: 400 },
+    )
+  }
+
+  if (!academicYearId) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية مطلوبة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!courseId) {
+    return NextResponse.json(
+      { error: 'الدورة مطلوبة' },
+      { status: 400 },
+    )
+  }
+
+  if (levelIds.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'اختر مستوى واحداً على الأقل',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!Number.isFinite(fee) || fee < 0) {
+    return NextResponse.json(
+      {
+        error:
+          'قيمة رسوم الرحلة غير صحيحة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMin !== null &&
+    (!Number.isFinite(attendanceMin) ||
+      attendanceMin < 0 ||
+      attendanceMin > 100)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMax !== null &&
+    (!Number.isFinite(attendanceMax) ||
+      attendanceMax < 0 ||
+      attendanceMax > 100)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMin !== null &&
+    attendanceMax !== null &&
+    attendanceMin > attendanceMax
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: academicYear } =
+    await supabase
+      .from('academic_years')
+      .select(`
+        id,
+        is_active
+      `)
+      .eq('id', academicYearId)
+      .maybeSingle()
+
+  if (!academicYear) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية غير موجودة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!academicYear.is_active) {
+    return NextResponse.json(
+      {
+        error:
+          'لا يمكن استخدام سنة دراسية غير مفعلة',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: course } =
+    await supabase
+      .from('courses')
+      .select(`
+        id,
+        academic_year_id
+      `)
+      .eq('id', courseId)
+      .maybeSingle()
+
+  if (!course) {
+    return NextResponse.json(
+      { error: 'الدورة غير موجودة' },
+      { status: 400 },
+    )
+  }
+
+  if (
+    course.academic_year_id !==
+    academicYearId
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الدورة لا تتبع السنة الدراسية المحددة',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: levels } =
+    await supabase
+      .from('levels')
+      .select(`
+        id,
+        is_active
+      `)
+      .in('id', levelIds)
+
+  const validLevelIds = new Set(
+    (levels ?? [])
+      .filter(
+        (level) => level.is_active,
       )
-    },
+      .map((level) => level.id),
   )
 
-  function handleTripCreated() {
-    setFormOpen(false)
-    loadTrips({ silent: true })
+  if (
+    levelIds.some(
+      (id) => !validLevelIds.has(id),
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'يوجد مستوى غير موجود أو غير مفعل',
+      },
+      { status: 400 },
+    )
   }
 
-  const publishedCount = trips.filter(
-    (trip) =>
-      trip.status === 'published',
-  ).length
+  const { data: updatedTrip, error: updateError } =
+    await supabase
+      .from('trips')
+      .update({
+        name,
+        description,
+        location,
+        trip_date: tripDate,
+        meeting_time: meetingTime,
+        return_time: returnTime,
+        fee,
+        note,
+        academic_year_id:
+          academicYearId,
+        course_id: courseId,
+        attendance_min:
+          attendanceMin,
+        attendance_max:
+          attendanceMax,
+        notes_requirement:
+          notesRequirement,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq('id', tripId)
+      .select(`
+        id,
+        name,
+        description,
+        location,
+        trip_date,
+        meeting_time,
+        return_time,
+        fee,
+        note,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status,
+        created_at,
+        updated_at
+      `)
+      .single()
 
-  const pendingCount = trips.filter(
-    (trip) =>
-      trip.status === 'pending_approval',
-  ).length
+  if (updateError || !updatedTrip) {
+    console.error(
+      'PATCH /api/trips - update error:',
+      updateError,
+    )
 
-  const closedCount = trips.filter(
-    (trip) =>
-      trip.status === 'closed',
-  ).length
+    return NextResponse.json(
+      {
+        error:
+          'تعذر تعديل الرحلة',
+        details:
+          updateError?.message,
+      },
+      { status: 500 },
+    )
+  }
 
-  return (
-    <div className="space-y-6">
-      {/* رأس الصفحة */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Map className="size-5" />
-          </div>
+  /*
+   * تحديث مستويات الرحلة:
+   * نحذف القديم ثم نضيف الجديد.
+   */
+  const { error: deleteLevelsError } =
+    await supabase
+      .from('trip_levels')
+      .delete()
+      .eq('trip_id', tripId)
 
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              الرحلات
-            </h1>
+  if (deleteLevelsError) {
+    console.error(
+      'PATCH /api/trips - delete old levels error:',
+      deleteLevelsError,
+    )
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              إدارة الرحلات الطلابية ومتابعة المشاركين
-            </p>
-          </div>
-        </div>
+    return NextResponse.json(
+      {
+        error:
+          'تعذر تحديث مستويات الرحلة',
+        details:
+          deleteLevelsError.message,
+      },
+      { status: 500 },
+    )
+  }
 
-        <button
-          type="button"
-          onClick={() =>
-            setFormOpen(true)
-          }
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-        >
-          <CirclePlus className="size-4" />
-          إضافة رحلة
-        </button>
-      </div>
+  const tripLevelRows =
+    levelIds.map((levelId) => ({
+      trip_id: tripId,
+      level_id: levelId,
+    }))
 
-      {/* الإحصائيات */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              إجمالي الرحلات
-            </span>
+  const { data: insertedLevels, error: levelsError } =
+    await supabase
+      .from('trip_levels')
+      .insert(tripLevelRows)
+      .select(`
+        id,
+        trip_id,
+        level_id
+      `)
 
-            <Map className="size-4 text-muted-foreground" />
-          </div>
+  if (levelsError) {
+    console.error(
+      'PATCH /api/trips - insert levels error:',
+      levelsError,
+    )
 
-          <div className="mt-2 text-2xl font-bold">
-            {trips.length}
-          </div>
-        </div>
+    return NextResponse.json(
+      {
+        error:
+          'تعذر حفظ مستويات الرحلة',
+        details:
+          levelsError.message,
+      },
+      { status: 500 },
+    )
+  }
 
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              منشورة
-            </span>
+  return NextResponse.json({
+    trip: updatedTrip,
+    tripLevels:
+      insertedLevels ?? [],
+  })
+}
 
-            <CalendarDays className="size-4 text-muted-foreground" />
-          </div>
+export async function DELETE(
+  request: Request,
+) {
+  const { access, response } =
+    await requireAuth()
 
-          <div className="mt-2 text-2xl font-bold">
-            {publishedCount}
-          </div>
-        </div>
+  if (response) return response
 
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              بانتظار الموافقة
-            </span>
+  if (!access) {
+    return NextResponse.json(
+      { error: 'غير مصرح بالوصول' },
+      { status: 401 },
+    )
+  }
 
-            <Clock3 className="size-4 text-muted-foreground" />
-          </div>
+  let body: any
 
-          <div className="mt-2 text-2xl font-bold">
-            {pendingCount}
-          </div>
-        </div>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'بيانات الطلب غير صحيحة' },
+      { status: 400 },
+    )
+  }
 
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              مغلقة
-            </span>
+  const tripId =
+    typeof body.id === 'string'
+      ? body.id
+      : ''
 
-            <Users className="size-4 text-muted-foreground" />
-          </div>
+  if (!tripId) {
+    return NextResponse.json(
+      { error: 'معرف الرحلة مطلوب' },
+      { status: 400 },
+    )
+  }
 
-          <div className="mt-2 text-2xl font-bold">
-            {closedCount}
-          </div>
-        </div>
-      </div>
+  const supabase =
+    await createSupabaseServerClient()
 
-      {/* الفلاتر */}
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <div className="flex flex-col gap-3 lg:flex-row">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+  const { data: trip, error: tripError } =
+    await supabase
+      .from('trips')
+      .select(`
+        id,
+        status
+      `)
+      .eq('id', tripId)
+      .maybeSingle()
 
-            <input
-              type="text"
-              value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="البحث باسم الرحلة أو الموقع..."
-              className="w-full rounded-xl border border-input bg-background py-2.5 pe-10 ps-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
+  if (tripError) {
+    console.error(
+      'DELETE /api/trips - trip lookup error:',
+      tripError,
+    )
 
-          <select
-            value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(
-                event.target.value as
-                  | 'all'
-                  | TripStatus,
-              )
-            }
-            className="rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          >
-            <option value="all">
-              جميع الحالات
-            </option>
+    return NextResponse.json(
+      {
+        error:
+          'تعذر التحقق من الرحلة',
+      },
+      { status: 500 },
+    )
+  }
 
-            <option value="draft">
-              مسودة
-            </option>
+  if (!trip) {
+    return NextResponse.json(
+      { error: 'الرحلة غير موجودة' },
+      { status: 404 },
+    )
+  }
 
-            <option value="pending_approval">
-              بانتظار الموافقة
-            </option>
+  if (trip.status === 'closed') {
+    return NextResponse.json(
+      {
+        error:
+          'لا يمكن حذف رحلة مغلقة',
+      },
+      { status: 400 },
+    )
+  }
 
-            <option value="published">
-              منشورة
-            </option>
+  /*
+   * trip_levels و trip_students
+   * عندها ON DELETE CASCADE حسب التصميم،
+   * لذلك حذف الرحلة يحذف العلاقات التابعة لها.
+   */
+  const { error: deleteError } =
+    await supabase
+      .from('trips')
+      .delete()
+      .eq('id', tripId)
 
-            <option value="rejected">
-              مرفوضة
-            </option>
+  if (deleteError) {
+    console.error(
+      'DELETE /api/trips - delete error:',
+      deleteError,
+    )
 
-            <option value="closed">
-              مغلقة
-            </option>
-          </select>
+    return NextResponse.json(
+      {
+        error:
+          'تعذر حذف الرحلة',
+        details:
+          deleteError.message,
+      },
+      { status: 500 },
+    )
+  }
 
-          <button
-            type="button"
-            onClick={() =>
-              loadTrips({
-                silent: true,
-              })
-            }
-            disabled={refreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-input bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw
-              className={`size-4 ${
-                refreshing
-                  ? 'animate-spin'
-                  : ''
-              }`}
-            />
+  return NextResponse.json({
+    success: true,
+  })
+}
 
-            تحديث
-          </button>
-        </div>
-      </div>
+async function createTrip(
+  request: Request,
+  userId: string,
+) {
+  let body: any
 
-      {/* الخطأ */}
-      {error && (
-        <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'بيانات الطلب غير صحيحة' },
+      { status: 400 },
+    )
+  }
 
-      {/* المحتوى */}
-      {loading ? (
-        <div className="flex min-h-[260px] items-center justify-center rounded-2xl border border-border bg-card">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            جاري تحميل الرحلات...
-          </div>
-        </div>
-      ) : filteredTrips.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-muted">
-            <Map className="size-6 text-muted-foreground" />
-          </div>
+  const name =
+    typeof body.name === 'string'
+      ? body.name.trim()
+      : ''
 
-          <h2 className="mt-4 text-base font-semibold">
-            {trips.length === 0
-              ? 'لا توجد رحلات حتى الآن'
-              : 'لا توجد نتائج مطابقة'}
-          </h2>
+  const description =
+    typeof body.description === 'string'
+      ? body.description.trim()
+      : null
 
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            {trips.length === 0
-              ? 'ابدأ بإضافة أول رحلة مدرسية.'
-              : 'جرّب تغيير البحث أو فلتر الحالة.'}
-          </p>
+  const location =
+    typeof body.location === 'string'
+      ? body.location.trim()
+      : null
 
-          {trips.length === 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                setFormOpen(true)
-              }
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
-            >
-              <CirclePlus className="size-4" />
-              إضافة أول رحلة
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredTrips.map((trip) => (
-            <div
-              key={trip.id}
-              className="rounded-2xl border border-border bg-card p-5 transition-shadow hover:shadow-sm"
-            >
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-base font-bold">
-                      {trip.name}
-                    </h2>
+  const tripDate =
+    typeof body.trip_date === 'string' &&
+    body.trip_date.trim()
+      ? body.trip_date.trim()
+      : null
 
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                        statusClasses[
-                          trip.status
-                        ]
-                      }`}
-                    >
-                      {
-                        statusLabels[
-                          trip.status
-                        ]
-                      }
-                    </span>
-                  </div>
+  const meetingTime =
+    typeof body.meeting_time === 'string' &&
+    body.meeting_time.trim()
+      ? body.meeting_time.trim()
+      : null
 
-                  {trip.description && (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {trip.description}
-                    </p>
-                  )}
+  const returnTime =
+    typeof body.return_time === 'string' &&
+    body.return_time.trim()
+      ? body.return_time.trim()
+      : null
 
-                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1.5">
-                      <CalendarDays className="size-3.5" />
-                      {formatDate(
-                        trip.trip_date,
-                      )}
-                    </span>
+  const note =
+    typeof body.note === 'string'
+      ? body.note.trim()
+      : null
 
-                    {trip.location && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Map className="size-3.5" />
-                        {trip.location}
-                      </span>
-                    )}
+  const academicYearId =
+    typeof body.academic_year_id ===
+    'string'
+      ? body.academic_year_id
+      : ''
 
-                    {formatTime(
-                      trip.meeting_time,
-                    ) && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Clock3 className="size-3.5" />
-                        التجمع{' '}
-                        {formatTime(
-                          trip.meeting_time,
-                        )}
-                      </span>
-                    )}
+  const courseId =
+    typeof body.course_id === 'string'
+      ? body.course_id
+      : ''
 
-                    <span className="inline-flex items-center gap-1.5">
-                      الرسوم:{' '}
-                      {formatFee(
-                        Number(
-                          trip.fee ?? 0,
-                        ),
-                      )}{' '}
-                      د.ب
-                    </span>
-                  </div>
-                </div>
+  const fee =
+    body.fee === null ||
+    body.fee === undefined ||
+    body.fee === ''
+      ? 0
+      : Number(body.fee)
 
-                <button
-                  type="button"
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-input px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
-                >
-                  التفاصيل
-                  <ChevronLeft className="size-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+  const attendanceMin =
+    body.attendance_min === null ||
+    body.attendance_min ===
+      undefined ||
+    body.attendance_min === ''
+      ? null
+      : Number(body.attendance_min)
 
-      {/* نموذج الإضافة */}
-      {formOpen && (
-        <TripsForm
-          academicYears={academicYears}
-          courses={courses}
-          onClose={() =>
-            setFormOpen(false)
-          }
-          onCreated={
-            handleTripCreated
-          }
-        />
-      )}
-    </div>
+  const attendanceMax =
+    body.attendance_max === null ||
+    body.attendance_max ===
+      undefined ||
+    body.attendance_max === ''
+      ? null
+      : Number(body.attendance_max)
+
+  const notesRequirement =
+    body.notes_requirement ===
+      'required' ||
+    body.notes_requirement ===
+      'none' ||
+    body.notes_requirement === 'any'
+      ? body.notes_requirement
+      : 'any'
+
+  const levelIds = Array.isArray(
+    body.level_ids,
+  )
+    ? [
+        ...new Set(
+          body.level_ids.filter(
+            (
+              id: unknown,
+            ): id is string =>
+              typeof id === 'string' &&
+              id.trim().length > 0,
+          ),
+        ),
+      ]
+    : []
+
+  if (!name) {
+    return NextResponse.json(
+      { error: 'اسم الرحلة مطلوب' },
+      { status: 400 },
+    )
+  }
+
+  if (!academicYearId) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية مطلوبة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!courseId) {
+    return NextResponse.json(
+      { error: 'الدورة مطلوبة' },
+      { status: 400 },
+    )
+  }
+
+  if (levelIds.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          'اختر مستوى واحداً على الأقل',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!Number.isFinite(fee) || fee < 0) {
+    return NextResponse.json(
+      {
+        error:
+          'قيمة رسوم الرحلة غير صحيحة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMin !== null &&
+    (!Number.isFinite(attendanceMin) ||
+      attendanceMin < 0 ||
+      attendanceMin > 100)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMax !== null &&
+    (!Number.isFinite(attendanceMax) ||
+      attendanceMax < 0 ||
+      attendanceMax > 100)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (
+    attendanceMin !== null &&
+    attendanceMax !== null &&
+    attendanceMin > attendanceMax
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
+      },
+      { status: 400 },
+    )
+  }
+
+  const supabase =
+    await createSupabaseServerClient()
+
+  const { data: academicYear } =
+    await supabase
+      .from('academic_years')
+      .select(`
+        id,
+        is_active
+      `)
+      .eq('id', academicYearId)
+      .maybeSingle()
+
+  if (!academicYear) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية غير موجودة',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!academicYear.is_active) {
+    return NextResponse.json(
+      {
+        error:
+          'لا يمكن إنشاء رحلة لسنة غير مفعلة',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: course } =
+    await supabase
+      .from('courses')
+      .select(`
+        id,
+        academic_year_id
+      `)
+      .eq('id', courseId)
+      .maybeSingle()
+
+  if (!course) {
+    return NextResponse.json(
+      { error: 'الدورة غير موجودة' },
+      { status: 400 },
+    )
+  }
+
+  if (
+    course.academic_year_id !==
+    academicYearId
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'الدورة لا تتبع السنة الدراسية المحددة',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: levels } =
+    await supabase
+      .from('levels')
+      .select(`
+        id,
+        is_active
+      `)
+      .in('id', levelIds)
+
+  const validLevelIds = new Set(
+    (levels ?? [])
+      .filter(
+        (level) => level.is_active,
+      )
+      .map((level) => level.id),
+  )
+
+  if (
+    levelIds.some(
+      (id) => !validLevelIds.has(id),
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'يوجد مستوى غير موجود أو غير مفعل',
+      },
+      { status: 400 },
+    )
+  }
+
+  const { data: trip, error: tripError } =
+    await supabase
+      .from('trips')
+      .insert({
+        name,
+        description,
+        location,
+        trip_date: tripDate,
+        meeting_time: meetingTime,
+        return_time: returnTime,
+        fee,
+        note,
+        academic_year_id:
+          academicYearId,
+        course_id: courseId,
+        attendance_min:
+          attendanceMin,
+        attendance_max:
+          attendanceMax,
+        notes_requirement:
+          notesRequirement,
+        status: 'draft',
+        created_by: userId,
+      })
+      .select(`
+        id,
+        name,
+        description,
+        location,
+        trip_date,
+        meeting_time,
+        return_time,
+        fee,
+        note,
+        academic_year_id,
+        course_id,
+        attendance_min,
+        attendance_max,
+        notes_requirement,
+        status,
+        created_at,
+        updated_at
+      `)
+      .single()
+
+  if (tripError || !trip) {
+    console.error(
+      'POST /api/trips - create error:',
+      tripError,
+    )
+
+    return NextResponse.json(
+      {
+        error:
+          'تعذر إنشاء الرحلة',
+        details:
+          tripError?.message,
+      },
+      { status: 500 },
+    )
+  }
+
+  const tripLevelRows =
+    levelIds.map((levelId) => ({
+      trip_id: trip.id,
+      level_id: levelId,
+    }))
+
+  const {
+    data: insertedLevels,
+    error: levelsError,
+  } = await supabase
+    .from('trip_levels')
+    .insert(tripLevelRows)
+    .select(`
+      id,
+      trip_id,
+      level_id
+    `)
+
+  if (levelsError) {
+    console.error(
+      'POST /api/trips - levels error:',
+      levelsError,
+    )
+
+    await supabase
+      .from('trips')
+      .delete()
+      .eq('id', trip.id)
+
+    return NextResponse.json(
+      {
+        error:
+          'تعذر حفظ مستويات الرحلة',
+        details:
+          levelsError.message,
+      },
+      { status: 500 },
+    )
+  }
+
+  return NextResponse.json(
+    {
+      trip,
+      tripLevels:
+        insertedLevels ?? [],
+    },
+    { status: 201 },
   )
 }
