@@ -5,11 +5,8 @@ import {
   BookOpen,
   ClipboardCheck,
   ExternalLink,
-  FileKey,
   GraduationCap,
-  KeyRound,
   LockKeyhole,
-  Settings2,
   ShieldCheck,
   UserCog,
   Users,
@@ -30,7 +27,7 @@ type ManagementOption = {
   title: string
   description: string
   href: string
-  icon: typeof Settings2
+  icon: typeof ShieldCheck
   badge?: string
 }
 
@@ -47,7 +44,8 @@ const quickLinks: QuickLink[] = [
     title: 'رابط التسجيل الخارجي',
     description:
       'فتح صفحة التسجيل الخارجي العامة التي يستخدمها أولياء الأمور والطلاب.',
-    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/register',
+    href:
+      'https://t3leem-school-management-dashboard-virid.vercel.app/register',
     icon: ExternalLink,
     external: true,
   },
@@ -55,7 +53,8 @@ const quickLinks: QuickLink[] = [
     title: 'رابط متابعة الطالب',
     description:
       'فتح صفحة متابعة الطالب العامة باستخدام الرقم الشخصي (CPR).',
-    href: 'https://t3leem-school-management-dashboard-virid.vercel.app/student-status',
+    href:
+      'https://t3leem-school-management-dashboard-virid.vercel.app/student-status',
     icon: ExternalLink,
     external: true,
   },
@@ -68,6 +67,13 @@ const managementOptions: ManagementOption[] = [
       'التحكم في نموذج التسجيل الخارجي والحقول المطلوبة وطرق الدفع.',
     href: '/settings/registration',
     icon: ClipboardCheck,
+  },
+  {
+    title: 'إدارة صفحة متابعة الطالب',
+    description:
+      'إدارة إعدادات ومحتوى صفحة متابعة الطالب العامة التي يمكن للطالب أو ولي الأمر الوصول إليها.',
+    href: '/settings/student-status',
+    icon: UserCog,
   },
   {
     title: 'المستخدمون والصلاحيات',
@@ -110,14 +116,6 @@ const managementOptions: ManagementOption[] = [
       'الوصول إلى السجلات والبيانات المؤرشفة وإدارتها.',
     href: '/settings/archive',
     icon: Archive,
-  },
-  {
-    title: 'إدارة المفاتيح',
-    description:
-      'إدارة مفاتيح التحكم الخاصة بالوظائف الحساسة والمميزات التي يمكن تفعيلها أو تعطيلها من الإدارة.',
-    href: '/settings/keys',
-    icon: KeyRound,
-    badge: 'مفاتيح النظام',
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
@@ -233,28 +231,6 @@ export function SettingsView() {
           })}
         </div>
       </section>
-
-      {/* تنبيه */}
-      <Card className="border-dashed">
-        <CardContent className="flex items-start gap-3 p-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <FileKey className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div>
-            <p className="font-medium">
-              مفاتيح النظام
-            </p>
-
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              سيتم من خلال إدارة المفاتيح التحكم في
-              الوظائف الحساسة مثل استيراد سجل الطلاب
-              وغيرها من العمليات التي تحتاج إلى تفعيل
-              صريح من الإدارة.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
