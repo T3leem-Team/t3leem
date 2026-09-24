@@ -1,221 +1,1188 @@
-create or replace function public.get_student_status_by_personal_id(
-  p_personal_id text
-)
-returns json
-language plpgsql
-security definer
-set search_path = pg_catalog, public
-as $$
-declare
-  v_personal_id text;
-  v_current_year_id uuid;
-  result json;
-begin
-  /*
-   * تنظيف الرقم الشخصي
-   */
-  v_personal_id := trim(p_personal_id);
+'use client'
 
-  /*
-   * حماية أولية:
-   * الرقم الشخصي يجب أن يكون أرقام فقط
-   * وبطول 9 أرقام.
-   */
-  if v_personal_id is null
-     or v_personal_id = ''
-     or v_personal_id !~ '^[0-9]{9}$'
-  then
-    return json_build_object(
-      'student', null,
-      'academicYear', null,
-      'level', null,
-      'courses', '[]'::json,
-      'attendanceStatuses', '[]'::json,
-      'attendance', '[]'::json
-    );
-  end if;
+import { useState } from 'react'
+import {
+  AlertCircle,
+  CalendarDays,
+  Clock3,
+  Eye,
+  Search,
+  UserRound,
+  X,
+} from 'lucide-react'
 
-  /*
-   * السنة الأكاديمية الحالية
-   */
-  select ay.id
-  into v_current_year_id
-  from public.academic_years ay
-  where ay.is_current = true
-    and ay.is_active = true
-  order by ay.id
-  limit 1;
+import { supabase } from '@/lib/supabase'
 
-  /*
-   * بيانات الطالب العامة فقط
-   *
-   * لا نرجع:
-   * notes
-   * health_notes
-   * created_by
-   * created_at
-   * updated_at
-   * fee_exempt
-   */
-  select json_build_object(
-    'student',
-    json_build_object(
-      'id', s.id,
-      'student_id', s.student_id,
-      'name', s.name,
-      'personal_id', s.personal_id,
-      'phone', s.phone,
-      'whatsapp', s.whatsapp,
-      'status', s.status
-    ),
+type Student = {
+  id: string
+  student_id: string | null
+  name: string
+  personal_id: string | null
+  phone: string | null
+  whatsapp: string | null
+  status: string | null
+}
 
-    /*
-     * السنة الحالية
-     */
-    'academicYear',
-    (
-      select json_build_object(
-        'id', ay.id,
-        'name', ay.name,
-        'is_active', ay.is_active,
-        'is_current', ay.is_current
-      )
-      from public.academic_years ay
-      where ay.id = v_current_year_id
-      limit 1
-    ),
+type AcademicYear = {
+  id: string
+  name: string
+  is_active: boolean
+  is_current: boolean
+}
 
-    /*
-     * مستوى الطالب في السنة الحالية
-     */
-    'level',
-    (
-      select json_build_object(
-        'id', l.id,
-        'name', l.name
-      )
-      from public.enrollments e
-      join public.levels l
-        on l.id = e.level_id
-      where e.student_id = s.id
-        and e.academic_year_id = v_current_year_id
-      order by e.id desc
-      limit 1
-    ),
+type Level = {
+  id: string
+  name: string
+}
 
-    /*
-     * الدورات التي الطالب مرتبط بها فعليًا
-     */
-    'courses',
-    coalesce(
-      (
-        select json_agg(
-          json_build_object(
-            'id', c.id,
-            'academic_year_id', c.academic_year_id,
-            'name', c.name,
-            'start_date', c.start_date,
-            'end_date', c.end_date,
-            'days', c.days
-          )
-          order by c.start_date desc nulls last
-        )
-        from public.teacher_student_assignments tsa
-        join public.courses c
-          on c.id = tsa.course_id
-        where tsa.student_id = s.id
-      ),
-      '[]'::json
-    ),
+type Course = {
+  id: string
+  academic_year_id: string
+  name: string
+  start_date: string | null
+  end_date: string | null
+  days: string[] | null
+}
 
-    /*
-     * حالات الحضور الفعالة فقط
-     */
-    'attendanceStatuses',
-    coalesce(
-      (
-        select json_agg(
-          json_build_object(
-            'id', ats.id,
-            'name', ats.name,
-            'sort_order', ats.sort_order
-          )
-          order by ats.sort_order
-        )
-        from public.attendance_statuses ats
-        where ats.is_active = true
-      ),
-      '[]'::json
-    ),
+type AttendanceStatus = {
+  id: string
+  name: string
+  sort_order: number
+}
 
-    /*
-     * سجلات حضور الطالب فقط
-     *
-     * لا نرجع created_at
-     * ولا enrollment_id
-     */
-    'attendance',
-    coalesce(
-      (
-        select json_agg(
-          json_build_object(
-            'id', a.id,
-            'student_id', a.student_id,
-            'course_id', a.course_id,
-            'attendance_date', a.attendance_date,
-            'status_id', a.status_id,
-            'note', coalesce(a.note, '')
-          )
-          order by a.attendance_date desc
-        )
-        from public.attendance a
-        where a.student_id = s.id
-      ),
-      '[]'::json
-    )
+type AttendanceRecord = {
+  id: string
+  student_id: string
+  course_id: string
+  attendance_date: string
+  status_id: string
+  note: string | null
+}
+
+type CourseSummary = {
+  course: Course
+  totalDays: number
+  present: number
+  absent: number
+  late: number
+  excused: number
+  notRecorded: number
+  percentage: number
+  records: Array<{
+    date: string
+    status: string
+    note: string
+  }>
+}
+
+type StudentStatusResponse = {
+  student: Student | null
+  academicYear: AcademicYear | null
+  level: Level | null
+  courses: Course[] | null
+  attendanceStatuses: AttendanceStatus[] | null
+  attendance: AttendanceRecord[] | null
+}
+
+function getTodayString() {
+  const today = new Date()
+
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(
+    2,
+    '0',
   )
-  into result
-  from public.students s
-  where s.personal_id = v_personal_id
-  limit 1;
+  const day = String(today.getDate()).padStart(
+    2,
+    '0',
+  )
+
+  return `${year}-${month}-${day}`
+}
+
+function normalizeArabicDay(day: string) {
+  return day
+    .trim()
+    .replace(/^ال/, '')
+    .replace('أ', 'ا')
+    .replace('إ', 'ا')
+    .replace('آ', 'ا')
+    .replace('ى', 'ي')
+    .toLowerCase()
+}
+
+function getDayOfWeek(dateString: string) {
+  const date = new Date(
+    `${dateString}T00:00:00`,
+  )
+
+  const day = date.getDay()
+
+  const days = [
+    'الاحد',
+    'الاثنين',
+    'الثلاثاء',
+    'الاربعاء',
+    'الخميس',
+    'الجمعة',
+    'السبت',
+  ]
+
+  return days[day]
+}
+
+function getEnglishDayName(arabicDay: string) {
+  const map: Record<string, string> = {
+    الاحد: 'sunday',
+    الاثنين: 'monday',
+    الثلاثاء: 'tuesday',
+    الاربعاء: 'wednesday',
+    الخميس: 'thursday',
+    الجمعة: 'friday',
+    السبت: 'saturday',
+  }
+
+  return (
+    map[normalizeArabicDay(arabicDay)] ??
+    arabicDay
+  )
+}
+
+function isCourseStudyDay(
+  dateString: string,
+  course: Course,
+) {
+  if (
+    !course.days ||
+    course.days.length === 0
+  ) {
+    return true
+  }
+
+  const arabicDay = getDayOfWeek(dateString)
+
+  const currentArabicDay =
+    normalizeArabicDay(arabicDay)
+
+  const currentEnglishDay =
+    getEnglishDayName(arabicDay).toLowerCase()
+
+  return course.days.some((day) => {
+    const normalizedDay =
+      normalizeArabicDay(day)
+
+    return (
+      normalizedDay === currentArabicDay ||
+      normalizedDay ===
+        currentEnglishDay.toLowerCase()
+    )
+  })
+}
+
+function formatDate(date: string) {
+  return new Date(
+    `${date}T00:00:00`,
+  ).toLocaleDateString('ar-BH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+function calculateCourseSummary(
+  studentId: string,
+  course: Course,
+  attendanceRecords: AttendanceRecord[],
+  attendanceStatuses: AttendanceStatus[],
+): CourseSummary {
+  const today = getTodayString()
+
+  let totalDays = 0
+  let present = 0
+  let absent = 0
+  let late = 0
+  let excused = 0
+  let notRecorded = 0
+
+  const records: CourseSummary['records'] = []
+
+  if (
+    course.start_date &&
+    course.end_date
+  ) {
+    const start = new Date(
+      `${course.start_date}T00:00:00`,
+    )
+
+    const end = new Date(
+      `${course.end_date}T00:00:00`,
+    )
+
+    const current = new Date(start)
+
+    while (current <= end) {
+      const dateString = [
+        current.getFullYear(),
+        String(
+          current.getMonth() + 1,
+        ).padStart(2, '0'),
+        String(
+          current.getDate(),
+        ).padStart(2, '0'),
+      ].join('-')
+
+      if (
+        dateString <= today &&
+        isCourseStudyDay(
+          dateString,
+          course,
+        )
+      ) {
+        totalDays += 1
+
+        const record =
+          attendanceRecords.find(
+            (item) =>
+              item.student_id ===
+                studentId &&
+              item.course_id ===
+                course.id &&
+              item.attendance_date ===
+                dateString,
+          )
+
+        if (!record) {
+          notRecorded += 1
+
+          records.push({
+            date: dateString,
+            status: 'لم يسجل',
+            note: '',
+          })
+        } else {
+          const status =
+            attendanceStatuses.find(
+              (item) =>
+                item.id ===
+                record.status_id,
+            )
+
+          const statusName =
+            status?.name ?? ''
+
+          if (
+            statusName === 'حاضر'
+          ) {
+            present += 1
+          } else if (
+            statusName === 'غائب'
+          ) {
+            absent += 1
+          } else if (
+            statusName === 'متأخر'
+          ) {
+            late += 1
+          } else if (
+            statusName === 'مستأذن'
+          ) {
+            excused += 1
+          } else {
+            notRecorded += 1
+          }
+
+          records.push({
+            date: dateString,
+            status:
+              statusName ||
+              'غير معروف',
+            note:
+              record.note ?? '',
+          })
+        }
+      }
+
+      current.setDate(
+        current.getDate() + 1,
+      )
+    }
+  }
 
   /*
-   * إذا لم يوجد الطالب
+   * حاضر + متأخر + مستأذن
+   * = حضور
+   *
+   * غائب
+   * = يدخل في النسبة ويخفضها
+   *
+   * لم يسجل
+   * = لا يدخل في المقام
    */
-  return coalesce(
-    result,
-    json_build_object(
-      'student', null,
-      'academicYear', null,
-      'level', null,
-      'courses', '[]'::json,
-      'attendanceStatuses', '[]'::json,
-      'attendance', '[]'::json
+  const denominator =
+    present +
+    late +
+    excused +
+    absent
+
+  const percentage =
+    denominator > 0
+      ? Math.round(
+          ((present +
+            late +
+            excused) /
+            denominator) *
+            100,
+        )
+      : 0
+
+  return {
+    course,
+    totalDays,
+    present,
+    absent,
+    late,
+    excused,
+    notRecorded,
+    percentage,
+    records: records.sort(
+      (a, b) =>
+        b.date.localeCompare(
+          a.date,
+        ),
+    ),
+  }
+}
+
+export default function StudentStatusPage() {
+  const [searchValue, setSearchValue] =
+    useState('')
+
+  const [loading, setLoading] =
+    useState(false)
+
+  const [searched, setSearched] =
+    useState(false)
+
+  const [error, setError] =
+    useState('')
+
+  const [student, setStudent] =
+    useState<Student | null>(null)
+
+  const [level, setLevel] =
+    useState<Level | null>(null)
+
+  const [
+    currentCourses,
+    setCurrentCourses,
+  ] = useState<CourseSummary[]>([])
+
+  const [
+    previousCourses,
+    setPreviousCourses,
+  ] = useState<CourseSummary[]>([])
+
+  const [
+    selectedCourse,
+    setSelectedCourse,
+  ] =
+    useState<CourseSummary | null>(
+      null,
     )
-  );
-end;
-$$;
 
+  const handleSearch = async () => {
+    const personalId =
+      searchValue.trim()
 
-/*
- * إلغاء أي صلاحيات سابقة
- */
-revoke all
-on function public.get_student_status_by_personal_id(text)
-from public;
+    /*
+     * الرقم الشخصي:
+     * 9 أرقام فقط
+     */
+    if (!/^\d{9}$/.test(personalId)) {
+      setError(
+        'أدخل الرقم الشخصي المكون من 9 أرقام.',
+      )
+      setSearched(true)
+      return
+    }
 
+    setLoading(true)
+    setSearched(false)
+    setError('')
 
-/*
- * السماح للصفحة العامة باستدعاء الـ RPC فقط
- */
-grant execute
-on function public.get_student_status_by_personal_id(text)
-to anon;
+    setStudent(null)
+    setLevel(null)
+    setCurrentCourses([])
+    setPreviousCourses([])
+    setSelectedCourse(null)
 
+    try {
+      /*
+       * الصفحة العامة تعتمد على RPC واحد فقط.
+       *
+       * لا يوجد أي SELECT مباشر
+       * من المتصفح على جداول النظام.
+       */
+      const {
+        data,
+        error: rpcError,
+      } =
+        await supabase.rpc(
+          'get_student_status_by_personal_id',
+          {
+            p_personal_id:
+              personalId,
+          },
+        )
 
-/*
- * السماح للمستخدمين المسجلين أيضًا
- */
-grant execute
-on function public.get_student_status_by_personal_id(text)
-to authenticated;
+      if (rpcError) {
+        throw rpcError
+      }
+
+      const payload =
+        data as StudentStatusResponse | null
+
+      const studentData =
+        payload?.student ?? null
+
+      if (!studentData) {
+        setError(
+          'لم يتم العثور على طالب بهذا الرقم الشخصي.',
+        )
+        setSearched(true)
+        return
+      }
+
+      const academicYear =
+        payload?.academicYear ??
+        null
+
+      const levelData =
+        payload?.level ?? null
+
+      const courses =
+        Array.isArray(
+          payload?.courses,
+        )
+          ? payload.courses
+          : []
+
+      const attendanceStatuses =
+        Array.isArray(
+          payload?.attendanceStatuses,
+        )
+          ? payload.attendanceStatuses
+          : []
+
+      const attendanceRecords =
+        Array.isArray(
+          payload?.attendance,
+        )
+          ? payload.attendance
+          : []
+
+      setStudent(studentData)
+      setLevel(levelData)
+
+      const today =
+        getTodayString()
+
+      /*
+       * الدورات الحالية:
+       *
+       * - نفس السنة الحالية
+       * - بدأت بالفعل
+       * - لم تنتهِ
+       */
+      const currentCourseList =
+        courses.filter(
+          (course) => {
+            if (
+              !academicYear
+            ) {
+              return false
+            }
+
+            if (
+              course.academic_year_id !==
+              academicYear.id
+            ) {
+              return false
+            }
+
+            if (
+              !course.start_date ||
+              !course.end_date
+            ) {
+              return false
+            }
+
+            return (
+              course.start_date <=
+                today &&
+              course.end_date >=
+                today
+            )
+          },
+        )
+
+      const currentSummaries =
+        currentCourseList.map(
+          (course) =>
+            calculateCourseSummary(
+              studentData.id,
+              course,
+              attendanceRecords,
+              attendanceStatuses,
+            ),
+        )
+
+      setCurrentCourses(
+        currentSummaries,
+      )
+
+      /*
+       * الدورات السابقة
+       */
+      const previousCourseList =
+        courses.filter(
+          (course) => {
+            if (
+              !course.end_date
+            ) {
+              return false
+            }
+
+            return (
+              course.end_date <
+              today
+            )
+          },
+        )
+
+      const previousSummaries =
+        previousCourseList.map(
+          (course) =>
+            calculateCourseSummary(
+              studentData.id,
+              course,
+              attendanceRecords,
+              attendanceStatuses,
+            ),
+        )
+
+      setPreviousCourses(
+        previousSummaries,
+      )
+
+      setSearched(true)
+    } catch (err) {
+      console.error(
+        'Student status error:',
+        err,
+      )
+
+      setError(
+        'حدث خطأ أثناء جلب بيانات الطالب.',
+      )
+
+      setSearched(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-muted/30 px-4 py-10">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+            <UserRound className="size-7" />
+          </div>
+
+          <h1 className="text-2xl font-bold">
+            متابعة الطالب
+          </h1>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            أدخل الرقم الشخصي للطالب
+            لعرض بياناته الحقيقية
+            ومتابعة الحضور
+          </p>
+        </div>
+
+        <div className="rounded-2xl border bg-background p-5 shadow-sm">
+          <label className="mb-2 block text-sm font-medium">
+            الرقم الشخصي (CPR)
+          </label>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(e) =>
+                setSearchValue(
+                  e.target.value,
+                )
+              }
+              onKeyDown={(e) => {
+                if (
+                  e.key ===
+                  'Enter'
+                ) {
+                  void handleSearch()
+                }
+              }}
+              placeholder="أدخل الرقم الشخصي"
+              dir="ltr"
+              inputMode="numeric"
+              maxLength={9}
+              autoComplete="off"
+              className="h-11 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                void handleSearch()
+              }
+              disabled={loading}
+              className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? (
+                <Clock3 className="size-4 animate-spin" />
+              ) : (
+                <Search className="size-4" />
+              )}
+
+              متابعة
+            </button>
+          </div>
+        </div>
+
+        {searched && error && (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 size-5 shrink-0" />
+
+              <div>
+                <p className="font-semibold">
+                  تعذر العثور على البيانات
+                </p>
+
+                <p className="mt-1 text-sm">
+                  {error}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {searched &&
+          !error &&
+          student && (
+            <div className="mt-5 space-y-5">
+              <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+                <div className="border-b px-5 py-4">
+                  <h2 className="font-semibold">
+                    بيانات الطالب
+                  </h2>
+                </div>
+
+                <div className="grid gap-4 p-5 sm:grid-cols-2">
+                  <InfoItem
+                    label="اسم الطالب"
+                    value={
+                      student.name ||
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="الرقم الشخصي"
+                    value={
+                      student.personal_id ??
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="المستوى"
+                    value={
+                      level?.name ??
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="رقم الطالب"
+                    value={
+                      student.student_id ??
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="رقم الهاتف"
+                    value={
+                      student.phone ??
+                      '—'
+                    }
+                  />
+
+                  <InfoItem
+                    label="الواتساب"
+                    value={
+                      student.whatsapp ??
+                      '—'
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+                <div className="border-b px-5 py-4">
+                  <h2 className="font-semibold">
+                    الدورة الحالية
+                  </h2>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    ملخص حضور الطالب من
+                    سجلات الحضور الفعلية
+                  </p>
+                </div>
+
+                {currentCourses.length ===
+                0 ? (
+                  <div className="p-5 text-sm text-muted-foreground">
+                    لا توجد دورة حالية
+                    مرتبطة بهذا الطالب
+                    حاليًا.
+                  </div>
+                ) : (
+                  <div className="space-y-5 p-5">
+                    {currentCourses.map(
+                      (summary) => (
+                        <CurrentCourseCard
+                          key={
+                            summary.course
+                              .id
+                          }
+                          summary={
+                            summary
+                          }
+                          onDetails={() =>
+                            setSelectedCourse(
+                              summary,
+                            )
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {previousCourses.length >
+                0 && (
+                <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+                  <div className="border-b px-5 py-4">
+                    <h2 className="font-semibold">
+                      الدورات السابقة
+                    </h2>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      نسبة الحضور في
+                      الدورات السابقة
+                    </p>
+                  </div>
+
+                  <div className="divide-y">
+                    {previousCourses.map(
+                      (summary) => (
+                        <div
+                          key={
+                            summary.course
+                              .id
+                          }
+                          className="flex flex-wrap items-center justify-between gap-4 p-5"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {
+                                summary
+                                  .course
+                                  .name
+                              }
+                            </p>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {summary
+                                .course
+                                .start_date
+                                ? formatDate(
+                                    summary
+                                      .course
+                                      .start_date,
+                                  )
+                                : '—'}
+                              {' — '}
+                              {summary
+                                .course
+                                .end_date
+                                ? formatDate(
+                                    summary
+                                      .course
+                                      .end_date,
+                                  )
+                                : '—'}
+                            </p>
+                          </div>
+
+                          <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
+                            {
+                              summary.percentage
+                            }
+                            %
+                            حضور
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <CalendarDays className="size-3.5" />
+
+          <span>
+            نظام متابعة الطلاب
+          </span>
+        </div>
+      </div>
+
+      {selectedCourse && (
+        <AttendanceDetailsModal
+          summary={
+            selectedCourse
+          }
+          onClose={() =>
+            setSelectedCourse(
+              null,
+            )
+          }
+        />
+      )}
+    </main>
+  )
+}
+
+function CurrentCourseCard({
+  summary,
+  onDetails,
+}: {
+  summary: CourseSummary
+  onDetails: () => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-muted/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold">
+              {summary.course.name}
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              {summary.course
+                .start_date
+                ? formatDate(
+                    summary.course
+                      .start_date,
+                  )
+                : '—'}
+              {' — '}
+              {summary.course
+                .end_date
+                ? formatDate(
+                    summary.course
+                      .end_date,
+                  )
+                : '—'}
+            </p>
+          </div>
+
+          <div className="rounded-full bg-primary/10 px-4 py-2 text-sm font-bold">
+            {summary.percentage}%
+            حضور
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <AttendanceBox
+          label="حاضر"
+          value={
+            summary.present
+          }
+        />
+
+        <AttendanceBox
+          label="غائب"
+          value={
+            summary.absent
+          }
+        />
+
+        <AttendanceBox
+          label="متأخر"
+          value={
+            summary.late
+          }
+        />
+
+        <AttendanceBox
+          label="مستأذن"
+          value={
+            summary.excused
+          }
+        />
+
+        <AttendanceBox
+          label="لم يسجل"
+          value={
+            summary.notRecorded
+          }
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={onDetails}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border bg-background px-4 py-3 text-sm font-medium transition hover:bg-muted"
+      >
+        <Eye className="size-4" />
+        عرض تفاصيل الحضور
+      </button>
+    </div>
+  )
+}
+
+function AttendanceDetailsModal({
+  summary,
+  onClose,
+}: {
+  summary: CourseSummary
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border bg-background shadow-xl"
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+      >
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div>
+            <h2 className="font-semibold">
+              تفاصيل الحضور
+            </h2>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              {
+                summary.course
+                  .name
+              }
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-9 items-center justify-center rounded-lg transition hover:bg-muted"
+            aria-label="إغلاق"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="border-b bg-muted/20 p-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <AttendanceBox
+              label="حاضر"
+              value={
+                summary.present
+              }
+            />
+
+            <AttendanceBox
+              label="غائب"
+              value={
+                summary.absent
+              }
+            />
+
+            <AttendanceBox
+              label="متأخر"
+              value={
+                summary.late
+              }
+            />
+
+            <AttendanceBox
+              label="مستأذن"
+              value={
+                summary.excused
+              }
+            />
+
+            <AttendanceBox
+              label="لم يسجل"
+              value={
+                summary.notRecorded
+              }
+            />
+          </div>
+        </div>
+
+        <div className="max-h-[55vh] overflow-y-auto p-5">
+          {summary.records
+            .length === 0 ? (
+            <div className="rounded-xl border p-4 text-sm text-muted-foreground">
+              لا توجد أيام حضور
+              مسجلة.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-4 py-3 text-right">
+                        التاريخ
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        الحالة
+                      </th>
+
+                      <th className="px-4 py-3 text-right">
+                        ملاحظة المعلم
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {summary.records.map(
+                      (
+                        record,
+                        index,
+                      ) => (
+                        <tr
+                          key={`${record.date}-${index}`}
+                          className="border-b last:border-b-0"
+                        >
+                          <td className="px-4 py-3">
+                            {formatDate(
+                              record.date,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <StatusBadge
+                              status={
+                                record.status
+                              }
+                            />
+                          </td>
+
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {record.note ||
+                              '—'}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AttendanceBox({
+  label,
+  value,
+}: {
+  label: string
+  value: number
+}) {
+  return (
+    <div className="rounded-xl border bg-background p-3 text-center">
+      <p className="text-xs text-muted-foreground">
+        {label}
+      </p>
+
+      <p className="mt-1 text-xl font-bold">
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: string
+}) {
+  const className =
+    status === 'حاضر'
+      ? 'bg-green-100 text-green-800'
+      : status === 'غائب'
+        ? 'bg-red-100 text-red-800'
+        : status ===
+            'متأخر'
+          ? 'bg-yellow-100 text-yellow-800'
+          : status ===
+              'مستأذن'
+            ? 'bg-blue-100 text-blue-800'
+            : 'bg-muted text-muted-foreground'
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${className}`}
+    >
+      {status}
+    </span>
+  )
+}
+
+function InfoItem({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border p-4">
+      <p className="text-xs text-muted-foreground">
+        {label}
+      </p>
+
+      <p className="mt-1 font-medium">
+        {value}
+      </p>
+    </div>
+  )
+}
