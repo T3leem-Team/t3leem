@@ -38,7 +38,10 @@ async function requireAdmin() {
     }
   }
 
-  const { data: profile, error } =
+  const {
+    data: profile,
+    error,
+  } =
     await supabaseAdmin
       .from('user_profiles')
       .select(
@@ -104,7 +107,8 @@ async function requireAdmin() {
  *
  * تحميل:
  * - المستخدمين
- * - الصلاحيات التفصيلية
+ * - الصلاحيات
+ * - صلاحيات الأدوار
  * - أقسام لوحة التحكم
  * - ربط الأقسام بالمستخدمين
  * --------------------------------------------------
@@ -119,7 +123,9 @@ export async function GET() {
     }
 
     /*
+     * --------------------------------------------------
      * تحميل المستخدمين
+     * --------------------------------------------------
      */
     const {
       data: users,
@@ -164,7 +170,9 @@ export async function GET() {
     }
 
     /*
-     * تحميل الصلاحيات التفصيلية
+     * --------------------------------------------------
+     * تحميل جميع الصلاحيات
+     * --------------------------------------------------
      */
     const {
       data: permissions,
@@ -204,7 +212,9 @@ export async function GET() {
     }
 
     /*
-     * تحميل ربط المستخدمين بالصلاحيات التفصيلية
+     * --------------------------------------------------
+     * تحميل الصلاحيات الفردية للمستخدمين
+     * --------------------------------------------------
      */
     const {
       data: userPermissions,
@@ -238,7 +248,51 @@ export async function GET() {
     }
 
     /*
-     * تحميل أقسام لوحة التحكم الديناميكية
+     * --------------------------------------------------
+     * تحميل صلاحيات الأدوار
+     *
+     * مثال:
+     *
+     * Teacher
+     * ├─ students.view
+     * ├─ attendance.view
+     * ├─ attendance.manage
+     * └─ teachers.manage_assignments
+     * --------------------------------------------------
+     */
+    const {
+      data: rolePermissions,
+      error:
+        rolePermissionsError,
+    } =
+      await supabaseAdmin
+        .from('role_permissions')
+        .select(
+          `
+          role,
+          permission_id
+          `,
+        )
+
+    if (rolePermissionsError) {
+      console.error(
+        'Role permissions lookup error:',
+        rolePermissionsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل صلاحيات الأدوار.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * --------------------------------------------------
+     * تحميل أقسام لوحة التحكم
+     * --------------------------------------------------
      */
     const {
       data: dashboardSections,
@@ -284,7 +338,9 @@ export async function GET() {
     }
 
     /*
-     * تحميل ربط المستخدمين بأقسام لوحة التحكم
+     * --------------------------------------------------
+     * تحميل ربط أقسام لوحة التحكم بالمستخدمين
+     * --------------------------------------------------
      */
     const {
       data: userDashboardSections,
@@ -322,13 +378,20 @@ export async function GET() {
     }
 
     /*
+     * --------------------------------------------------
      * تجهيز بيانات المستخدمين
+     * --------------------------------------------------
      */
     const usersWithPermissions =
       (users ?? []).map(
         (user) => {
           /*
-           * الصلاحيات التفصيلية
+           * ----------------------------------------------
+           * الصلاحيات الفردية فقط
+           * ----------------------------------------------
+           *
+           * هذه تأتي من:
+           * user_permissions
            */
           const permissionLinks =
             (
@@ -341,11 +404,62 @@ export async function GET() {
             )
 
           const userPermissionIds =
-            permissionLinks.map(
-              (item) =>
-                item.permission_id,
+            Array.from(
+              new Set(
+                permissionLinks.map(
+                  (item) =>
+                    item.permission_id,
+                ),
+              ),
             )
 
+          /*
+           * ----------------------------------------------
+           * صلاحيات الدور
+           * ----------------------------------------------
+           *
+           * هذه تأتي من:
+           * role_permissions
+           */
+          const rolePermissionIds =
+            Array.from(
+              new Set(
+                (
+                  rolePermissions ??
+                  []
+                )
+                  .filter(
+                    (item) =>
+                      item.role ===
+                      user.role,
+                  )
+                  .map(
+                    (item) =>
+                      item.permission_id,
+                  ),
+              ),
+            )
+
+          /*
+           * ----------------------------------------------
+           * جميع الصلاحيات الفعلية
+           * ----------------------------------------------
+           *
+           * الدور + الفردية
+           */
+          const effectivePermissionIds =
+            Array.from(
+              new Set([
+                ...rolePermissionIds,
+                ...userPermissionIds,
+              ]),
+            )
+
+          /*
+           * ----------------------------------------------
+           * تفاصيل الصلاحيات الفردية
+           * ----------------------------------------------
+           */
           const userPermissionDetails =
             (
               permissions ??
@@ -358,7 +472,41 @@ export async function GET() {
             )
 
           /*
+           * ----------------------------------------------
+           * تفاصيل صلاحيات الدور
+           * ----------------------------------------------
+           */
+          const rolePermissionDetails =
+            (
+              permissions ??
+              []
+            ).filter(
+              (permission) =>
+                rolePermissionIds.includes(
+                  permission.id,
+                ),
+            )
+
+          /*
+           * ----------------------------------------------
+           * تفاصيل جميع الصلاحيات الفعلية
+           * ----------------------------------------------
+           */
+          const effectivePermissionDetails =
+            (
+              permissions ??
+              []
+            ).filter(
+              (permission) =>
+                effectivePermissionIds.includes(
+                  permission.id,
+                ),
+            )
+
+          /*
+           * ----------------------------------------------
            * أقسام لوحة التحكم
+           * ----------------------------------------------
            */
           const sectionLinks =
             (
@@ -371,9 +519,13 @@ export async function GET() {
             )
 
           const userSectionIds =
-            sectionLinks.map(
-              (item) =>
-                item.section_id,
+            Array.from(
+              new Set(
+                sectionLinks.map(
+                  (item) =>
+                    item.section_id,
+                ),
+              ),
             )
 
           const userSectionDetails =
@@ -391,7 +543,9 @@ export async function GET() {
             ...user,
 
             /*
-             * الصلاحيات التفصيلية
+             * ==============================================
+             * الصلاحيات الفردية فقط
+             * ==============================================
              */
             permissionIds:
               userPermissionIds,
@@ -400,7 +554,31 @@ export async function GET() {
               userPermissionDetails,
 
             /*
-             * صلاحيات أقسام لوحة التحكم
+             * ==============================================
+             * صلاحيات الدور
+             * ==============================================
+             */
+            rolePermissionIds:
+              rolePermissionIds,
+
+            rolePermissions:
+              rolePermissionDetails,
+
+            /*
+             * ==============================================
+             * الصلاحيات الفعلية
+             * ==============================================
+             */
+            effectivePermissionIds:
+              effectivePermissionIds,
+
+            effectivePermissions:
+              effectivePermissionDetails,
+
+            /*
+             * ==============================================
+             * أقسام لوحة التحكم
+             * ==============================================
              */
             sectionIds:
               userSectionIds,
@@ -495,7 +673,7 @@ export async function POST(
         : null
 
     /*
-     * الصلاحيات التفصيلية
+     * الصلاحيات الفردية فقط
      */
     const permissionIds =
       Array.isArray(
@@ -546,7 +724,7 @@ export async function POST(
     }
 
     /*
-     * التحقق من صيغة البريد الإلكتروني
+     * التحقق من البريد
      */
     if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
@@ -562,6 +740,9 @@ export async function POST(
       )
     }
 
+    /*
+     * التحقق من الدور
+     */
     if (
       !ALLOWED_ROLES.includes(
         role as AllowedRole,
@@ -576,6 +757,9 @@ export async function POST(
       )
     }
 
+    /*
+     * التحقق من كلمة المرور
+     */
     if (
       password.length < 8
     ) {
@@ -631,7 +815,7 @@ export async function POST(
     }
 
     /*
-     * التحقق من البريد الإلكتروني
+     * التحقق من البريد
      */
     const {
       data: existingEmailProfile,
@@ -673,7 +857,9 @@ export async function POST(
     }
 
     /*
+     * --------------------------------------------------
      * إنشاء حساب Supabase Auth
+     * --------------------------------------------------
      */
     const {
       data: authData,
@@ -711,7 +897,9 @@ export async function POST(
       authData.user.id
 
     /*
+     * --------------------------------------------------
      * إنشاء user_profiles
+     * --------------------------------------------------
      */
     const {
       data: profile,
@@ -781,10 +969,12 @@ export async function POST(
 
     /*
      * --------------------------------------------------
-     * الصلاحيات التفصيلية
+     * حفظ الصلاحيات الفردية فقط
+     *
+     * صلاحيات الدور لا يتم نسخها هنا.
+     * المستخدم يحصل عليها تلقائيًا من role_permissions.
      * --------------------------------------------------
      */
-
     const uniquePermissionIds =
       Array.from(
         new Set(
@@ -898,7 +1088,6 @@ export async function POST(
      * أقسام لوحة التحكم
      * --------------------------------------------------
      */
-
     const uniqueSectionIds =
       Array.from(
         new Set(
@@ -1036,6 +1225,54 @@ export async function POST(
       }
     }
 
+    /*
+     * --------------------------------------------------
+     * إرجاع المستخدم الجديد
+     * --------------------------------------------------
+     *
+     * ملاحظة:
+     * permissionIds = فردية فقط
+     *
+     * rolePermissionIds = صلاحيات الدور
+     *
+     * effectivePermissionIds =
+     * الدور + الفردية
+     * --------------------------------------------------
+     */
+    const {
+      data: createdRolePermissions,
+    } =
+      await supabaseAdmin
+        .from('role_permissions')
+        .select(
+          'permission_id',
+        )
+        .eq(
+          'role',
+          role,
+        )
+
+    const createdRolePermissionIds =
+      Array.from(
+        new Set(
+          (
+            createdRolePermissions ??
+            []
+          ).map(
+            (item) =>
+              item.permission_id,
+          ),
+        ),
+      )
+
+    const createdEffectivePermissionIds =
+      Array.from(
+        new Set([
+          ...createdRolePermissionIds,
+          ...uniquePermissionIds,
+        ]),
+      )
+
     return NextResponse.json(
       {
         success: true,
@@ -1045,6 +1282,12 @@ export async function POST(
 
           permissionIds:
             uniquePermissionIds,
+
+          rolePermissionIds:
+            createdRolePermissionIds,
+
+          effectivePermissionIds:
+            createdEffectivePermissionIds,
 
           sectionIds:
             validSectionIds,
@@ -1072,9 +1315,7 @@ export async function POST(
  * --------------------------------------------------
  * PATCH
  *
- * تعديل المستخدم + البريد + الدور + القسم +
- * الحالة + كلمة المرور + الصلاحيات +
- * أقسام لوحة التحكم
+ * تعديل المستخدم
  * --------------------------------------------------
  */
 export async function PATCH(
@@ -1136,7 +1377,7 @@ export async function PATCH(
         : ''
 
     /*
-     * الصلاحيات التفصيلية
+     * الصلاحيات الفردية فقط
      */
     const permissionIds =
       Array.isArray(
@@ -1233,7 +1474,9 @@ export async function PATCH(
     }
 
     /*
+     * --------------------------------------------------
      * جلب المستخدم المطلوب تعديله
+     * --------------------------------------------------
      */
     const {
       data: targetUser,
@@ -1286,7 +1529,9 @@ export async function PATCH(
     }
 
     /*
+     * --------------------------------------------------
      * التحقق من البريد الجديد
+     * --------------------------------------------------
      */
     if (
       email &&
@@ -1337,7 +1582,9 @@ export async function PATCH(
     }
 
     /*
+     * --------------------------------------------------
      * منع الأدمن من تعطيل نفسه
+     * --------------------------------------------------
      */
     if (
       targetUser.auth_user_id ===
@@ -1354,7 +1601,9 @@ export async function PATCH(
     }
 
     /*
+     * --------------------------------------------------
      * تحديث Supabase Auth
+     * --------------------------------------------------
      */
     if (
       password ||
@@ -1416,7 +1665,9 @@ export async function PATCH(
     }
 
     /*
+     * --------------------------------------------------
      * تحديث Profile
+     * --------------------------------------------------
      */
     const profileUpdate: Record<
       string,
@@ -1494,10 +1745,14 @@ export async function PATCH(
 
     /*
      * --------------------------------------------------
-     * تحديث الصلاحيات التفصيلية
+     * تحديث الصلاحيات الفردية
+     *
+     * مهم:
+     * هنا نحفظ فقط permissionIds القادمة من الواجهة.
+     *
+     * صلاحيات الدور لا تدخل إلى user_permissions.
      * --------------------------------------------------
      */
-
     const uniquePermissionIds =
       Array.from(
         new Set(
@@ -1551,7 +1806,7 @@ export async function PATCH(
     }
 
     /*
-     * حذف الصلاحيات القديمة
+     * حذف الصلاحيات الفردية القديمة
      */
     const {
       error:
@@ -1585,7 +1840,7 @@ export async function PATCH(
     }
 
     /*
-     * إضافة الصلاحيات الجديدة
+     * إضافة الصلاحيات الفردية الجديدة
      */
     if (
       validPermissionIds.length >
@@ -1635,7 +1890,6 @@ export async function PATCH(
      * تحديث أقسام لوحة التحكم
      * --------------------------------------------------
      */
-
     const uniqueSectionIds =
       Array.from(
         new Set(
@@ -1768,6 +2022,50 @@ export async function PATCH(
       }
     }
 
+    /*
+     * --------------------------------------------------
+     * جلب صلاحيات الدور بعد التعديل
+     * --------------------------------------------------
+     */
+    const {
+      data: updatedRolePermissions,
+    } =
+      await supabaseAdmin
+        .from('role_permissions')
+        .select(
+          'permission_id',
+        )
+        .eq(
+          'role',
+          role,
+        )
+
+    const updatedRolePermissionIds =
+      Array.from(
+        new Set(
+          (
+            updatedRolePermissions ??
+            []
+          ).map(
+            (item) =>
+              item.permission_id,
+          ),
+        ),
+      )
+
+    /*
+     * --------------------------------------------------
+     * الصلاحيات الفعلية بعد التعديل
+     * --------------------------------------------------
+     */
+    const updatedEffectivePermissionIds =
+      Array.from(
+        new Set([
+          ...updatedRolePermissionIds,
+          ...validPermissionIds,
+        ]),
+      )
+
     return NextResponse.json({
       success: true,
 
@@ -1775,10 +2073,22 @@ export async function PATCH(
         ...updatedProfile,
 
         /*
-         * الصلاحيات التفصيلية
+         * الصلاحيات الفردية فقط
          */
         permissionIds:
           validPermissionIds,
+
+        /*
+         * صلاحيات الدور
+         */
+        rolePermissionIds:
+          updatedRolePermissionIds,
+
+        /*
+         * جميع الصلاحيات الفعلية
+         */
+        effectivePermissionIds:
+          updatedEffectivePermissionIds,
 
         /*
          * أقسام لوحة التحكم
@@ -1908,7 +2218,11 @@ export async function DELETE(
     }
 
     /*
-     * حذف الصلاحيات التفصيلية
+     * حذف الصلاحيات الفردية
+     *
+     * ملاحظة:
+     * role_permissions لا تُحذف لأنها مرتبطة بالدور
+     * وليس بالمستخدم نفسه.
      */
     const {
       error:
@@ -1969,7 +2283,7 @@ export async function DELETE(
       return NextResponse.json(
         {
           error:
-            'تعذر حذف أقسام لوحة التحكم للمستخدم.',
+            'تعذر حذف أقسام لوحة التحكم.',
         },
         { status: 500 },
       )
