@@ -124,9 +124,11 @@ function getTodayString() {
   const now = new Date()
 
   const year = now.getFullYear()
+
   const month = String(
     now.getMonth() + 1
   ).padStart(2, '0')
+
   const day = String(
     now.getDate()
   ).padStart(2, '0')
@@ -1728,62 +1730,79 @@ export function StudentsView() {
 
     loadData()
   }, [])
+
+  /*
+   * ============================================================
+   * الحذف الجماعي
+   * ============================================================
+   *
+   * هذه الدالة تستقبل IDs الطلاب المحددين من StudentsTable
+   * وتحذفهم من جدول students في Supabase.
+   */
   const deleteSelectedStudents = async (
-  studentIds: string[]
-) => {
-  const ids = Array.from(
-    new Set(
-      studentIds.filter(Boolean)
+    studentIds: string[]
+  ) => {
+    const ids = Array.from(
+      new Set(
+        studentIds.filter(Boolean)
+      )
     )
-  )
 
-  if (ids.length === 0) {
-    return
-  }
-
-  const {
-    error,
-  } = await supabase
-    .from('students')
-    .delete()
-    .in('id', ids)
-
-  if (error) {
-    throw new Error(
-      `خطأ في حذف الطلاب: ${error.message}`
-    )
-  }
-
-  setStudentList(
-    (current) => {
-      const next =
-        current.filter(
-          (student) =>
-            !ids.includes(student.id)
-        )
-
-      if (studentsViewCache) {
-        studentsViewCache = {
-          ...studentsViewCache,
-          studentList: next,
-        }
-      }
-
-      return next
+    if (ids.length === 0) {
+      return
     }
-  )
 
-  if (
-    selectedStudentId &&
-    ids.includes(selectedStudentId)
-  ) {
-    setSelectedStudentId('')
+    const {
+      error,
+    } = await supabase
+      .from('students')
+      .delete()
+      .in('id', ids)
+
+    if (error) {
+      throw new Error(
+        `خطأ في حذف الطلاب: ${error.message}`
+      )
+    }
+
+    setStudentList(
+      (current) => {
+        const next =
+          current.filter(
+            (student) =>
+              !ids.includes(student.id)
+          )
+
+        /*
+         * تحديث الكاش أيضاً.
+         */
+        if (studentsViewCache) {
+          studentsViewCache = {
+            ...studentsViewCache,
+            studentList: next,
+          }
+        }
+
+        return next
+      }
+    )
+
+    /*
+     * إذا كان الطالب المحدد حالياً
+     * ضمن الطلاب المحذوفين، نلغي التحديد.
+     */
+    if (
+      selectedStudentId &&
+      ids.includes(selectedStudentId)
+    ) {
+      setSelectedStudentId('')
+    }
+
+    setSupabaseStatus(
+      `تم حذف ${ids.length} طالب من Supabase ✅`
+    )
   }
 
-  setSupabaseStatus(
-    `تم حذف ${ids.length} طالب من Supabase ✅`
-  )
-}
   const updateFilter = (
     key: keyof Filters,
     value: string
@@ -2568,6 +2587,9 @@ export function StudentsView() {
               openAttendanceDetails
             }
             onOpenColumns={() => {}}
+            onDeleteSelected={
+              deleteSelectedStudents
+            }
           />
         </CardContent>
       </Card>
