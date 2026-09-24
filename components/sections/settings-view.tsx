@@ -233,7 +233,3 @@ export function SettingsView() {
     </div>
   )
 }
-
-التغيير الوحيد: روابط التسجيل ومتابعة الطالب أصبحت تستخدم الدومين الثابت:
-
-https://t3leem-school-management-dashboard.vercel.app
