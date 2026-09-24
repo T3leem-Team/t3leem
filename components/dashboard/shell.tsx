@@ -23,6 +23,8 @@ export function DashboardShell({
     '/students',
     '/teachers',
     '/payments',
+    '/communication',
+    '/trips',
   ]
 
   const isMainRoute = mainRoutes.includes(pathname)
