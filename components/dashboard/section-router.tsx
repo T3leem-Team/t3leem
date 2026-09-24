@@ -10,6 +10,7 @@ import { TeachersView } from '@/components/sections/teachers-view'
 import { PaymentsView } from '@/components/sections/payments-view'
 import { SettingsView } from '@/components/sections/settings-view'
 import { SupervisionView } from '@/components/sections/supervision-view'
+import { TripsView } from '@/components/sections/trips-view'
 
 const routes: {
   match: (p: string) => boolean
@@ -36,6 +37,14 @@ const routes: {
   {
     match: (p) => p.startsWith('/payments'),
     view: () => <PaymentsView />,
+  },
+  {
+    match: (p) => p.startsWith('/communication'),
+    view: () => null,
+  },
+  {
+    match: (p) => p.startsWith('/trips'),
+    view: () => <TripsView />,
   },
 ]
 
@@ -65,6 +74,8 @@ function getSectionKey(pathname: string) {
   if (pathname.startsWith('/students')) return 'students'
   if (pathname.startsWith('/teachers')) return 'teachers'
   if (pathname.startsWith('/payments')) return 'payments'
+  if (pathname.startsWith('/communication')) return 'communication'
+  if (pathname.startsWith('/trips')) return 'trips'
 
   return null
 }
