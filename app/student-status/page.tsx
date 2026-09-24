@@ -459,10 +459,13 @@ export default function StudentStatusPage() {
         return
       }
 
-      const realStudent =
-        studentData as Student
-
-      setStudent(realStudent)
+      console.log('SEARCHED PERSONAL ID:', personalId)
+        console.log('SUPABASE STUDENT RESULT:', studentData)
+        
+        const realStudent =
+          studentData as Student
+        
+        setStudent(realStudent)
 
       /*
        * =====================================================
