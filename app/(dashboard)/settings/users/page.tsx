@@ -24,6 +24,11 @@ type Role =
   | 'Teacher'
   | 'Payments Manager'
 
+type RolePermission = {
+  role: Role
+  permission_id: string
+}
+
 type User = {
   id: string
   auth_user_id: string
@@ -36,8 +41,14 @@ type User = {
   created_at: string
   updated_at: string
 
-  // الصلاحيات التفصيلية
+  // الصلاحيات الإضافية الخاصة بالمستخدم فقط
   permissionIds: string[]
+
+  // صلاحيات الدور
+  rolePermissionIds: string[]
+
+  // جميع الصلاحيات الفعلية = صلاحيات الدور + الإضافية
+  effectivePermissionIds: string[]
 
   // أقسام لوحة التحكم
   sectionIds: string[]
@@ -92,6 +103,10 @@ export default function Page() {
     DashboardSection[]
   >([])
 
+  const [rolePermissions, setRolePermissions] = useState<
+    RolePermission[]
+  >([])
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -106,7 +121,7 @@ export default function Page() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('Teacher')
 
-  // الصلاحيات التفصيلية
+  // الصلاحيات الإضافية فقط
   const [selectedPermissions, setSelectedPermissions] =
     useState<string[]>([])
 
@@ -140,6 +155,7 @@ export default function Page() {
       setUsers(data.users ?? [])
       setPermissions(data.permissions ?? [])
       setDashboardSections(data.dashboardSections ?? [])
+      setRolePermissions(data.rolePermissions ?? [])
     } catch (err) {
       setError(
         err instanceof Error
@@ -154,6 +170,24 @@ export default function Page() {
   useEffect(() => {
     void loadUsers()
   }, [])
+
+  const getRolePermissionIds = (
+    roleValue: Role,
+  ) => {
+    return Array.from(
+      new Set(
+        rolePermissions
+          .filter(
+            (item) =>
+              item.role === roleValue,
+          )
+          .map(
+            (item) =>
+              item.permission_id,
+          ),
+      ),
+    )
+  }
 
   const resetForm = () => {
     setUsername('')
@@ -204,6 +238,9 @@ export default function Page() {
     setPassword('')
     setRole(user.role)
 
+    // مهم:
+    // نضع فقط الصلاحيات الإضافية في selectedPermissions
+    // ولا نضع صلاحيات الدور فيها.
     setSelectedPermissions([
       ...(user.permissionIds ?? []),
     ])
@@ -222,12 +259,27 @@ export default function Page() {
   const togglePermission = (
     permissionId: string,
   ) => {
+    const currentRolePermissionIds =
+      getRolePermissionIds(role)
+
+    // لا نسمح بتحويل صلاحية الدور إلى صلاحية فردية
+    if (
+      currentRolePermissionIds.includes(
+        permissionId,
+      )
+    ) {
+      return
+    }
+
     setSelectedPermissions((current) =>
       current.includes(permissionId)
         ? current.filter(
             (id) => id !== permissionId,
           )
-        : [...current, permissionId],
+        : [
+            ...current,
+            permissionId,
+          ],
     )
   }
 
@@ -239,7 +291,10 @@ export default function Page() {
         ? current.filter(
             (id) => id !== sectionId,
           )
-        : [...current, sectionId],
+        : [
+            ...current,
+            sectionId,
+          ],
     )
   }
 
@@ -281,47 +336,76 @@ export default function Page() {
       const isEditing =
         editingId !== null
 
+      const rolePermissionIds =
+        getRolePermissionIds(role)
+
+      // إزالة أي صلاحية موجودة أصلًا في الدور
+      // من قائمة الصلاحيات الفردية.
+      const additionalPermissionIds =
+        Array.from(
+          new Set(
+            selectedPermissions.filter(
+              (id) =>
+                !rolePermissionIds.includes(
+                  id,
+                ),
+            ),
+          ),
+        )
+
       const body = isEditing
         ? {
             userId: editingId,
+
             email:
-              email.trim().toLowerCase(),
+              email
+                .trim()
+                .toLowerCase(),
+
             fullName:
               fullName.trim(),
+
             department:
               department.trim() ||
               null,
+
             role,
+
             ...(password
               ? { password }
               : {}),
 
-            // الصلاحيات التفصيلية
+            // إضافية فقط
             permissionIds:
-              selectedPermissions,
+              additionalPermissionIds,
 
-            // أقسام لوحة التحكم
             sectionIds:
               selectedSections,
           }
         : {
             username:
               username.trim(),
+
             email:
-              email.trim().toLowerCase(),
+              email
+                .trim()
+                .toLowerCase(),
+
             fullName:
               fullName.trim(),
+
             department:
               department.trim() ||
               null,
+
             password,
+
             role,
 
-            // الصلاحيات التفصيلية
+            // إضافية فقط
             permissionIds:
-              selectedPermissions,
+              additionalPermissionIds,
 
-            // أقسام لوحة التحكم
             sectionIds:
               selectedSections,
           }
@@ -333,13 +417,16 @@ export default function Page() {
             method: isEditing
               ? 'PATCH'
               : 'POST',
+
             headers: {
               'Content-Type':
                 'application/json',
             },
-            body: JSON.stringify(
-              body,
-            ),
+
+            body:
+              JSON.stringify(
+                body,
+              ),
           },
         )
 
@@ -394,29 +481,40 @@ export default function Page() {
           '/api/admin/users',
           {
             method: 'PATCH',
+
             headers: {
               'Content-Type':
                 'application/json',
             },
-            body: JSON.stringify({
-              userId: user.id,
-              email: user.email,
-              fullName:
-                user.full_name,
-              role: user.role,
-              department:
-                user.department,
-              isActive:
-                !user.is_active,
 
-              // نحافظ على صلاحياته الحالية
-              permissionIds:
-                user.permissionIds,
+            body:
+              JSON.stringify({
+                userId: user.id,
 
-              // ونحافظ على أقسامه الحالية
-              sectionIds:
-                user.sectionIds,
-            }),
+                email:
+                  user.email,
+
+                fullName:
+                  user.full_name,
+
+                role:
+                  user.role,
+
+                department:
+                  user.department,
+
+                isActive:
+                  !user.is_active,
+
+                // نحافظ على الإضافية فقط
+                permissionIds:
+                  user.permissionIds ??
+                  [],
+
+                sectionIds:
+                  user.sectionIds ??
+                  [],
+              }),
           },
         )
 
@@ -455,16 +553,24 @@ export default function Page() {
 
   const selectedPermissionsLabel =
     selectedPermissions.length === 0
-      ? 'اختر الصلاحيات'
-      : selectedPermissions.length ===
-          permissions.length
-        ? 'جميع الصلاحيات'
-        : `${selectedPermissions.length} صلاحية محددة`
+      ? 'لا توجد صلاحيات إضافية'
+      : `${selectedPermissions.length} صلاحية إضافية`
 
   const activeDashboardSections =
     dashboardSections.filter(
       (section) =>
         section.is_active,
+    )
+
+  const currentRolePermissionIds =
+    getRolePermissionIds(role)
+
+  const currentRolePermissions =
+    permissions.filter(
+      (permission) =>
+        currentRolePermissionIds.includes(
+          permission.id,
+        ),
     )
 
   const filteredUsers = useMemo(() => {
@@ -523,6 +629,25 @@ export default function Page() {
       (section) =>
         section.id === id,
     )?.section_name ?? id
+
+  const getEffectivePermissionIds =
+    (user: User) => {
+      const roleIds =
+        user.rolePermissionIds ??
+        getRolePermissionIds(
+          user.role,
+        )
+
+      const extraIds =
+        user.permissionIds ?? []
+
+      return Array.from(
+        new Set([
+          ...roleIds,
+          ...extraIds,
+        ]),
+      )
+    }
 
   return (
     <div className="space-y-6">
@@ -619,7 +744,7 @@ export default function Page() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  حدد بيانات المستخدم والدور وأقسام النظام والصلاحيات التفصيلية.
+                  حدد بيانات المستخدم والدور وأقسام النظام والصلاحيات الإضافية.
                 </p>
               </div>
 
@@ -752,12 +877,33 @@ export default function Page() {
 
                 <select
                   value={role}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setRole(
                       event.target
                         .value as Role,
                     )
-                  }
+
+                    // تنظيف أي صلاحية إضافية
+                    // أصبحت جزءًا من الدور الجديد
+                    const newRole =
+                      event.target
+                        .value as Role
+
+                    const newRolePermissionIds =
+                      getRolePermissionIds(
+                        newRole,
+                      )
+
+                    setSelectedPermissions(
+                      (current) =>
+                        current.filter(
+                          (id) =>
+                            !newRolePermissionIds.includes(
+                              id,
+                            ),
+                        ),
+                    )
+                  }}
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   {roles.map(
@@ -935,60 +1081,133 @@ export default function Page() {
                   permissions.length >
                     0 && (
                     <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
-                      <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                        {permissions.map(
-                          (
-                            permission,
-                          ) => {
-                            const selected =
-                              selectedPermissions.includes(
-                                permission.id,
-                              )
+                      {/* صلاحيات الدور */}
+                      {currentRolePermissions.length >
+                        0 && (
+                        <div className="mb-4 rounded-lg border bg-muted/30 p-3">
+                          <div className="mb-2">
+                            <p className="text-sm font-semibold">
+                              صلاحيات الدور
+                            </p>
 
-                            return (
-                              <button
-                                key={
-                                  permission.id
-                                }
-                                type="button"
-                                onClick={() =>
-                                  togglePermission(
-                                    permission.id,
-                                  )
-                                }
-                                className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
-                              >
-                                <span
-                                  className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
-                                    selected
-                                      ? 'border-primary bg-primary text-primary-foreground'
-                                      : 'border-muted-foreground/40'
-                                  }`}
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              هذه الصلاحيات تأتي تلقائيًا من دور المستخدم ولا تحتاج إلى إضافتها يدويًا.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                            {currentRolePermissions.map(
+                              (
+                                permission,
+                              ) => (
+                                <div
+                                  key={
+                                    permission.id
+                                  }
+                                  className="flex items-start gap-3 rounded-md bg-background px-3 py-2.5"
                                 >
-                                  {selected && (
+                                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-primary bg-primary text-primary-foreground">
                                     <Check className="size-3" />
-                                  )}
-                                </span>
-
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-medium">
-                                    {
-                                      permission.permission_name
-                                    }
                                   </span>
 
-                                  {permission.description && (
-                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-medium">
                                       {
-                                        permission.description
+                                        permission.permission_name
                                       }
                                     </span>
-                                  )}
-                                </span>
-                              </button>
+
+                                    {permission.description && (
+                                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                                        {
+                                          permission.description
+                                        }
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* الصلاحيات الإضافية */}
+                      <div>
+                        <div className="mb-2">
+                          <p className="text-sm font-semibold">
+                            صلاحيات إضافية للمستخدم
+                          </p>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            هذه الصلاحيات تضاف لهذا المستخدم فقط بالإضافة إلى صلاحيات دوره.
+                          </p>
+                        </div>
+
+                        <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                          {permissions
+                            .filter(
+                              (
+                                permission,
+                              ) =>
+                                !currentRolePermissionIds.includes(
+                                  permission.id,
+                                ),
                             )
-                          },
-                        )}
+                            .map(
+                              (
+                                permission,
+                              ) => {
+                                const selected =
+                                  selectedPermissions.includes(
+                                    permission.id,
+                                  )
+
+                                return (
+                                  <button
+                                    key={
+                                      permission.id
+                                    }
+                                    type="button"
+                                    onClick={() =>
+                                      togglePermission(
+                                        permission.id,
+                                      )
+                                    }
+                                    className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
+                                  >
+                                    <span
+                                      className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                        selected
+                                          ? 'border-primary bg-primary text-primary-foreground'
+                                          : 'border-muted-foreground/40'
+                                      }`}
+                                    >
+                                      {selected && (
+                                        <Check className="size-3" />
+                                      )}
+                                    </span>
+
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-medium">
+                                        {
+                                          permission.permission_name
+                                        }
+                                      </span>
+
+                                      {permission.description && (
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                          {
+                                            permission.description
+                                          }
+                                        </span>
+                                      )}
+                                    </span>
+                                  </button>
+                                )
+                              },
+                            )}
+                        </div>
                       </div>
 
                       <div className="mt-3 flex justify-end border-t pt-3">
@@ -1009,7 +1228,7 @@ export default function Page() {
                   )}
 
                 <p className="text-xs text-muted-foreground">
-                  تحدد العمليات التي يستطيع المستخدم تنفيذها داخل الأقسام المسموحة له.
+                  صلاحيات الدور تُطبق تلقائيًا، ويمكن إضافة صلاحيات إضافية للمستخدم عند الحاجة.
                 </p>
               </div>
             </div>
@@ -1139,7 +1358,7 @@ export default function Page() {
                     </th>
 
                     <th className="px-5 py-4 text-right font-medium">
-                      الصلاحيات التفصيلية
+                      الصلاحيات الفعلية
                     </th>
 
                     <th className="px-5 py-4 text-right font-medium">
@@ -1154,216 +1373,257 @@ export default function Page() {
 
                 <tbody className="divide-y">
                   {filteredUsers.map(
-                    (user) => (
-                      <tr
-                        key={
-                          user.id
-                        }
-                        className="transition-colors hover:bg-muted/20"
-                      >
-                        <td className="px-5 py-4">
-                          <div>
-                            <p className="font-medium">
-                              {
-                                user.full_name
-                              }
-                            </p>
+                    (user) => {
+                      const effectivePermissionIds =
+                        getEffectivePermissionIds(
+                          user,
+                        )
 
-                            <p
-                              className="mt-1 text-xs text-muted-foreground"
+                      const rolePermissionIds =
+                        user.rolePermissionIds ??
+                        getRolePermissionIds(
+                          user.role,
+                        )
+
+                      const additionalPermissionIds =
+                        user.permissionIds ??
+                        []
+
+                      return (
+                        <tr
+                          key={
+                            user.id
+                          }
+                          className="transition-colors hover:bg-muted/20"
+                        >
+                          <td className="px-5 py-4">
+                            <div>
+                              <p className="font-medium">
+                                {
+                                  user.full_name
+                                }
+                              </p>
+
+                              <p
+                                className="mt-1 text-xs text-muted-foreground"
+                                dir="ltr"
+                              >
+                                @
+                                {
+                                  user.username
+                                }
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span
+                              className="text-sm"
                               dir="ltr"
                             >
-                              @
-                              {
-                                user.username
-                              }
-                            </p>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <span
-                            className="text-sm"
-                            dir="ltr"
-                          >
-                            {user.email ||
-                              '—'}
-                          </span>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <Badge variant="neutral">
-                            {getRoleLabel(
-                              user.role,
-                            )}
-                          </Badge>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          {user.department ||
-                            '—'}
-                        </td>
-
-                        {/* أقسام لوحة التحكم */}
-                        <td className="max-w-[360px] px-5 py-4">
-                          {(
-                            user.sectionIds ??
-                            []
-                          ).length ===
-                          0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              لا توجد أقسام
+                              {user.email ||
+                                '—'}
                             </span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {(
-                                user.sectionIds ??
-                                []
-                              )
-                                .slice(
-                                  0,
-                                  3,
-                                )
-                                .map(
-                                  (
-                                    id,
-                                  ) => (
-                                    <Badge
-                                      key={
-                                        id
-                                      }
-                                      variant="neutral"
-                                    >
-                                      {getSectionName(
-                                        id,
-                                      )}
-                                    </Badge>
-                                  ),
-                                )}
+                          </td>
 
-                              {(
-                                user.sectionIds ??
-                                []
-                              ).length >
-                                3 && (
-                                <Badge variant="neutral">
-                                  +
-                                  {(
-                                    user.sectionIds ??
-                                    []
-                                  ).length -
-                                    3}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                        {/* الصلاحيات التفصيلية */}
-                        <td className="max-w-[360px] px-5 py-4">
-                          {user.permissionIds
-                            .length ===
-                          0 ? (
-                            <span className="text-xs text-muted-foreground">
-                              لا توجد صلاحيات إضافية
-                            </span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {user.permissionIds
-                                .slice(
-                                  0,
-                                  3,
-                                )
-                                .map(
-                                  (
-                                    id,
-                                  ) => (
-                                    <Badge
-                                      key={
-                                        id
-                                      }
-                                      variant="neutral"
-                                    >
-                                      {getPermissionName(
-                                        id,
-                                      )}
-                                    </Badge>
-                                  ),
-                                )}
-
-                              {user.permissionIds
-                                .length >
-                                3 && (
-                                <Badge variant="neutral">
-                                  +
-                                  {user
-                                    .permissionIds
-                                    .length -
-                                    3}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          {user.is_active ? (
-                            <Badge variant="success">
-                              نشط
-                            </Badge>
-                          ) : (
+                          <td className="px-5 py-4">
                             <Badge variant="neutral">
-                              معطل
-                            </Badge>
-                          )}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                openEditForm(
-                                  user,
-                                )
-                              }
-                              disabled={
-                                saving
-                              }
-                            >
-                              <Edit3 className="size-4" />
-                              تعديل
-                            </Button>
-
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleToggleActive(
-                                  user,
-                                )
-                              }
-                              disabled={
-                                saving
-                              }
-                            >
-                              {saving ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <Power className="size-4" />
+                              {getRoleLabel(
+                                user.role,
                               )}
+                            </Badge>
+                          </td>
 
-                              {user.is_active
-                                ? 'تعطيل'
-                                : 'تفعيل'}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ),
+                          <td className="px-5 py-4">
+                            {user.department ||
+                              '—'}
+                          </td>
+
+                          {/* أقسام لوحة التحكم */}
+                          <td className="max-w-[360px] px-5 py-4">
+                            {(
+                              user.sectionIds ??
+                              []
+                            ).length ===
+                            0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                لا توجد أقسام
+                              </span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {(
+                                  user.sectionIds ??
+                                  []
+                                )
+                                  .slice(
+                                    0,
+                                    3,
+                                  )
+                                  .map(
+                                    (
+                                      id,
+                                    ) => (
+                                      <Badge
+                                        key={
+                                          id
+                                        }
+                                        variant="neutral"
+                                      >
+                                        {getSectionName(
+                                          id,
+                                        )}
+                                      </Badge>
+                                    ),
+                                  )}
+
+                                {(
+                                  user.sectionIds ??
+                                  []
+                                ).length >
+                                  3 && (
+                                  <Badge variant="neutral">
+                                    +
+                                    {(
+                                      user.sectionIds ??
+                                      []
+                                    ).length -
+                                      3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* الصلاحيات الفعلية */}
+                          <td className="max-w-[400px] px-5 py-4">
+                            {effectivePermissionIds.length ===
+                            0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                لا توجد صلاحيات
+                              </span>
+                            ) : (
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {effectivePermissionIds
+                                    .slice(
+                                      0,
+                                      4,
+                                    )
+                                    .map(
+                                      (
+                                        id,
+                                      ) => {
+                                        const isRolePermission =
+                                          rolePermissionIds.includes(
+                                            id,
+                                          )
+
+                                        return (
+                                          <Badge
+                                            key={
+                                              id
+                                            }
+                                            variant="neutral"
+                                          >
+                                            {getPermissionName(
+                                              id,
+                                            )}
+
+                                            {isRolePermission &&
+                                              ' • دور'}
+                                          </Badge>
+                                        )
+                                      },
+                                    )}
+
+                                  {effectivePermissionIds.length >
+                                    4 && (
+                                    <Badge variant="neutral">
+                                      +
+                                      {effectivePermissionIds.length -
+                                        4}
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                <div className="text-xs text-muted-foreground">
+                                  {rolePermissionIds.length >
+                                    0 &&
+                                    `${rolePermissionIds.length} من الدور`}
+
+                                  {rolePermissionIds.length >
+                                    0 &&
+                                    additionalPermissionIds.length >
+                                      0 &&
+                                    ' • '}
+
+                                  {additionalPermissionIds.length >
+                                    0 &&
+                                    `${additionalPermissionIds.length} إضافية`}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {user.is_active ? (
+                              <Badge variant="success">
+                                نشط
+                              </Badge>
+                            ) : (
+                              <Badge variant="neutral">
+                                معطل
+                              </Badge>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  openEditForm(
+                                    user,
+                                  )
+                                }
+                                disabled={
+                                  saving
+                                }
+                              >
+                                <Edit3 className="size-4" />
+                                تعديل
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handleToggleActive(
+                                    user,
+                                  )
+                                }
+                                disabled={
+                                  saving
+                                }
+                              >
+                                {saving ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <Power className="size-4" />
+                                )}
+
+                                {user.is_active
+                                  ? 'تعطيل'
+                                  : 'تفعيل'}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    },
                   )}
                 </tbody>
               </table>
