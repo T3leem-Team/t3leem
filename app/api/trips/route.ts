@@ -343,6 +343,125 @@ export async function PATCH(
 
   /*
    * =======================================================
+   * إغلاق الرحلة
+   * =======================================================
+   *
+   * الطلب:
+   *
+   * {
+   *   id: tripId,
+   *   action: 'close',
+   *   close_note: '...'
+   * }
+   *
+   * الإغلاق مسموح فقط للرحلة المنشورة.
+   */
+
+  if (body.action === 'close') {
+    const {
+      data: existingTrip,
+      error: existingError,
+    } = await supabase
+      .from('trips')
+      .select(`
+        id,
+        status
+      `)
+      .eq('id', tripId)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error(
+        'PATCH /api/trips - close trip lookup error:',
+        existingError,
+      )
+
+      return jsonError(
+        'تعذر التحقق من الرحلة',
+        500,
+        existingError.message,
+      )
+    }
+
+    if (!existingTrip) {
+      return jsonError(
+        'الرحلة غير موجودة',
+        404,
+      )
+    }
+
+    if (
+      existingTrip.status ===
+      'closed'
+    ) {
+      return jsonError(
+        'الرحلة مغلقة بالفعل',
+        400,
+      )
+    }
+
+    if (
+      existingTrip.status !==
+      'published'
+    ) {
+      return jsonError(
+        'لا يمكن إغلاق الرحلة إلا إذا كانت منشورة',
+        400,
+      )
+    }
+
+    const closeNote =
+      typeof body.close_note ===
+      'string'
+        ? body.close_note.trim()
+        : null
+
+    const now =
+      new Date().toISOString()
+
+    const {
+      data: closedTrip,
+      error: closeError,
+    } = await supabase
+      .from('trips')
+      .update({
+        status: 'closed',
+        closed_by:
+          access.userId,
+        closed_at: now,
+        close_note:
+          closeNote || null,
+        updated_at: now,
+      })
+      .eq('id', tripId)
+      .eq('status', 'published')
+      .select(tripSelect)
+      .single()
+
+    if (
+      closeError ||
+      !closedTrip
+    ) {
+      console.error(
+        'PATCH /api/trips - close error:',
+        closeError,
+      )
+
+      return jsonError(
+        'تعذر إغلاق الرحلة',
+        500,
+        closeError?.message,
+      )
+    }
+
+    return NextResponse.json({
+      trip: closedTrip,
+      closed: true,
+    })
+  }
+
+  /*
+   * =======================================================
    * نشر الرحلة
    * =======================================================
    *
