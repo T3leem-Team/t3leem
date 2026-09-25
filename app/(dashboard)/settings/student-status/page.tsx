@@ -7,6 +7,9 @@ import {
   ShieldCheck,
   UserRoundCheck,
   Bus,
+  Copy,
+  Printer,
+  Check,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -24,6 +27,12 @@ export default function StudentStatusSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const studentStatusUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/student-status`
+      : '/student-status'
 
   useEffect(() => {
     loadSettings()
@@ -104,6 +113,26 @@ export default function StudentStatusSettingsPage() {
     setSaving(false)
   }
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(studentStatusUrl)
+
+      setCopied(true)
+      setMessage('تم نسخ وصلة متابعة الطلاب.')
+
+      setTimeout(() => {
+        setCopied(false)
+      }, 2000)
+    } catch (error) {
+      console.error(error)
+      setError('تعذر نسخ الوصلة.')
+    }
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
   if (loading) {
     return (
       <div
@@ -175,6 +204,63 @@ export default function StudentStatusSettingsPage() {
             )
           }
         />
+
+        {/* Student Status Link */}
+        <div className="rounded-xl border bg-card p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-4">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <UserRoundCheck className="size-5" />
+              </div>
+
+              <div>
+                <h2 className="font-semibold">
+                  وصلة متابعة الطلاب
+                </h2>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  هذه وصلة ثابتة يمكن إرسالها للطلاب أو طباعتها واستخدامها للوصول إلى صفحة متابعة الطالب.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div
+                dir="ltr"
+                className="break-all text-sm font-medium text-foreground"
+              >
+                {studentStatusUrl}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                {copied ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Copy className="size-4" />
+                )}
+
+                {copied
+                  ? 'تم النسخ'
+                  : 'نسخ الوصلة'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+              >
+                <Printer className="size-4" />
+                طباعة الوصلة
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
@@ -204,7 +290,9 @@ export default function StudentStatusSettingsPage() {
             <Save className="size-4" />
           )}
 
-          {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+          {saving
+            ? 'جاري الحفظ...'
+            : 'حفظ الإعدادات'}
         </button>
       </div>
     </div>
@@ -248,7 +336,9 @@ function SettingCard({
         aria-checked={enabled}
         onClick={() => onChange(!enabled)}
         className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-          enabled ? 'bg-primary' : 'bg-muted-foreground/30'
+          enabled
+            ? 'bg-primary'
+            : 'bg-muted-foreground/30'
         }`}
       >
         <span
