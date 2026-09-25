@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   CheckSquare,
+  Download,
   Loader2,
   RefreshCw,
   Search,
@@ -57,6 +58,16 @@ type CourseNote = {
   source: string
 }
 
+type ResponseStatus =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+
+type ResponseSource =
+  | 'student'
+  | 'admin'
+  | null
+
 type Student = {
   id: string
   name: string
@@ -87,8 +98,12 @@ type Student = {
 
   selected: boolean
 
-  response: 'pending' | 'accepted' | 'rejected'
+  response: ResponseStatus
   response_note: string | null
+  response_source: ResponseSource
+  responded_at: string | null
+
+  payment_amount: number
 }
 
 type ApiResponse = {
@@ -112,6 +127,25 @@ function formatDate(value: string | null) {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+  }).format(date)
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return '—'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat('ar-BH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Bahrain',
   }).format(date)
 }
 
@@ -162,7 +196,7 @@ function getStatusLabel(status: TripStatus) {
   }
 }
 
-function getResponseLabel(response: Student['response']) {
+function getResponseLabel(response: ResponseStatus) {
   switch (response) {
     case 'accepted':
       return 'موافق'
@@ -175,9 +209,7 @@ function getResponseLabel(response: Student['response']) {
   }
 }
 
-function getResponseClass(
-  response: Student['response'],
-) {
+function getResponseClass(response: ResponseStatus) {
   switch (response) {
     case 'accepted':
       return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
@@ -188,6 +220,40 @@ function getResponseClass(
     default:
       return 'bg-muted text-muted-foreground'
   }
+}
+
+function getResponseSourceLabel(source: ResponseSource) {
+  switch (source) {
+    case 'student':
+      return 'من الرابط'
+
+    case 'admin':
+      return 'يدوي'
+
+    default:
+      return '—'
+  }
+}
+
+function getResponseSourceClass(source: ResponseSource) {
+  switch (source) {
+    case 'student':
+      return 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
+
+    case 'admin':
+      return 'bg-purple-500/10 text-purple-700 dark:text-purple-400'
+
+    default:
+      return 'bg-muted text-muted-foreground'
+  }
+}
+
+function formatPayment(value: number) {
+  if (!value || value <= 0) {
+    return 'غير مدفوع'
+  }
+
+  return `${formatFee(value)} د.ب`
 }
 
 export function TripDetailsView({
@@ -201,6 +267,12 @@ export function TripDetailsView({
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+
+  const [paymentSavingId, setPaymentSavingId] =
+    useState<string | null>(null)
+
+  const [responseSavingId, setResponseSavingId] =
+    useState<string | null>(null)
 
   const [directPublishAllowed, setDirectPublishAllowed] =
     useState(false)
@@ -227,6 +299,9 @@ export function TripDetailsView({
     useState<
       'all' | 'accepted' | 'rejected' | 'pending'
     >('all')
+
+  const [paymentInputs, setPaymentInputs] =
+    useState<Record<string, string>>({})
 
   async function loadPublishSetting() {
     setSettingsLoading(true)
@@ -301,6 +376,20 @@ export function TripDetailsView({
           )
           .map((student) => student.id),
       )
+
+      const nextPaymentInputs: Record<
+        string,
+        string
+      > = {}
+
+      nextData.students.forEach((student) => {
+        nextPaymentInputs[student.id] =
+          student.payment_amount > 0
+            ? String(student.payment_amount)
+            : ''
+      })
+
+      setPaymentInputs(nextPaymentInputs)
     } catch (error) {
       console.error(
         'Load trip students error:',
@@ -343,10 +432,6 @@ export function TripDetailsView({
     )
   }, [data, selectedIds])
 
-  /*
-   * نتائج الرحلة:
-   * نعتمد فقط على الطلاب الموجودين في الرحلة.
-   */
   const tripResults = useMemo(() => {
     if (!data) {
       return {
@@ -498,6 +583,9 @@ export function TripDetailsView({
     data?.trip.status !== 'closed' &&
     data?.trip.status !== 'published'
 
+  const canEditParticipantData =
+    data?.trip.status !== 'closed'
+
   function toggleStudent(studentId: string) {
     if (!canEdit) return
 
@@ -597,6 +685,205 @@ export function TripDetailsView({
     }
   }
 
+  async function savePayment(
+    student: Student,
+  ) {
+    if (!canEditParticipantData) return
+
+    const rawValue =
+      paymentInputs[student.id] ?? ''
+
+    const normalizedValue =
+      rawValue.trim().replace(',', '.')
+
+    const amount =
+      normalizedValue === ''
+        ? 0
+        : Number(normalizedValue)
+
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      setError(
+        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+      )
+      return
+    }
+
+    const roundedAmount =
+      Math.round(amount * 1000) / 1000
+
+    setPaymentSavingId(student.id)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        `/api/trips/${encodeURIComponent(
+          tripId,
+        )}/students`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'payment',
+            student_id: student.id,
+            payment_amount: roundedAmount,
+          }),
+        },
+      )
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر حفظ مبلغ الدفع.',
+        )
+      }
+
+      setData((current) => {
+        if (!current) return current
+
+        return {
+          ...current,
+          students: current.students.map(
+            (item) =>
+              item.id === student.id
+                ? {
+                    ...item,
+                    payment_amount:
+                      roundedAmount,
+                  }
+                : item,
+          ),
+        }
+      })
+
+      setPaymentInputs((current) => ({
+        ...current,
+        [student.id]:
+          roundedAmount > 0
+            ? String(roundedAmount)
+            : '',
+      }))
+
+      setSuccess(
+        `تم حفظ دفع الطالب ${student.name}.`,
+      )
+    } catch (error) {
+      console.error(
+        'Save trip payment error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر حفظ مبلغ الدفع.',
+      )
+    } finally {
+      setPaymentSavingId(null)
+    }
+  }
+
+  async function saveResponse(
+    student: Student,
+    responseValue: ResponseStatus,
+  ) {
+    if (!canEditParticipantData) return
+
+    setResponseSavingId(student.id)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        `/api/trips/${encodeURIComponent(
+          tripId,
+        )}/students`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'response',
+            student_id: student.id,
+            response: responseValue,
+          }),
+        },
+      )
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر حفظ رد الطالب.',
+        )
+      }
+
+      const updatedStudent =
+        result?.student
+
+      setData((current) => {
+        if (!current) return current
+
+        return {
+          ...current,
+          students: current.students.map(
+            (item) => {
+              if (item.id !== student.id) {
+                return item
+              }
+
+              return {
+                ...item,
+                response:
+                  updatedStudent?.response ??
+                  responseValue,
+                response_note:
+                  updatedStudent?.response_note ??
+                  null,
+                response_source:
+                  updatedStudent?.response_source ??
+                  (responseValue === 'pending'
+                    ? null
+                    : 'admin'),
+                responded_at:
+                  updatedStudent?.responded_at ??
+                  (responseValue === 'pending'
+                    ? null
+                    : new Date().toISOString()),
+              }
+            },
+          ),
+        }
+      })
+
+      setSuccess(
+        `تم تحديث رد الطالب ${student.name}.`,
+      )
+    } catch (error) {
+      console.error(
+        'Save trip response error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر حفظ رد الطالب.',
+      )
+    } finally {
+      setResponseSavingId(null)
+    }
+  }
+
   async function publishTrip() {
     if (!data) return
 
@@ -671,6 +958,143 @@ export function TripDetailsView({
       )
     } finally {
       setPublishing(false)
+    }
+  }
+
+  async function downloadExcel() {
+    if (!data) return
+
+    try {
+      const XLSX = await import('xlsx')
+
+      const students = data.students.filter(
+        (student) => student.selected,
+      )
+
+      if (students.length === 0) {
+        setError(
+          'لا يوجد طلاب محددون لتنزيلهم.',
+        )
+        return
+      }
+
+      const rows = students.map(
+        (student, index) => ({
+          '#': index + 1,
+          الطالب: student.name,
+          'الرقم الشخصي':
+            student.personal_id ?? '',
+          المستوى:
+            student.level?.name ?? '',
+          الهاتف:
+            student.phone ??
+            student.whatsapp ??
+            '',
+          الحضور:
+            student.attendance_percentage !==
+            null
+              ? `${student.attendance_percentage.toFixed(
+                  1,
+                )}%`
+              : 'لا توجد بيانات',
+          حاضر:
+            student.attendance_present,
+          غائب:
+            student.attendance_absent,
+          متأخر:
+            student.attendance_late,
+          مستأذن:
+            student.attendance_excused,
+          'الرد':
+            getResponseLabel(
+              student.response,
+            ),
+          'نوع الرد':
+            getResponseSourceLabel(
+              student.response_source,
+            ),
+          'تاريخ الرد':
+            student.responded_at
+              ? formatDateTime(
+                  student.responded_at,
+                )
+              : '',
+          الدفع:
+            student.payment_amount > 0
+              ? student.payment_amount
+              : 0,
+          'حالة الدفع':
+            student.payment_amount > 0
+              ? 'مدفوع'
+              : 'غير مدفوع',
+          'ملاحظة الرد':
+            student.response_note ?? '',
+          'ملاحظات الدورة':
+            student.course_notes
+              .map(
+                (note) => note.note,
+              )
+              .join(' | '),
+        }),
+      )
+
+      const worksheet =
+        XLSX.utils.json_to_sheet(rows)
+
+      const workbook =
+        XLSX.utils.book_new()
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        'طلاب الرحلة',
+      )
+
+      worksheet['!cols'] = [
+        { wch: 6 },
+        { wch: 28 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 16 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 30 },
+        { wch: 40 },
+      ]
+
+      const safeName =
+        data.trip.name
+          .replace(
+            /[\\/:*?"<>|]/g,
+            '',
+          )
+          .trim() || 'الرحلة'
+
+      XLSX.writeFile(
+        workbook,
+        `${safeName}-طلاب.xlsx`,
+      )
+
+      setSuccess(
+        'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
+      )
+    } catch (error) {
+      console.error(
+        'Export trip students error:',
+        error,
+      )
+
+      setError(
+        'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
+      )
     }
   }
 
@@ -761,24 +1185,41 @@ export function TripDetailsView({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            loadData({ silent: true })
-          }
-          disabled={refreshing}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${
-              refreshing
-                ? 'animate-spin'
-                : ''
-            }`}
-          />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={downloadExcel}
+            disabled={
+              data.students.filter(
+                (student) =>
+                  student.selected,
+              ).length === 0
+            }
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            تنزيل Excel
+          </button>
 
-          تحديث
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              loadData({ silent: true })
+            }
+            disabled={refreshing}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${
+                refreshing
+                  ? 'animate-spin'
+                  : ''
+              }`}
+            />
+
+            تحديث
+          </button>
+        </div>
       </div>
 
       {/* Trip information */}
@@ -890,7 +1331,7 @@ export function TripDetailsView({
         )}
       </div>
 
-      {/* Results button / summary */}
+      {/* Results */}
       {trip.status === 'published' ||
       trip.status === 'closed' ? (
         <div className="overflow-hidden rounded-xl border bg-card">
@@ -926,7 +1367,6 @@ export function TripDetailsView({
             </button>
           </div>
 
-          {/* Result summary */}
           <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border bg-muted/20 p-4">
               <div className="flex items-center justify-between">
@@ -987,7 +1427,6 @@ export function TripDetailsView({
 
           {showResults && (
             <div className="border-t">
-              {/* Results filters */}
               <div className="border-b bg-muted/20 p-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="relative">
@@ -1034,9 +1473,8 @@ export function TripDetailsView({
                 </div>
               </div>
 
-              {/* Results table */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[750px] text-sm">
+                <table className="w-full min-w-[1250px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30 text-right">
                       <th className="w-12 px-4 py-3">
@@ -1056,7 +1494,19 @@ export function TripDetailsView({
                       </th>
 
                       <th className="px-4 py-3 font-medium">
-                        النتيجة
+                        الرد
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        نوع الرد
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        تاريخ الرد
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        الدفع
                       </th>
 
                       <th className="px-4 py-3 font-medium">
@@ -1069,7 +1519,7 @@ export function TripDetailsView({
                     {resultStudents.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={9}
                           className="px-4 py-12 text-center text-muted-foreground"
                         >
                           لا توجد نتائج مطابقة.
@@ -1120,15 +1570,128 @@ export function TripDetailsView({
                             </td>
 
                             <td className="px-4 py-3">
+                              <select
+                                value={
+                                  student.response
+                                }
+                                disabled={
+                                  !canEditParticipantData ||
+                                  responseSavingId ===
+                                    student.id
+                                }
+                                onChange={(event) =>
+                                  saveResponse(
+                                    student,
+                                    event
+                                      .target
+                                      .value as ResponseStatus,
+                                  )
+                                }
+                                className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
+                                  student.response ===
+                                  'accepted'
+                                    ? 'border-emerald-500/30'
+                                    : student.response ===
+                                        'rejected'
+                                      ? 'border-red-500/30'
+                                      : ''
+                                }`}
+                              >
+                                <option value="pending">
+                                  بانتظار الرد
+                                </option>
+
+                                <option value="accepted">
+                                  موافق
+                                </option>
+
+                                <option value="rejected">
+                                  رافض
+                                </option>
+                              </select>
+                            </td>
+
+                            <td className="px-4 py-3">
                               <span
-                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getResponseClass(
-                                  student.response,
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
+                                  student.response_source,
                                 )}`}
                               >
-                                {getResponseLabel(
-                                  student.response,
+                                {getResponseSourceLabel(
+                                  student.response_source,
                                 )}
                               </span>
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                              {formatDateTime(
+                                student.responded_at,
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <div className="flex min-w-[150px] items-center gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={
+                                    paymentInputs[
+                                      student.id
+                                    ] ?? ''
+                                  }
+                                  disabled={
+                                    !canEditParticipantData ||
+                                    paymentSavingId ===
+                                      student.id
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    setPaymentInputs(
+                                      (
+                                        current,
+                                      ) => ({
+                                        ...current,
+                                        [student.id]:
+                                          event
+                                            .target
+                                            .value,
+                                      }),
+                                    )
+                                  }
+                                  placeholder="0.000"
+                                  className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                                />
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    savePayment(
+                                      student,
+                                    )
+                                  }
+                                  disabled={
+                                    !canEditParticipantData ||
+                                    paymentSavingId ===
+                                      student.id
+                                  }
+                                  className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {paymentSavingId ===
+                                  student.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    'حفظ'
+                                  )}
+                                </button>
+                              </div>
+
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {formatPayment(
+                                  student.payment_amount,
+                                )}
+                              </div>
                             </td>
 
                             <td className="max-w-[280px] px-4 py-3">
@@ -1160,8 +1723,8 @@ export function TripDetailsView({
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           {trip.status === 'published'
-            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة نتائج ردود الطلاب من قسم «نتائج الرحلة».'
-            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب.'}
+            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
+            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع.'}
         </div>
       )}
 
@@ -1317,7 +1880,7 @@ export function TripDetailsView({
 
           {/* Students table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1150px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/30 text-right">
                   <th className="w-12 px-4 py-3">
@@ -1344,6 +1907,10 @@ export function TripDetailsView({
                     الرد
                   </th>
 
+                  <th className="px-4 py-3 font-medium">
+                    الدفع
+                  </th>
+
                   <th className="px-4 py-3 text-center font-medium">
                     اختيار
                   </th>
@@ -1355,7 +1922,7 @@ export function TripDetailsView({
                 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
@@ -1498,15 +2065,57 @@ export function TripDetailsView({
                           </td>
 
                           <td className="px-4 py-3">
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-xs ${getResponseClass(
-                                student.response,
-                              )}`}
+                            <select
+                              value={
+                                student.response
+                              }
+                              disabled={
+                                !canEditParticipantData ||
+                                responseSavingId ===
+                                  student.id
+                              }
+                              onChange={(event) =>
+                                saveResponse(
+                                  student,
+                                  event
+                                    .target
+                                    .value as ResponseStatus,
+                                )
+                              }
+                              className="h-9 rounded-lg border bg-background px-2 text-xs outline-none focus:border-primary"
                             >
-                              {getResponseLabel(
-                                student.response,
+                              <option value="pending">
+                                بانتظار الرد
+                              </option>
+
+                              <option value="accepted">
+                                موافق
+                              </option>
+
+                              <option value="rejected">
+                                رافض
+                              </option>
+                            </select>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
+                                  student.response_source,
+                                )}`}
+                              >
+                                {getResponseSourceLabel(
+                                  student.response_source,
+                                )}
+                              </span>
+
+                              {student.responded_at && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatDateTime(
+                                    student.responded_at,
+                                  )}
+                                </span>
                               )}
-                            </span>
+                            </div>
 
                             {student.response_note && (
                               <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
@@ -1515,6 +2124,65 @@ export function TripDetailsView({
                                 }
                               </div>
                             )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div className="flex min-w-[150px] items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={
+                                  paymentInputs[
+                                    student.id
+                                  ] ?? ''
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  setPaymentInputs(
+                                    (
+                                      current,
+                                    ) => ({
+                                      ...current,
+                                      [student.id]:
+                                        event
+                                          .target
+                                          .value,
+                                    }),
+                                  )
+                                }
+                                placeholder="0.000"
+                                className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  savePayment(
+                                    student,
+                                  )
+                                }
+                                disabled={
+                                  paymentSavingId ===
+                                  student.id
+                                }
+                                className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {paymentSavingId ===
+                                student.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'حفظ'
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {formatPayment(
+                                student.payment_amount,
+                              )}
+                            </div>
                           </td>
 
                           <td className="px-4 py-3 text-center">
