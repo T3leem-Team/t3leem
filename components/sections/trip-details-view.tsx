@@ -11,6 +11,10 @@ import {
   Send,
   Users,
   X,
+  BarChart3,
+  UserCheck,
+  UserX,
+  Clock3,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -171,6 +175,21 @@ function getResponseLabel(response: Student['response']) {
   }
 }
 
+function getResponseClass(
+  response: Student['response'],
+) {
+  switch (response) {
+    case 'accepted':
+      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+
+    case 'rejected':
+      return 'bg-red-500/10 text-red-700 dark:text-red-400'
+
+    default:
+      return 'bg-muted text-muted-foreground'
+  }
+}
+
 export function TripDetailsView({
   tripId,
 }: {
@@ -185,6 +204,7 @@ export function TripDetailsView({
 
   const [directPublishAllowed, setDirectPublishAllowed] =
     useState(false)
+
   const [settingsLoading, setSettingsLoading] =
     useState(true)
 
@@ -193,20 +213,32 @@ export function TripDetailsView({
 
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
+
   const [showEligibleOnly, setShowEligibleOnly] =
     useState(true)
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] =
+    useState<string[]>([])
+
+  const [showResults, setShowResults] =
+    useState(false)
+
+  const [responseFilter, setResponseFilter] =
+    useState<
+      'all' | 'accepted' | 'rejected' | 'pending'
+    >('all')
 
   async function loadPublishSetting() {
     setSettingsLoading(true)
 
-    const { data: settings, error: settingsError } =
-      await supabase
-        .from('student_status_settings')
-        .select('allow_direct_trip_publish')
-        .limit(1)
-        .maybeSingle()
+    const {
+      data: settings,
+      error: settingsError,
+    } = await supabase
+      .from('student_status_settings')
+      .select('allow_direct_trip_publish')
+      .limit(1)
+      .maybeSingle()
 
     if (settingsError) {
       console.error(
@@ -224,7 +256,9 @@ export function TripDetailsView({
     setSettingsLoading(false)
   }
 
-  async function loadData(options?: { silent?: boolean }) {
+  async function loadData(options?: {
+    silent?: boolean
+  }) {
     const silent = options?.silent ?? false
 
     if (silent) {
@@ -238,7 +272,9 @@ export function TripDetailsView({
 
     try {
       const response = await fetch(
-        `/api/trips/${encodeURIComponent(tripId)}/students`,
+        `/api/trips/${encodeURIComponent(
+          tripId,
+        )}/students`,
         {
           method: 'GET',
           cache: 'no-store',
@@ -260,7 +296,9 @@ export function TripDetailsView({
 
       setSelectedIds(
         nextData.students
-          .filter((student) => student.selected)
+          .filter(
+            (student) => student.selected,
+          )
           .map((student) => student.id),
       )
     } catch (error) {
@@ -294,6 +332,109 @@ export function TripDetailsView({
       (student) => student.eligible,
     )
   }, [data])
+
+  const selectedStudents = useMemo(() => {
+    if (!data) return []
+
+    const selected = new Set(selectedIds)
+
+    return data.students.filter((student) =>
+      selected.has(student.id),
+    )
+  }, [data, selectedIds])
+
+  /*
+   * نتائج الرحلة:
+   * نعتمد فقط على الطلاب الموجودين في الرحلة.
+   */
+  const tripResults = useMemo(() => {
+    if (!data) {
+      return {
+        total: 0,
+        accepted: 0,
+        rejected: 0,
+        pending: 0,
+      }
+    }
+
+    const students = data.students.filter(
+      (student) => student.selected,
+    )
+
+    return {
+      total: students.length,
+
+      accepted: students.filter(
+        (student) =>
+          student.response === 'accepted',
+      ).length,
+
+      rejected: students.filter(
+        (student) =>
+          student.response === 'rejected',
+      ).length,
+
+      pending: students.filter(
+        (student) =>
+          student.response === 'pending',
+      ).length,
+    }
+  }, [data])
+
+  const resultStudents = useMemo(() => {
+    if (!data) return []
+
+    const normalizedSearch =
+      search.trim().toLowerCase()
+
+    return data.students
+      .filter((student) => student.selected)
+      .filter((student) => {
+        if (responseFilter === 'all') {
+          return true
+        }
+
+        return (
+          student.response === responseFilter
+        )
+      })
+      .filter((student) => {
+        if (!normalizedSearch) {
+          return true
+        }
+
+        const name =
+          typeof student.name === 'string'
+            ? student.name
+            : ''
+
+        const personalId =
+          typeof student.personal_id === 'string'
+            ? student.personal_id
+            : ''
+
+        const phone =
+          typeof student.phone === 'string'
+            ? student.phone
+            : ''
+
+        return (
+          name
+            .toLowerCase()
+            .includes(normalizedSearch) ||
+          personalId
+            .toLowerCase()
+            .includes(normalizedSearch) ||
+          phone
+            .toLowerCase()
+            .includes(normalizedSearch)
+        )
+      })
+  }, [
+    data,
+    search,
+    responseFilter,
+  ])
 
   const filteredStudents = useMemo(() => {
     if (!data || !Array.isArray(data.students)) {
@@ -412,7 +553,9 @@ export function TripDetailsView({
 
     try {
       const response = await fetch(
-        `/api/trips/${encodeURIComponent(tripId)}/students`,
+        `/api/trips/${encodeURIComponent(
+          tripId,
+        )}/students`,
         {
           method: 'POST',
           headers: {
@@ -476,7 +619,7 @@ export function TripDetailsView({
     }
 
     const confirmed = window.confirm(
-      'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المؤهلين في صفحة حالة الطالب.',
+      'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
     )
 
     if (!confirmed) return
@@ -486,16 +629,20 @@ export function TripDetailsView({
     setSuccess('')
 
     try {
-      const response = await fetch('/api/trips', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        '/api/trips',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            id: tripId,
+            status: 'published',
+          }),
         },
-        body: JSON.stringify({
-          id: tripId,
-          status: 'published',
-        }),
-      })
+      )
 
       const result = await response.json()
 
@@ -539,7 +686,9 @@ export function TripDetailsView({
       >
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>جاري تحميل الرحلة...</span>
+          <span>
+            جاري تحميل الرحلة...
+          </span>
         </div>
       </div>
     )
@@ -741,11 +890,277 @@ export function TripDetailsView({
         )}
       </div>
 
-      {/* Closed notice */}
+      {/* Results button / summary */}
+      {trip.status === 'published' ||
+      trip.status === 'closed' ? (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+
+                <h2 className="text-lg font-semibold">
+                  نتائج الرحلة
+                </h2>
+              </div>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                نتائج ردود الطلاب على الرحلة.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowResults(
+                  (current) => !current,
+                )
+              }
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition hover:bg-muted"
+            >
+              <BarChart3 className="h-4 w-4" />
+
+              {showResults
+                ? 'إخفاء النتائج'
+                : 'عرض النتائج'}
+            </button>
+          </div>
+
+          {/* Result summary */}
+          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  إجمالي الطلاب
+                </span>
+
+                <Users className="h-5 w-5 text-muted-foreground" />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold">
+                {tripResults.total}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-emerald-700 dark:text-emerald-400">
+                  موافق
+                </span>
+
+                <UserCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                {tripResults.accepted}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-red-700 dark:text-red-400">
+                  رافض
+                </span>
+
+                <UserX className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-400">
+                {tripResults.rejected}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-amber-700 dark:text-amber-400">
+                  بانتظار الرد
+                </span>
+
+                <Clock3 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
+                {tripResults.pending}
+              </p>
+            </div>
+          </div>
+
+          {showResults && (
+            <div className="border-t">
+              {/* Results filters */}
+              <div className="border-b bg-muted/20 p-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                    <input
+                      value={search}
+                      onChange={(event) =>
+                        setSearch(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="بحث باسم الطالب أو الرقم الشخصي أو الهاتف..."
+                      className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
+                    />
+                  </div>
+
+                  <select
+                    value={responseFilter}
+                    onChange={(event) =>
+                      setResponseFilter(
+                        event.target
+                          .value as typeof responseFilter,
+                      )
+                    }
+                    className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
+                  >
+                    <option value="all">
+                      جميع الردود
+                    </option>
+
+                    <option value="accepted">
+                      الموافقون فقط
+                    </option>
+
+                    <option value="rejected">
+                      الرافضون فقط
+                    </option>
+
+                    <option value="pending">
+                      الذين لم يردوا
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Results table */}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[750px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-right">
+                      <th className="w-12 px-4 py-3">
+                        #
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        الطالب
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        المستوى
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        الهاتف
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        النتيجة
+                      </th>
+
+                      <th className="px-4 py-3 font-medium">
+                        الملاحظة
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {resultStudents.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-4 py-12 text-center text-muted-foreground"
+                        >
+                          لا توجد نتائج مطابقة.
+                        </td>
+                      </tr>
+                    ) : (
+                      resultStudents.map(
+                        (
+                          student,
+                          index,
+                        ) => (
+                          <tr
+                            key={
+                              student.id
+                            }
+                            className="border-b last:border-0 hover:bg-muted/20"
+                          >
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {index + 1}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <div className="font-medium">
+                                {
+                                  student.name
+                                }
+                              </div>
+
+                              {student.personal_id && (
+                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                  {
+                                    student.personal_id
+                                  }
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {student.level
+                                ?.name ||
+                                'غير محدد'}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {student.phone ||
+                                student.whatsapp ||
+                                'غير متوفر'}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${getResponseClass(
+                                  student.response,
+                                )}`}
+                              >
+                                {getResponseLabel(
+                                  student.response,
+                                )}
+                              </span>
+                            </td>
+
+                            <td className="max-w-[280px] px-4 py-3">
+                              {student.response_note ? (
+                                <span className="text-sm text-muted-foreground">
+                                  {
+                                    student.response_note
+                                  }
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد ملاحظة
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ),
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Closed / Published notice */}
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           {trip.status === 'published'
-            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب.'
+            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة نتائج ردود الطلاب من قسم «نتائج الرحلة».'
             : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب.'}
         </div>
       )}
@@ -768,454 +1183,481 @@ export function TripDetailsView({
       )}
 
       {/* Students section */}
-      <div className="overflow-hidden rounded-xl border bg-card">
-        {/* Section header */}
-        <div className="border-b p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
+      {canEdit && (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {/* Section header */}
+          <div className="border-b p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
 
-                <h2 className="text-lg font-semibold">
-                  الطلاب المؤهلون
-                </h2>
+                  <h2 className="text-lg font-semibold">
+                    الطلاب المؤهلون
+                  </h2>
+                </div>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  حدد الطلاب الذين تريد إضافتهم إلى الرحلة.
+                </p>
               </div>
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                حدد الطلاب الذين تريد إضافتهم إلى الرحلة.
-              </p>
-            </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+                  المؤهلون:{' '}
+                  <strong>
+                    {eligibleStudents.length}
+                  </strong>
+                </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                المؤهلون:{' '}
-                <strong>
-                  {eligibleStudents.length}
-                </strong>
-              </div>
-
-              <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                المحددون:{' '}
-                <strong>
-                  {selectedCount}
-                </strong>
+                <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+                  المحددون:{' '}
+                  <strong>
+                    {selectedCount}
+                  </strong>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Filters */}
-        <div className="border-b bg-muted/20 p-4">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {/* Filters */}
+          <div className="border-b bg-muted/20 p-4">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
-              <input
-                value={search}
+                <input
+                  value={search}
+                  onChange={(event) =>
+                    setSearch(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
+                  className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
+                />
+              </div>
+
+              <select
+                value={levelFilter}
                 onChange={(event) =>
-                  setSearch(
+                  setLevelFilter(
                     event.target.value,
                   )
                 }
-                placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
-                className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
-              />
+                className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
+              >
+                <option value="all">
+                  كل المستويات
+                </option>
+
+                {levels.map((level) => (
+                  <option
+                    key={level.id}
+                    value={level.id}
+                  >
+                    {level.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={
+                    showEligibleOnly
+                  }
+                  onChange={(event) =>
+                    setShowEligibleOnly(
+                      event.target.checked,
+                    )
+                  }
+                  className="h-4 w-4"
+                />
+
+                عرض المؤهلين فقط
+              </label>
             </div>
 
-            <select
-              value={levelFilter}
-              onChange={(event) =>
-                setLevelFilter(
-                  event.target.value,
-                )
-              }
-              className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
-            >
-              <option value="all">
-                كل المستويات
-              </option>
-
-              {levels.map((level) => (
-                <option
-                  key={level.id}
-                  value={level.id}
-                >
-                  {level.name}
-                </option>
-              ))}
-            </select>
-
-            <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
-              <input
-                type="checkbox"
-                checked={
-                  showEligibleOnly
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={
+                  selectAllVisible
                 }
-                onChange={(event) =>
-                  setShowEligibleOnly(
-                    event.target.checked,
-                  )
+                disabled={
+                  !canEdit ||
+                  filteredStudents.filter(
+                    (student) =>
+                      student.eligible,
+                  ).length === 0
                 }
-                className="h-4 w-4"
-              />
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckSquare className="h-4 w-4" />
 
-              عرض المؤهلين فقط
-            </label>
+                تحديد الظاهر
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  clearVisibleSelection
+                }
+                disabled={
+                  !canEdit ||
+                  filteredStudents.length === 0
+                }
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                إلغاء تحديد الظاهر
+              </button>
+            </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={selectAllVisible}
-              disabled={
-                !canEdit ||
-                filteredStudents.filter(
-                  (student) =>
-                    student.eligible,
-                ).length === 0
-              }
-              className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <CheckSquare className="h-4 w-4" />
+          {/* Students table */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30 text-right">
+                  <th className="w-12 px-4 py-3">
+                    #
+                  </th>
 
-              تحديد الظاهر
-            </button>
+                  <th className="px-4 py-3 font-medium">
+                    الطالب
+                  </th>
 
-            <button
-              type="button"
-              onClick={
-                clearVisibleSelection
-              }
-              disabled={
-                !canEdit ||
-                filteredStudents.length === 0
-              }
-              className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              إلغاء تحديد الظاهر
-            </button>
-          </div>
-        </div>
+                  <th className="px-4 py-3 font-medium">
+                    المستوى
+                  </th>
 
-        {/* Students table */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30 text-right">
-                <th className="w-12 px-4 py-3">
-                  #
-                </th>
+                  <th className="px-4 py-3 font-medium">
+                    الحضور
+                  </th>
 
-                <th className="px-4 py-3 font-medium">
-                  الطالب
-                </th>
+                  <th className="px-4 py-3 font-medium">
+                    ملاحظات الدورة
+                  </th>
 
-                <th className="px-4 py-3 font-medium">
-                  المستوى
-                </th>
+                  <th className="px-4 py-3 font-medium">
+                    الرد
+                  </th>
 
-                <th className="px-4 py-3 font-medium">
-                  الحضور
-                </th>
-
-                <th className="px-4 py-3 font-medium">
-                  ملاحظات الدورة
-                </th>
-
-                <th className="px-4 py-3 font-medium">
-                  الرد
-                </th>
-
-                <th className="px-4 py-3 text-center font-medium">
-                  اختيار
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredStudents.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-12 text-center text-muted-foreground"
-                  >
-                    لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
-                  </td>
+                  <th className="px-4 py-3 text-center font-medium">
+                    اختيار
+                  </th>
                 </tr>
-              ) : (
-                filteredStudents.map(
-                  (student, index) => {
-                    const isSelected =
-                      selectedIds.includes(
-                        student.id,
-                      )
+              </thead>
 
-                    return (
-                      <tr
-                        key={student.id}
-                        className={`border-b last:border-0 ${
-                          isSelected
-                            ? 'bg-primary/5'
-                            : 'hover:bg-muted/20'
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {index + 1}
-                        </td>
+              <tbody>
+                {filteredStudents.length ===
+                0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-12 text-center text-muted-foreground"
+                    >
+                      لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudents.map(
+                    (
+                      student,
+                      index,
+                    ) => {
+                      const isSelected =
+                        selectedIds.includes(
+                          student.id,
+                        )
 
-                        <td className="px-4 py-3">
-                          <div className="font-medium">
-                            {student.name}
-                          </div>
+                      return (
+                        <tr
+                          key={
+                            student.id
+                          }
+                          className={`border-b last:border-0 ${
+                            isSelected
+                              ? 'bg-primary/5'
+                              : 'hover:bg-muted/20'
+                          }`}
+                        >
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {index + 1}
+                          </td>
 
-                          {student.personal_id && (
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                              {student.personal_id}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {student.level?.name ||
-                            'غير محدد'}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div
-                            className={`font-semibold ${
-                              student.attendance_percentage ===
-                              null
-                                ? 'text-muted-foreground'
-                                : getAttendanceClass(
-                                    student.attendance_percentage,
-                                  )
-                            }`}
-                          >
-                            {student.attendance_percentage ===
-                            null
-                              ? 'لا توجد بيانات'
-                              : `${student.attendance_percentage.toFixed(
-                                  1,
-                                )}%`}
-                          </div>
-
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            حاضر{' '}
-                            {
-                              student.attendance_present
-                            }
-                            {' · '}
-                            غائب{' '}
-                            {
-                              student.attendance_absent
-                            }
-                            {' · '}
-                            متأخر{' '}
-                            {
-                              student.attendance_late
-                            }
-                            {' · '}
-                            مستأذن{' '}
-                            {
-                              student.attendance_excused
-                            }
-                          </div>
-                        </td>
-
-                        <td className="max-w-[260px] px-4 py-3">
-                          {student.course_notes
-                            .length > 0 ? (
-                            <div className="space-y-1">
-                              {student.course_notes
-                                .slice(0, 2)
-                                .map(
-                                  (
-                                    note,
-                                    noteIndex,
-                                  ) => (
-                                    <div
-                                      key={`${student.id}-${noteIndex}`}
-                                      className="rounded-md bg-muted/50 px-2 py-1 text-xs"
-                                    >
-                                      {
-                                        note.note
-                                      }
-                                    </div>
-                                  ),
-                                )}
-
-                              {student
-                                .course_notes
-                                .length > 2 && (
-                                <div className="text-xs text-muted-foreground">
-                                  +
-                                  {student
-                                    .course_notes
-                                    .length -
-                                    2}{' '}
-                                  ملاحظات أخرى
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              لا توجد ملاحظات
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs">
-                            {getResponseLabel(
-                              student.response,
-                            )}
-                          </span>
-
-                          {student.response_note && (
-                            <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                          <td className="px-4 py-3">
+                            <div className="font-medium">
                               {
-                                student.response_note
+                                student.name
                               }
                             </div>
-                          )}
-                        </td>
 
-                        <td className="px-4 py-3 text-center">
-                          {student.eligible ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                toggleStudent(
-                                  student.id,
-                                )
-                              }
-                              disabled={
-                                !canEdit
-                              }
-                              aria-label={
-                                isSelected
-                                  ? 'إلغاء اختيار الطالب'
-                                  : 'اختيار الطالب'
-                              }
-                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
-                                isSelected
-                                  ? 'border-primary bg-primary text-primary-foreground'
-                                  : 'bg-background hover:bg-muted'
-                              } ${
-                                !canEdit
-                                  ? 'cursor-not-allowed opacity-50'
-                                  : ''
+                            {student.personal_id && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {
+                                  student.personal_id
+                                }
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {student.level
+                              ?.name ||
+                              'غير محدد'}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <div
+                              className={`font-semibold ${
+                                student.attendance_percentage ===
+                                null
+                                  ? 'text-muted-foreground'
+                                  : getAttendanceClass(
+                                      student.attendance_percentage,
+                                    )
                               }`}
                             >
-                              {isSelected && (
-                                <Check className="h-4 w-4" />
+                              {student.attendance_percentage ===
+                              null
+                                ? 'لا توجد بيانات'
+                                : `${student.attendance_percentage.toFixed(
+                                    1,
+                                  )}%`}
+                            </div>
+
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              حاضر{' '}
+                              {
+                                student.attendance_present
+                              }
+                              {' · '}
+                              غائب{' '}
+                              {
+                                student.attendance_absent
+                              }
+                              {' · '}
+                              متأخر{' '}
+                              {
+                                student.attendance_late
+                              }
+                              {' · '}
+                              مستأذن{' '}
+                              {
+                                student.attendance_excused
+                              }
+                            </div>
+                          </td>
+
+                          <td className="max-w-[260px] px-4 py-3">
+                            {student.course_notes
+                              .length > 0 ? (
+                              <div className="space-y-1">
+                                {student.course_notes
+                                  .slice(
+                                    0,
+                                    2,
+                                  )
+                                  .map(
+                                    (
+                                      note,
+                                      noteIndex,
+                                    ) => (
+                                      <div
+                                        key={`${student.id}-${noteIndex}`}
+                                        className="rounded-md bg-muted/50 px-2 py-1 text-xs"
+                                      >
+                                        {
+                                          note.note
+                                        }
+                                      </div>
+                                    ),
+                                  )}
+
+                                {student
+                                  .course_notes
+                                  .length >
+                                  2 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    +
+                                    {student
+                                      .course_notes
+                                      .length -
+                                      2}{' '}
+                                    ملاحظات أخرى
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                لا توجد ملاحظات
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs ${getResponseClass(
+                                student.response,
+                              )}`}
+                            >
+                              {getResponseLabel(
+                                student.response,
                               )}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              غير مؤهل
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  },
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
 
-        {/* Bottom actions */}
-        <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-muted-foreground">
-              تم تحديد{' '}
-              <strong className="text-foreground">
-                {selectedCount}
-              </strong>{' '}
-              طالب من أصل{' '}
-              <strong className="text-foreground">
-                {eligibleStudents.length}
-              </strong>{' '}
-              طالب مؤهل.
-            </div>
+                            {student.response_note && (
+                              <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                                {
+                                  student.response_note
+                                }
+                              </div>
+                            )}
+                          </td>
 
-            <button
-              type="button"
-              onClick={saveStudents}
-              disabled={
-                !canEdit || saving
-              }
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  جاري الحفظ...
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  حفظ الطلاب
-                </>
-              )}
-            </button>
+                          <td className="px-4 py-3 text-center">
+                            {student.eligible ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  toggleStudent(
+                                    student.id,
+                                  )
+                                }
+                                disabled={
+                                  !canEdit
+                                }
+                                aria-label={
+                                  isSelected
+                                    ? 'إلغاء اختيار الطالب'
+                                    : 'اختيار الطالب'
+                                }
+                                className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                                  isSelected
+                                    ? 'border-primary bg-primary text-primary-foreground'
+                                    : 'bg-background hover:bg-muted'
+                                } ${
+                                  !canEdit
+                                    ? 'cursor-not-allowed opacity-50'
+                                    : ''
+                                }`}
+                              >
+                                {isSelected && (
+                                  <Check className="h-4 w-4" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                غير مؤهل
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    },
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* Publish */}
-          {trip.status === 'draft' && (
-            <div className="border-t pt-4">
-              <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Send className="h-4 w-4" />
+          {/* Bottom actions */}
+          <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                تم تحديد{' '}
+                <strong className="text-foreground">
+                  {selectedCount}
+                </strong>{' '}
+                طالب من أصل{' '}
+                <strong className="text-foreground">
+                  {eligibleStudents.length}
+                </strong>{' '}
+                طالب مؤهل.
+              </div>
 
-                    <p className="font-semibold">
-                      نشر الرحلة
+              <button
+                type="button"
+                onClick={
+                  saveStudents
+                }
+                disabled={
+                  !canEdit || saving
+                }
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    حفظ الطلاب
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Publish */}
+            {trip.status === 'draft' && (
+              <div className="border-t pt-4">
+                <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4 w-4" />
+
+                      <p className="font-semibold">
+                        نشر الرحلة
+                      </p>
+                    </div>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
                     </p>
+
+                    {!settingsLoading &&
+                      !directPublishAllowed && (
+                        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                          النشر المباشر موقوف من إعدادات النظام.
+                        </p>
+                      )}
                   </div>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
-                  </p>
-
-                  {!settingsLoading &&
-                    !directPublishAllowed && (
-                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                        النشر المباشر موقوف من إعدادات النظام.
-                      </p>
+                  <button
+                    type="button"
+                    onClick={
+                      publishTrip
+                    }
+                    disabled={
+                      settingsLoading ||
+                      !directPublishAllowed ||
+                      publishing ||
+                      selectedCount === 0
+                    }
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {publishing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        جاري النشر...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        نشر الرحلة
+                      </>
                     )}
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={publishTrip}
-                  disabled={
-                    settingsLoading ||
-                    !directPublishAllowed ||
-                    publishing ||
-                    selectedCount === 0
-                  }
-                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {publishing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      جاري النشر...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      نشر الرحلة
-                    </>
-                  )}
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
