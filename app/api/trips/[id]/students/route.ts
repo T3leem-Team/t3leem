@@ -32,6 +32,12 @@ type EnrollmentRow = {
   status: string | null
 }
 
+type AssignmentRow = {
+  id: string
+  student_id: string
+  course_id: string
+}
+
 type AttendanceRow = {
   id: string
   student_id: string
@@ -151,8 +157,20 @@ function isAttendanceEligible(
   min: number | null,
   max: number | null,
 ) {
+  /*
+   * إذا لم يتم وضع أي شرط حضور،
+   * فلا نستبعد الطالب بسبب عدم وجود نسبة.
+   */
+  if (min === null && max === null) {
+    return true
+  }
+
+  /*
+   * إذا يوجد شرط حضور ولا توجد نسبة فعلية،
+   * فالطالب غير مؤهل لهذا الشرط.
+   */
   if (percentage === null) {
-    return min === null
+    return false
   }
 
   if (
@@ -200,9 +218,16 @@ function getEligibilityNote(
 ) {
   const reasons: string[] = []
 
+  /*
+   * لا نعتبر عدم وجود نسبة مشكلة
+   * إذا لم يتم تحديد شرط حضور.
+   */
   if (
     attendancePercentage === null &&
-    attendanceMin !== null
+    (
+      attendanceMin !== null ||
+      attendanceMax !== null
+    )
   ) {
     reasons.push(
       'لا توجد بيانات حضور كافية',
@@ -484,66 +509,152 @@ export async function GET(
 
     /*
      * -------------------------------------------------------
-     * طلاب السنة الحالية
+     * طلاب السنة + المستوى
      * -------------------------------------------------------
      *
-     * نستخدم enrollments لمعرفة مستوى الطالب
-     * داخل السنة الدراسية الخاصة بالرحلة.
+     * هذه الخطوة تحدد الطلاب الموجودين في
+     * السنة والمستويات المختارة.
+     *
+     * لكن وجود enrollment وحده لا يكفي.
+     * يجب أن يكون الطالب أيضاً مسنداً للدورة.
      */
 
-    const {
-      data: enrollments,
-      error: enrollmentsError,
-    } = await supabase
-      .from('enrollments')
-      .select(`
-        id,
-        student_id,
-        academic_year_id,
-        level_id,
-        class_id,
-        status
-      `)
-      .eq(
-        'academic_year_id',
-        trip.academic_year_id,
-      )
-      .in(
-        'level_id',
-        levelIds.length > 0
-          ? levelIds
-          : ['00000000-0000-0000-0000-000000000000'],
-      )
+    let enrollmentRows: EnrollmentRow[] = []
 
-    if (enrollmentsError) {
-      console.error(
-        'GET /api/trips/[id]/students - enrollments error:',
-        enrollmentsError,
-      )
+    if (levelIds.length > 0) {
+      const {
+        data: enrollments,
+        error: enrollmentsError,
+      } = await supabase
+        .from('enrollments')
+        .select(`
+          id,
+          student_id,
+          academic_year_id,
+          level_id,
+          class_id,
+          status
+        `)
+        .eq(
+          'academic_year_id',
+          trip.academic_year_id,
+        )
+        .in(
+          'level_id',
+          levelIds,
+        )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل تسجيلات الطلاب',
-          details:
-            enrollmentsError.message,
-        },
-        { status: 500 },
-      )
+      if (enrollmentsError) {
+        console.error(
+          'GET /api/trips/[id]/students - enrollments error:',
+          enrollmentsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل تسجيلات الطلاب',
+            details:
+              enrollmentsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      enrollmentRows =
+        (enrollments ??
+          []) as EnrollmentRow[]
     }
 
-    const enrollmentRows =
-      (enrollments ??
-        []) as EnrollmentRow[]
+    /*
+     * -------------------------------------------------------
+     * الإسناد للدورة - شرط أساسي
+     * -------------------------------------------------------
+     *
+     * الطالب يعتبر من طلاب الدورة إذا كان له
+     * teacher_student_assignments مرتبط بالدورة
+     * المحددة في الرحلة.
+     *
+     * لا نشترط معلماً معيناً.
+     * وجود أي إسناد للطالب في هذه الدورة يكفي.
+     */
 
-    const enrollmentIds =
-      enrollmentRows.map(
-        (item) => item.id,
-      )
-
-    const studentIds = [
+    const enrollmentStudentIds = [
       ...new Set(
         enrollmentRows.map(
+          (item) => item.student_id,
+        ),
+      ),
+    ]
+
+    let assignmentRows: AssignmentRow[] = []
+
+    if (
+      enrollmentStudentIds.length > 0
+    ) {
+      const {
+        data: assignments,
+        error: assignmentsError,
+      } = await supabase
+        .from('teacher_student_assignments')
+        .select(`
+          id,
+          student_id,
+          course_id
+        `)
+        .eq(
+          'course_id',
+          trip.course_id,
+        )
+        .in(
+          'student_id',
+          enrollmentStudentIds,
+        )
+
+      if (assignmentsError) {
+        console.error(
+          'GET /api/trips/[id]/students - assignments error:',
+          assignmentsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل إسنادات الطلاب للدورة',
+            details:
+              assignmentsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      assignmentRows =
+        (assignments ??
+          []) as AssignmentRow[]
+    }
+
+    const assignedStudentIds =
+      new Set(
+        assignmentRows.map(
+          (item) => item.student_id,
+        ),
+      )
+
+    /*
+     * نأخذ فقط التسجيلات التي لها إسناد
+     * في الدورة المحددة.
+     */
+    const candidateEnrollmentRows =
+      enrollmentRows.filter(
+        (enrollment) =>
+          assignedStudentIds.has(
+            enrollment.student_id,
+          ),
+      )
+
+    const candidateStudentIds = [
+      ...new Set(
+        candidateEnrollmentRows.map(
           (item) => item.student_id,
         ),
       ),
@@ -557,7 +668,9 @@ export async function GET(
 
     let students: StudentRow[] = []
 
-    if (studentIds.length > 0) {
+    if (
+      candidateStudentIds.length > 0
+    ) {
       const {
         data: studentRows,
         error: studentsError,
@@ -571,7 +684,10 @@ export async function GET(
           whatsapp,
           notes
         `)
-        .in('id', studentIds)
+        .in(
+          'id',
+          candidateStudentIds,
+        )
 
       if (studentsError) {
         console.error(
@@ -643,15 +759,12 @@ export async function GET(
      * -------------------------------------------------------
      * الحضور
      * -------------------------------------------------------
-     *
-     * نقرأ سجلات الحضور للدورة والسنة
-     * للطلاب المرشحين.
      */
 
     let attendance: AttendanceRow[] = []
 
     if (
-      studentIds.length > 0
+      candidateStudentIds.length > 0
     ) {
       let attendanceQuery =
         supabase
@@ -671,13 +784,9 @@ export async function GET(
           )
           .in(
             'student_id',
-            studentIds,
+            candidateStudentIds,
           )
 
-      /*
-       * إذا كانت الدورة لها تاريخ نهاية،
-       * لا نستخدم سجلات بعد تاريخ النهاية.
-       */
       if (course?.end_date) {
         attendanceQuery =
           attendanceQuery.lte(
@@ -715,7 +824,7 @@ export async function GET(
 
     /*
      * -------------------------------------------------------
-     * الملاحظات الخاصة بالرحلة الموجودة مسبقاً
+     * طلاب الرحلة المحفوظون
      * -------------------------------------------------------
      */
 
@@ -809,8 +918,13 @@ export async function GET(
     const resultStudents =
       students
         .map((student) => {
+          /*
+           * بما أن studentIds جاءت من assignments
+           * فهي بالتأكيد مرتبطة بالدورة.
+           */
+
           const enrollment =
-            enrollmentRows.find(
+            candidateEnrollmentRows.find(
               (item) =>
                 item.student_id ===
                 student.id,
@@ -843,12 +957,6 @@ export async function GET(
               trip.attendance_max,
             )
 
-          /*
-           * حالياً notes الموجودة في students
-           * هي مصدر الملاحظات العامة للطالب.
-           *
-           * لا ننشئ مصدراً جديداً للملاحظات.
-           */
           const notesEligible =
             isNotesEligible(
               student.notes,
@@ -915,10 +1023,6 @@ export async function GET(
             attendance_not_recorded:
               attendanceSummary.notRecorded,
 
-            /*
-             * نرسل ملاحظات الطالب للعرض
-             * داخل صفحة الرحلة.
-             */
             course_notes:
               student.notes
                 ? [
@@ -929,6 +1033,13 @@ export async function GET(
                   ]
                 : [],
 
+            /*
+             * إذا عندنا سجل محفوظ للطالب:
+             * نستخدم selected كما هو.
+             *
+             * إذا لم يوجد سجل:
+             * يبدأ محدداً إذا كان مؤهلاً.
+             */
             eligible,
 
             eligibility_note:
@@ -975,9 +1086,6 @@ export async function GET(
      * -------------------------------------------------------
      * تواريخ الحضور الموجودة فعلياً
      * -------------------------------------------------------
-     *
-     * نرسلها للواجهة للاستفادة منها
-     * في التفاصيل.
      */
 
     const lessonDates = [
@@ -1129,6 +1237,18 @@ export async function POST(
       )
     }
 
+    /*
+     * هذه هي الاختيارات النهائية من الواجهة.
+     *
+     * مهم:
+     * وجود الطالب في selectedStudentIds يعني
+     * selected=true.
+     *
+     * عدم وجوده يعني selected=false.
+     *
+     * لا نحذف السجل من قاعدة البيانات.
+     */
+
     const selectedStudentIds =
       Array.isArray(
         body.student_ids,
@@ -1148,9 +1268,14 @@ export async function POST(
           ]
         : []
 
+    const selectedSet =
+      new Set(
+        selectedStudentIds,
+      )
+
     /*
      * -------------------------------------------------------
-     * المستويات التابعة للرحلة
+     * مستويات الرحلة
      * -------------------------------------------------------
      */
 
@@ -1198,14 +1323,8 @@ export async function POST(
 
     /*
      * -------------------------------------------------------
-     * الطلاب المؤهلون فعلياً
+     * التسجيلات في السنة والمستوى
      * -------------------------------------------------------
-     *
-     * نعيد التحقق من أن الطالب:
-     * - في السنة الصحيحة
-     * - في مستوى الرحلة
-     *
-     * ثم نحفظ المختارين فقط.
      */
 
     const {
@@ -1251,23 +1370,112 @@ export async function POST(
       (enrollments ??
         []) as EnrollmentRow[]
 
-    const validEnrollmentMap =
-      new Map<
-        string,
-        EnrollmentRow
-      >()
+    /*
+     * -------------------------------------------------------
+     * الإسناد للدورة - شرط أساسي
+     * -------------------------------------------------------
+     */
 
-    for (const enrollment of enrollmentRows) {
-      validEnrollmentMap.set(
-        enrollment.student_id,
-        enrollment,
-      )
+    const enrollmentStudentIds = [
+      ...new Set(
+        enrollmentRows.map(
+          (item) => item.student_id,
+        ),
+      ),
+    ]
+
+    let assignmentRows: AssignmentRow[] = []
+
+    if (
+      enrollmentStudentIds.length > 0
+    ) {
+      const {
+        data: assignments,
+        error: assignmentsError,
+      } = await supabase
+        .from('teacher_student_assignments')
+        .select(`
+          id,
+          student_id,
+          course_id
+        `)
+        .eq(
+          'course_id',
+          trip.course_id,
+        )
+        .in(
+          'student_id',
+          enrollmentStudentIds,
+        )
+
+      if (assignmentsError) {
+        console.error(
+          'POST /api/trips/[id]/students - assignments error:',
+          assignmentsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر التحقق من إسنادات الطلاب للدورة',
+            details:
+              assignmentsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      assignmentRows =
+        (assignments ??
+          []) as AssignmentRow[]
     }
+
+    const assignedStudentIds =
+      new Set(
+        assignmentRows.map(
+          (item) => item.student_id,
+        ),
+      )
+
+    /*
+     * المرشحون الحقيقيون:
+     *
+     * السنة + المستوى + الإسناد للدورة.
+     */
+    const candidateEnrollmentRows =
+      enrollmentRows.filter(
+        (enrollment) =>
+          assignedStudentIds.has(
+            enrollment.student_id,
+          ),
+      )
+
+    const candidateStudentIds = [
+      ...new Set(
+        candidateEnrollmentRows.map(
+          (item) => item.student_id,
+        ),
+      ),
+    ]
+
+    const candidateStudentSet =
+      new Set(
+        candidateStudentIds,
+      )
+
+    /*
+     * -------------------------------------------------------
+     * التحقق من الاختيارات المرسلة
+     * -------------------------------------------------------
+     *
+     * أي طالب تم تحديده في الواجهة يجب أن يكون
+     * من المرشحين الحقيقيين.
+     */
 
     const invalidStudentIds =
       selectedStudentIds.filter(
         (studentId) =>
-          !validEnrollmentMap.has(
+          !candidateStudentSet.has(
             studentId,
           ),
       )
@@ -1276,7 +1484,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            'يوجد طالب غير مرتبط بالسنة أو المستوى المحدد للرحلة',
+            'يوجد طالب غير مرتبط بالسنة أو المستوى أو غير مسند للدورة المحددة',
         },
         { status: 400 },
       )
@@ -1284,277 +1492,21 @@ export async function POST(
 
     /*
      * -------------------------------------------------------
-     * حذف الاختيارات السابقة
+     * الطلاب الموجودون حالياً في الرحلة
      * -------------------------------------------------------
-     */
-
-    const {
-      error: deleteError,
-    } = await supabase
-      .from('trip_students')
-      .delete()
-      .eq('trip_id', id)
-
-    if (deleteError) {
-      console.error(
-        'POST /api/trips/[id]/students - delete old students error:',
-        deleteError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحديث طلاب الرحلة',
-          details:
-            deleteError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    /*
-     * -------------------------------------------------------
-     * حفظ الطلاب المختارين
-     * -------------------------------------------------------
-     */
-
-    if (selectedStudentIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        tripId: id,
-        students: [],
-      })
-    }
-
-    /*
-     * نحصل على النسب الحالية قبل الحفظ
-     * حتى تبقى بيانات trip_students متزامنة
-     * مع العرض.
-     */
-
-    const studentIds =
-      selectedStudentIds
-
-    const {
-      data: attendanceStatuses,
-    } = await supabase
-      .from('attendance_statuses')
-      .select(`
-        id,
-        name
-      `)
-
-    const statusMap =
-      new Map<string, string>(
-        (
-          (attendanceStatuses ??
-            []) as AttendanceStatus[]
-        ).map((status) => [
-          status.id,
-          status.name,
-        ]),
-      )
-
-    const {
-      data: attendanceRows,
-      error: attendanceError,
-    } = await supabase
-      .from('attendance')
-      .select(`
-        id,
-        student_id,
-        enrollment_id,
-        attendance_date,
-        status_id,
-        note,
-        course_id
-      `)
-      .eq(
-        'course_id',
-        trip.course_id,
-      )
-      .in(
-        'student_id',
-        studentIds,
-      )
-
-    if (attendanceError) {
-      console.error(
-        'POST /api/trips/[id]/students - attendance error:',
-        attendanceError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر حساب حضور الطلاب',
-          details:
-            attendanceError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    const attendanceByStudent =
-      new Map<
-        string,
-        AttendanceRow[]
-      >()
-
-    for (const record of (
-      (attendanceRows ??
-        []) as AttendanceRow[]
-    )) {
-      const current =
-        attendanceByStudent.get(
-          record.student_id,
-        ) ?? []
-
-      current.push(record)
-
-      attendanceByStudent.set(
-        record.student_id,
-        current,
-      )
-    }
-
-    const {
-      data: studentRows,
-      error: studentsError,
-    } = await supabase
-      .from('students')
-      .select(`
-        id,
-        notes
-      `)
-      .in(
-        'id',
-        studentIds,
-      )
-
-    if (studentsError) {
-      console.error(
-        'POST /api/trips/[id]/students - student notes error:',
-        studentsError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل ملاحظات الطلاب',
-          details:
-            studentsError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    const studentNotesMap =
-      new Map<string, string | null>(
-        (
-          studentRows ?? []
-        ).map((student) => [
-          student.id,
-          student.notes,
-        ]),
-      )
-
-    const rows =
-      selectedStudentIds.map(
-        (studentId) => {
-          const enrollment =
-            validEnrollmentMap.get(
-              studentId,
-            )!
-
-          const records =
-            attendanceByStudent.get(
-              studentId,
-            ) ?? []
-
-          const summary =
-            calculateAttendance(
-              records,
-              statusMap,
-            )
-
-          const notes =
-            studentNotesMap.get(
-              studentId,
-            ) ?? null
-
-          const attendanceEligible =
-            isAttendanceEligible(
-              summary.percentage,
-              trip.attendance_min,
-              trip.attendance_max,
-            )
-
-          const notesEligible =
-            isNotesEligible(
-              notes,
-              trip.notes_requirement,
-            )
-
-          const eligible =
-            attendanceEligible &&
-            notesEligible
-
-          return {
-            trip_id: id,
-            student_id: studentId,
-            enrollment_id:
-              enrollment.id,
-
-            attendance_percentage:
-              summary.percentage,
-
-            attendance_present:
-              summary.present,
-
-            attendance_absent:
-              summary.absent,
-
-            attendance_late:
-              summary.late,
-
-            attendance_excused:
-              summary.excused,
-
-            attendance_not_recorded:
-              summary.notRecorded,
-
-            eligibility_note:
-              getEligibilityNote(
-                summary.percentage,
-                trip.attendance_min,
-                trip.attendance_max,
-                notes,
-                trip.notes_requirement,
-              ),
-
-            selected: true,
-
-            response: 'pending',
-          }
-        },
-      )
-
-    /*
-     * مهم:
-     * الاختيار النهائي يتم من الإدارة.
      *
-     * لذلك لا نمنع الحفظ إذا كانت بعض الشروط
-     * غير متحققة، لكن نحفظ eligibility_note
-     * حتى تكون الحالة واضحة للمستخدم.
+     * نقرأهم حتى:
+     * - نحافظ على الرد
+     * - نحافظ على ملاحظة الرد
+     * - نحافظ على responded_at
+     * - نحدث selected فقط
      */
 
     const {
-      data: insertedStudents,
-      error: insertError,
+      data: existingTripStudents,
+      error: existingTripStudentsError,
     } = await supabase
       .from('trip_students')
-      .insert(rows)
       .select(`
         id,
         trip_id,
@@ -1572,19 +1524,567 @@ export async function POST(
         response_note,
         responded_at
       `)
+      .eq('trip_id', id)
 
-    if (insertError) {
+    if (existingTripStudentsError) {
       console.error(
-        'POST /api/trips/[id]/students - insert error:',
-        insertError,
+        'POST /api/trips/[id]/students - existing trip students error:',
+        existingTripStudentsError,
       )
 
       return NextResponse.json(
         {
           error:
-            'تعذر حفظ طلاب الرحلة',
+            'تعذر تحميل الاختيارات السابقة',
           details:
-            insertError.message,
+            existingTripStudentsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    const existingRows =
+      (existingTripStudents ??
+        []) as TripStudentRow[]
+
+    const existingMap =
+      new Map(
+        existingRows.map(
+          (row) => [
+            row.student_id,
+            row,
+          ],
+        ),
+      )
+
+    /*
+     * -------------------------------------------------------
+     * حذف السجلات التي لم تعد ضمن الدورة/المستوى
+     * -------------------------------------------------------
+     *
+     * لا نحذف الطالب لأنه فقط unchecked.
+     *
+     * نحذف فقط إذا لم يعد مرشحاً أساساً:
+     * - تغير مستواه
+     * - خرج من السنة
+     * - لم يعد مسنداً للدورة
+     */
+
+    const staleStudentIds =
+      existingRows
+        .map(
+          (row) =>
+            row.student_id,
+        )
+        .filter(
+          (studentId) =>
+            !candidateStudentSet.has(
+              studentId,
+            ),
+        )
+
+    if (
+      staleStudentIds.length > 0
+    ) {
+      const {
+        error: deleteStaleError,
+      } = await supabase
+        .from('trip_students')
+        .delete()
+        .eq('trip_id', id)
+        .in(
+          'student_id',
+          staleStudentIds,
+        )
+
+      if (deleteStaleError) {
+        console.error(
+          'POST /api/trips/[id]/students - delete stale students error:',
+          deleteStaleError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تنظيف طلاب الرحلة السابقين',
+            details:
+              deleteStaleError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      for (const studentId of staleStudentIds) {
+        existingMap.delete(
+          studentId,
+        )
+      }
+    }
+
+    /*
+     * -------------------------------------------------------
+     * بيانات الحضور
+     * -------------------------------------------------------
+     */
+
+    const {
+      data: attendanceStatuses,
+      error: attendanceStatusesError,
+    } = await supabase
+      .from('attendance_statuses')
+      .select(`
+        id,
+        name
+      `)
+
+    if (attendanceStatusesError) {
+      console.error(
+        'POST /api/trips/[id]/students - attendance statuses error:',
+        attendanceStatusesError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل حالات الحضور',
+          details:
+            attendanceStatusesError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    const statusMap =
+      new Map<string, string>(
+        (
+          (attendanceStatuses ??
+            []) as AttendanceStatus[]
+        ).map((status) => [
+          status.id,
+          status.name,
+        ]),
+      )
+
+    let attendanceRows: AttendanceRow[] = []
+
+    if (
+      candidateStudentIds.length > 0
+    ) {
+      const {
+        data: attendance,
+        error: attendanceError,
+      } = await supabase
+        .from('attendance')
+        .select(`
+          id,
+          student_id,
+          enrollment_id,
+          attendance_date,
+          status_id,
+          note,
+          course_id
+        `)
+        .eq(
+          'course_id',
+          trip.course_id,
+        )
+        .in(
+          'student_id',
+          candidateStudentIds,
+        )
+
+      if (attendanceError) {
+        console.error(
+          'POST /api/trips/[id]/students - attendance error:',
+          attendanceError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر حساب حضور الطلاب',
+            details:
+              attendanceError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      attendanceRows =
+        (attendance ??
+          []) as AttendanceRow[]
+    }
+
+    const attendanceByStudent =
+      new Map<
+        string,
+        AttendanceRow[]
+      >()
+
+    for (const record of attendanceRows) {
+      const current =
+        attendanceByStudent.get(
+          record.student_id,
+        ) ?? []
+
+      current.push(record)
+
+      attendanceByStudent.set(
+        record.student_id,
+        current,
+      )
+    }
+
+    /*
+     * -------------------------------------------------------
+     * ملاحظات الطلاب
+     * -------------------------------------------------------
+     */
+
+    let studentRows: Array<{
+      id: string
+      notes: string | null
+    }> = []
+
+    if (
+      candidateStudentIds.length > 0
+    ) {
+      const {
+        data: students,
+        error: studentsError,
+      } = await supabase
+        .from('students')
+        .select(`
+          id,
+          notes
+        `)
+        .in(
+          'id',
+          candidateStudentIds,
+        )
+
+      if (studentsError) {
+        console.error(
+          'POST /api/trips/[id]/students - student notes error:',
+          studentsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر تحميل ملاحظات الطلاب',
+            details:
+              studentsError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      studentRows =
+        students ?? []
+    }
+
+    const studentNotesMap =
+      new Map<string, string | null>(
+        studentRows.map(
+          (student) => [
+            student.id,
+            student.notes,
+          ],
+        ),
+      )
+
+    /*
+     * -------------------------------------------------------
+     * تحديث / إنشاء السجلات
+     * -------------------------------------------------------
+     *
+     * هنا الإصلاح الأساسي لمشكلة الحفظ.
+     *
+     * كل طالب مرشح يحصل على selected:
+     *
+     * موجود في selectedStudentIds → true
+     * غير موجود → false
+     *
+     * الطالب الموجود سابقاً:
+     * نعمل UPDATE للحقول الخاصة بالاختيار
+     * فقط، ولا نلمس response.
+     *
+     * الطالب الجديد:
+     * نعمل INSERT ويأخذ response=pending.
+     */
+
+    const newRows: Array<{
+      trip_id: string
+      student_id: string
+      enrollment_id: string
+      attendance_percentage: number | null
+      attendance_present: number
+      attendance_absent: number
+      attendance_late: number
+      attendance_excused: number
+      attendance_not_recorded: number
+      eligibility_note: string | null
+      selected: boolean
+    }> = []
+
+    for (const studentId of candidateStudentIds) {
+      const enrollment =
+        candidateEnrollmentRows.find(
+          (item) =>
+            item.student_id ===
+            studentId,
+        )
+
+      if (!enrollment) {
+        continue
+      }
+
+      const records =
+        attendanceByStudent.get(
+          studentId,
+        ) ?? []
+
+      const summary =
+        calculateAttendance(
+          records,
+          statusMap,
+        )
+
+      const notes =
+        studentNotesMap.get(
+          studentId,
+        ) ?? null
+
+      const attendanceEligible =
+        isAttendanceEligible(
+          summary.percentage,
+          trip.attendance_min,
+          trip.attendance_max,
+        )
+
+      const notesEligible =
+        isNotesEligible(
+          notes,
+          trip.notes_requirement,
+        )
+
+      const eligibilityNote =
+        getEligibilityNote(
+          summary.percentage,
+          trip.attendance_min,
+          trip.attendance_max,
+          notes,
+          trip.notes_requirement,
+        )
+
+      const selected =
+        selectedSet.has(
+          studentId,
+        )
+
+      const existing =
+        existingMap.get(
+          studentId,
+        )
+
+      if (existing) {
+        /*
+         * مهم جداً:
+         * لا نستخدم upsert هنا حتى لا نلمس
+         * response / response_note / responded_at.
+         */
+        const {
+          error: updateError,
+        } = await supabase
+          .from('trip_students')
+          .update({
+            enrollment_id:
+              enrollment.id,
+            attendance_percentage:
+              summary.percentage,
+            attendance_present:
+              summary.present,
+            attendance_absent:
+              summary.absent,
+            attendance_late:
+              summary.late,
+            attendance_excused:
+              summary.excused,
+            attendance_not_recorded:
+              summary.notRecorded,
+            eligibility_note:
+              eligibilityNote,
+            selected,
+          })
+          .eq(
+            'id',
+            existing.id,
+          )
+
+        if (updateError) {
+          console.error(
+            'POST /api/trips/[id]/students - update student error:',
+            updateError,
+          )
+
+          return NextResponse.json(
+            {
+              error:
+                'تعذر تحديث اختيار أحد الطلاب',
+              details:
+                updateError.message,
+            },
+            { status: 500 },
+          )
+        }
+
+        continue
+      }
+
+      /*
+       * طالب جديد:
+       * يبدأ بحالة انتظار الرد.
+       */
+      newRows.push({
+        trip_id: id,
+        student_id: studentId,
+        enrollment_id:
+          enrollment.id,
+        attendance_percentage:
+          summary.percentage,
+        attendance_present:
+          summary.present,
+        attendance_absent:
+          summary.absent,
+        attendance_late:
+          summary.late,
+        attendance_excused:
+          summary.excused,
+        attendance_not_recorded:
+          summary.notRecorded,
+        eligibility_note:
+          eligibilityNote,
+        selected,
+      })
+    }
+
+    /*
+     * -------------------------------------------------------
+     * إدخال الطلاب الجدد
+     * -------------------------------------------------------
+     */
+
+    let insertedStudents: TripStudentRow[] = []
+
+    if (newRows.length > 0) {
+      const {
+        data: insertedRows,
+        error: insertError,
+      } = await supabase
+        .from('trip_students')
+        .insert(
+          newRows.map((row) => ({
+            ...row,
+            response: 'pending',
+          })),
+        )
+        .select(`
+          id,
+          trip_id,
+          student_id,
+          enrollment_id,
+          attendance_percentage,
+          attendance_present,
+          attendance_absent,
+          attendance_late,
+          attendance_excused,
+          attendance_not_recorded,
+          eligibility_note,
+          selected,
+          response,
+          response_note,
+          responded_at
+        `)
+
+      if (insertError) {
+        console.error(
+          'POST /api/trips/[id]/students - insert error:',
+          insertError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر حفظ طلاب الرحلة الجدد',
+            details:
+              insertError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      insertedStudents =
+        (insertedRows ??
+          []) as TripStudentRow[]
+    }
+
+    /*
+     * -------------------------------------------------------
+     * النتيجة
+     * -------------------------------------------------------
+     *
+     * لا يهم إذا لم يتم اختيار أي طالب.
+     * في هذه الحالة جميع المرشحين يصبحون selected=false.
+     *
+     * وهذا هو المطلوب حتى لا ترجع الـcheckbox
+     * وتتعلم تلقائياً بعد إعادة التحميل.
+     */
+
+    const {
+      data: finalStudents,
+      error: finalStudentsError,
+    } = await supabase
+      .from('trip_students')
+      .select(`
+        id,
+        trip_id,
+        student_id,
+        enrollment_id,
+        attendance_percentage,
+        attendance_present,
+        attendance_absent,
+        attendance_late,
+        attendance_excused,
+        attendance_not_recorded,
+        eligibility_note,
+        selected,
+        response,
+        response_note,
+        responded_at
+      `)
+      .eq('trip_id', id)
+      .in(
+        'student_id',
+        candidateStudentIds.length > 0
+          ? candidateStudentIds
+          : [
+              '00000000-0000-0000-0000-000000000000',
+            ],
+      )
+
+    if (finalStudentsError) {
+      console.error(
+        'POST /api/trips/[id]/students - final students error:',
+        finalStudentsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تم الحفظ ولكن تعذر تحميل النتيجة النهائية',
+          details:
+            finalStudentsError.message,
         },
         { status: 500 },
       )
@@ -1593,8 +2093,9 @@ export async function POST(
     return NextResponse.json({
       success: true,
       tripId: id,
+      selectedStudentIds,
       students:
-        insertedStudents ?? [],
+        finalStudents ?? insertedStudents,
     })
   } catch (error) {
     console.error(
