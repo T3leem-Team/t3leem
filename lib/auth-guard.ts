@@ -5,8 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase-server'
 const SESSION_COOKIE = 't3leem_session_id'
 const DEVICE_COOKIE = 't3leem_device_token'
 
-const MAX_SESSION_HOURS = 4
-const IDLE_TIMEOUT_MINUTES = 30
+const IDLE_TIMEOUT_MINUTES = 20
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,14 +34,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      * 1. Supabase Auth
      * --------------------------------------------------
      */
-    const supabase =
-      await createSupabaseServerClient()
+    const supabase = await createSupabaseServerClient()
 
     const {
       data: { user },
       error: authError,
-    } =
-      await supabase.auth.getUser()
+    } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return {
@@ -58,15 +55,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      */
     const cookieStore = await cookies()
 
-    const sessionId =
-      cookieStore.get(
-        SESSION_COOKIE,
-      )?.value
-
-    const deviceToken =
-      cookieStore.get(
-        DEVICE_COOKIE,
-      )?.value
+    const sessionId = cookieStore.get(SESSION_COOKIE)?.value
+    const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -83,23 +73,21 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const {
       data: session,
       error: sessionError,
-    } =
-      await supabaseAdmin
-        .from('active_sessions')
-        .select(
-          `
+    } = await supabaseAdmin
+      .from('active_sessions')
+      .select(
+        `
           id,
           auth_user_id,
           trusted_device_id,
           is_active,
           login_at,
-          last_activity_at,
-          expires_at
-          `,
-        )
-        .eq('id', sessionId)
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
+          last_activity_at
+        `,
+      )
+      .eq('id', sessionId)
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
 
     if (
       sessionError ||
@@ -112,56 +100,21 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    /*
+     * --------------------------------------------------
+     * 4. انتهاء الخمول: 20 دقيقة
+     * --------------------------------------------------
+     *
+     * لا يوجد هنا حد أقصى للجلسة.
+     *
+     * إذا كان المستخدم نشطًا، تستمر الجلسة.
+     * إذا لم يحدث نشاط لمدة 20 دقيقة، تنتهي.
+     */
     const now = Date.now()
 
-    /*
-     * --------------------------------------------------
-     * 4. الحد الأقصى للجلسة: 4 ساعات
-     * --------------------------------------------------
-     */
-    const maxSessionExpiry =
-      new Date(session.login_at).getTime() +
-      MAX_SESSION_HOURS *
-        60 *
-        60 *
-        1000
-
-    const databaseExpiry =
-      session.expires_at
-        ? new Date(
-            session.expires_at,
-          ).getTime()
-        : maxSessionExpiry
-
-    const finalExpiry = Math.min(
-      maxSessionExpiry,
-      databaseExpiry,
-    )
-
-    if (now >= finalExpiry) {
-      await closeSession(
-        session.id,
-      )
-
-      return {
-        allowed: false,
-        reason: 'session_expired',
-      }
-    }
-
-    /*
-     * --------------------------------------------------
-     * 5. انتهاء الخمول: 30 دقيقة
-     *
-     * مهم:
-     * هذا Guard لا يعتبر نفسه نشاطًا.
-     * last_activity_at يتحدث فقط من نشاط المستخدم الحقيقي.
-     * --------------------------------------------------
-     */
-    const lastActivity =
-      new Date(
-        session.last_activity_at,
-      ).getTime()
+    const lastActivity = new Date(
+      session.last_activity_at,
+    ).getTime()
 
     const idleTimeout =
       IDLE_TIMEOUT_MINUTES *
@@ -169,12 +122,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       1000
 
     if (
-      now - lastActivity >=
-      idleTimeout
+      Number.isNaN(lastActivity) ||
+      now - lastActivity >= idleTimeout
     ) {
-      await closeSession(
-        session.id,
-      )
+      await closeSession(session.id)
 
       return {
         allowed: false,
@@ -184,36 +135,29 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     /*
      * --------------------------------------------------
-     * 6. المستخدم
-     *
-     * نرجع profileId هنا حتى تستطيع
-     * بقية Guards استخدامه بدون إعادة
-     * الاستعلام عن user_profiles.
+     * 5. المستخدم
      * --------------------------------------------------
      */
     const {
       data: profile,
       error: profileError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          'id, auth_user_id, is_active',
-        )
-        .eq(
-          'auth_user_id',
-          user.id,
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(
+        'id, auth_user_id, is_active',
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .maybeSingle()
 
     if (
       profileError ||
       !profile ||
       !profile.is_active
     ) {
-      await closeSession(
-        session.id,
-      )
+      await closeSession(session.id)
 
       return {
         allowed: false,
@@ -223,48 +167,44 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     /*
      * --------------------------------------------------
-     * 7. الجهاز الموثوق
+     * 6. الجهاز الموثوق
      * --------------------------------------------------
      */
-    const deviceTokenHash =
-      await sha256(
-        deviceToken,
-      )
+    const deviceTokenHash = await sha256(
+      deviceToken,
+    )
 
     const {
       data: device,
       error: deviceError,
-    } =
-      await supabaseAdmin
-        .from('trusted_devices')
-        .select(
-          'id, auth_user_id, status',
-        )
-        .eq(
-          'id',
-          session.trusted_device_id,
-        )
-        .eq(
-          'auth_user_id',
-          user.id,
-        )
-        .eq(
-          'device_token_hash',
-          deviceTokenHash,
-        )
-        .eq(
-          'status',
-          'approved',
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('trusted_devices')
+      .select(
+        'id, auth_user_id, status',
+      )
+      .eq(
+        'id',
+        session.trusted_device_id,
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .eq(
+        'device_token_hash',
+        deviceTokenHash,
+      )
+      .eq(
+        'status',
+        'approved',
+      )
+      .maybeSingle()
 
     if (
       deviceError ||
       !device
     ) {
-      await closeSession(
-        session.id,
-      )
+      await closeSession(session.id)
 
       return {
         allowed: false,
@@ -274,12 +214,30 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     /*
      * --------------------------------------------------
+     * 7. تحديث آخر نشاط
+     * --------------------------------------------------
+     *
+     * بما أن المستخدم وصل إلى Guard بنجاح،
+     * نعتبر هذا نشاطًا حقيقيًا للنظام.
+     *
+     * لذلك الجلسة تستمر طالما المستخدم يستخدم
+     * الصفحات والـ API المحمية.
+     */
+    const activityNow =
+      new Date().toISOString()
+
+    await supabaseAdmin
+      .from('active_sessions')
+      .update({
+        last_activity_at: activityNow,
+      })
+      .eq('id', session.id)
+      .eq('auth_user_id', user.id)
+      .eq('is_active', true)
+
+    /*
+     * --------------------------------------------------
      * 8. السماح
-     *
-     * نرجع profileId حتى لا يتم
-     * الاستعلام عن user_profiles مرة أخرى.
-     *
-     * لا نحدث last_activity_at هنا.
      * --------------------------------------------------
      */
     return {
@@ -303,7 +261,9 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 }
 
 /*
+ * --------------------------------------------------
  * إغلاق الجلسة
+ * --------------------------------------------------
  */
 async function closeSession(
   sessionId: string,
@@ -323,7 +283,9 @@ async function closeSession(
 }
 
 /*
+ * --------------------------------------------------
  * SHA-256
+ * --------------------------------------------------
  */
 async function sha256(
   value: string,
