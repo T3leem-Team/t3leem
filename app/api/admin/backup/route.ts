@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  createClient,
+  type SupabaseClient,
+} from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 
 export const runtime = 'nodejs'
@@ -13,14 +16,19 @@ const PAGE_SIZE = 1000
 
 function getAdminClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!url) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL غير موجود.')
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_URL غير موجود.',
+    )
   }
 
   if (!serviceRoleKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY غير موجود.')
+    throw new Error(
+      'SUPABASE_SERVICE_ROLE_KEY غير موجود.',
+    )
   }
 
   return createClient(url, serviceRoleKey, {
@@ -33,14 +41,19 @@ function getAdminClient(): SupabaseClient {
 
 async function checkAdmin(): Promise<SupabaseClient> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL غير موجود.')
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_URL غير موجود.',
+    )
   }
 
   if (!anonKey) {
-    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY غير موجود.')
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY غير موجود.',
+    )
   }
 
   const cookieStore = await cookies()
@@ -57,7 +70,11 @@ async function checkAdmin(): Promise<SupabaseClient> {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(
-              ({ name, value, options }) => {
+              ({
+                name,
+                value,
+                options,
+              }) => {
                 cookieStore.set(
                   name,
                   value,
@@ -87,14 +104,16 @@ async function checkAdmin(): Promise<SupabaseClient> {
 
   const admin = getAdminClient()
 
-  const { data: profile, error: profileError } =
-    await admin
-      .from('user_profiles')
-      .select(
-        'id, auth_user_id, username, full_name, role, is_active',
-      )
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
+  const {
+    data: profile,
+    error: profileError,
+  } = await admin
+    .from('user_profiles')
+    .select(
+      'id, auth_user_id, username, full_name, role, is_active',
+    )
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
 
   if (profileError) {
     throw new Error(
@@ -147,7 +166,10 @@ async function getAll(
       query = queryBuilder(query)
     }
 
-    const { data, error } = await query
+    const {
+      data,
+      error,
+    } = await query
 
     if (error) {
       throw new Error(
@@ -155,11 +177,15 @@ async function getAll(
       )
     }
 
-    const batch = (data || []) as Row[]
+    const batch =
+      (data || []) as Row[]
 
     rows.push(...batch)
 
-    if (batch.length < PAGE_SIZE) {
+    if (
+      batch.length <
+      PAGE_SIZE
+    ) {
       break
     }
 
@@ -176,10 +202,16 @@ function idsFrom(
   return Array.from(
     new Set(
       rows
-        .map((row) => row[key])
+        .map(
+          (row) =>
+            row[key],
+        )
         .filter(
-          (value): value is string =>
-            typeof value === 'string' &&
+          (
+            value,
+          ): value is string =>
+            typeof value ===
+              'string' &&
             value.length > 0,
         ),
     ),
@@ -197,7 +229,10 @@ function filterByIds(
       )
     }
 
-    return query.in('id', ids)
+    return query.in(
+      'id',
+      ids,
+    )
   }
 }
 
@@ -209,10 +244,17 @@ function appendSheet(
   const safeRows =
     rows.length > 0
       ? rows
-      : [{ 'لا توجد بيانات': '' }]
+      : [
+          {
+            'لا توجد بيانات':
+              '',
+          },
+        ]
 
   const sheet =
-    XLSX.utils.json_to_sheet(safeRows)
+    XLSX.utils.json_to_sheet(
+      safeRows,
+    )
 
   XLSX.utils.book_append_sheet(
     workbook,
@@ -223,19 +265,27 @@ function appendSheet(
 
 export async function GET() {
   try {
-    const admin = await checkAdmin()
+    const admin =
+      await checkAdmin()
 
     /*
      * 1. السنة الدراسية الحالية
      */
     const {
       data: academicYear,
-      error: academicYearError,
+      error:
+        academicYearError,
     } = await admin
       .from('academic_years')
       .select('*')
-      .eq('is_current', true)
-      .eq('is_active', true)
+      .eq(
+        'is_current',
+        true,
+      )
+      .eq(
+        'is_active',
+        true,
+      )
       .maybeSingle()
 
     if (academicYearError) {
@@ -256,98 +306,122 @@ export async function GET() {
     /*
      * 2. الطلاب
      */
-    const students = await getAll(
-      admin,
-      'students',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const students =
+      await getAll(
+        admin,
+        'students',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     const studentIds =
-      idsFrom(students, 'id')
+      idsFrom(
+        students,
+        'id',
+      )
 
     /*
-     * 3. التسجيلات / الانتسابات
+     * 3. الانتسابات
      */
-    const enrollments = await getAll(
-      admin,
-      'enrollments',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const enrollments =
+      await getAll(
+        admin,
+        'enrollments',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     const enrollmentIds =
-      idsFrom(enrollments, 'id')
+      idsFrom(
+        enrollments,
+        'id',
+      )
 
     /*
-     * 4. المستويات المستخدمة في السنة
+     * 4. المستويات المستخدمة
      */
     const enrollmentLevelIds =
-      idsFrom(enrollments, 'level_id')
+      idsFrom(
+        enrollments,
+        'level_id',
+      )
 
     /*
      * 5. الفصول
      */
-    const classes = await getAll(
-      admin,
-      'classes',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const classes =
+      await getAll(
+        admin,
+        'classes',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     const classIds =
-      idsFrom(classes, 'id')
+      idsFrom(
+        classes,
+        'id',
+      )
 
     const classLevelIds =
-      idsFrom(classes, 'level_id')
+      idsFrom(
+        classes,
+        'level_id',
+      )
 
-    const levelIds = Array.from(
-      new Set([
-        ...enrollmentLevelIds,
-        ...classLevelIds,
-      ]),
-    )
+    const levelIds =
+      Array.from(
+        new Set([
+          ...enrollmentLevelIds,
+          ...classLevelIds,
+        ]),
+      )
 
     /*
-     * 6. المواد / الدورات
+     * 6. المواد والدورات
      *
-     * تشمل كل مواد السنة الحالية،
-     * حتى لو انتهى تاريخها.
+     * تشمل جميع دورات السنة الحالية
+     * حتى لو انتهت.
      */
-    const courses = await getAll(
-      admin,
-      'courses',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const courses =
+      await getAll(
+        admin,
+        'courses',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     const courseIds =
-      idsFrom(courses, 'id')
+      idsFrom(
+        courses,
+        'id',
+      )
 
     /*
      * 7. المدفوعات
      */
-    const payments = await getAll(
-      admin,
-      'payments',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const payments =
+      await getAll(
+        admin,
+        'payments',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     /*
      * 8. طلبات التسجيل
@@ -378,7 +452,7 @@ export async function GET() {
       )
 
     /*
-     * 10. الإعدادات المالية للسنة
+     * 10. الإعدادات المالية
      */
     const financialSettings =
       await getAll(
@@ -392,7 +466,7 @@ export async function GET() {
       )
 
     /*
-     * 11. الحركات المالية للسنة
+     * 11. الحركات المالية
      */
     const financialTransactions =
       await getAll(
@@ -406,7 +480,7 @@ export async function GET() {
       )
 
     /*
-     * 12. سجلات الإشراف للسنة
+     * 12. سجلات الإشراف
      */
     const supervisionRecords =
       await getAll(
@@ -420,23 +494,27 @@ export async function GET() {
       )
 
     /*
-     * 13. الرحلات للسنة
+     * 13. الرحلات
      */
-    const trips = await getAll(
-      admin,
-      'trips',
-      (query) =>
-        query.eq(
-          'academic_year_id',
-          academicYearId,
-        ),
-    )
+    const trips =
+      await getAll(
+        admin,
+        'trips',
+        (query) =>
+          query.eq(
+            'academic_year_id',
+            academicYearId,
+          ),
+      )
 
     const tripIds =
-      idsFrom(trips, 'id')
+      idsFrom(
+        trips,
+        'id',
+      )
 
     /*
-     * 14. الرحلات - مستويات
+     * 14. مستويات الرحلات
      */
     const tripLevels =
       tripIds.length > 0
@@ -452,7 +530,7 @@ export async function GET() {
         : []
 
     /*
-     * 15. الرحلات - الطلاب
+     * 15. طلاب الرحلات
      */
     const tripStudents =
       tripIds.length > 0
@@ -470,9 +548,9 @@ export async function GET() {
     /*
      * 16. الحضور
      *
-     * جدول attendance لا يحتوي academic_year_id،
-     * لذلك نربطه بطلاب السنة الحالية
-     * وبالتسجيلات والمواد الحالية.
+     * لا يحتوي جدول attendance
+     * على academic_year_id،
+     * لذلك نستخدم طلاب السنة الحالية.
      */
     const attendance =
       await getAll(
@@ -480,7 +558,8 @@ export async function GET() {
         'attendance',
         (query) => {
           if (
-            studentIds.length === 0
+            studentIds.length ===
+            0
           ) {
             return query.eq(
               'student_id',
@@ -496,7 +575,7 @@ export async function GET() {
       )
 
     /*
-     * 17. تعيين المعلمين للمواد
+     * 17. معلمو المواد
      */
     const courseTeachers =
       courseIds.length > 0
@@ -522,8 +601,10 @@ export async function GET() {
             'teacher_student_assignments',
             (query) => {
               if (
-                courseIds.length > 0 &&
-                studentIds.length > 0
+                courseIds.length >
+                  0 &&
+                studentIds.length >
+                  0
               ) {
                 return query
                   .in(
@@ -537,7 +618,8 @@ export async function GET() {
               }
 
               if (
-                courseIds.length > 0
+                courseIds.length >
+                0
               ) {
                 return query.in(
                   'course_id',
@@ -546,7 +628,8 @@ export async function GET() {
               }
 
               if (
-                studentIds.length > 0
+                studentIds.length >
+                0
               ) {
                 return query.in(
                   'student_id',
@@ -563,7 +646,7 @@ export async function GET() {
         : []
 
     /*
-     * 19. المعلمون المرتبطون بالسنة الحالية
+     * 19. المعلمون المرتبطون بالسنة
      */
     const courseTeacherIds =
       Array.from(
@@ -574,7 +657,9 @@ export async function GET() {
                 row.teacher_id,
             )
             .filter(
-              (value): value is string =>
+              (
+                value,
+              ): value is string =>
                 typeof value ===
                   'string' &&
                 value.length > 0,
@@ -591,7 +676,9 @@ export async function GET() {
                 row.teacher_id,
             )
             .filter(
-              (value): value is string =>
+              (
+                value,
+              ): value is string =>
                 typeof value ===
                   'string' &&
                 value.length > 0,
@@ -621,19 +708,21 @@ export async function GET() {
         : []
 
     /*
-     * 20. المستويات المستخدمة
+     * 20. المستويات
      */
     const levels =
       levelIds.length > 0
         ? await getAll(
             admin,
             'levels',
-            filterByIds(levelIds),
+            filterByIds(
+              levelIds,
+            ),
           )
         : []
 
     /*
-     * 21. قيم الحقول الديناميكية للطلاب
+     * 21. القيم الديناميكية للطلاب
      */
     const studentDynamicValues =
       studentIds.length > 0
@@ -649,10 +738,7 @@ export async function GET() {
         : []
 
     /*
-     * 22. الحقول المخصصة وقيمها
-     *
-     * الحقول نفسها إعداد عام، لكن القيم
-     * نأخذ منها قيم طلاب السنة الحالية فقط.
+     * 22. الحقول المخصصة
      */
     const customFields =
       await getAll(
@@ -666,6 +752,9 @@ export async function GET() {
         'id',
       )
 
+    /*
+     * 23. خيارات الحقول المخصصة
+     */
     const customFieldOptions =
       customFieldIds.length > 0
         ? await getAll(
@@ -679,6 +768,9 @@ export async function GET() {
           )
         : []
 
+    /*
+     * 24. ظهور الحقول المخصصة
+     */
     const customFieldVisibility =
       customFieldIds.length > 0
         ? await getAll(
@@ -692,6 +784,9 @@ export async function GET() {
           )
         : []
 
+    /*
+     * 25. قيم الحقول المخصصة للطلاب الحاليين
+     */
     const customFieldValues =
       studentIds.length > 0
         ? await getAll(
@@ -711,10 +806,7 @@ export async function GET() {
         : []
 
     /*
-     * 23. حقول التسجيل القديمة / الديناميكية
-     *
-     * هذه إعدادات عامة وليست بيانات مستخدمين.
-     * نحتفظ بها لأنها جزء من تعريف الحقول.
+     * 26. الحقول الديناميكية
      */
     const dynamicFields =
       await getAll(
@@ -723,7 +815,7 @@ export async function GET() {
       )
 
     /*
-     * 24. حالات الحضور
+     * 27. حالات الحضور
      */
     const attendanceStatuses =
       await getAll(
@@ -766,7 +858,7 @@ export async function GET() {
     )
 
     /*
-     * السنة الحالية
+     * السنة الدراسية
      */
     appendSheet(
       workbook,
@@ -774,150 +866,228 @@ export async function GET() {
       [academicYear],
     )
 
+    /*
+     * الطلاب
+     */
     appendSheet(
       workbook,
       'الطلاب',
       students,
     )
 
+    /*
+     * الانتسابات
+     *
+     * تم تغيير اسم الـ Sheet حتى لا يتكرر
+     * مع Sheet التسجيلات.
+     */
     appendSheet(
       workbook,
-      'التسجيلات',
+      'انتساب الطلاب',
       enrollments,
     )
 
+    /*
+     * المستويات
+     */
     appendSheet(
       workbook,
       'المستويات',
       levels,
     )
 
+    /*
+     * الفصول
+     */
     appendSheet(
       workbook,
       'الفصول',
       classes,
     )
 
+    /*
+     * المواد والدورات
+     */
     appendSheet(
       workbook,
       'المواد والدورات',
       courses,
     )
 
+    /*
+     * المدفوعات
+     */
     appendSheet(
       workbook,
       'المدفوعات',
       payments,
     )
 
+    /*
+     * طلبات التسجيل
+     */
     appendSheet(
       workbook,
       'طلبات التسجيل',
       registrationRequests,
     )
 
+    /*
+     * التسجيلات
+     */
     appendSheet(
       workbook,
       'التسجيلات',
       registrations,
     )
 
+    /*
+     * الإعدادات المالية
+     */
     appendSheet(
       workbook,
       'إعدادات المالية',
       financialSettings,
     )
 
+    /*
+     * الحركات المالية
+     */
     appendSheet(
       workbook,
       'الحركات المالية',
       financialTransactions,
     )
 
+    /*
+     * الحضور
+     */
     appendSheet(
       workbook,
       'الحضور',
       attendance,
     )
 
+    /*
+     * حالات الحضور
+     */
     appendSheet(
       workbook,
       'حالات الحضور',
       attendanceStatuses,
     )
 
+    /*
+     * المعلمون
+     */
     appendSheet(
       workbook,
       'المعلمون',
       teachers,
     )
 
+    /*
+     * معلمو المواد
+     */
     appendSheet(
       workbook,
       'معلمو المواد',
       courseTeachers,
     )
 
+    /*
+     * تعيين الطلاب للمعلمين
+     */
     appendSheet(
       workbook,
       'تعيين الطلاب للمعلمين',
       teacherStudentAssignments,
     )
 
+    /*
+     * القيم الديناميكية للطلاب
+     */
     appendSheet(
       workbook,
       'القيم الديناميكية للطلاب',
       studentDynamicValues,
     )
 
+    /*
+     * الحقول الديناميكية
+     */
     appendSheet(
       workbook,
       'الحقول الديناميكية',
       dynamicFields,
     )
 
+    /*
+     * الحقول المخصصة
+     */
     appendSheet(
       workbook,
       'الحقول المخصصة',
       customFields,
     )
 
+    /*
+     * خيارات الحقول المخصصة
+     */
     appendSheet(
       workbook,
       'خيارات الحقول المخصصة',
       customFieldOptions,
     )
 
+    /*
+     * ظهور الحقول المخصصة
+     */
     appendSheet(
       workbook,
       'ظهور الحقول المخصصة',
       customFieldVisibility,
     )
 
+    /*
+     * قيم الحقول المخصصة
+     */
     appendSheet(
       workbook,
       'قيم الحقول المخصصة',
       customFieldValues,
     )
 
+    /*
+     * سجلات الإشراف
+     */
     appendSheet(
       workbook,
       'سجلات الإشراف',
       supervisionRecords,
     )
 
+    /*
+     * الرحلات
+     */
     appendSheet(
       workbook,
       'الرحلات',
       trips,
     )
 
+    /*
+     * مستويات الرحلات
+     */
     appendSheet(
       workbook,
       'مستويات الرحلات',
       tripLevels,
     )
 
+    /*
+     * طلاب الرحلات
+     */
     appendSheet(
       workbook,
       'طلاب الرحلات',
@@ -928,14 +1098,18 @@ export async function GET() {
      * إنشاء ملف XLSX
      */
     const buffer =
-      XLSX.write(workbook, {
-        bookType: 'xlsx',
-        type: 'buffer',
-      })
+      XLSX.write(
+        workbook,
+        {
+          bookType: 'xlsx',
+          type: 'buffer',
+        },
+      )
 
     const filename =
       `T3LEEM-Backup-${String(
-        academicYear.name || 'Current-Year',
+        academicYear.name ||
+          'Current-Year',
       ).replace(
         /[\\/:*?"<>|]/g,
         '-',
@@ -948,8 +1122,10 @@ export async function GET() {
         headers: {
           'Content-Type':
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
           'Content-Disposition':
             `attachment; filename="${filename}"`,
+
           'Cache-Control':
             'no-store, no-cache, must-revalidate',
         },
