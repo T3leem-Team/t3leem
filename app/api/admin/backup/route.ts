@@ -1,18 +1,25 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
+import {
+  createClient,
+  type SupabaseClient,
+} from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 1000
 
 type Row = Record<string, unknown>
 
-function getAdminClient() {
+type AdminClient = SupabaseClient
+
+function getAdminClient(): AdminClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY
 
   if (!url) {
     throw new Error(
@@ -34,9 +41,10 @@ function getAdminClient() {
   })
 }
 
-async function checkAdmin() {
+async function checkAdmin(): Promise<AdminClient> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!url) {
     throw new Error(
@@ -60,11 +68,16 @@ async function checkAdmin() {
         getAll() {
           return cookieStore.getAll()
         },
+
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(
               ({ name, value, options }) => {
-                cookieStore.set(name, value, options)
+                cookieStore.set(
+                  name,
+                  value,
+                  options
+                )
               }
             )
           } catch {
@@ -133,9 +146,9 @@ async function checkAdmin() {
 }
 
 async function getAll(
-  admin: ReturnType<typeof getAdminClient>,
+  admin: AdminClient,
   table: string
-) {
+): Promise<Row[]> {
   const result: Row[] = []
 
   let from = 0
@@ -172,10 +185,10 @@ async function getAll(
 }
 
 async function getByAcademicYear(
-  admin: ReturnType<typeof getAdminClient>,
+  admin: AdminClient,
   table: string,
   academicYearId: string
-) {
+): Promise<Row[]> {
   const result: Row[] = []
 
   let from = 0
@@ -189,7 +202,10 @@ async function getByAcademicYear(
     } = await admin
       .from(table)
       .select('*')
-      .eq('academic_year_id', academicYearId)
+      .eq(
+        'academic_year_id',
+        academicYearId
+      )
       .range(from, to)
 
     if (error) {
@@ -213,11 +229,11 @@ async function getByAcademicYear(
 }
 
 async function getByIds(
-  admin: ReturnType<typeof getAdminClient>,
+  admin: AdminClient,
   table: string,
   column: string,
   ids: string[]
-) {
+): Promise<Row[]> {
   if (ids.length === 0) {
     return []
   }
@@ -231,7 +247,10 @@ async function getByIds(
     i < ids.length;
     i += chunkSize
   ) {
-    const chunk = ids.slice(i, i + chunkSize)
+    const chunk = ids.slice(
+      i,
+      i + chunkSize
+    )
 
     let from = 0
 
@@ -268,11 +287,15 @@ async function getByIds(
   return result
 }
 
-function cleanRows(rows: Row[]) {
+function cleanRows(
+  rows: Row[]
+): Row[] {
   return rows.map((row) => {
     const output: Row = {}
 
-    for (const [key, value] of Object.entries(row)) {
+    for (const [key, value] of Object.entries(
+      row
+    )) {
       if (Array.isArray(value)) {
         output[key] = value.join(', ')
       } else if (
@@ -297,9 +320,10 @@ function addSheet(
   const sheetName = name.slice(0, 31)
 
   if (rows.length === 0) {
-    const sheet = XLSX.utils.aoa_to_sheet([
-      ['لا توجد بيانات'],
-    ])
+    const sheet =
+      XLSX.utils.aoa_to_sheet([
+        ['لا توجد بيانات'],
+      ])
 
     XLSX.utils.book_append_sheet(
       workbook,
@@ -310,9 +334,10 @@ function addSheet(
     return
   }
 
-  const sheet = XLSX.utils.json_to_sheet(
-    cleanRows(rows)
-  )
+  const sheet =
+    XLSX.utils.json_to_sheet(
+      cleanRows(rows)
+    )
 
   XLSX.utils.book_append_sheet(
     workbook,
@@ -327,10 +352,11 @@ export async function GET() {
      * 1. التحقق من المستخدم
      */
 
-    const admin = await checkAdmin()
+    const admin =
+      await checkAdmin()
 
     /*
-     * 2. السنة الحالية
+     * 2. السنة الدراسية الحالية
      */
 
     const {
@@ -360,7 +386,7 @@ export async function GET() {
       String(currentYear.id)
 
     /*
-     * 3. جلب بيانات السنة الحالية
+     * 3. بيانات السنة الحالية
      */
 
     const [
@@ -444,58 +470,70 @@ export async function GET() {
     ])
 
     /*
-     * 4. IDs
+     * 4. استخراج المعرفات
      */
 
-    const studentIds = students
-      .map((row) => row.id)
-      .filter(
-        (id): id is string =>
-          typeof id === 'string'
-      )
-
-    const enrollmentIds = enrollments
-      .map((row) => row.id)
-      .filter(
-        (id): id is string =>
-          typeof id === 'string'
-      )
-
-    const courseIds = courses
-      .map((row) => row.id)
-      .filter(
-        (id): id is string =>
-          typeof id === 'string'
-      )
-
-    const levelIds = Array.from(
-      new Set(
-        [
-          ...enrollments.map(
-            (row) => row.level_id
-          ),
-          ...classes.map(
-            (row) => row.level_id
-          ),
-          ...registrations.map(
-            (row) => row.level_id
-          ),
-          ...registrationRequests.map(
-            (row) => row.level_id
-          ),
-        ].filter(
+    const studentIds =
+      students
+        .map((row) => row.id)
+        .filter(
           (id): id is string =>
             typeof id === 'string'
         )
-      )
-    )
 
-    const tripIds = trips
-      .map((row) => row.id)
-      .filter(
-        (id): id is string =>
-          typeof id === 'string'
+    const enrollmentIds =
+      enrollments
+        .map((row) => row.id)
+        .filter(
+          (id): id is string =>
+            typeof id === 'string'
+        )
+
+    const courseIds =
+      courses
+        .map((row) => row.id)
+        .filter(
+          (id): id is string =>
+            typeof id === 'string'
+        )
+
+    const levelIds =
+      Array.from(
+        new Set(
+          [
+            ...enrollments.map(
+              (row) =>
+                row.level_id
+            ),
+
+            ...classes.map(
+              (row) =>
+                row.level_id
+            ),
+
+            ...registrations.map(
+              (row) =>
+                row.level_id
+            ),
+
+            ...registrationRequests.map(
+              (row) =>
+                row.level_id
+            ),
+          ].filter(
+            (id): id is string =>
+              typeof id === 'string'
+          )
+        )
       )
+
+    const tripIds =
+      trips
+        .map((row) => row.id)
+        .filter(
+          (id): id is string =>
+            typeof id === 'string'
+        )
 
     /*
      * 5. البيانات المرتبطة
@@ -586,7 +624,8 @@ export async function GET() {
           new Set(
             courseTeachers
               .map(
-                (row) => row.teacher_id
+                (row) =>
+                  row.teacher_id
               )
               .concat(
                 teacherAssignments.map(
@@ -619,7 +658,7 @@ export async function GET() {
     ])
 
     /*
-     * 6. الحضور
+     * 6. فلترة الحضور للسنة الحالية
      */
 
     const currentStudentIds =
@@ -632,91 +671,99 @@ export async function GET() {
       new Set(enrollmentIds)
 
     const currentAttendance =
-      attendance.filter((row) => {
-        const studentId =
-          typeof row.student_id ===
-          'string'
-            ? row.student_id
-            : null
+      attendance.filter(
+        (row) => {
+          const studentId =
+            typeof row.student_id ===
+            'string'
+              ? row.student_id
+              : null
 
-        const courseId =
-          typeof row.course_id ===
-          'string'
-            ? row.course_id
-            : null
+          const courseId =
+            typeof row.course_id ===
+            'string'
+              ? row.course_id
+              : null
 
-        const enrollmentId =
-          typeof row.enrollment_id ===
-          'string'
-            ? row.enrollment_id
-            : null
+          const enrollmentId =
+            typeof row.enrollment_id ===
+            'string'
+              ? row.enrollment_id
+              : null
 
-        return (
-          (studentId &&
-            currentStudentIds.has(
-              studentId
-            )) ||
-          (courseId &&
-            currentCourseIds.has(
-              courseId
-            )) ||
-          (enrollmentId &&
-            currentEnrollmentIds.has(
-              enrollmentId
-            ))
-        )
-      })
+          return (
+            (studentId &&
+              currentStudentIds.has(
+                studentId
+              )) ||
+            (courseId &&
+              currentCourseIds.has(
+                courseId
+              )) ||
+            (enrollmentId &&
+              currentEnrollmentIds.has(
+                enrollmentId
+              ))
+          )
+        }
+      )
 
     /*
-     * 7. ربط المعلمين بالدورات
+     * 7. المعلمون المرتبطون بالدورات الحالية
      */
 
     const currentCourseTeachers =
-      courseTeachers.filter((row) => {
-        const courseId =
-          typeof row.course_id ===
-          'string'
-            ? row.course_id
-            : null
+      courseTeachers.filter(
+        (row) => {
+          const courseId =
+            typeof row.course_id ===
+            'string'
+              ? row.course_id
+              : null
 
-        return (
-          courseId !== null &&
-          currentCourseIds.has(courseId)
-        )
-      })
+          return (
+            courseId !== null &&
+            currentCourseIds.has(
+              courseId
+            )
+          )
+        }
+      )
 
     /*
-     * 8. إسناد الطلاب
+     * 8. إسنادات الطلاب الحالية
      */
 
     const currentTeacherAssignments =
-      teacherAssignments.filter((row) => {
-        const studentId =
-          typeof row.student_id ===
-          'string'
-            ? row.student_id
-            : null
+      teacherAssignments.filter(
+        (row) => {
+          const studentId =
+            typeof row.student_id ===
+            'string'
+              ? row.student_id
+              : null
 
-        const courseId =
-          typeof row.course_id ===
-          'string'
-            ? row.course_id
-            : null
+          const courseId =
+            typeof row.course_id ===
+            'string'
+              ? row.course_id
+              : null
 
-        return (
-          (studentId &&
-            currentStudentIds.has(
-              studentId
-            )) ||
-          (courseId &&
-            currentCourseIds.has(
-              courseId
-            ))
-        )
-      })
+          return (
+            (studentId &&
+              currentStudentIds.has(
+                studentId
+              )) ||
+            (courseId &&
+              currentCourseIds.has(
+                courseId
+              ))
+          )
+        }
+      )
 
     /*
-     * 9. Excel
+     * 9. إنشاء ملف Excel
      */
 
     const workbook =
@@ -873,40 +920,46 @@ export async function GET() {
     )
 
     /*
-     * 10. إنشاء الملف
+     * 10. تحويل Excel إلى Buffer
      */
 
-    const buffer = XLSX.write(
-      workbook,
-      {
-        bookType: 'xlsx',
-        type: 'buffer',
-        compression: true,
-      }
-    )
+    const buffer =
+      XLSX.write(
+        workbook,
+        {
+          bookType: 'xlsx',
+          type: 'buffer',
+          compression: true,
+        }
+      )
 
     const fileName =
       `T3LEEM-Backup-${String(
-        currentYear.name ?? 'Current-Year'
+        currentYear.name ??
+          'Current-Year'
       )}.xlsx`
 
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        'Content-Type':
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    return new NextResponse(
+      buffer,
+      {
+        status: 200,
 
-        'Content-Disposition':
-          `attachment; filename="${encodeURIComponent(
-            fileName
-          )}"`,
+        headers: {
+          'Content-Type':
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 
-        'Cache-Control':
-          'no-store, no-cache, must-revalidate',
+          'Content-Disposition':
+            `attachment; filename="${encodeURIComponent(
+              fileName
+            )}"`,
 
-        Pragma: 'no-cache',
-      },
-    })
+          'Cache-Control':
+            'no-store, no-cache, must-revalidate',
+
+          Pragma: 'no-cache',
+        },
+      }
+    )
   } catch (error) {
     console.error(
       'T3LEEM BACKUP ERROR:',
