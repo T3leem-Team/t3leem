@@ -1047,7 +1047,7 @@ export function StudentsTable({
             الجدول
            ========================================= */}
 
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="max-h-[600px] overflow-auto rounded-lg border">
           <Table>
 
             <TableHeader>
