@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { SectionRouter } from './section-router'
+import { ActivityTracker } from '@/components/auth/activity-tracker'
 
 export function DashboardShell({
   children,
@@ -31,6 +32,8 @@ export function DashboardShell({
 
   return (
     <div className="flex min-h-screen bg-background">
+      <ActivityTracker />
+
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
