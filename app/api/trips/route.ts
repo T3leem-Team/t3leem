@@ -3,15 +3,97 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
+type TripStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'published'
+  | 'rejected'
+  | 'closed'
+
+const tripSelect = `
+  id,
+  name,
+  description,
+  location,
+  trip_date,
+  meeting_time,
+  return_time,
+  fee,
+  note,
+  academic_year_id,
+  course_id,
+  attendance_min,
+  attendance_max,
+  notes_requirement,
+  status,
+  created_by,
+  approved_by,
+  approved_at,
+  approval_note,
+  rejected_by,
+  rejected_at,
+  rejection_note,
+  closed_by,
+  closed_at,
+  close_note,
+  created_at,
+  updated_at
+`
+
+function jsonError(
+  error: string,
+  status = 400,
+  details?: string,
+) {
+  return NextResponse.json(
+    {
+      error,
+      ...(details ? { details } : {}),
+    },
+    { status },
+  )
+}
+
+async function getTripSettings(
+  supabase: Awaited<
+    ReturnType<typeof createSupabaseServerClient>
+  >,
+) {
+  const {
+    data,
+    error,
+  } = await supabase
+    .from('student_status_settings')
+    .select(`
+      is_enabled,
+      allow_trip_creation,
+      allow_direct_trip_publish
+    `)
+    .limit(1)
+    .maybeSingle()
+
+  return {
+    settings: data,
+    error,
+  }
+}
+
+/*
+ * =========================================================
+ * GET
+ * =========================================================
+ */
+
 export async function GET() {
-  const { access, response } = await requireAuth()
+  const { access, response } =
+    await requireAuth()
 
   if (response) return response
 
   if (!access) {
-    return NextResponse.json(
-      { error: 'غير مصرح بالوصول' },
-      { status: 401 },
+    return jsonError(
+      'غير مصرح بالوصول',
+      401,
     )
   }
 
@@ -26,35 +108,7 @@ export async function GET() {
   ] = await Promise.all([
     supabase
       .from('trips')
-      .select(`
-        id,
-        name,
-        description,
-        location,
-        trip_date,
-        meeting_time,
-        return_time,
-        fee,
-        note,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status,
-        created_by,
-        approved_by,
-        approved_at,
-        approval_note,
-        rejected_by,
-        rejected_at,
-        rejection_note,
-        closed_by,
-        closed_at,
-        close_note,
-        created_at,
-        updated_at
-      `)
+      .select(tripSelect)
       .order('created_at', {
         ascending: false,
       }),
@@ -113,12 +167,10 @@ export async function GET() {
       tripsResult.error,
     )
 
-    return NextResponse.json(
-      {
-        error: 'تعذر تحميل الرحلات',
-        details: tripsResult.error.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تحميل الرحلات',
+      500,
+      tripsResult.error.message,
     )
   }
 
@@ -128,13 +180,10 @@ export async function GET() {
       academicYearsResult.error,
     )
 
-    return NextResponse.json(
-      {
-        error: 'تعذر تحميل السنوات الدراسية',
-        details:
-          academicYearsResult.error.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تحميل السنوات الدراسية',
+      500,
+      academicYearsResult.error.message,
     )
   }
 
@@ -144,13 +193,10 @@ export async function GET() {
       coursesResult.error,
     )
 
-    return NextResponse.json(
-      {
-        error: 'تعذر تحميل الدورات',
-        details:
-          coursesResult.error.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تحميل الدورات',
+      500,
+      coursesResult.error.message,
     )
   }
 
@@ -160,17 +206,15 @@ export async function GET() {
       levelsResult.error,
     )
 
-    return NextResponse.json(
-      {
-        error: 'تعذر تحميل المستويات',
-        details:
-          levelsResult.error.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تحميل المستويات',
+      500,
+      levelsResult.error.message,
     )
   }
 
-  const trips = tripsResult.data ?? []
+  const trips =
+    tripsResult.data ?? []
 
   let tripLevels: Array<{
     id: string
@@ -183,35 +227,32 @@ export async function GET() {
       (trip) => trip.id,
     )
 
-    const tripLevelsResult =
-      await supabase
-        .from('trip_levels')
-        .select(`
-          id,
-          trip_id,
-          level_id
-        `)
-        .in('trip_id', tripIds)
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('trip_levels')
+      .select(`
+        id,
+        trip_id,
+        level_id
+      `)
+      .in('trip_id', tripIds)
 
-    if (tripLevelsResult.error) {
+    if (error) {
       console.error(
         'GET /api/trips - trip levels error:',
-        tripLevelsResult.error,
+        error,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل مستويات الرحلات',
-          details:
-            tripLevelsResult.error.message,
-        },
-        { status: 500 },
+      return jsonError(
+        'تعذر تحميل مستويات الرحلات',
+        500,
+        error.message,
       )
     }
 
-    tripLevels =
-      tripLevelsResult.data ?? []
+    tripLevels = data ?? []
   }
 
   return NextResponse.json({
@@ -226,6 +267,12 @@ export async function GET() {
   })
 }
 
+/*
+ * =========================================================
+ * POST
+ * =========================================================
+ */
+
 export async function POST(
   request: Request,
 ) {
@@ -235,9 +282,9 @@ export async function POST(
   if (response) return response
 
   if (!access) {
-    return NextResponse.json(
-      { error: 'غير مصرح بالوصول' },
-      { status: 401 },
+    return jsonError(
+      'غير مصرح بالوصول',
+      401,
     )
   }
 
@@ -246,6 +293,12 @@ export async function POST(
     access.userId,
   )
 }
+
+/*
+ * =========================================================
+ * PATCH
+ * =========================================================
+ */
 
 export async function PATCH(
   request: Request,
@@ -256,9 +309,9 @@ export async function PATCH(
   if (response) return response
 
   if (!access) {
-    return NextResponse.json(
-      { error: 'غير مصرح بالوصول' },
-      { status: 401 },
+    return jsonError(
+      'غير مصرح بالوصول',
+      401,
     )
   }
 
@@ -267,21 +320,21 @@ export async function PATCH(
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: 'بيانات الطلب غير صحيحة' },
-      { status: 400 },
+    return jsonError(
+      'بيانات الطلب غير صحيحة',
+      400,
     )
   }
 
   const tripId =
     typeof body.id === 'string'
-      ? body.id
+      ? body.id.trim()
       : ''
 
   if (!tripId) {
-    return NextResponse.json(
-      { error: 'معرف الرحلة مطلوب' },
-      { status: 400 },
+    return jsonError(
+      'معرف الرحلة مطلوب',
+      400,
     )
   }
 
@@ -289,20 +342,20 @@ export async function PATCH(
     await createSupabaseServerClient()
 
   /*
-   * =========================================================
+   * =======================================================
    * نشر الرحلة
-   * =========================================================
+   * =======================================================
    *
-   * إذا كان الطلب:
+   * الطلب:
    *
    * {
    *   id: tripId,
    *   status: 'published'
    * }
    *
-   * نتعامل معه كنشر مباشر، ولا نطلب اسم الرحلة
-   * أو السنة أو الدورة أو المستويات مرة أخرى.
+   * يعني نشر الرحلة مباشرة.
    */
+
   if (body.status === 'published') {
     const {
       data: existingTrip,
@@ -322,58 +375,49 @@ export async function PATCH(
         existingError,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر التحقق من الرحلة',
-        },
-        { status: 500 },
+      return jsonError(
+        'تعذر التحقق من الرحلة',
+        500,
       )
     }
 
     if (!existingTrip) {
-      return NextResponse.json(
-        {
-          error:
-            'الرحلة غير موجودة',
-        },
-        { status: 404 },
+      return jsonError(
+        'الرحلة غير موجودة',
+        404,
       )
     }
 
-    if (existingTrip.status === 'closed') {
-      return NextResponse.json(
-        {
-          error:
-            'لا يمكن نشر رحلة مغلقة',
-        },
-        { status: 400 },
+    if (
+      existingTrip.status ===
+      'closed'
+    ) {
+      return jsonError(
+        'لا يمكن نشر رحلة مغلقة',
+        400,
       )
     }
 
-    if (existingTrip.status !== 'draft') {
-      return NextResponse.json(
-        {
-          error:
-            'لا يمكن نشر الرحلة إلا إذا كانت في حالة مسودة',
-        },
-        { status: 400 },
+    if (
+      existingTrip.status !==
+      'draft'
+    ) {
+      return jsonError(
+        'لا يمكن نشر الرحلة إلا إذا كانت في حالة مسودة',
+        400,
       )
     }
 
     /*
-     * التحقق من إعداد السماح بالنشر المباشر.
+     * التحقق من إعدادات النظام.
      */
+
     const {
-      data: settings,
+      settings,
       error: settingsError,
-    } = await supabase
-      .from('student_status_settings')
-      .select(`
-        allow_direct_trip_publish
-      `)
-      .limit(1)
-      .maybeSingle()
+    } = await getTripSettings(
+      supabase,
+    )
 
     if (settingsError) {
       console.error(
@@ -381,12 +425,20 @@ export async function PATCH(
         settingsError,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر التحقق من إعدادات النشر',
-        },
-        { status: 500 },
+      return jsonError(
+        'تعذر التحقق من إعدادات النشر',
+        500,
+        settingsError.message,
+      )
+    }
+
+    if (
+      settings?.is_enabled ===
+      false
+    ) {
+      return jsonError(
+        'ميزة الرحلات موقوفة من إعدادات النظام',
+        403,
       )
     }
 
@@ -394,19 +446,17 @@ export async function PATCH(
       settings?.allow_direct_trip_publish !==
       true
     ) {
-      return NextResponse.json(
-        {
-          error:
-            'النشر المباشر موقوف من إعدادات النظام',
-        },
-        { status: 403 },
+      return jsonError(
+        'النشر المباشر موقوف من إعدادات النظام',
+        403,
       )
     }
 
     /*
-     * التأكد من وجود طالب واحد على الأقل
-     * محفوظ ومحدد للرحلة.
+     * يجب وجود طالب واحد على الأقل
+     * محدد ومحفوظ للرحلة.
      */
+
     const {
       count: selectedStudentsCount,
       error: studentsError,
@@ -425,12 +475,10 @@ export async function PATCH(
         studentsError,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر التحقق من طلاب الرحلة',
-        },
-        { status: 500 },
+      return jsonError(
+        'تعذر التحقق من طلاب الرحلة',
+        500,
+        studentsError.message,
       )
     }
 
@@ -438,18 +486,16 @@ export async function PATCH(
       !selectedStudentsCount ||
       selectedStudentsCount === 0
     ) {
-      return NextResponse.json(
-        {
-          error:
-            'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة',
-        },
-        { status: 400 },
+      return jsonError(
+        'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة',
+        400,
       )
     }
 
     /*
      * نشر الرحلة.
      */
+
     const {
       data: publishedTrip,
       error: publishError,
@@ -462,51 +508,22 @@ export async function PATCH(
       })
       .eq('id', tripId)
       .eq('status', 'draft')
-      .select(`
-        id,
-        name,
-        description,
-        location,
-        trip_date,
-        meeting_time,
-        return_time,
-        fee,
-        note,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status,
-        created_by,
-        approved_by,
-        approved_at,
-        approval_note,
-        rejected_by,
-        rejected_at,
-        rejection_note,
-        closed_by,
-        closed_at,
-        close_note,
-        created_at,
-        updated_at
-      `)
+      .select(tripSelect)
       .single()
 
-    if (publishError || !publishedTrip) {
+    if (
+      publishError ||
+      !publishedTrip
+    ) {
       console.error(
         'PATCH /api/trips - publish error:',
         publishError,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر نشر الرحلة',
-          details:
-            publishError?.message,
-        },
-        { status: 500 },
+      return jsonError(
+        'تعذر نشر الرحلة',
+        500,
+        publishError?.message,
       )
     }
 
@@ -517,9 +534,9 @@ export async function PATCH(
   }
 
   /*
-   * =========================================================
+   * =======================================================
    * تعديل بيانات الرحلة
-   * =========================================================
+   * =======================================================
    */
 
   const {
@@ -540,41 +557,43 @@ export async function PATCH(
       existingError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر التحقق من الرحلة',
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر التحقق من الرحلة',
+      500,
+      existingError.message,
     )
   }
 
   if (!existingTrip) {
-    return NextResponse.json(
-      { error: 'الرحلة غير موجودة' },
-      { status: 404 },
+    return jsonError(
+      'الرحلة غير موجودة',
+      404,
     )
   }
 
-  if (existingTrip.status === 'closed') {
-    return NextResponse.json(
-      {
-        error:
-          'لا يمكن تعديل رحلة مغلقة',
-      },
-      { status: 400 },
+  if (
+    existingTrip.status ===
+    'closed'
+  ) {
+    return jsonError(
+      'لا يمكن تعديل رحلة مغلقة',
+      400,
     )
   }
 
-  if (existingTrip.status === 'published') {
-    return NextResponse.json(
-      {
-        error:
-          'لا يمكن تعديل رحلة منشورة',
-      },
-      { status: 400 },
+  if (
+    existingTrip.status ===
+    'published'
+  ) {
+    return jsonError(
+      'لا يمكن تعديل رحلة منشورة',
+      400,
     )
   }
+
+  /*
+   * قراءة البيانات.
+   */
 
   const name =
     typeof body.name === 'string'
@@ -582,29 +601,34 @@ export async function PATCH(
       : ''
 
   const description =
-    typeof body.description === 'string'
+    typeof body.description ===
+    'string'
       ? body.description.trim()
       : null
 
   const location =
-    typeof body.location === 'string'
+    typeof body.location ===
+    'string'
       ? body.location.trim()
       : null
 
   const tripDate =
-    typeof body.trip_date === 'string' &&
+    typeof body.trip_date ===
+      'string' &&
     body.trip_date.trim()
       ? body.trip_date.trim()
       : null
 
   const meetingTime =
-    typeof body.meeting_time === 'string' &&
+    typeof body.meeting_time ===
+      'string' &&
     body.meeting_time.trim()
       ? body.meeting_time.trim()
       : null
 
   const returnTime =
-    typeof body.return_time === 'string' &&
+    typeof body.return_time ===
+      'string' &&
     body.return_time.trim()
       ? body.return_time.trim()
       : null
@@ -617,12 +641,13 @@ export async function PATCH(
   const academicYearId =
     typeof body.academic_year_id ===
     'string'
-      ? body.academic_year_id
+      ? body.academic_year_id.trim()
       : ''
 
   const courseId =
-    typeof body.course_id === 'string'
-      ? body.course_id
+    typeof body.course_id ===
+    'string'
+      ? body.course_id.trim()
       : ''
 
   const fee =
@@ -633,7 +658,8 @@ export async function PATCH(
       : Number(body.fee)
 
   const attendanceMin =
-    body.attendance_min === null ||
+    body.attendance_min ===
+      null ||
     body.attendance_min ===
       undefined ||
     body.attendance_min === ''
@@ -641,7 +667,8 @@ export async function PATCH(
       : Number(body.attendance_min)
 
   const attendanceMax =
-    body.attendance_max === null ||
+    body.attendance_max ===
+      null ||
     body.attendance_max ===
       undefined ||
     body.attendance_max === ''
@@ -653,158 +680,194 @@ export async function PATCH(
       'required' ||
     body.notes_requirement ===
       'none' ||
-    body.notes_requirement === 'any'
+    body.notes_requirement ===
+      'any'
       ? body.notes_requirement
       : 'any'
 
-  const levelIds = Array.isArray(
-    body.level_ids,
-  )
-    ? [
-        ...new Set(
-          body.level_ids.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id === 'string' &&
-              id.trim().length > 0,
+  const levelIds =
+    Array.isArray(
+      body.level_ids,
+    )
+      ? [
+          ...new Set(
+            body.level_ids.filter(
+              (
+                id: unknown,
+              ): id is string =>
+                typeof id ===
+                  'string' &&
+                id.trim().length >
+                  0,
+            ),
           ),
-        ),
-      ]
-    : []
+        ]
+      : []
+
+  /*
+   * =======================================================
+   * التحقق الأساسي
+   * =======================================================
+   */
 
   if (!name) {
-    return NextResponse.json(
-      { error: 'اسم الرحلة مطلوب' },
-      { status: 400 },
+    return jsonError(
+      'اسم الرحلة مطلوب',
+      400,
     )
   }
 
   if (!academicYearId) {
-    return NextResponse.json(
-      {
-        error:
-          'السنة الدراسية مطلوبة',
-      },
-      { status: 400 },
+    return jsonError(
+      'السنة الدراسية مطلوبة',
+      400,
     )
   }
 
   if (!courseId) {
-    return NextResponse.json(
-      { error: 'الدورة مطلوبة' },
-      { status: 400 },
+    return jsonError(
+      'الدورة مطلوبة',
+      400,
     )
   }
 
   if (levelIds.length === 0) {
-    return NextResponse.json(
-      {
-        error:
-          'اختر مستوى واحداً على الأقل',
-      },
-      { status: 400 },
+    return jsonError(
+      'اختر مستوى واحداً على الأقل',
+      400,
     )
   }
 
-  if (!Number.isFinite(fee) || fee < 0) {
-    return NextResponse.json(
-      {
-        error:
-          'قيمة رسوم الرحلة غير صحيحة',
-      },
-      { status: 400 },
+  if (
+    !Number.isFinite(fee) ||
+    fee < 0
+  ) {
+    return jsonError(
+      'قيمة رسوم الرحلة غير صحيحة',
+      400,
     )
   }
 
   if (
     attendanceMin !== null &&
-    (!Number.isFinite(attendanceMin) ||
+    (!Number.isFinite(
+      attendanceMin,
+    ) ||
       attendanceMin < 0 ||
       attendanceMin > 100)
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
+      400,
     )
   }
 
   if (
     attendanceMax !== null &&
-    (!Number.isFinite(attendanceMax) ||
+    (!Number.isFinite(
+      attendanceMax,
+    ) ||
       attendanceMax < 0 ||
       attendanceMax > 100)
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
+      400,
     )
   }
 
   if (
     attendanceMin !== null &&
     attendanceMax !== null &&
-    attendanceMin > attendanceMax
+    attendanceMin >
+      attendanceMax
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
+      400,
     )
   }
 
-  const { data: academicYear } =
-    await supabase
-      .from('academic_years')
-      .select(`
-        id,
-        is_active
-      `)
-      .eq('id', academicYearId)
-      .maybeSingle()
+  /*
+   * =======================================================
+   * التحقق من السنة الدراسية
+   * =======================================================
+   */
+
+  const {
+    data: academicYear,
+    error: academicYearError,
+  } = await supabase
+    .from('academic_years')
+    .select(`
+      id,
+      is_active
+    `)
+    .eq('id', academicYearId)
+    .maybeSingle()
+
+  if (academicYearError) {
+    console.error(
+      'PATCH /api/trips - academic year error:',
+      academicYearError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من السنة الدراسية',
+      500,
+      academicYearError.message,
+    )
+  }
 
   if (!academicYear) {
-    return NextResponse.json(
-      {
-        error:
-          'السنة الدراسية غير موجودة',
-      },
-      { status: 400 },
+    return jsonError(
+      'السنة الدراسية غير موجودة',
+      400,
     )
   }
 
   if (!academicYear.is_active) {
-    return NextResponse.json(
-      {
-        error:
-          'لا يمكن استخدام سنة دراسية غير مفعلة',
-      },
-      { status: 400 },
+    return jsonError(
+      'لا يمكن استخدام سنة دراسية غير مفعلة',
+      400,
     )
   }
 
-  const { data: course } =
-    await supabase
-      .from('courses')
-      .select(`
-        id,
-        academic_year_id
-      `)
-      .eq('id', courseId)
-      .maybeSingle()
+  /*
+   * =======================================================
+   * التحقق من الدورة
+   * =======================================================
+   */
+
+  const {
+    data: course,
+    error: courseError,
+  } = await supabase
+    .from('courses')
+    .select(`
+      id,
+      academic_year_id
+    `)
+    .eq('id', courseId)
+    .maybeSingle()
+
+  if (courseError) {
+    console.error(
+      'PATCH /api/trips - course error:',
+      courseError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من الدورة',
+      500,
+      courseError.message,
+    )
+  }
 
   if (!course) {
-    return NextResponse.json(
-      { error: 'الدورة غير موجودة' },
-      { status: 400 },
+    return jsonError(
+      'الدورة غير موجودة',
+      400,
     )
   }
 
@@ -812,45 +875,72 @@ export async function PATCH(
     course.academic_year_id !==
     academicYearId
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الدورة لا تتبع السنة الدراسية المحددة',
-      },
-      { status: 400 },
+    return jsonError(
+      'الدورة لا تتبع السنة الدراسية المحددة',
+      400,
     )
   }
 
-  const { data: levels } =
-    await supabase
-      .from('levels')
-      .select(`
-        id,
-        is_active
-      `)
-      .in('id', levelIds)
+  /*
+   * =======================================================
+   * التحقق من المستويات
+   * =======================================================
+   */
 
-  const validLevelIds = new Set(
-    (levels ?? [])
-      .filter(
-        (level) => level.is_active,
-      )
-      .map((level) => level.id),
-  )
+  const {
+    data: levels,
+    error: levelsValidationError,
+  } = await supabase
+    .from('levels')
+    .select(`
+      id,
+      is_active
+    `)
+    .in('id', levelIds)
+
+  if (levelsValidationError) {
+    console.error(
+      'PATCH /api/trips - levels validation error:',
+      levelsValidationError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من المستويات',
+      500,
+      levelsValidationError.message,
+    )
+  }
+
+  const validLevelIds =
+    new Set(
+      (levels ?? [])
+        .filter(
+          (level) =>
+            level.is_active,
+        )
+        .map(
+          (level) =>
+            level.id,
+        ),
+    )
 
   if (
     levelIds.some(
-      (id) => !validLevelIds.has(id),
+      (id) =>
+        !validLevelIds.has(id),
     )
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'يوجد مستوى غير موجود أو غير مفعل',
-      },
-      { status: 400 },
+    return jsonError(
+      'يوجد مستوى غير موجود أو غير مفعل',
+      400,
     )
   }
+
+  /*
+   * =======================================================
+   * تحديث الرحلة
+   * =======================================================
+   */
 
   const {
     data: updatedTrip,
@@ -879,48 +969,31 @@ export async function PATCH(
         new Date().toISOString(),
     })
     .eq('id', tripId)
-    .select(`
-      id,
-      name,
-      description,
-      location,
-      trip_date,
-      meeting_time,
-      return_time,
-      fee,
-      note,
-      academic_year_id,
-      course_id,
-      attendance_min,
-      attendance_max,
-      notes_requirement,
-      status,
-      created_at,
-      updated_at
-    `)
+    .select(tripSelect)
     .single()
 
-  if (updateError || !updatedTrip) {
+  if (
+    updateError ||
+    !updatedTrip
+  ) {
     console.error(
       'PATCH /api/trips - update error:',
       updateError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر تعديل الرحلة',
-        details:
-          updateError?.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تعديل الرحلة',
+      500,
+      updateError?.message,
     )
   }
 
   /*
-   * تحديث مستويات الرحلة:
-   * نحذف القديم ثم نضيف الجديد.
+   * =======================================================
+   * تحديث مستويات الرحلة
+   * =======================================================
    */
+
   const {
     error: deleteLevelsError,
   } = await supabase
@@ -934,22 +1007,20 @@ export async function PATCH(
       deleteLevelsError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر تحديث مستويات الرحلة',
-        details:
-          deleteLevelsError.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر تحديث مستويات الرحلة',
+      500,
+      deleteLevelsError.message,
     )
   }
 
   const tripLevelRows =
-    levelIds.map((levelId) => ({
-      trip_id: tripId,
-      level_id: levelId,
-    }))
+    levelIds.map(
+      (levelId) => ({
+        trip_id: tripId,
+        level_id: levelId,
+      }),
+    )
 
   const {
     data: insertedLevels,
@@ -969,14 +1040,10 @@ export async function PATCH(
       levelsError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر حفظ مستويات الرحلة',
-        details:
-          levelsError.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر حفظ مستويات الرحلة',
+      500,
+      levelsError.message,
     )
   }
 
@@ -987,6 +1054,12 @@ export async function PATCH(
   })
 }
 
+/*
+ * =========================================================
+ * DELETE
+ * =========================================================
+ */
+
 export async function DELETE(
   request: Request,
 ) {
@@ -996,9 +1069,9 @@ export async function DELETE(
   if (response) return response
 
   if (!access) {
-    return NextResponse.json(
-      { error: 'غير مصرح بالوصول' },
-      { status: 401 },
+    return jsonError(
+      'غير مصرح بالوصول',
+      401,
     )
   }
 
@@ -1007,21 +1080,21 @@ export async function DELETE(
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: 'بيانات الطلب غير صحيحة' },
-      { status: 400 },
+    return jsonError(
+      'بيانات الطلب غير صحيحة',
+      400,
     )
   }
 
   const tripId =
     typeof body.id === 'string'
-      ? body.id
+      ? body.id.trim()
       : ''
 
   if (!tripId) {
-    return NextResponse.json(
-      { error: 'معرف الرحلة مطلوب' },
-      { status: 400 },
+    return jsonError(
+      'معرف الرحلة مطلوب',
+      400,
     )
   }
 
@@ -1046,37 +1119,50 @@ export async function DELETE(
       tripError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر التحقق من الرحلة',
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر التحقق من الرحلة',
+      500,
+      tripError.message,
     )
   }
 
   if (!trip) {
-    return NextResponse.json(
-      { error: 'الرحلة غير موجودة' },
-      { status: 404 },
+    return jsonError(
+      'الرحلة غير موجودة',
+      404,
     )
   }
 
-  if (trip.status === 'closed') {
-    return NextResponse.json(
-      {
-        error:
-          'لا يمكن حذف رحلة مغلقة',
-      },
-      { status: 400 },
+  if (
+    trip.status === 'closed'
+  ) {
+    return jsonError(
+      'لا يمكن حذف رحلة مغلقة',
+      400,
+    )
+  }
+
+  /*
+   * إذا كانت الرحلة منشورة،
+   * نحافظ على منع الحذف حتى لا تختفي
+   * رحلة منشورة من الرابط العام للطلاب.
+   */
+
+  if (
+    trip.status === 'published'
+  ) {
+    return jsonError(
+      'لا يمكن حذف رحلة منشورة',
+      400,
     )
   }
 
   /*
    * trip_levels و trip_students
-   * عندها ON DELETE CASCADE حسب التصميم،
-   * لذلك حذف الرحلة يحذف العلاقات التابعة لها.
+   * تعتمد على ON DELETE CASCADE
+   * حسب تصميم قاعدة البيانات.
    */
+
   const {
     error: deleteError,
   } = await supabase
@@ -1090,14 +1176,10 @@ export async function DELETE(
       deleteError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر حذف الرحلة',
-        details:
-          deleteError.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر حذف الرحلة',
+      500,
+      deleteError.message,
     )
   }
 
@@ -1105,6 +1187,12 @@ export async function DELETE(
     success: true,
   })
 }
+
+/*
+ * =========================================================
+ * CREATE TRIP
+ * =========================================================
+ */
 
 async function createTrip(
   request: Request,
@@ -1115,9 +1203,9 @@ async function createTrip(
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: 'بيانات الطلب غير صحيحة' },
-      { status: 400 },
+    return jsonError(
+      'بيانات الطلب غير صحيحة',
+      400,
     )
   }
 
@@ -1127,29 +1215,34 @@ async function createTrip(
       : ''
 
   const description =
-    typeof body.description === 'string'
+    typeof body.description ===
+    'string'
       ? body.description.trim()
       : null
 
   const location =
-    typeof body.location === 'string'
+    typeof body.location ===
+    'string'
       ? body.location.trim()
       : null
 
   const tripDate =
-    typeof body.trip_date === 'string' &&
+    typeof body.trip_date ===
+      'string' &&
     body.trip_date.trim()
       ? body.trip_date.trim()
       : null
 
   const meetingTime =
-    typeof body.meeting_time === 'string' &&
+    typeof body.meeting_time ===
+      'string' &&
     body.meeting_time.trim()
       ? body.meeting_time.trim()
       : null
 
   const returnTime =
-    typeof body.return_time === 'string' &&
+    typeof body.return_time ===
+      'string' &&
     body.return_time.trim()
       ? body.return_time.trim()
       : null
@@ -1162,12 +1255,13 @@ async function createTrip(
   const academicYearId =
     typeof body.academic_year_id ===
     'string'
-      ? body.academic_year_id
+      ? body.academic_year_id.trim()
       : ''
 
   const courseId =
-    typeof body.course_id === 'string'
-      ? body.course_id
+    typeof body.course_id ===
+    'string'
+      ? body.course_id.trim()
       : ''
 
   const fee =
@@ -1178,7 +1272,8 @@ async function createTrip(
       : Number(body.fee)
 
   const attendanceMin =
-    body.attendance_min === null ||
+    body.attendance_min ===
+      null ||
     body.attendance_min ===
       undefined ||
     body.attendance_min === ''
@@ -1186,7 +1281,8 @@ async function createTrip(
       : Number(body.attendance_min)
 
   const attendanceMax =
-    body.attendance_max === null ||
+    body.attendance_max ===
+      null ||
     body.attendance_max ===
       undefined ||
     body.attendance_max === ''
@@ -1198,161 +1294,243 @@ async function createTrip(
       'required' ||
     body.notes_requirement ===
       'none' ||
-    body.notes_requirement === 'any'
+    body.notes_requirement ===
+      'any'
       ? body.notes_requirement
       : 'any'
 
-  const levelIds = Array.isArray(
-    body.level_ids,
-  )
-    ? [
-        ...new Set(
-          body.level_ids.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id === 'string' &&
-              id.trim().length > 0,
+  const levelIds =
+    Array.isArray(
+      body.level_ids,
+    )
+      ? [
+          ...new Set(
+            body.level_ids.filter(
+              (
+                id: unknown,
+              ): id is string =>
+                typeof id ===
+                  'string' &&
+                id.trim().length >
+                  0,
+            ),
           ),
-        ),
-      ]
-    : []
+        ]
+      : []
+
+  /*
+   * =======================================================
+   * التحقق الأساسي
+   * =======================================================
+   */
 
   if (!name) {
-    return NextResponse.json(
-      { error: 'اسم الرحلة مطلوب' },
-      { status: 400 },
+    return jsonError(
+      'اسم الرحلة مطلوب',
+      400,
     )
   }
 
   if (!academicYearId) {
-    return NextResponse.json(
-      {
-        error:
-          'السنة الدراسية مطلوبة',
-      },
-      { status: 400 },
+    return jsonError(
+      'السنة الدراسية مطلوبة',
+      400,
     )
   }
 
   if (!courseId) {
-    return NextResponse.json(
-      { error: 'الدورة مطلوبة' },
-      { status: 400 },
+    return jsonError(
+      'الدورة مطلوبة',
+      400,
     )
   }
 
   if (levelIds.length === 0) {
-    return NextResponse.json(
-      {
-        error:
-          'اختر مستوى واحداً على الأقل',
-      },
-      { status: 400 },
+    return jsonError(
+      'اختر مستوى واحداً على الأقل',
+      400,
     )
   }
 
-  if (!Number.isFinite(fee) || fee < 0) {
-    return NextResponse.json(
-      {
-        error:
-          'قيمة رسوم الرحلة غير صحيحة',
-      },
-      { status: 400 },
+  if (
+    !Number.isFinite(fee) ||
+    fee < 0
+  ) {
+    return jsonError(
+      'قيمة رسوم الرحلة غير صحيحة',
+      400,
     )
   }
 
   if (
     attendanceMin !== null &&
-    (!Number.isFinite(attendanceMin) ||
+    (!Number.isFinite(
+      attendanceMin,
+    ) ||
       attendanceMin < 0 ||
       attendanceMin > 100)
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأدنى للحضور يجب أن يكون بين 0 و100',
+      400,
     )
   }
 
   if (
     attendanceMax !== null &&
-    (!Number.isFinite(attendanceMax) ||
+    (!Number.isFinite(
+      attendanceMax,
+    ) ||
       attendanceMax < 0 ||
       attendanceMax > 100)
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأعلى للحضور يجب أن يكون بين 0 و100',
+      400,
     )
   }
 
   if (
     attendanceMin !== null &&
     attendanceMax !== null &&
-    attendanceMin > attendanceMax
+    attendanceMin >
+      attendanceMax
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
-      },
-      { status: 400 },
+    return jsonError(
+      'الحد الأدنى للحضور لا يمكن أن يكون أكبر من الحد الأعلى',
+      400,
     )
   }
 
   const supabase =
     await createSupabaseServerClient()
 
-  const { data: academicYear } =
-    await supabase
-      .from('academic_years')
-      .select(`
-        id,
-        is_active
-      `)
-      .eq('id', academicYearId)
-      .maybeSingle()
+  /*
+   * =======================================================
+   * إعدادات الرحلات
+   * =======================================================
+   */
+
+  const {
+    settings,
+    error: settingsError,
+  } = await getTripSettings(
+    supabase,
+  )
+
+  if (settingsError) {
+    console.error(
+      'POST /api/trips - settings error:',
+      settingsError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من إعدادات الرحلات',
+      500,
+      settingsError.message,
+    )
+  }
+
+  if (
+    settings?.is_enabled ===
+    false
+  ) {
+    return jsonError(
+      'ميزة الرحلات موقوفة من إعدادات النظام',
+      403,
+    )
+  }
+
+  if (
+    settings?.allow_trip_creation ===
+    false
+  ) {
+    return jsonError(
+      'إنشاء الرحلات موقوف من إعدادات النظام',
+      403,
+    )
+  }
+
+  /*
+   * =======================================================
+   * السنة الدراسية
+   * =======================================================
+   */
+
+  const {
+    data: academicYear,
+    error: academicYearError,
+  } = await supabase
+    .from('academic_years')
+    .select(`
+      id,
+      is_active
+    `)
+    .eq('id', academicYearId)
+    .maybeSingle()
+
+  if (academicYearError) {
+    console.error(
+      'POST /api/trips - academic year error:',
+      academicYearError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من السنة الدراسية',
+      500,
+      academicYearError.message,
+    )
+  }
 
   if (!academicYear) {
-    return NextResponse.json(
-      {
-        error:
-          'السنة الدراسية غير موجودة',
-      },
-      { status: 400 },
+    return jsonError(
+      'السنة الدراسية غير موجودة',
+      400,
     )
   }
 
   if (!academicYear.is_active) {
-    return NextResponse.json(
-      {
-        error:
-          'لا يمكن إنشاء رحلة لسنة غير مفعلة',
-      },
-      { status: 400 },
+    return jsonError(
+      'لا يمكن إنشاء رحلة لسنة غير مفعلة',
+      400,
     )
   }
 
-  const { data: course } =
-    await supabase
-      .from('courses')
-      .select(`
-        id,
-        academic_year_id
-      `)
-      .eq('id', courseId)
-      .maybeSingle()
+  /*
+   * =======================================================
+   * الدورة
+   * =======================================================
+   */
+
+  const {
+    data: course,
+    error: courseError,
+  } = await supabase
+    .from('courses')
+    .select(`
+      id,
+      academic_year_id
+    `)
+    .eq('id', courseId)
+    .maybeSingle()
+
+  if (courseError) {
+    console.error(
+      'POST /api/trips - course error:',
+      courseError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من الدورة',
+      500,
+      courseError.message,
+    )
+  }
 
   if (!course) {
-    return NextResponse.json(
-      { error: 'الدورة غير موجودة' },
-      { status: 400 },
+    return jsonError(
+      'الدورة غير موجودة',
+      400,
     )
   }
 
@@ -1360,45 +1538,72 @@ async function createTrip(
     course.academic_year_id !==
     academicYearId
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'الدورة لا تتبع السنة الدراسية المحددة',
-      },
-      { status: 400 },
+    return jsonError(
+      'الدورة لا تتبع السنة الدراسية المحددة',
+      400,
     )
   }
 
-  const { data: levels } =
-    await supabase
-      .from('levels')
-      .select(`
-        id,
-        is_active
-      `)
-      .in('id', levelIds)
+  /*
+   * =======================================================
+   * المستويات
+   * =======================================================
+   */
 
-  const validLevelIds = new Set(
-    (levels ?? [])
-      .filter(
-        (level) => level.is_active,
-      )
-      .map((level) => level.id),
-  )
+  const {
+    data: levels,
+    error: levelsError,
+  } = await supabase
+    .from('levels')
+    .select(`
+      id,
+      is_active
+    `)
+    .in('id', levelIds)
+
+  if (levelsError) {
+    console.error(
+      'POST /api/trips - levels validation error:',
+      levelsError,
+    )
+
+    return jsonError(
+      'تعذر التحقق من المستويات',
+      500,
+      levelsError.message,
+    )
+  }
+
+  const validLevelIds =
+    new Set(
+      (levels ?? [])
+        .filter(
+          (level) =>
+            level.is_active,
+        )
+        .map(
+          (level) =>
+            level.id,
+        ),
+    )
 
   if (
     levelIds.some(
-      (id) => !validLevelIds.has(id),
+      (id) =>
+        !validLevelIds.has(id),
     )
   ) {
-    return NextResponse.json(
-      {
-        error:
-          'يوجد مستوى غير موجود أو غير مفعل',
-      },
-      { status: 400 },
+    return jsonError(
+      'يوجد مستوى غير موجود أو غير مفعل',
+      400,
     )
   }
+
+  /*
+   * =======================================================
+   * إنشاء الرحلة
+   * =======================================================
+   */
 
   const {
     data: trip,
@@ -1426,53 +1631,42 @@ async function createTrip(
       status: 'draft',
       created_by: userId,
     })
-    .select(`
-      id,
-      name,
-      description,
-      location,
-      trip_date,
-      meeting_time,
-      return_time,
-      fee,
-      note,
-      academic_year_id,
-      course_id,
-      attendance_min,
-      attendance_max,
-      notes_requirement,
-      status,
-      created_at,
-      updated_at
-    `)
+    .select(tripSelect)
     .single()
 
-  if (tripError || !trip) {
+  if (
+    tripError ||
+    !trip
+  ) {
     console.error(
       'POST /api/trips - create error:',
       tripError,
     )
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر إنشاء الرحلة',
-        details:
-          tripError?.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر إنشاء الرحلة',
+      500,
+      tripError?.message,
     )
   }
 
+  /*
+   * =======================================================
+   * حفظ مستويات الرحلة
+   * =======================================================
+   */
+
   const tripLevelRows =
-    levelIds.map((levelId) => ({
-      trip_id: trip.id,
-      level_id: levelId,
-    }))
+    levelIds.map(
+      (levelId) => ({
+        trip_id: trip.id,
+        level_id: levelId,
+      }),
+    )
 
   const {
     data: insertedLevels,
-    error: levelsError,
+    error: insertedLevelsError,
   } = await supabase
     .from('trip_levels')
     .insert(tripLevelRows)
@@ -1482,25 +1676,25 @@ async function createTrip(
       level_id
     `)
 
-  if (levelsError) {
+  if (insertedLevelsError) {
     console.error(
       'POST /api/trips - levels error:',
-      levelsError,
+      insertedLevelsError,
     )
+
+    /*
+     * تنظيف الرحلة إذا فشل حفظ المستويات.
+     */
 
     await supabase
       .from('trips')
       .delete()
       .eq('id', trip.id)
 
-    return NextResponse.json(
-      {
-        error:
-          'تعذر حفظ مستويات الرحلة',
-        details:
-          levelsError.message,
-      },
-      { status: 500 },
+    return jsonError(
+      'تعذر حفظ مستويات الرحلة',
+      500,
+      insertedLevelsError.message,
     )
   }
 
@@ -1510,6 +1704,8 @@ async function createTrip(
       tripLevels:
         insertedLevels ?? [],
     },
-    { status: 201 },
+    {
+      status: 201,
+    },
   )
 }
