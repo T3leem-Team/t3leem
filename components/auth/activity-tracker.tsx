@@ -1,0 +1,107 @@
+'use client'
+
+import { useEffect, useRef } from 'react'
+
+const ACTIVITY_THROTTLE_MS =
+  60 * 1000
+
+export function ActivityTracker() {
+  const lastSentRef =
+    useRef(0)
+
+  useEffect(() => {
+    let stopped = false
+
+    async function sendActivity() {
+      if (stopped) {
+        return
+      }
+
+      const now =
+        Date.now()
+
+      if (
+        now -
+          lastSentRef.current <
+        ACTIVITY_THROTTLE_MS
+      ) {
+        return
+      }
+
+      lastSentRef.current =
+        now
+
+      try {
+        const response =
+          await fetch(
+            '/api/auth/activity',
+            {
+              method: 'POST',
+              credentials:
+                'include',
+              cache: 'no-store',
+            },
+          )
+
+        if (
+          response.status ===
+          401
+        ) {
+          window.location.replace(
+            '/login',
+          )
+        }
+      } catch {
+        /*
+         * لا نسجل خروج المستخدم
+         * بسبب انقطاع مؤقت في الشبكة.
+         */
+      }
+    }
+
+    const handleActivity =
+      () => {
+        void sendActivity()
+      }
+
+    const events = [
+      'pointerdown',
+      'keydown',
+      'touchstart',
+      'scroll',
+    ]
+
+    events.forEach(
+      (event) => {
+        window.addEventListener(
+          event,
+          handleActivity,
+          {
+            passive: true,
+          },
+        )
+      },
+    )
+
+    /*
+     * فحص أولي فقط.
+     * لا يعتبر هذا نشاطًا مستمرًا.
+     */
+    void sendActivity()
+
+    return () => {
+      stopped = true
+
+      events.forEach(
+        (event) => {
+          window.removeEventListener(
+            event,
+            handleActivity,
+          )
+        },
+      )
+    }
+  }, [])
+
+  return null
+}
