@@ -104,8 +104,7 @@ export default function Page() {
               <div>
                 <CardTitle>النسخة الاحتياطية</CardTitle>
                 <CardDescription>
-                  تنزيل نسخة Excel من بيانات السنة الدراسية الحالية،
-                  مع وضع كل قسم في ورقة مستقلة.
+                  تنزيل نسخة Excel من بيانات السنة الدراسية الحالية.
                 </CardDescription>
               </div>
             </div>
