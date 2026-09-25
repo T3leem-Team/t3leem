@@ -659,13 +659,6 @@ export default function StudentStatusPage() {
         previousSummaries,
       )
 
-      /*
-       * جلب الرحلات المخصصة للطالب.
-       *
-       * الرحلة تظهر فقط إذا:
-       * selected = true
-       * status = published
-       */
       setTripsLoading(true)
 
       try {
@@ -914,13 +907,15 @@ export default function StudentStatusPage() {
               </div>
 
               {/* الرحلات */}
-              <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
-                <div className="border-b px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="size-5 text-primary" />
-
+              <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
+                <div className="border-b border-amber-200 bg-amber-100/50 px-5 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h2 className="font-semibold">
+                      <div className="mb-1 inline-flex rounded-full border border-amber-200 bg-background/80 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                        الرحلات
+                      </div>
+
+                      <h2 className="font-semibold text-foreground">
                         الرحلات المخصصة للطالب
                       </h2>
 
@@ -929,15 +924,24 @@ export default function StudentStatusPage() {
                         للمشاركة فيها
                       </p>
                     </div>
+
+                    <div className="rounded-full border border-amber-200 bg-background px-3 py-1.5 text-xs font-semibold text-amber-700">
+                      {trips.length}{' '}
+                      {trips.length === 1
+                        ? 'رحلة'
+                        : 'رحلات'}
+                    </div>
                   </div>
                 </div>
 
                 <div className="p-5">
                   {tripsLoading ? (
-                    <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                      <Clock3 className="size-4 animate-spin" />
+                    <div className="rounded-xl border border-amber-200 bg-background/70 py-7 text-center">
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <Clock3 className="size-4 animate-spin" />
 
-                      جاري تحميل الرحلات...
+                        جاري تحميل الرحلات...
+                      </div>
                     </div>
                   ) : tripsError ? (
                     <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -948,7 +952,7 @@ export default function StudentStatusPage() {
                       </div>
                     </div>
                   ) : trips.length === 0 ? (
-                    <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    <div className="rounded-xl border border-dashed border-amber-300 bg-background/70 p-6 text-center text-sm text-muted-foreground">
                       لا توجد رحلات مخصصة لك حاليًا.
                     </div>
                   ) : (
@@ -1134,14 +1138,14 @@ function StudentTripCard({
 
   const responseClass =
     trip.response === 'accepted'
-      ? 'bg-green-100 text-green-800'
+      ? 'border-green-200 bg-green-50 text-green-800'
       : trip.response === 'rejected'
-        ? 'bg-red-100 text-red-800'
-        : 'bg-yellow-100 text-yellow-800'
+        ? 'border-red-200 bg-red-50 text-red-800'
+        : 'border-amber-200 bg-amber-50 text-amber-800'
 
   return (
-    <div className="overflow-hidden rounded-2xl border">
-      <div className="bg-muted/20 p-4">
+    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-background shadow-sm transition-shadow hover:shadow-md">
+      <div className="border-b border-amber-100 bg-gradient-to-l from-amber-50/80 to-background p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">
@@ -1181,7 +1185,7 @@ function StudentTripCard({
           </div>
 
           <span
-            className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold ${responseClass}`}
+            className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${responseClass}`}
           >
             {responseLabel}
           </span>
@@ -1260,56 +1264,68 @@ function StudentTripCard({
           </div>
         )}
 
-        <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row">
-          <button
-            type="button"
-            disabled={responding}
-            onClick={() =>
-              onRespond(
-                trip.trip_id,
-                'accepted',
-              )
-            }
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              trip.response ===
-              'accepted'
-                ? 'bg-green-600 text-white'
-                : 'border bg-background hover:bg-muted'
-            }`}
-          >
-            <Check className="size-4" />
+        <div className="border-t border-amber-100 pt-4">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            يرجى تحديد الرد على الرحلة
+          </p>
 
-            {responding &&
-            trip.response !==
-              'accepted'
-              ? 'جاري الحفظ...'
-              : 'أوافق'}
-          </button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={responding}
+              onClick={() =>
+                onRespond(
+                  trip.trip_id,
+                  'accepted',
+                )
+              }
+              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                trip.response ===
+                'accepted'
+                  ? 'border-green-600 bg-green-600 text-white shadow-sm'
+                  : 'border-green-200 bg-green-50/50 text-green-700 hover:border-green-400 hover:bg-green-100'
+              }`}
+            >
+              <Check className="size-4" />
 
-          <button
-            type="button"
-            disabled={responding}
-            onClick={() =>
-              onRespond(
-                trip.trip_id,
-                'rejected',
-              )
-            }
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              trip.response ===
-              'rejected'
-                ? 'bg-red-600 text-white'
-                : 'border bg-background hover:bg-muted'
-            }`}
-          >
-            <X className="size-4" />
+              {responding &&
+              trip.response !==
+                'accepted'
+                ? 'جاري الحفظ...'
+                : trip.response ===
+                    'accepted'
+                  ? 'تمت الموافقة'
+                  : 'أوافق'}
+            </button>
 
-            {responding &&
-            trip.response !==
-              'rejected'
-              ? 'جاري الحفظ...'
-              : 'أعتذر'}
-          </button>
+            <button
+              type="button"
+              disabled={responding}
+              onClick={() =>
+                onRespond(
+                  trip.trip_id,
+                  'rejected',
+                )
+              }
+              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                trip.response ===
+                'rejected'
+                  ? 'border-red-600 bg-red-600 text-white shadow-sm'
+                  : 'border-red-200 bg-red-50/50 text-red-700 hover:border-red-400 hover:bg-red-100'
+              }`}
+            >
+              <X className="size-4" />
+
+              {responding &&
+              trip.response !==
+                'rejected'
+                ? 'جاري الحفظ...'
+                : trip.response ===
+                    'rejected'
+                  ? 'تم الاعتذار'
+                  : 'أعتذر'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1326,7 +1342,7 @@ function TripInfoItem({
   icon?: React.ReactNode
 }) {
   return (
-    <div className="rounded-xl border p-3">
+    <div className="rounded-xl border bg-background p-3">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {icon}
 
