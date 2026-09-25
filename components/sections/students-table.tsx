@@ -105,10 +105,6 @@ type Props = {
 
   onOpenColumns?: () => void
 
-  /*
-   * الحذف يتم من StudentsView حتى يبقى مصدر البيانات
-   * وإعادة التحميل في مكان واحد.
-   */
   onDeleteSelected: (
     studentIds: string[]
   ) => Promise<void> | void
@@ -812,7 +808,6 @@ export function StudentsTable({
 
           <div className="flex items-center gap-2">
 
-            {/* تحديد */}
             <button
               type="button"
               onClick={() => {
@@ -832,7 +827,6 @@ export function StudentsTable({
             {selectionMode && (
               <>
 
-                {/* تحديد الكل */}
                 <button
                   type="button"
                   onClick={
@@ -845,7 +839,6 @@ export function StudentsTable({
                     : 'تحديد الكل'}
                 </button>
 
-                {/* حذف المحدد */}
                 <button
                   type="button"
                   onClick={
@@ -866,7 +859,6 @@ export function StudentsTable({
               </>
             )}
 
-            {/* تخصيص الأعمدة */}
             <button
               type="button"
               onClick={() =>
@@ -883,10 +875,6 @@ export function StudentsTable({
           </div>
         </div>
 
-        {/* =========================================
-            عدد الطلاب المحددين
-           ========================================= */}
-
         {selectionMode &&
           selectedCount > 0 && (
             <div className="rounded-lg border bg-muted/20 px-4 py-2 text-sm">
@@ -898,10 +886,6 @@ export function StudentsTable({
             </div>
           )}
 
-        {/* =========================================
-            تخصيص الأعمدة
-           ========================================= */}
-
         {showColumns && (
           <div className="rounded-lg border bg-muted/20 p-4">
 
@@ -911,7 +895,6 @@ export function StudentsTable({
 
             <div className="grid gap-4 md:grid-cols-3">
 
-              {/* الأعمدة الأساسية */}
               <div className="space-y-2">
 
                 <div className="text-xs font-semibold text-muted-foreground">
@@ -944,7 +927,6 @@ export function StudentsTable({
                 )}
               </div>
 
-              {/* الأعمدة الإضافية */}
               <div className="space-y-2">
 
                 <div className="text-xs font-semibold text-muted-foreground">
@@ -977,7 +959,6 @@ export function StudentsTable({
                 )}
               </div>
 
-              {/* الحقول والدورات */}
               <div className="space-y-2">
 
                 <div className="text-xs font-semibold text-muted-foreground">
@@ -1045,20 +1026,25 @@ export function StudentsTable({
 
         {/* =========================================
             الجدول
+            - ارتفاع داخلي
+            - سكرول عمودي داخل الجدول
+            - السكرول العمودي في اليمين بسبب RTL
+            - السكرول الأفقي أسفل الجدول
            ========================================= */}
 
-        <div className="max-h-[600px] overflow-auto rounded-lg border">
-          <Table>
+        <div
+          dir="rtl"
+          className="max-h-[600px] overflow-auto rounded-lg border"
+        >
+          <Table className="min-w-[1200px]">
 
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow>
 
-                {/* رقم الصف */}
                 <TableHead className="w-[55px] text-center">
                   #
                 </TableHead>
 
-                {/* تحديد */}
                 {selectionMode && (
                   <TableHead className="w-[55px] text-center">
                     <input
@@ -1074,7 +1060,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* الاسم */}
                 {visibleColumns.name !== false && (
                   <TableHead className="min-w-[220px]">
                     {filterInput(
@@ -1084,7 +1069,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* الهوية */}
                 {visibleColumns.personalId !== false && (
                   <TableHead className="min-w-[150px]">
                     {filterInput(
@@ -1094,7 +1078,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* المستوى */}
                 {visibleColumns.grade !== false && (
                   <TableHead className="min-w-[170px]">
                     {filterSelect(
@@ -1105,7 +1088,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* التواصل */}
                 {visibleColumns.contact !== false && (
                   <TableHead className="min-w-[180px]">
                     {filterInput(
@@ -1115,7 +1097,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* السداد */}
                 {visibleColumns.paymentStatus !== false && (
                   <TableHead className="min-w-[170px]">
                     {filterSelect(
@@ -1126,7 +1107,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* الملاحظات */}
                 {visibleColumns.notes !== false && (
                   <TableHead className="min-w-[130px]">
                     {filterInput(
@@ -1136,7 +1116,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* الحضور */}
                 {visibleColumns.attendance !== false && (
                   <TableHead className="min-w-[150px]">
                     {filterSelect(
@@ -1147,7 +1126,6 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {/* أعمدة إضافية */}
                 {visibleExtraColumns.map(
                   (column) => (
                     <TableHead
@@ -1158,7 +1136,6 @@ export function StudentsTable({
                   )
                 )}
 
-                {/* الحقول الديناميكية */}
                 {visibleDynamicFields.map(
                   (field) => (
                     <TableHead
@@ -1169,7 +1146,6 @@ export function StudentsTable({
                   )
                 )}
 
-                {/* الدورات */}
                 {visibleCourses.map(
                   (course) => (
                     <TableHead
@@ -1215,11 +1191,7 @@ export function StudentsTable({
                           ? 'selected'
                           : undefined
                       }
-                      className={
-                        selectionMode
-                          ? 'cursor-pointer'
-                          : 'cursor-pointer'
-                      }
+                      className="h-[48px] cursor-pointer"
                       onClick={() => {
 
                         if (selectionMode) {
@@ -1235,12 +1207,10 @@ export function StudentsTable({
                       }}
                     >
 
-                      {/* رقم */}
                       <TableCell className="text-center text-muted-foreground">
                         {index + 1}
                       </TableCell>
 
-                      {/* checkbox */}
                       {selectionMode && (
                         <TableCell className="text-center">
                           <input
@@ -1261,14 +1231,12 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الاسم */}
                       {visibleColumns.name !== false && (
                         <TableCell className="font-medium">
                           {student.name}
                         </TableCell>
                       )}
 
-                      {/* الهوية */}
                       {visibleColumns.personalId !== false && (
                         <TableCell>
                           {student.personalId ||
@@ -1276,7 +1244,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* المستوى */}
                       {visibleColumns.grade !== false && (
                         <TableCell>
                           {student.grade ||
@@ -1284,7 +1251,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* التواصل */}
                       {visibleColumns.contact !== false && (
                         <TableCell>
                           <div className="space-y-1 text-xs">
@@ -1304,7 +1270,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* السداد */}
                       {visibleColumns.paymentStatus !== false && (
                         <TableCell>
                           <button
@@ -1329,7 +1294,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الملاحظات */}
                       {visibleColumns.notes !== false && (
                         <TableCell>
                           <button
@@ -1351,7 +1315,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الحضور */}
                       {visibleColumns.attendance !== false && (
                         <TableCell>
                           <button
@@ -1374,7 +1337,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* رقم الطالب */}
                       {visibleColumns.studentId && (
                         <TableCell>
                           {student.studentId ||
@@ -1382,7 +1344,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الجنس */}
                       {visibleColumns.gender && (
                         <TableCell>
                           {student.gender ||
@@ -1390,7 +1351,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* العمر */}
                       {visibleColumns.age && (
                         <TableCell>
                           {student.age ??
@@ -1398,7 +1358,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الهاتف */}
                       {visibleColumns.phone && (
                         <TableCell>
                           {student.phone ||
@@ -1406,7 +1365,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* واتساب */}
                       {visibleColumns.whatsapp && (
                         <TableCell>
                           {student.whatsapp ||
@@ -1414,7 +1372,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الحالة */}
                       {visibleColumns.status && (
                         <TableCell>
                           <StatusBadge
@@ -1426,7 +1383,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الفصل */}
                       {visibleColumns.className && (
                         <TableCell>
                           {student.className ||
@@ -1434,7 +1390,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* المصدر */}
                       {visibleColumns.source && (
                         <TableCell>
                           {getSourceLabel(
@@ -1443,7 +1398,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* المستحق */}
                       {visibleColumns.amountDue && (
                         <TableCell>
                           {Number(
@@ -1452,7 +1406,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* المدفوع */}
                       {visibleColumns.amountPaid && (
                         <TableCell>
                           {Number(
@@ -1461,7 +1414,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* المتبقي */}
                       {visibleColumns.remaining && (
                         <TableCell>
                           {remaining.toFixed(
@@ -1470,7 +1422,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الإعفاء */}
                       {visibleColumns.feeExempt && (
                         <TableCell>
                           {student.feeExempt
@@ -1479,7 +1430,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الحالات الصحية */}
                       {visibleColumns.chronicDiseases && (
                         <TableCell>
                           {student.chronicDiseases ||
@@ -1487,7 +1437,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* تاريخ الإضافة */}
                       {visibleColumns.createdAt && (
                         <TableCell>
                           {formatDate(
@@ -1496,7 +1445,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* آخر تحديث */}
                       {visibleColumns.updatedAt && (
                         <TableCell>
                           {formatDate(
@@ -1505,7 +1453,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* العام الدراسي */}
                       {visibleColumns.academicYearName && (
                         <TableCell>
                           {student.academicYearName ||
@@ -1513,7 +1460,6 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {/* الحقول الديناميكية */}
                       {visibleDynamicFields.map(
                         (field) => (
                           <TableCell
@@ -1532,7 +1478,6 @@ export function StudentsTable({
                         )
                       )}
 
-                      {/* الدورات */}
                       {visibleCourses.map(
                         (course) => {
 
@@ -1813,7 +1758,6 @@ export function StudentsTable({
                         إضافة دفعة
                       </div>
 
-                      {/* المبلغ */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           المبلغ
@@ -1838,7 +1782,6 @@ export function StudentsTable({
                         />
                       </div>
 
-                      {/* طريقة الدفع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           طريقة الدفع
@@ -1875,7 +1818,6 @@ export function StudentsTable({
                         </select>
                       </div>
 
-                      {/* تاريخ الدفع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           تاريخ الدفع
@@ -1898,7 +1840,6 @@ export function StudentsTable({
                         />
                       </div>
 
-                      {/* رقم المرجع */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           رقم المرجع
@@ -1921,7 +1862,6 @@ export function StudentsTable({
                         />
                       </div>
 
-                      {/* الملاحظات */}
                       <div>
                         <label className="mb-1.5 block text-xs text-muted-foreground">
                           ملاحظات
