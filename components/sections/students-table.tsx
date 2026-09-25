@@ -313,12 +313,6 @@ export function StudentsTable({
   const [deleteMessage, setDeleteMessage] =
     useState('')
 
-  /*
-   * =========================================
-   * الخيارات الحقيقية للفلاتر
-   * =========================================
-   */
-
   const gradeOptions = useMemo(() => {
     const values = new Set<string>()
 
@@ -380,12 +374,6 @@ export function StudentsTable({
     return Array.from(values)
   }, [students])
 
-  /*
-   * =========================================
-   * تحديد طالب
-   * =========================================
-   */
-
   const toggleStudentSelection = (
     studentId: string
   ) => {
@@ -397,12 +385,6 @@ export function StudentsTable({
         : [...current, studentId]
     )
   }
-
-  /*
-   * =========================================
-   * تحديد الكل
-   * =========================================
-   */
 
   const toggleSelectAll = () => {
     const allStudentIds = students.map(
@@ -422,12 +404,6 @@ export function StudentsTable({
     }
   }
 
-  /*
-   * =========================================
-   * الخروج من وضع التحديد
-   * =========================================
-   */
-
   const exitSelectionMode = () => {
     if (deleteSaving) return
 
@@ -436,12 +412,6 @@ export function StudentsTable({
     setShowDeleteConfirm(false)
     setDeleteMessage('')
   }
-
-  /*
-   * =========================================
-   * فتح تأكيد الحذف
-   * =========================================
-   */
 
   const openDeleteConfirmation = () => {
     if (
@@ -455,24 +425,12 @@ export function StudentsTable({
     setShowDeleteConfirm(true)
   }
 
-  /*
-   * =========================================
-   * إغلاق تأكيد الحذف
-   * =========================================
-   */
-
   const closeDeleteConfirmation = () => {
     if (deleteSaving) return
 
     setShowDeleteConfirm(false)
     setDeleteMessage('')
   }
-
-  /*
-   * =========================================
-   * تنفيذ الحذف الجماعي
-   * =========================================
-   */
 
   const confirmDeleteSelected = async () => {
     if (
@@ -511,12 +469,6 @@ export function StudentsTable({
       setDeleteSaving(false)
     }
   }
-
-  /*
-   * =========================================
-   * الدفع
-   * =========================================
-   */
 
   const openPayment = (
     student: StudentTableStudent
@@ -664,12 +616,6 @@ export function StudentsTable({
     }
   }
 
-  /*
-   * =========================================
-   * فلتر نصي
-   * =========================================
-   */
-
   const filterInput = (
     key: keyof StudentTableFilters,
     placeholder: string
@@ -695,12 +641,6 @@ export function StudentsTable({
       </div>
     )
   }
-
-  /*
-   * =========================================
-   * فلتر اختيار
-   * =========================================
-   */
 
   const filterSelect = (
     key: keyof StudentTableFilters,
@@ -740,12 +680,6 @@ export function StudentsTable({
       </div>
     )
   }
-
-  /*
-   * =========================================
-   * الأعمدة
-   * =========================================
-   */
 
   const visibleExtraColumns =
     extraColumns.filter(
@@ -796,18 +730,12 @@ export function StudentsTable({
     <>
       <div className="space-y-3">
 
-        {/* =========================================
-            شريط الأدوات
-           ========================================= */}
-
         <div className="flex items-center justify-between gap-2">
-
           <div className="text-sm font-medium">
             الطلاب ({students.length})
           </div>
 
           <div className="flex items-center gap-2">
-
             <button
               type="button"
               onClick={() => {
@@ -826,7 +754,6 @@ export function StudentsTable({
 
             {selectionMode && (
               <>
-
                 <button
                   type="button"
                   onClick={
@@ -888,7 +815,6 @@ export function StudentsTable({
 
         {showColumns && (
           <div className="rounded-lg border bg-muted/20 p-4">
-
             <div className="mb-3 text-sm font-semibold">
               تخصيص الأعمدة
             </div>
@@ -896,7 +822,6 @@ export function StudentsTable({
             <div className="grid gap-4 md:grid-cols-3">
 
               <div className="space-y-2">
-
                 <div className="text-xs font-semibold text-muted-foreground">
                   الأعمدة الأساسية
                 </div>
@@ -928,7 +853,6 @@ export function StudentsTable({
               </div>
 
               <div className="space-y-2">
-
                 <div className="text-xs font-semibold text-muted-foreground">
                   أعمدة إضافية
                 </div>
@@ -960,7 +884,6 @@ export function StudentsTable({
               </div>
 
               <div className="space-y-2">
-
                 <div className="text-xs font-semibold text-muted-foreground">
                   الحقول والدورات
                 </div>
@@ -1026,15 +949,16 @@ export function StudentsTable({
 
         {/* =========================================
             الجدول
-            - ارتفاع داخلي
-            - سكرول عمودي داخل الجدول
-            - السكرول العمودي في اليمين بسبب RTL
-            - السكرول الأفقي أسفل الجدول
+            - حد أقصى يعادل تقريباً 10 صفوف
+            - السكرول العمودي داخل الجدول
+            - السكرول العمودي في اليمين
+            - السكرول الأفقي أسفل منطقة الجدول
+            - منع الـ Table الداخلي من إنشاء Scroll آخر
            ========================================= */}
 
         <div
           dir="rtl"
-          className="max-h-[600px] overflow-auto rounded-lg border"
+          className="relative max-h-[590px] overflow-auto rounded-lg border [&>div]:overflow-visible"
         >
           <Table className="min-w-[1200px]">
 
@@ -1193,7 +1117,6 @@ export function StudentsTable({
                       }
                       className="h-[48px] cursor-pointer"
                       onClick={() => {
-
                         if (selectionMode) {
                           toggleStudentSelection(
                             student.id
@@ -1254,7 +1177,6 @@ export function StudentsTable({
                       {visibleColumns.contact !== false && (
                         <TableCell>
                           <div className="space-y-1 text-xs">
-
                             <div>
                               {student.phone ||
                                 '-'}
@@ -1265,7 +1187,6 @@ export function StudentsTable({
                                 {student.whatsapp}
                               </div>
                             )}
-
                           </div>
                         </TableCell>
                       )}
@@ -1523,10 +1444,6 @@ export function StudentsTable({
         </div>
       </div>
 
-      {/* =========================================
-          تأكيد مسح الطلاب المحددين
-         ========================================= */}
-
       {showDeleteConfirm && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
@@ -1539,7 +1456,6 @@ export function StudentsTable({
             }
           }}
         >
-
           <div
             dir="rtl"
             className="w-full max-w-md rounded-xl bg-background p-5 shadow-xl"
@@ -1547,11 +1463,8 @@ export function StudentsTable({
               event.stopPropagation()
             }
           >
-
             <div className="mb-5">
-
               <div className="mb-2 flex items-center gap-2">
-
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
                   <Trash2 className="h-5 w-5 text-destructive" />
                 </div>
@@ -1559,7 +1472,6 @@ export function StudentsTable({
                 <h2 className="text-lg font-semibold">
                   تأكيد المسح
                 </h2>
-
               </div>
 
               <p className="text-sm text-muted-foreground">
@@ -1579,7 +1491,6 @@ export function StudentsTable({
                 هذه العملية قد تؤدي إلى حذف
                 بيانات الطلاب المرتبطة بهم.
               </p>
-
             </div>
 
             {deleteMessage && (
@@ -1589,7 +1500,6 @@ export function StudentsTable({
             )}
 
             <div className="flex gap-2">
-
               <button
                 type="button"
                 onClick={
@@ -1613,15 +1523,10 @@ export function StudentsTable({
               >
                 إلغاء
               </button>
-
             </div>
           </div>
         </div>
       )}
-
-      {/* =========================================
-          تفاصيل الدفع
-         ========================================= */}
 
       {paymentStudent && (
         <div
@@ -1635,7 +1540,6 @@ export function StudentsTable({
             }
           }}
         >
-
           <div
             className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
             dir="rtl"
@@ -1643,9 +1547,7 @@ export function StudentsTable({
               event.stopPropagation()
             }
           >
-
             <div className="mb-5 flex items-start justify-between">
-
               <div>
                 <h2 className="text-lg font-semibold">
                   تفاصيل السداد
@@ -1664,11 +1566,9 @@ export function StudentsTable({
               >
                 إغلاق
               </button>
-
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-
               <div className="rounded-lg border p-3">
                 <div className="text-xs text-muted-foreground">
                   المستحق
@@ -1727,7 +1627,6 @@ export function StudentsTable({
                   />
                 </div>
               </div>
-
             </div>
 
             {!paymentStudent.feeExempt &&
@@ -1738,7 +1637,6 @@ export function StudentsTable({
                   paymentStudent.amountDue
                 ) && (
                 <div className="mt-5">
-
                   {!showAddPayment ? (
                     <button
                       type="button"
@@ -1753,7 +1651,6 @@ export function StudentsTable({
                     </button>
                   ) : (
                     <div className="space-y-4 rounded-lg border p-4">
-
                       <div className="text-sm font-semibold">
                         إضافة دفعة
                       </div>
@@ -1892,7 +1789,6 @@ export function StudentsTable({
                       )}
 
                       <div className="flex gap-2">
-
                         <button
                           type="button"
                           onClick={
@@ -1922,11 +1818,9 @@ export function StudentsTable({
                         >
                           إلغاء
                         </button>
-
                       </div>
                     </div>
                   )}
-
                 </div>
               )}
 
@@ -1947,7 +1841,6 @@ export function StudentsTable({
                   تم سداد الرسوم بالكامل.
                 </div>
               )}
-
           </div>
         </div>
       )}
