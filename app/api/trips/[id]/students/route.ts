@@ -64,6 +64,7 @@ type TripStudentRow = {
   response: string | null
   response_note: string | null
   responded_at: string | null
+  payment_amount: number | null
 }
 
 function normalizePercentage(
@@ -77,7 +78,7 @@ function normalizePercentage(
 }
 
 /*
- * حساب الحضور بنفس قاعدة النظام:
+ * حساب الحضور:
  *
  * حاضر + متأخر + مستأذن = حضور
  * غائب = ضمن المقام
@@ -117,9 +118,6 @@ function calculateAttendance(
       continue
     }
 
-    /*
-     * أي حالة أخرى لا تدخل في النسبة.
-     */
     notRecorded += 1
   }
 
@@ -157,18 +155,10 @@ function isAttendanceEligible(
   min: number | null,
   max: number | null,
 ) {
-  /*
-   * إذا لم يتم وضع أي شرط حضور،
-   * فلا نستبعد الطالب بسبب عدم وجود نسبة.
-   */
   if (min === null && max === null) {
     return true
   }
 
-  /*
-   * إذا يوجد شرط حضور ولا توجد نسبة فعلية،
-   * فالطالب غير مؤهل لهذا الشرط.
-   */
   if (percentage === null) {
     return false
   }
@@ -218,10 +208,6 @@ function getEligibilityNote(
 ) {
   const reasons: string[] = []
 
-  /*
-   * لا نعتبر عدم وجود نسبة مشكلة
-   * إذا لم يتم تحديد شرط حضور.
-   */
   if (
     attendancePercentage === null &&
     (
@@ -281,6 +267,12 @@ function getEligibilityNote(
     : null
 }
 
+/*
+ * ============================================================
+ * GET
+ * ============================================================
+ */
+
 export async function GET(
   request: Request,
   { params }: RouteContext,
@@ -317,11 +309,8 @@ export async function GET(
       await createSupabaseServerClient()
 
     /*
-     * -------------------------------------------------------
      * الرحلة
-     * -------------------------------------------------------
      */
-
     const {
       data: trip,
       error: tripError,
@@ -377,11 +366,8 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
      * الدورة
-     * -------------------------------------------------------
      */
-
     const {
       data: course,
       error: courseError,
@@ -416,11 +402,8 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
      * مستويات الرحلة
-     * -------------------------------------------------------
      */
-
     const {
       data: tripLevels,
       error: tripLevelsError,
@@ -456,11 +439,8 @@ export async function GET(
       )
 
     /*
-     * -------------------------------------------------------
      * المستويات
-     * -------------------------------------------------------
      */
-
     let levels: Array<{
       id: string
       name: string
@@ -508,17 +488,8 @@ export async function GET(
     )
 
     /*
-     * -------------------------------------------------------
-     * طلاب السنة + المستوى
-     * -------------------------------------------------------
-     *
-     * هذه الخطوة تحدد الطلاب الموجودين في
-     * السنة والمستويات المختارة.
-     *
-     * لكن وجود enrollment وحده لا يكفي.
-     * يجب أن يكون الطالب أيضاً مسنداً للدورة.
+     * التسجيلات في السنة + المستوى
      */
-
     let enrollmentRows: EnrollmentRow[] = []
 
     if (levelIds.length > 0) {
@@ -567,18 +538,8 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
-     * الإسناد للدورة - شرط أساسي
-     * -------------------------------------------------------
-     *
-     * الطالب يعتبر من طلاب الدورة إذا كان له
-     * teacher_student_assignments مرتبط بالدورة
-     * المحددة في الرحلة.
-     *
-     * لا نشترط معلماً معيناً.
-     * وجود أي إسناد للطالب في هذه الدورة يكفي.
+     * الإسناد للدورة
      */
-
     const enrollmentStudentIds = [
       ...new Set(
         enrollmentRows.map(
@@ -640,10 +601,6 @@ export async function GET(
         ),
       )
 
-    /*
-     * نأخذ فقط التسجيلات التي لها إسناد
-     * في الدورة المحددة.
-     */
     const candidateEnrollmentRows =
       enrollmentRows.filter(
         (enrollment) =>
@@ -661,11 +618,8 @@ export async function GET(
     ]
 
     /*
-     * -------------------------------------------------------
      * الطلاب
-     * -------------------------------------------------------
      */
-
     let students: StudentRow[] = []
 
     if (
@@ -712,11 +666,8 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
      * حالات الحضور
-     * -------------------------------------------------------
      */
-
     const {
       data: attendanceStatuses,
       error: attendanceStatusesError,
@@ -756,11 +707,8 @@ export async function GET(
       )
 
     /*
-     * -------------------------------------------------------
      * الحضور
-     * -------------------------------------------------------
      */
-
     let attendance: AttendanceRow[] = []
 
     if (
@@ -823,11 +771,8 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
      * طلاب الرحلة المحفوظون
-     * -------------------------------------------------------
      */
-
     const {
       data: tripStudents,
       error: tripStudentsError,
@@ -848,7 +793,8 @@ export async function GET(
         selected,
         response,
         response_note,
-        responded_at
+        responded_at,
+        payment_amount
       `)
       .eq('trip_id', id)
 
@@ -884,11 +830,8 @@ export async function GET(
       )
 
     /*
-     * -------------------------------------------------------
-     * تجميع الحضور لكل طالب
-     * -------------------------------------------------------
+     * تجميع الحضور
      */
-
     const attendanceByStudent =
       new Map<
         string,
@@ -910,19 +853,11 @@ export async function GET(
     }
 
     /*
-     * -------------------------------------------------------
-     * تجهيز القائمة النهائية
-     * -------------------------------------------------------
+     * القائمة النهائية
      */
-
     const resultStudents =
       students
         .map((student) => {
-          /*
-           * بما أن studentIds جاءت من assignments
-           * فهي بالتأكيد مرتبطة بالدورة.
-           */
-
           const enrollment =
             candidateEnrollmentRows.find(
               (item) =>
@@ -1033,13 +968,6 @@ export async function GET(
                   ]
                 : [],
 
-            /*
-             * إذا عندنا سجل محفوظ للطالب:
-             * نستخدم selected كما هو.
-             *
-             * إذا لم يوجد سجل:
-             * يبدأ محدداً إذا كان مؤهلاً.
-             */
             eligible,
 
             eligibility_note:
@@ -1064,6 +992,10 @@ export async function GET(
               saved?.responded_at ??
               null,
 
+            payment_amount:
+              saved?.payment_amount ??
+              0,
+
             trip_student_id:
               saved?.id ?? null,
           }
@@ -1081,12 +1013,6 @@ export async function GET(
             'ar',
           ),
         )
-
-    /*
-     * -------------------------------------------------------
-     * تواريخ الحضور الموجودة فعلياً
-     * -------------------------------------------------------
-     */
 
     const lessonDates = [
       ...new Set(
@@ -1121,6 +1047,16 @@ export async function GET(
     )
   }
 }
+
+/*
+ * ============================================================
+ * POST
+ * ============================================================
+ *
+ * حفظ اختيار الطلاب فقط.
+ *
+ * payment_amount لا يتم لمسه هنا.
+ */
 
 export async function POST(
   request: Request,
@@ -1157,12 +1093,6 @@ export async function POST(
     const supabase =
       await createSupabaseServerClient()
 
-    /*
-     * -------------------------------------------------------
-     * التحقق من الرحلة
-     * -------------------------------------------------------
-     */
-
     const {
       data: trip,
       error: tripError,
@@ -1181,11 +1111,6 @@ export async function POST(
       .maybeSingle()
 
     if (tripError) {
-      console.error(
-        'POST /api/trips/[id]/students - trip error:',
-        tripError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -1207,21 +1132,18 @@ export async function POST(
       )
     }
 
-    if (trip.status === 'closed') {
+    if (
+      trip.status === 'closed' ||
+      trip.status === 'published'
+    ) {
       return NextResponse.json(
         {
           error:
-            'لا يمكن تعديل رحلة مغلقة',
+            'لا يمكن تعديل قائمة طلاب رحلة منشورة أو مغلقة',
         },
         { status: 400 },
       )
     }
-
-    /*
-     * -------------------------------------------------------
-     * قراءة الطلب
-     * -------------------------------------------------------
-     */
 
     let body: any
 
@@ -1236,18 +1158,6 @@ export async function POST(
         { status: 400 },
       )
     }
-
-    /*
-     * هذه هي الاختيارات النهائية من الواجهة.
-     *
-     * مهم:
-     * وجود الطالب في selectedStudentIds يعني
-     * selected=true.
-     *
-     * عدم وجوده يعني selected=false.
-     *
-     * لا نحذف السجل من قاعدة البيانات.
-     */
 
     const selectedStudentIds =
       Array.isArray(
@@ -1273,12 +1183,6 @@ export async function POST(
         selectedStudentIds,
       )
 
-    /*
-     * -------------------------------------------------------
-     * مستويات الرحلة
-     * -------------------------------------------------------
-     */
-
     const {
       data: tripLevels,
       error: tripLevelsError,
@@ -1290,11 +1194,6 @@ export async function POST(
       .eq('trip_id', id)
 
     if (tripLevelsError) {
-      console.error(
-        'POST /api/trips/[id]/students - trip levels error:',
-        tripLevelsError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -1321,12 +1220,6 @@ export async function POST(
       )
     }
 
-    /*
-     * -------------------------------------------------------
-     * التسجيلات في السنة والمستوى
-     * -------------------------------------------------------
-     */
-
     const {
       data: enrollments,
       error: enrollmentsError,
@@ -1350,11 +1243,6 @@ export async function POST(
       )
 
     if (enrollmentsError) {
-      console.error(
-        'POST /api/trips/[id]/students - enrollments error:',
-        enrollmentsError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -1369,12 +1257,6 @@ export async function POST(
     const enrollmentRows =
       (enrollments ??
         []) as EnrollmentRow[]
-
-    /*
-     * -------------------------------------------------------
-     * الإسناد للدورة - شرط أساسي
-     * -------------------------------------------------------
-     */
 
     const enrollmentStudentIds = [
       ...new Set(
@@ -1409,11 +1291,6 @@ export async function POST(
         )
 
       if (assignmentsError) {
-        console.error(
-          'POST /api/trips/[id]/students - assignments error:',
-          assignmentsError,
-        )
-
         return NextResponse.json(
           {
             error:
@@ -1437,11 +1314,6 @@ export async function POST(
         ),
       )
 
-    /*
-     * المرشحون الحقيقيون:
-     *
-     * السنة + المستوى + الإسناد للدورة.
-     */
     const candidateEnrollmentRows =
       enrollmentRows.filter(
         (enrollment) =>
@@ -1463,15 +1335,6 @@ export async function POST(
         candidateStudentIds,
       )
 
-    /*
-     * -------------------------------------------------------
-     * التحقق من الاختيارات المرسلة
-     * -------------------------------------------------------
-     *
-     * أي طالب تم تحديده في الواجهة يجب أن يكون
-     * من المرشحين الحقيقيين.
-     */
-
     const invalidStudentIds =
       selectedStudentIds.filter(
         (studentId) =>
@@ -1489,18 +1352,6 @@ export async function POST(
         { status: 400 },
       )
     }
-
-    /*
-     * -------------------------------------------------------
-     * الطلاب الموجودون حالياً في الرحلة
-     * -------------------------------------------------------
-     *
-     * نقرأهم حتى:
-     * - نحافظ على الرد
-     * - نحافظ على ملاحظة الرد
-     * - نحافظ على responded_at
-     * - نحدث selected فقط
-     */
 
     const {
       data: existingTripStudents,
@@ -1522,16 +1373,12 @@ export async function POST(
         selected,
         response,
         response_note,
-        responded_at
+        responded_at,
+        payment_amount
       `)
       .eq('trip_id', id)
 
     if (existingTripStudentsError) {
-      console.error(
-        'POST /api/trips/[id]/students - existing trip students error:',
-        existingTripStudentsError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -1556,19 +1403,6 @@ export async function POST(
           ],
         ),
       )
-
-    /*
-     * -------------------------------------------------------
-     * حذف السجلات التي لم تعد ضمن الدورة/المستوى
-     * -------------------------------------------------------
-     *
-     * لا نحذف الطالب لأنه فقط unchecked.
-     *
-     * نحذف فقط إذا لم يعد مرشحاً أساساً:
-     * - تغير مستواه
-     * - خرج من السنة
-     * - لم يعد مسنداً للدورة
-     */
 
     const staleStudentIds =
       existingRows
@@ -1598,11 +1432,6 @@ export async function POST(
         )
 
       if (deleteStaleError) {
-        console.error(
-          'POST /api/trips/[id]/students - delete stale students error:',
-          deleteStaleError,
-        )
-
         return NextResponse.json(
           {
             error:
@@ -1621,12 +1450,6 @@ export async function POST(
       }
     }
 
-    /*
-     * -------------------------------------------------------
-     * بيانات الحضور
-     * -------------------------------------------------------
-     */
-
     const {
       data: attendanceStatuses,
       error: attendanceStatusesError,
@@ -1638,11 +1461,6 @@ export async function POST(
       `)
 
     if (attendanceStatusesError) {
-      console.error(
-        'POST /api/trips/[id]/students - attendance statuses error:',
-        attendanceStatusesError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -1694,11 +1512,6 @@ export async function POST(
         )
 
       if (attendanceError) {
-        console.error(
-          'POST /api/trips/[id]/students - attendance error:',
-          attendanceError,
-        )
-
         return NextResponse.json(
           {
             error:
@@ -1735,12 +1548,6 @@ export async function POST(
       )
     }
 
-    /*
-     * -------------------------------------------------------
-     * ملاحظات الطلاب
-     * -------------------------------------------------------
-     */
-
     let studentRows: Array<{
       id: string
       notes: string | null
@@ -1764,11 +1571,6 @@ export async function POST(
         )
 
       if (studentsError) {
-        console.error(
-          'POST /api/trips/[id]/students - student notes error:',
-          studentsError,
-        )
-
         return NextResponse.json(
           {
             error:
@@ -1793,26 +1595,6 @@ export async function POST(
           ],
         ),
       )
-
-    /*
-     * -------------------------------------------------------
-     * تحديث / إنشاء السجلات
-     * -------------------------------------------------------
-     *
-     * هنا الإصلاح الأساسي لمشكلة الحفظ.
-     *
-     * كل طالب مرشح يحصل على selected:
-     *
-     * موجود في selectedStudentIds → true
-     * غير موجود → false
-     *
-     * الطالب الموجود سابقاً:
-     * نعمل UPDATE للحقول الخاصة بالاختيار
-     * فقط، ولا نلمس response.
-     *
-     * الطالب الجديد:
-     * نعمل INSERT ويأخذ response=pending.
-     */
 
     const newRows: Array<{
       trip_id: string
@@ -1856,19 +1638,6 @@ export async function POST(
           studentId,
         ) ?? null
 
-      const attendanceEligible =
-        isAttendanceEligible(
-          summary.percentage,
-          trip.attendance_min,
-          trip.attendance_max,
-        )
-
-      const notesEligible =
-        isNotesEligible(
-          notes,
-          trip.notes_requirement,
-        )
-
       const eligibilityNote =
         getEligibilityNote(
           summary.percentage,
@@ -1889,11 +1658,6 @@ export async function POST(
         )
 
       if (existing) {
-        /*
-         * مهم جداً:
-         * لا نستخدم upsert هنا حتى لا نلمس
-         * response / response_note / responded_at.
-         */
         const {
           error: updateError,
         } = await supabase
@@ -1923,11 +1687,6 @@ export async function POST(
           )
 
         if (updateError) {
-          console.error(
-            'POST /api/trips/[id]/students - update student error:',
-            updateError,
-          )
-
           return NextResponse.json(
             {
               error:
@@ -1942,10 +1701,6 @@ export async function POST(
         continue
       }
 
-      /*
-       * طالب جديد:
-       * يبدأ بحالة انتظار الرد.
-       */
       newRows.push({
         trip_id: id,
         student_id: studentId,
@@ -1969,17 +1724,8 @@ export async function POST(
       })
     }
 
-    /*
-     * -------------------------------------------------------
-     * إدخال الطلاب الجدد
-     * -------------------------------------------------------
-     */
-
-    let insertedStudents: TripStudentRow[] = []
-
     if (newRows.length > 0) {
       const {
-        data: insertedRows,
         error: insertError,
       } = await supabase
         .from('trip_students')
@@ -1989,30 +1735,8 @@ export async function POST(
             response: 'pending',
           })),
         )
-        .select(`
-          id,
-          trip_id,
-          student_id,
-          enrollment_id,
-          attendance_percentage,
-          attendance_present,
-          attendance_absent,
-          attendance_late,
-          attendance_excused,
-          attendance_not_recorded,
-          eligibility_note,
-          selected,
-          response,
-          response_note,
-          responded_at
-        `)
 
       if (insertError) {
-        console.error(
-          'POST /api/trips/[id]/students - insert error:',
-          insertError,
-        )
-
         return NextResponse.json(
           {
             error:
@@ -2023,23 +1747,7 @@ export async function POST(
           { status: 500 },
         )
       }
-
-      insertedStudents =
-        (insertedRows ??
-          []) as TripStudentRow[]
     }
-
-    /*
-     * -------------------------------------------------------
-     * النتيجة
-     * -------------------------------------------------------
-     *
-     * لا يهم إذا لم يتم اختيار أي طالب.
-     * في هذه الحالة جميع المرشحين يصبحون selected=false.
-     *
-     * وهذا هو المطلوب حتى لا ترجع الـcheckbox
-     * وتتعلم تلقائياً بعد إعادة التحميل.
-     */
 
     const {
       data: finalStudents,
@@ -2061,7 +1769,8 @@ export async function POST(
         selected,
         response,
         response_note,
-        responded_at
+        responded_at,
+        payment_amount
       `)
       .eq('trip_id', id)
       .in(
@@ -2074,11 +1783,6 @@ export async function POST(
       )
 
     if (finalStudentsError) {
-      console.error(
-        'POST /api/trips/[id]/students - final students error:',
-        finalStudentsError,
-      )
-
       return NextResponse.json(
         {
           error:
@@ -2095,7 +1799,7 @@ export async function POST(
       tripId: id,
       selectedStudentIds,
       students:
-        finalStudents ?? insertedStudents,
+        finalStudents ?? [],
     })
   } catch (error) {
     console.error(
@@ -2107,6 +1811,407 @@ export async function POST(
       {
         error:
           'حدث خطأ أثناء حفظ طلاب الرحلة',
+      },
+      { status: 500 },
+    )
+  }
+}
+
+/*
+ * ============================================================
+ * PATCH
+ * ============================================================
+ *
+ * حالياً نستخدم PATCH لتحديث:
+ *
+ * 1. payment_amount
+ * 2. response
+ *
+ * بدون التأثير على selected.
+ */
+
+export async function PATCH(
+  request: Request,
+  { params }: RouteContext,
+) {
+  try {
+    const { access, response } =
+      await requireAuth()
+
+    if (response) return response
+
+    if (!access) {
+      return NextResponse.json(
+        {
+          error:
+            'غير مصرح بالوصول',
+        },
+        { status: 401 },
+      )
+    }
+
+    const { id } = await params
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error:
+            'معرف الرحلة مطلوب',
+        },
+        { status: 400 },
+      )
+    }
+
+    const supabase =
+      await createSupabaseServerClient()
+
+    const {
+      data: trip,
+      error: tripError,
+    } = await supabase
+      .from('trips')
+      .select(`
+        id,
+        status
+      `)
+      .eq('id', id)
+      .maybeSingle()
+
+    if (tripError) {
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من الرحلة',
+          details:
+            tripError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    if (!trip) {
+      return NextResponse.json(
+        {
+          error:
+            'الرحلة غير موجودة',
+        },
+        { status: 404 },
+      )
+    }
+
+    let body: any
+
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            'بيانات الطلب غير صحيحة',
+        },
+        { status: 400 },
+      )
+    }
+
+    /*
+     * --------------------------------------------------------
+     * تحديث مبلغ الدفع
+     * --------------------------------------------------------
+     */
+
+    if (
+      body.action === 'payment'
+    ) {
+      const studentId =
+        typeof body.student_id ===
+        'string'
+          ? body.student_id
+          : ''
+
+      if (!studentId) {
+        return NextResponse.json(
+          {
+            error:
+              'معرف الطالب مطلوب',
+          },
+          { status: 400 },
+        )
+      }
+
+      /*
+       * الرحلة المغلقة فقط تمنع تعديل الدفع.
+       *
+       * الرحلة المنشورة يسمح فيها بتعديل الدفع
+       * لأن الدفع يتم يدوياً من الإدارة.
+       */
+      if (
+        trip.status === 'closed'
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'لا يمكن تعديل الدفع في رحلة مغلقة',
+          },
+          { status: 400 },
+        )
+      }
+
+      let paymentAmount = 0
+
+      if (
+        body.payment_amount !==
+          null &&
+        body.payment_amount !==
+          undefined &&
+        body.payment_amount !== ''
+      ) {
+        paymentAmount =
+          Number(
+            body.payment_amount,
+          )
+      }
+
+      if (
+        !Number.isFinite(
+          paymentAmount,
+        ) ||
+        paymentAmount < 0
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'مبلغ الدفع غير صحيح',
+          },
+          { status: 400 },
+        )
+      }
+
+      /*
+       * نخلي الدقة 3 منازل عشرية
+       * لأن الدينار البحريني 3 منازل.
+       */
+      paymentAmount =
+        Math.round(
+          paymentAmount * 1000,
+        ) / 1000
+
+      const {
+        data: updated,
+        error: updateError,
+      } = await supabase
+        .from('trip_students')
+        .update({
+          payment_amount:
+            paymentAmount,
+        })
+        .eq(
+          'trip_id',
+          id,
+        )
+        .eq(
+          'student_id',
+          studentId,
+        )
+        .select(`
+          id,
+          trip_id,
+          student_id,
+          payment_amount
+        `)
+        .maybeSingle()
+
+      if (updateError) {
+        console.error(
+          'PATCH /api/trips/[id]/students - payment error:',
+          updateError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر حفظ مبلغ الدفع',
+            details:
+              updateError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      if (!updated) {
+        return NextResponse.json(
+          {
+            error:
+              'الطالب غير موجود في الرحلة',
+          },
+          { status: 404 },
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        student_id: studentId,
+        payment_amount:
+          updated.payment_amount ?? 0,
+      })
+    }
+
+    /*
+     * --------------------------------------------------------
+     * تحديث الرد
+     * --------------------------------------------------------
+     */
+
+    if (
+      body.action === 'response'
+    ) {
+      const studentId =
+        typeof body.student_id ===
+        'string'
+          ? body.student_id
+          : ''
+
+      const tripResponse =
+        body.response
+
+      if (!studentId) {
+        return NextResponse.json(
+          {
+            error:
+              'معرف الطالب مطلوب',
+          },
+          { status: 400 },
+        )
+      }
+
+      if (
+        tripResponse !==
+          'pending' &&
+        tripResponse !==
+          'accepted' &&
+        tripResponse !==
+          'rejected'
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'حالة الرد غير صحيحة',
+          },
+          { status: 400 },
+        )
+      }
+
+      if (
+        trip.status === 'closed'
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'لا يمكن تعديل الرد في رحلة مغلقة',
+          },
+          { status: 400 },
+        )
+      }
+
+      const responseNote =
+        typeof body.response_note ===
+        'string'
+          ? body.response_note.trim() ||
+            null
+          : null
+
+      const isPending =
+        tripResponse ===
+        'pending'
+
+      const {
+        data: updated,
+        error: updateError,
+      } = await supabase
+        .from('trip_students')
+        .update({
+          response:
+            tripResponse,
+          response_note:
+            responseNote,
+          responded_at:
+            isPending
+              ? null
+              : new Date().toISOString(),
+          response_source:
+            isPending
+              ? null
+              : 'admin',
+        })
+        .eq(
+          'trip_id',
+          id,
+        )
+        .eq(
+          'student_id',
+          studentId,
+        )
+        .select(`
+          id,
+          trip_id,
+          student_id,
+          selected,
+          response,
+          response_note,
+          responded_at,
+          response_source
+        `)
+        .maybeSingle()
+
+      if (updateError) {
+        console.error(
+          'PATCH /api/trips/[id]/students - response error:',
+          updateError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر حفظ رد الطالب',
+            details:
+              updateError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      if (!updated) {
+        return NextResponse.json(
+          {
+            error:
+              'الطالب غير موجود في الرحلة',
+          },
+          { status: 404 },
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        student: updated,
+      })
+    }
+
+    return NextResponse.json(
+      {
+        error:
+          'نوع العملية غير معروف',
+      },
+      { status: 400 },
+    )
+  } catch (error) {
+    console.error(
+      'PATCH /api/trips/[id]/students error:',
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        error:
+          'حدث خطأ أثناء تحديث طالب الرحلة',
       },
       { status: 500 },
     )
