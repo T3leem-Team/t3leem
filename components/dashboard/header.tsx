@@ -70,6 +70,21 @@ type UserProfile = {
   role: string
 }
 
+type AuditLog = {
+  id: string
+  auth_user_id: string
+  event_type: string
+  success: boolean
+  created_at: string
+}
+
+type NotificationItem = {
+  id: string
+  userName: string
+  username: string
+  createdAt: string
+}
+
 function getInitials(name: string) {
   const cleanName = name.trim()
 
@@ -86,6 +101,60 @@ function getInitials(name: string) {
   return `${words[0][0]}${words[1][0]}`
 }
 
+function formatRelativeTime(dateString: string) {
+  const date = new Date(dateString)
+  const now = new Date()
+
+  const diffSeconds = Math.floor(
+    (now.getTime() - date.getTime()) / 1000,
+  )
+
+  if (diffSeconds < 60) {
+    return 'الآن'
+  }
+
+  const minutes = Math.floor(
+    diffSeconds / 60,
+  )
+
+  if (minutes < 60) {
+    return minutes === 1
+      ? 'قبل دقيقة'
+      : `قبل ${minutes} دقائق`
+  }
+
+  const hours = Math.floor(
+    minutes / 60,
+  )
+
+  if (hours < 24) {
+    return hours === 1
+      ? 'قبل ساعة'
+      : `قبل ${hours} ساعات`
+  }
+
+  const days = Math.floor(
+    hours / 24,
+  )
+
+  if (days === 1) {
+    return 'أمس'
+  }
+
+  if (days < 7) {
+    return `قبل ${days} أيام`
+  }
+
+  return date.toLocaleDateString(
+    'ar-BH',
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    },
+  )
+}
+
 export function Header({
   onMenuClick,
 }: {
@@ -94,7 +163,10 @@ export function Header({
   const pathname = usePathname()
 
   const [open, setOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileOpen, setProfileOpen] =
+    useState(false)
+  const [notificationsOpen, setNotificationsOpen] =
+    useState(false)
 
   const [mode, setMode] =
     useState<'light' | 'dark'>('light')
@@ -107,10 +179,19 @@ export function Header({
   const [loadingProfile, setLoadingProfile] =
     useState(true)
 
+  const [notifications, setNotifications] =
+    useState<NotificationItem[]>([])
+
+  const [loadingNotifications, setLoadingNotifications] =
+    useState(false)
+
   const menuRef =
     useRef<HTMLDivElement>(null)
 
   const profileRef =
+    useRef<HTMLDivElement>(null)
+
+  const notificationsRef =
     useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -192,6 +273,146 @@ export function Header({
     loadProfile()
   }, [])
 
+  async function loadNotifications() {
+    try {
+      setLoadingNotifications(true)
+
+      const { data: logs, error: logsError } =
+        await supabase
+          .from('auth_audit_logs')
+          .select(
+            `
+            id,
+            auth_user_id,
+            event_type,
+            success,
+            created_at
+            `,
+          )
+          .eq(
+            'event_type',
+            'login_success',
+          )
+          .eq(
+            'success',
+            true,
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            },
+          )
+          .limit(10)
+
+      if (logsError) {
+        console.error(
+          'Notifications load error:',
+          logsError,
+        )
+
+        setNotifications([])
+        return
+      }
+
+      if (!logs || logs.length === 0) {
+        setNotifications([])
+        return
+      }
+
+      const userIds = [
+        ...new Set(
+          logs.map(
+            (log: AuditLog) =>
+              log.auth_user_id,
+          ),
+        ),
+      ]
+
+      const {
+        data: profiles,
+        error: profilesError,
+      } =
+        await supabase
+          .from('user_profiles')
+          .select(
+            `
+            auth_user_id,
+            username,
+            full_name
+            `,
+          )
+          .in(
+            'auth_user_id',
+            userIds,
+          )
+
+      if (profilesError) {
+        console.error(
+          'Notification profiles load error:',
+          profilesError,
+        )
+      }
+
+      const profileMap =
+        new Map<
+          string,
+          {
+            username: string
+            full_name: string
+          }
+        >()
+
+      ;(profiles ?? []).forEach(
+        (item) => {
+          profileMap.set(
+            item.auth_user_id,
+            {
+              username:
+                item.username,
+              full_name:
+                item.full_name,
+            },
+          )
+        },
+      )
+
+      const items: NotificationItem[] =
+        logs.map(
+          (log: AuditLog) => {
+            const userProfile =
+              profileMap.get(
+                log.auth_user_id,
+              )
+
+            return {
+              id: log.id,
+              userName:
+                userProfile?.full_name ||
+                userProfile?.username ||
+                'مستخدم',
+              username:
+                userProfile?.username ||
+                '',
+              createdAt:
+                log.created_at,
+            }
+          },
+        )
+
+      setNotifications(items)
+    } catch (error) {
+      console.error(
+        'Notifications request error:',
+        error,
+      )
+
+      setNotifications([])
+    } finally {
+      setLoadingNotifications(false)
+    }
+  }
+
   useEffect(() => {
     function handleClickOutside(
       event: MouseEvent,
@@ -213,6 +434,15 @@ export function Header({
         )
       ) {
         setProfileOpen(false)
+      }
+
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(
+          target,
+        )
+      ) {
+        setNotificationsOpen(false)
       }
     }
 
@@ -325,22 +555,20 @@ export function Header({
     )
   }
 
-
-async function handleLogout() {
-  try {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-    })
-  } catch (error) {
-    console.error(
-      'Logout request error:',
-      error,
-    )
-  } finally {
-    window.location.href = '/login'
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      })
+    } catch (error) {
+      console.error(
+        'Logout request error:',
+        error,
+      )
+    } finally {
+      window.location.href = '/login'
+    }
   }
-}
-
 
   const displayName =
     profile?.full_name ||
@@ -495,16 +723,103 @@ async function handleLogout() {
         )}
       </div>
 
-      <button
-        type="button"
-        className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted"
-        aria-label="الإشعارات"
+      {/* Notifications */}
+      <div
+        ref={notificationsRef}
+        className="relative"
       >
-        <Bell className="size-5" />
+        <button
+          type="button"
+          onClick={() => {
+            const next =
+              !notificationsOpen
 
-        <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
-      </button>
+            setNotificationsOpen(next)
 
+            if (next) {
+              loadNotifications()
+            }
+          }}
+          className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="الإشعارات"
+          aria-expanded={
+            notificationsOpen
+          }
+        >
+          <Bell className="size-5" />
+
+          {notifications.length > 0 && (
+            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
+          )}
+        </button>
+
+        {notificationsOpen && (
+          <div className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold">
+                آخر النشاطات
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                آخر عمليات الدخول إلى النظام
+              </p>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto">
+              {loadingNotifications ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  جاري تحميل النشاطات...
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  لا توجد عمليات دخول مسجلة.
+                </div>
+              ) : (
+                notifications.map(
+                  (item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {getInitials(
+                          item.userName,
+                        )}
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {item.userName}
+                        </p>
+
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          سجل دخول إلى النظام
+                        </p>
+                      </div>
+
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatRelativeTime(
+                          item.createdAt,
+                        )}
+                      </span>
+                    </div>
+                  ),
+                )
+              )}
+            </div>
+
+            {notifications.length > 0 && (
+              <div className="border-t border-border px-4 py-2.5">
+                <p className="text-center text-xs text-muted-foreground">
+                  يتم عرض آخر 10 عمليات دخول
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Profile */}
       <div
         ref={profileRef}
         className="relative"
@@ -578,4 +893,3 @@ async function handleLogout() {
     </header>
   )
 }
-
