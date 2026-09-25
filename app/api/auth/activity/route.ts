@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/require-auth'
+import { cookies } from 'next/headers'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
+
+const SESSION_COOKIE = 't3leem_session_id'
+const IDLE_TIMEOUT_MINUTES = 20
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,58 +19,132 @@ const supabaseAdmin = createClient(
 
 export async function POST() {
   try {
-    const { access, response } =
-      await requireAuth()
+    const supabase =
+      await createSupabaseServerClient()
 
-    if (response) {
-      return response
-    }
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-    if (!access?.sessionId) {
+    if (authError || !user) {
       return NextResponse.json(
         {
           authenticated: false,
-          error:
-            'لا توجد جلسة نشطة.',
         },
         { status: 401 },
       )
     }
 
-    const now =
-      new Date().toISOString()
+    const cookieStore = await cookies()
+
+    const sessionId =
+      cookieStore.get(SESSION_COOKIE)?.value
+
+    if (!sessionId) {
+      return NextResponse.json(
+        {
+          authenticated: false,
+        },
+        { status: 401 },
+      )
+    }
 
     const {
-      error,
-    } =
+      data: session,
+      error: sessionError,
+    } = await supabaseAdmin
+      .from('active_sessions')
+      .select(`
+        id,
+        auth_user_id,
+        is_active,
+        last_activity_at
+      `)
+      .eq('id', sessionId)
+      .eq('auth_user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        {
+          authenticated: false,
+        },
+        { status: 401 },
+      )
+    }
+
+    /*
+     * التحقق من آخر نشاط حقيقي
+     */
+    const now = Date.now()
+
+    const lastActivity =
+      new Date(
+        session.last_activity_at,
+      ).getTime()
+
+    const idleTimeout =
+      IDLE_TIMEOUT_MINUTES *
+      60 *
+      1000
+
+    /*
+     * إذا مرّت 20 دقيقة بدون نشاط
+     */
+    if (
+      Number.isNaN(lastActivity) ||
+      now - lastActivity >= idleTimeout
+    ) {
+      const closedAt =
+        new Date().toISOString()
+
       await supabaseAdmin
         .from('active_sessions')
         .update({
-          last_activity_at: now,
+          is_active: false,
+          logout_at: closedAt,
+          last_activity_at: closedAt,
         })
-        .eq(
-          'id',
-          access.sessionId,
-        )
-        .eq(
-          'auth_user_id',
-          access.userId,
-        )
-        .eq(
-          'is_active',
-          true,
-        )
+        .eq('id', session.id)
+        .eq('is_active', true)
 
-    if (error) {
+      return NextResponse.json(
+        {
+          authenticated: false,
+          reason: 'idle_timeout',
+        },
+        { status: 401 },
+      )
+    }
+
+    /*
+     * يوجد نشاط حقيقي
+     * لذلك نحدث آخر نشاط
+     */
+    const updatedAt =
+      new Date().toISOString()
+
+    const { error: updateError } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .update({
+          last_activity_at: updatedAt,
+        })
+        .eq('id', session.id)
+        .eq('auth_user_id', user.id)
+        .eq('is_active', true)
+
+    if (updateError) {
       console.error(
         'Session activity update error:',
-        error,
+        updateError,
       )
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحديث نشاط الجلسة.',
+          authenticated: false,
         },
         { status: 500 },
       )
@@ -84,8 +162,7 @@ export async function POST() {
 
     return NextResponse.json(
       {
-        error:
-          'حدث خطأ أثناء تحديث نشاط الجلسة.',
+        authenticated: false,
       },
       { status: 500 },
     )
