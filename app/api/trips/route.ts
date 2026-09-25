@@ -346,7 +346,14 @@ export async function PATCH(
    * إغلاق الرحلة
    * =======================================================
    *
-   * الطلب:
+   * يدعم الطلب الحالي من الواجهة:
+   *
+   * {
+   *   id: tripId,
+   *   status: 'closed'
+   * }
+   *
+   * ويدعم أيضًا:
    *
    * {
    *   id: tripId,
@@ -354,10 +361,16 @@ export async function PATCH(
    *   close_note: '...'
    * }
    *
-   * الإغلاق مسموح فقط للرحلة المنشورة.
+   * الإغلاق مسموح فقط:
+   *
+   * published -> closed
+   *
    */
 
-  if (body.action === 'close') {
+  if (
+    body.status === 'closed' ||
+    body.action === 'close'
+  ) {
     const {
       data: existingTrip,
       error: existingError,
@@ -472,7 +485,6 @@ export async function PATCH(
    *   status: 'published'
    * }
    *
-   * يعني نشر الرحلة مباشرة.
    */
 
   if (body.status === 'published') {
@@ -497,6 +509,7 @@ export async function PATCH(
       return jsonError(
         'تعذر التحقق من الرحلة',
         500,
+        existingError.message,
       )
     }
 
@@ -526,10 +539,6 @@ export async function PATCH(
         400,
       )
     }
-
-    /*
-     * التحقق من إعدادات النظام.
-     */
 
     const {
       settings,
@@ -571,11 +580,6 @@ export async function PATCH(
       )
     }
 
-    /*
-     * يجب وجود طالب واحد على الأقل
-     * محدد ومحفوظ للرحلة.
-     */
-
     const {
       count: selectedStudentsCount,
       error: studentsError,
@@ -610,10 +614,6 @@ export async function PATCH(
         400,
       )
     }
-
-    /*
-     * نشر الرحلة.
-     */
 
     const {
       data: publishedTrip,
@@ -1261,12 +1261,6 @@ export async function DELETE(
     )
   }
 
-  /*
-   * إذا كانت الرحلة منشورة،
-   * نحافظ على منع الحذف حتى لا تختفي
-   * رحلة منشورة من الرابط العام للطلاب.
-   */
-
   if (
     trip.status === 'published'
   ) {
@@ -1275,12 +1269,6 @@ export async function DELETE(
       400,
     )
   }
-
-  /*
-   * trip_levels و trip_students
-   * تعتمد على ON DELETE CASCADE
-   * حسب تصميم قاعدة البيانات.
-   */
 
   const {
     error: deleteError,
