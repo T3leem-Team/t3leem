@@ -16,8 +16,14 @@ const routes: {
   match: (p: string) => boolean
   view: () => React.ReactNode
 }[] = [
-  { match: (p) => p === '/', view: () => <DashboardView /> },
-  { match: (p) => p.startsWith('/settings'), view: () => <SettingsView /> },
+  {
+    match: (p) => p === '/',
+    view: () => <DashboardView />,
+  },
+  {
+    match: (p) => p.startsWith('/settings'),
+    view: () => <SettingsView />,
+  },
   {
     match: (p) => p.startsWith('/supervision'),
     view: () => <SupervisionView />,
@@ -97,7 +103,7 @@ async function refreshSections(
     )
 
     if (!response.ok) {
-      router.replace('/login?reason=session_expired')
+      router.replace('/login')
       return
     }
 
