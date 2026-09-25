@@ -11,7 +11,7 @@ import { PaymentsView } from '@/components/sections/payments-view'
 import { SettingsView } from '@/components/sections/settings-view'
 import { SupervisionView } from '@/components/sections/supervision-view'
 import { TripsView } from '@/components/sections/trips-view'
-import { CommunicationView } from '@/components/sections/communication-view'
+import { CommunicationView } from '@/components/sections/communication'
 
 const routes: {
   match: (p: string) => boolean
