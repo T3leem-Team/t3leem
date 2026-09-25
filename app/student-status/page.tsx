@@ -906,76 +906,74 @@ export default function StudentStatusPage() {
                 </div>
               </div>
 
-              {/* الرحلات */}
-              <div className="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
-                <div className="border-b border-amber-200 bg-amber-100/50 px-5 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="mb-1 inline-flex rounded-full border border-amber-200 bg-background/80 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-                        الرحلات
+              {/* الرحلات - لا يظهر القسم نهائيًا إذا لم توجد رحلة */}
+              {trips.length > 0 && (
+                <div className="overflow-hidden rounded-2xl border border-blue-200 bg-blue-50/40 shadow-sm">
+                  <div className="border-b border-blue-200 bg-blue-100/60 px-5 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="mb-1 inline-flex rounded-full border border-blue-200 bg-background/80 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                          الرحلات
+                        </div>
+
+                        <h2 className="font-semibold text-foreground">
+                          الرحلات المخصصة للطالب
+                        </h2>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          الرحلات التي تم اختيار الطالب
+                          للمشاركة فيها
+                        </p>
                       </div>
 
-                      <h2 className="font-semibold text-foreground">
-                        الرحلات المخصصة للطالب
-                      </h2>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        الرحلات التي تم اختيار الطالب
-                        للمشاركة فيها
-                      </p>
-                    </div>
-
-                    <div className="rounded-full border border-amber-200 bg-background px-3 py-1.5 text-xs font-semibold text-amber-700">
-                      {trips.length}{' '}
-                      {trips.length === 1
-                        ? 'رحلة'
-                        : 'رحلات'}
+                      <div className="rounded-full border border-blue-200 bg-background px-3 py-1.5 text-xs font-semibold text-blue-700">
+                        {trips.length}{' '}
+                        {trips.length === 1
+                          ? 'رحلة'
+                          : 'رحلات'}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="p-5">
-                  {tripsLoading ? (
-                    <div className="rounded-xl border border-amber-200 bg-background/70 py-7 text-center">
-                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Clock3 className="size-4 animate-spin" />
+                  <div className="p-5">
+                    {tripsLoading ? (
+                      <div className="rounded-xl border border-blue-200 bg-background/70 py-7 text-center">
+                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                          <Clock3 className="size-4 animate-spin" />
 
-                        جاري تحميل الرحلات...
+                          جاري تحميل الرحلات...
+                        </div>
                       </div>
-                    </div>
-                  ) : tripsError ? (
-                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="size-4" />
+                    ) : tripsError ? (
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="size-4" />
 
-                        {tripsError}
+                          {tripsError}
+                        </div>
                       </div>
-                    </div>
-                  ) : trips.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-amber-300 bg-background/70 p-6 text-center text-sm text-muted-foreground">
-                      لا توجد رحلات مخصصة لك حاليًا.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {trips.map((trip) => (
-                        <StudentTripCard
-                          key={
-                            trip.trip_student_id
-                          }
-                          trip={trip}
-                          responding={
-                            respondingTripId ===
-                            trip.trip_id
-                          }
-                          onRespond={
-                            handleTripResponse
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
+                    ) : (
+                      <div className="space-y-4">
+                        {trips.map((trip) => (
+                          <StudentTripCard
+                            key={
+                              trip.trip_student_id
+                            }
+                            trip={trip}
+                            responding={
+                              respondingTripId ===
+                              trip.trip_id
+                            }
+                            onRespond={
+                              handleTripResponse
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
                 <div className="border-b px-5 py-4">
@@ -1141,11 +1139,11 @@ function StudentTripCard({
       ? 'border-green-200 bg-green-50 text-green-800'
       : trip.response === 'rejected'
         ? 'border-red-200 bg-red-50 text-red-800'
-        : 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-blue-200 bg-blue-50 text-blue-800'
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-background shadow-sm transition-shadow hover:shadow-md">
-      <div className="border-b border-amber-100 bg-gradient-to-l from-amber-50/80 to-background p-4">
+    <div className="overflow-hidden rounded-2xl border border-blue-200 bg-background shadow-sm transition-shadow hover:shadow-md">
+      <div className="border-b border-blue-100 bg-gradient-to-l from-blue-50/80 to-background p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">
@@ -1264,7 +1262,7 @@ function StudentTripCard({
           </div>
         )}
 
-        <div className="border-t border-amber-100 pt-4">
+        <div className="border-t border-blue-100 pt-4">
           <p className="mb-2 text-xs font-medium text-muted-foreground">
             يرجى تحديد الرد على الرحلة
           </p>
