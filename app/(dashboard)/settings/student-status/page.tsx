@@ -7,10 +7,10 @@ import {
   ShieldCheck,
   UserRoundCheck,
   Bus,
-  Copy,
+  Download,
   Printer,
-  Check,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 
 import { supabase } from '@/lib/supabase'
 
@@ -27,7 +27,6 @@ export default function StudentStatusSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
 
   const studentStatusUrl =
     typeof window !== 'undefined'
@@ -113,24 +112,150 @@ export default function StudentStatusSettingsPage() {
     setSaving(false)
   }
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(studentStatusUrl)
+  const handleDownloadQr = () => {
+    const svg = document.getElementById(
+      'student-status-qr',
+    )
 
-      setCopied(true)
-      setMessage('تم نسخ وصلة متابعة الطلاب.')
-
-      setTimeout(() => {
-        setCopied(false)
-      }, 2000)
-    } catch (error) {
-      console.error(error)
-      setError('تعذر نسخ الوصلة.')
+    if (!svg) {
+      setError('تعذر إنشاء QR Code.')
+      return
     }
+
+    const serializer = new XMLSerializer()
+    const source = serializer.serializeToString(svg)
+
+    const blob = new Blob([source], {
+      type: 'image/svg+xml;charset=utf-8',
+    })
+
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'student-status-qr.svg'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+
+    setMessage('تم تنزيل QR Code بنجاح.')
   }
 
-  const handlePrint = () => {
-    window.print()
+  const handlePrintQr = () => {
+    const svg = document.getElementById(
+      'student-status-qr',
+    )
+
+    if (!svg) {
+      setError('تعذر تجهيز QR Code للطباعة.')
+      return
+    }
+
+    const serializer = new XMLSerializer()
+    const source = serializer.serializeToString(svg)
+
+    const printWindow = window.open(
+      '',
+      '_blank',
+      'width=600,height=700',
+    )
+
+    if (!printWindow) {
+      setError(
+        'تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.',
+      )
+      return
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl">
+        <head>
+          <title>QR متابعة الطلاب</title>
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-family: Arial, sans-serif;
+              background: white;
+            }
+
+            .page {
+              text-align: center;
+              padding: 40px;
+            }
+
+            h1 {
+              margin: 0 0 10px;
+              font-size: 28px;
+            }
+
+            p {
+              margin: 0 0 25px;
+              color: #555;
+              font-size: 16px;
+            }
+
+            .qr {
+              display: inline-flex;
+              padding: 20px;
+              border: 1px solid #ddd;
+              border-radius: 16px;
+              background: white;
+            }
+
+            .url {
+              margin-top: 20px;
+              font-size: 12px;
+              color: #666;
+              direction: ltr;
+              word-break: break-all;
+            }
+
+            @media print {
+              body {
+                min-height: auto;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="page">
+            <h1>متابعة الطلاب</h1>
+
+            <p>
+              امسح رمز QR للوصول إلى صفحة متابعة الطالب
+            </p>
+
+            <div class="qr">
+              ${source}
+            </div>
+
+            <div class="url">
+              ${studentStatusUrl}
+            </div>
+          </div>
+        </body>
+      </html>
+    `)
+
+    printWindow.document.close()
+
+    printWindow.focus()
+
+    setTimeout(() => {
+      printWindow.print()
+    }, 300)
   }
 
   if (loading) {
@@ -205,9 +330,9 @@ export default function StudentStatusSettingsPage() {
           }
         />
 
-        {/* Student Status Link */}
+        {/* QR Code */}
         <div className="rounded-xl border bg-card p-5">
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             <div className="flex items-start gap-4">
               <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <UserRoundCheck className="size-5" />
@@ -215,48 +340,60 @@ export default function StudentStatusSettingsPage() {
 
               <div>
                 <h2 className="font-semibold">
-                  وصلة متابعة الطلاب
+                  QR متابعة الطلاب
                 </h2>
 
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  هذه وصلة ثابتة يمكن إرسالها للطلاب أو طباعتها واستخدامها للوصول إلى صفحة متابعة الطالب.
+                  رمز ثابت يمكن طباعته أو إرساله للطلاب للوصول إلى صفحة متابعة الطالب.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="flex flex-col items-center justify-center gap-4 rounded-xl border bg-muted/20 p-6">
               <div
-                dir="ltr"
-                className="break-all text-sm font-medium text-foreground"
+                id="student-status-qr-container"
+                className="rounded-xl bg-white p-5 shadow-sm"
               >
-                {studentStatusUrl}
+                <QRCodeSVG
+                  id="student-status-qr"
+                  value={studentStatusUrl}
+                  size={240}
+                  level="H"
+                  includeMargin
+                />
+              </div>
+
+              <div className="text-center">
+                <p className="font-semibold">
+                  متابعة الطلاب
+                </p>
+
+                <p
+                  dir="ltr"
+                  className="mt-1 break-all text-xs text-muted-foreground"
+                >
+                  {studentStatusUrl}
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <button
                 type="button"
-                onClick={handleCopy}
+                onClick={handleDownloadQr}
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
               >
-                {copied ? (
-                  <Check className="size-4" />
-                ) : (
-                  <Copy className="size-4" />
-                )}
-
-                {copied
-                  ? 'تم النسخ'
-                  : 'نسخ الوصلة'}
+                <Download className="size-4" />
+                تحميل QR
               </button>
 
               <button
                 type="button"
-                onClick={handlePrint}
+                onClick={handlePrintQr}
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
               >
                 <Printer className="size-4" />
-                طباعة الوصلة
+                طباعة QR
               </button>
             </div>
           </div>
