@@ -23,7 +23,15 @@ const DEVICE_COOKIE =
 const SESSION_COOKIE =
   't3leem_session_id'
 
-const SESSION_MAX_HOURS = 4
+/*
+ * مدة بقاء Cookie الخاصة بالجلسة.
+ *
+ * هذه ليست مدة صلاحية الجلسة.
+ * انتهاء الجلسة الحقيقي يعتمد على 20 دقيقة خمول.
+ *
+ * نخلي الكوكي طويلة حتى لا تنتهي بعد 4 ساعات.
+ */
+const SESSION_COOKIE_MAX_DAYS = 30
 
 const supabaseAdmin = createClient(
   supabaseUrl,
@@ -245,9 +253,6 @@ export async function POST(
     /*
      * ------------------------------------------------------
      * 3. التحقق من كلمة المرور
-     *
-     * مهم:
-     * هذه هي عملية signInWithPassword الوحيدة.
      * ------------------------------------------------------
      */
 
@@ -284,9 +289,6 @@ export async function POST(
         passwordError,
       )
 
-      /*
-       * Audit failed login
-       */
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -441,14 +443,6 @@ export async function POST(
         )
       }
 
-      /*
-       * Session التي أنشأها Supabase للتحقق
-       * لا نستخدمها، ولا ننشئ Session للنظام.
-       *
-       * لأنها موجودة فقط داخل passwordClient
-       * ولا يتم إرسالها للمتصفح.
-       */
-
       return NextResponse.json(
         {
           error:
@@ -542,10 +536,6 @@ export async function POST(
         )
       }
 
-      /*
-       * Audit: device pending
-       */
-
       const { error: auditError } =
         await supabaseAdmin
           .from('auth_audit_logs')
@@ -576,10 +566,6 @@ export async function POST(
         )
       }
 
-      /*
-       * لا نرسل Supabase Session للمتصفح.
-       */
-
       const response =
         NextResponse.json(
           {
@@ -592,10 +578,6 @@ export async function POST(
           },
           { status: 403 },
         )
-
-      /*
-       * حفظ Device Cookie فقط.
-       */
 
       response.cookies.set(
         DEVICE_COOKIE,
@@ -625,10 +607,6 @@ export async function POST(
       device.status ===
       'approved'
     ) {
-      /*
-       * تحديث آخر استخدام للجهاز.
-       */
-
       const { error: deviceUpdateError } =
         await supabaseAdmin
           .from('trusted_devices')
@@ -648,12 +626,6 @@ export async function POST(
         )
       }
 
-      /*
-       * ----------------------------------------------------
-       * إنشاء Response
-       * ----------------------------------------------------
-       */
-
       const response =
         NextResponse.json({
           user: {
@@ -669,15 +641,6 @@ export async function POST(
           deviceStatus:
             'approved',
         })
-
-      /*
-       * ----------------------------------------------------
-       * استخدام Session التي تم إنشاؤها
-       * في signInWithPassword الأول.
-       *
-       * لا يوجد signInWithPassword ثاني.
-       * ----------------------------------------------------
-       */
 
       const supabase =
         createServerClient(
@@ -767,25 +730,12 @@ export async function POST(
 
       /*
        * ----------------------------------------------------
-       * مهم:
-       *
-       * Session الناتجة من passwordClient موجودة
-       * بالفعل، لكن createServerClient لا يعرف عنها
-       * تلقائياً.
-       *
-       * لذلك نضعها مباشرة في Auth cookies.
+       * إنشاء Supabase Auth Session
        * ----------------------------------------------------
        */
 
       const session =
         passwordAuthData.session
-
-      /*
-       * Supabase SSR cookies
-       *
-       * يتم إنشاء Cookie Session من خلال
-       * setSession.
-       */
 
       const {
         error: setSessionError,
@@ -817,6 +767,12 @@ export async function POST(
       /*
        * ----------------------------------------------------
        * إنشاء Active Session
+       *
+       * لا يوجد حد 4 ساعات.
+       *
+       * expires_at مجرد تاريخ بعيد لسجل الجلسة.
+       * انتهاء الجلسة الحقيقي يتم عن طريق
+       * idle timeout = 20 دقيقة.
        * ----------------------------------------------------
        */
 
@@ -826,7 +782,8 @@ export async function POST(
       const expiresAt =
         new Date(
           loginAt.getTime() +
-            SESSION_MAX_HOURS *
+            SESSION_COOKIE_MAX_DAYS *
+              24 *
               60 *
               60 *
               1000,
@@ -862,11 +819,6 @@ export async function POST(
           'Active session insert error:',
           sessionError,
         )
-
-        /*
-         * لا نفشل تسجيل الدخول بسبب Audit/Session tracking
-         * إذا كانت Auth Session نفسها سليمة.
-         */
       }
 
       /*
@@ -887,7 +839,8 @@ export async function POST(
             sameSite: 'lax',
             path: '/',
             maxAge:
-              SESSION_MAX_HOURS *
+              SESSION_COOKIE_MAX_DAYS *
+              24 *
               60 *
               60,
           },
@@ -955,21 +908,12 @@ export async function POST(
       error,
     )
 
-    const response =
-      NextResponse.json(
-        {
-          error:
-            'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
-        },
-        { status: 500 },
-      )
-
-    /*
-     * لا نحذف Device Cookie هنا.
-     *
-     * الجهاز الموثوق يجب أن يبقى محفوظاً.
-     */
-
-    return response
+    return NextResponse.json(
+      {
+        error:
+          'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
+      },
+      { status: 500 },
+    )
   }
 }
