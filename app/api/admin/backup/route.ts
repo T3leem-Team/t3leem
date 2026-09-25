@@ -14,8 +14,13 @@ type Row = Record<string, unknown>
 
 const PAGE_SIZE = 1000
 
+const EMPTY_UUID =
+  '00000000-0000-0000-0000-000000000000'
+
 function getAdminClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+
   const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -31,16 +36,22 @@ function getAdminClient(): SupabaseClient {
     )
   }
 
-  return createClient(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+  return createClient(
+    url,
+    serviceRoleKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
     },
-  })
+  )
 }
 
 async function checkAdmin(): Promise<SupabaseClient> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+
   const anonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -56,45 +67,49 @@ async function checkAdmin(): Promise<SupabaseClient> {
     )
   }
 
-  const cookieStore = await cookies()
+  const cookieStore =
+    await cookies()
 
-  const supabase = createServerClient(
-    url,
-    anonKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
+  const supabase =
+    createServerClient(
+      url,
+      anonKey,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
 
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(
-              ({
-                name,
-                value,
-                options,
-              }) => {
-                cookieStore.set(
+          setAll(
+            cookiesToSet,
+          ) {
+            try {
+              cookiesToSet.forEach(
+                ({
                   name,
                   value,
                   options,
-                )
-              },
-            )
-          } catch {
-            // تجاهل خطأ تحديث الكوكيز
-            // أثناء طلب GET.
-          }
+                }) => {
+                  cookieStore.set(
+                    name,
+                    value,
+                    options,
+                  )
+                },
+              )
+            } catch {
+              // تجاهل خطأ تحديث الكوكيز
+            }
+          },
         },
       },
-    },
-  )
+    )
 
   const {
     data: { user },
     error: authError,
-  } = await supabase.auth.getUser()
+  } =
+    await supabase.auth.getUser()
 
   if (authError || !user) {
     throw new Error(
@@ -102,18 +117,23 @@ async function checkAdmin(): Promise<SupabaseClient> {
     )
   }
 
-  const admin = getAdminClient()
+  const admin =
+    getAdminClient()
 
   const {
     data: profile,
     error: profileError,
-  } = await admin
-    .from('user_profiles')
-    .select(
-      'id, auth_user_id, username, full_name, role, is_active',
-    )
-    .eq('auth_user_id', user.id)
-    .maybeSingle()
+  } =
+    await admin
+      .from('user_profiles')
+      .select(
+        'id, auth_user_id, username, full_name, role, is_active',
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .maybeSingle()
 
   if (profileError) {
     throw new Error(
@@ -133,7 +153,10 @@ async function checkAdmin(): Promise<SupabaseClient> {
     )
   }
 
-  if (profile.role !== 'Admin') {
+  if (
+    profile.role !==
+    'Admin'
+  ) {
     throw new Error(
       'ليس لديك صلاحية إنشاء نسخة احتياطية.',
     )
@@ -163,7 +186,8 @@ async function getAll(
       )
 
     if (queryBuilder) {
-      query = queryBuilder(query)
+      query =
+        queryBuilder(query)
     }
 
     const {
@@ -180,7 +204,9 @@ async function getAll(
     const batch =
       (data || []) as Row[]
 
-    rows.push(...batch)
+    rows.push(
+      ...batch,
+    )
 
     if (
       batch.length <
@@ -222,10 +248,13 @@ function filterByIds(
   ids: string[],
 ) {
   return (query: any) => {
-    if (ids.length === 0) {
+    if (
+      ids.length ===
+      0
+    ) {
       return query.eq(
         'id',
-        '00000000-0000-0000-0000-000000000000',
+        EMPTY_UUID,
       )
     }
 
@@ -236,14 +265,779 @@ function filterByIds(
   }
 }
 
+/* =========================================================
+   أسماء الأعمدة بالعربي
+   ========================================================= */
+
+const commonColumnNames: Record<
+  string,
+  string
+> = {
+  id: 'المعرف الداخلي',
+  created_at: 'تاريخ الإنشاء',
+  updated_at: 'تاريخ آخر تحديث',
+
+  name: 'الاسم',
+  description: 'الوصف',
+  status: 'الحالة',
+  note: 'ملاحظة',
+  notes: 'ملاحظات',
+
+  academic_year_id:
+    'معرف السنة الدراسية',
+
+  student_id:
+    'معرف الطالب',
+
+  enrollment_id:
+    'معرف الانتساب',
+
+  level_id:
+    'معرف المستوى',
+
+  class_id:
+    'معرف الفصل',
+
+  course_id:
+    'معرف المادة',
+
+  teacher_id:
+    'معرف المعلم',
+
+  trip_id:
+    'معرف الرحلة',
+
+  custom_field_id:
+    'معرف الحقل المخصص',
+
+  field_id:
+    'معرف الحقل',
+
+  record_id:
+    'معرف السجل',
+
+  payment_id:
+    'معرف الدفعة',
+
+  created_by:
+    'معرف منشئ السجل',
+
+  reviewed_by:
+    'معرف مراجع الطلب',
+
+  approved_by:
+    'معرف المعتمد',
+
+  rejected_by:
+    'معرف الرافض',
+
+  closed_by:
+    'معرف من أغلق السجل',
+
+  confirmed_by:
+    'معرف من أكد العملية',
+
+  reviewed_at:
+    'تاريخ المراجعة',
+
+  approved_at:
+    'تاريخ الاعتماد',
+
+  rejected_at:
+    'تاريخ الرفض',
+
+  closed_at:
+    'تاريخ الإغلاق',
+
+  confirmed_at:
+    'تاريخ التأكيد',
+
+  start_date:
+    'تاريخ البداية',
+
+  end_date:
+    'تاريخ النهاية',
+
+  payment_date:
+    'تاريخ الدفع',
+
+  record_date:
+    'تاريخ السجل',
+
+  attendance_date:
+    'تاريخ الحضور',
+
+  trip_date:
+    'تاريخ الرحلة',
+
+  meeting_time:
+    'وقت التجمع',
+
+  return_time:
+    'وقت العودة',
+
+  amount:
+    'المبلغ',
+
+  annual_fee:
+    'الرسوم السنوية',
+
+  fee:
+    'الرسوم',
+
+  payment_amount:
+    'مبلغ الدفع',
+
+  verified_payment_amount:
+    'المبلغ المؤكد',
+
+  payment_method:
+    'طريقة الدفع',
+
+  payment_status:
+    'حالة الدفع',
+
+  payment_reference:
+    'مرجع الدفع',
+
+  reference_number:
+    'الرقم المرجعي',
+
+  rejection_reason:
+    'سبب الرفض',
+
+  payment_rejection_reason:
+    'سبب رفض الدفع',
+
+  payment_proof_url:
+    'رابط إثبات الدفع',
+
+  payment_proof_required:
+    'إثبات الدفع مطلوب',
+
+  source:
+    'المصدر',
+
+  source_type:
+    'نوع المصدر',
+
+  processing_mode:
+    'طريقة المعالجة',
+
+  confirmation_status:
+    'حالة التأكيد',
+
+  transaction_type:
+    'نوع العملية',
+
+  adjustment_direction:
+    'اتجاه التسوية',
+
+  adjustment_sign:
+    'إشارة التسوية',
+
+  opening_balance:
+    'الرصيد الافتتاحي',
+
+  opening_source:
+    'مصدر الرصيد الافتتاحي',
+
+  opening_note:
+    'ملاحظة الرصيد الافتتاحي',
+
+  initial_balance:
+    'الرصيد الابتدائي',
+
+  initial_source:
+    'مصدر الرصيد الابتدائي',
+
+  initial_note:
+    'ملاحظة الرصيد الابتدائي',
+
+  balance_after:
+    'الرصيد بعد العملية',
+
+  description:
+    'الوصف',
+
+  transaction_type:
+    'نوع الحركة',
+
+  payment_link:
+    'رابط الدفع',
+
+  payment_link_enabled:
+    'الدفع عبر الرابط مفعل',
+
+  payment_enabled:
+    'الدفع الإلكتروني مفعل',
+
+  bank_transfer_enabled:
+    'التحويل البنكي مفعل',
+
+  cash_enabled:
+    'الدفع النقدي مفعل',
+
+  show_payment_qr:
+    'إظهار رمز الدفع',
+
+  payment_qr_url:
+    'رابط رمز الدفع',
+
+  is_current:
+    'السنة الحالية',
+
+  is_active:
+    'مفعل',
+
+  is_enabled:
+    'مفعل',
+
+  enabled:
+    'مفعل',
+
+  is_required:
+    'مطلوب',
+
+  required_name:
+    'الاسم مطلوب',
+
+  required_personal_id:
+    'الرقم الشخصي مطلوب',
+
+  required_phone:
+    'رقم الهاتف مطلوب',
+
+  required_whatsapp:
+    'رقم الواتساب مطلوب',
+
+  required_level:
+    'المستوى مطلوب',
+
+  required_notes:
+    'الملاحظات مطلوبة',
+
+  required_health_notes:
+    'الملاحظات الصحية مطلوبة',
+
+  required_gender:
+    'الجنس مطلوب',
+
+  required_age:
+    'العمر مطلوب',
+
+  show_name:
+    'إظهار الاسم',
+
+  show_personal_id:
+    'إظهار الرقم الشخصي',
+
+  show_phone:
+    'إظهار الهاتف',
+
+  show_whatsapp:
+    'إظهار الواتساب',
+
+  show_level:
+    'إظهار المستوى',
+
+  show_notes:
+    'إظهار الملاحظات',
+
+  show_health_notes:
+    'إظهار الملاحظات الصحية',
+
+  show_gender:
+    'إظهار الجنس',
+
+  show_age:
+    'إظهار العمر',
+
+  name:
+    'الاسم',
+
+  student_id:
+    'معرف الطالب',
+
+  personal_id:
+    'الرقم الشخصي',
+
+  gender:
+    'الجنس',
+
+  phone:
+    'رقم الهاتف',
+
+  whatsapp:
+    'رقم الواتساب',
+
+  age:
+    'العمر',
+
+  health_notes:
+    'الملاحظات الصحية',
+
+  fee_exempt:
+    'معفي من الرسوم',
+
+  subject:
+    'المادة / التخصص',
+
+  department:
+    'القسم',
+
+  username:
+    'اسم المستخدم',
+
+  full_name:
+    'الاسم الكامل',
+
+  email:
+    'البريد الإلكتروني',
+
+  role:
+    'الدور',
+
+  sort_order:
+    'الترتيب',
+
+  field_key:
+    'مفتاح الحقل',
+
+  field_type:
+    'نوع الحقل',
+
+  label:
+    'الاسم الظاهر',
+
+  value:
+    'القيمة',
+
+  section:
+    'القسم',
+
+  is_visible:
+    'ظاهر',
+
+  available_in_registration:
+    'متاح في التسجيل',
+
+  available_in_students:
+    'متاح في الطلاب',
+
+  available_in_payments:
+    'متاح في المدفوعات',
+
+  show_in_registration:
+    'يظهر في التسجيل',
+
+  registration_enabled:
+    'التسجيل مفعل',
+
+  registration_open:
+    'التسجيل مفتوح',
+
+  registration_mode:
+    'وضع التسجيل',
+
+  request_number:
+    'رقم الطلب',
+
+  tracking_token:
+    'رمز التتبع',
+
+  request_number:
+    'رقم الطلب',
+
+  registration_number:
+    'رقم التسجيل',
+
+  source:
+    'المصدر',
+
+  reason:
+    'السبب',
+
+  type:
+    'النوع',
+
+  attendance_percentage:
+    'نسبة الحضور',
+
+  attendance_present:
+    'عدد الحضور',
+
+  attendance_absent:
+    'عدد الغياب',
+
+  attendance_late:
+    'عدد التأخير',
+
+  attendance_excused:
+    'عدد الاستئذان',
+
+  attendance_not_recorded:
+    'عدد الأيام غير المسجلة',
+
+  eligibility_note:
+    'ملاحظة الأهلية',
+
+  selected:
+    'تم الاختيار',
+
+  response:
+    'الرد',
+
+  response_note:
+    'ملاحظة الرد',
+
+  responded_at:
+    'تاريخ الرد',
+
+  response_source:
+    'مصدر الرد',
+
+  attendance_min:
+    'الحد الأدنى للحضور',
+
+  attendance_max:
+    'الحد الأعلى للحضور',
+
+  notes_requirement:
+    'متطلب الملاحظات',
+
+  approved:
+    'معتمد',
+
+  closed:
+    'مغلق',
+
+  close_note:
+    'ملاحظة الإغلاق',
+
+  rejection_note:
+    'ملاحظة الرفض',
+
+  approval_note:
+    'ملاحظة الاعتماد',
+
+  academic_year:
+    'السنة الدراسية',
+
+  course_name:
+    'اسم المادة',
+
+  level_name:
+    'اسم المستوى',
+
+  class_name:
+    'اسم الفصل',
+
+  student_name:
+    'اسم الطالب',
+
+  teacher_name:
+    'اسم المعلم',
+
+  trip_name:
+    'اسم الرحلة',
+
+  attendance_status:
+    'حالة الحضور',
+
+  custom_field_name:
+    'اسم الحقل المخصص',
+
+  field_name:
+    'اسم الحقل',
+
+  enrollment_status:
+    'حالة الانتساب',
+
+  class_is_active:
+    'الفصل مفعل',
+
+  course_days:
+    'أيام المادة',
+
+  course_start_date:
+    'بداية المادة',
+
+  course_end_date:
+    'نهاية المادة',
+}
+
+/* =========================================================
+   تحويل القيم إلى نص مفهوم
+   ========================================================= */
+
+function readableBoolean(
+  value: unknown,
+): unknown {
+  if (
+    value === true
+  ) {
+    return 'نعم'
+  }
+
+  if (
+    value === false
+  ) {
+    return 'لا'
+  }
+
+  return value
+}
+
+function readableValue(
+  value: unknown,
+): unknown {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return ''
+  }
+
+  if (
+    typeof value ===
+    'boolean'
+  ) {
+    return readableBoolean(
+      value,
+    )
+  }
+
+  if (
+    Array.isArray(value)
+  ) {
+    return value.join(
+      '، ',
+    )
+  }
+
+  if (
+    typeof value ===
+      'object'
+  ) {
+    try {
+      return JSON.stringify(
+        value,
+      )
+    } catch {
+      return String(value)
+    }
+  }
+
+  return value
+}
+
+/* =========================================================
+   تحويل الصفوف مع تعريف العلاقات
+   ========================================================= */
+
+type RowContext = {
+  academicYears?: Map<
+    string,
+    string
+  >
+
+  students?: Map<
+    string,
+    string
+  >
+
+  enrollments?: Map<
+    string,
+    string
+  >
+
+  levels?: Map<
+    string,
+    string
+  >
+
+  classes?: Map<
+    string,
+    string
+  >
+
+  courses?: Map<
+    string,
+    string
+  >
+
+  teachers?: Map<
+    string,
+    string
+  >
+
+  trips?: Map<
+    string,
+    string
+  >
+
+  attendanceStatuses?: Map<
+    string,
+    string
+  >
+
+  customFields?: Map<
+    string,
+    string
+  >
+
+  dynamicFields?: Map<
+    string,
+    string
+  >
+}
+
+type ForeignConfig = {
+  column: string
+  label: string
+  lookup?: Map<
+    string,
+    string
+  >
+}
+
+function makeReadableRows(
+  rows: Row[],
+  context: RowContext = {},
+  foreignKeys: ForeignConfig[] = [],
+): Row[] {
+  return rows.map(
+    (row) => {
+      const result: Row = {}
+
+      for (
+        const [
+          key,
+          value,
+        ] of Object.entries(
+          row,
+        )
+      ) {
+        const foreign =
+          foreignKeys.find(
+            (item) =>
+              item.column ===
+              key,
+          )
+
+        if (
+          foreign &&
+          typeof value ===
+            'string'
+        ) {
+          result[
+            foreign.label
+          ] =
+            foreign.lookup?.get(
+              value,
+            ) ||
+            value
+
+          result[
+            `${foreign.label} - المعرف الداخلي`
+          ] = value
+
+          continue
+        }
+
+        const columnName =
+          commonColumnNames[
+            key
+          ] || key
+
+        result[
+          columnName
+        ] =
+          readableValue(
+            value,
+          )
+      }
+
+      return result
+    },
+  )
+}
+
+function makeMap(
+  rows: Row[],
+  idKey: string,
+  nameKey: string = 'name',
+): Map<string, string> {
+  const map =
+    new Map<
+      string,
+      string
+    >()
+
+  for (
+    const row of rows
+  ) {
+    const id =
+      row[idKey]
+
+    if (
+      typeof id !==
+      'string'
+    ) {
+      continue
+    }
+
+    const name =
+      row[nameKey]
+
+    if (
+      name ===
+      null ||
+      name ===
+      undefined ||
+      String(name)
+        .trim()
+        .length ===
+        0
+    ) {
+      map.set(
+        id,
+        id,
+      )
+    } else {
+      map.set(
+        id,
+        String(name),
+      )
+    }
+  }
+
+  return map
+}
+
+/* =========================================================
+   إضافة Sheet
+   ========================================================= */
+
 function appendSheet(
   workbook: XLSX.WorkBook,
   name: string,
   rows: Row[],
+  context?: RowContext,
+  foreignKeys?: ForeignConfig[],
 ) {
+  const readableRows =
+    makeReadableRows(
+      rows,
+      context,
+      foreignKeys,
+    )
+
   const safeRows =
-    rows.length > 0
-      ? rows
+    readableRows.length >
+    0
+      ? readableRows
       : [
           {
             'لا توجد بيانات':
@@ -263,38 +1057,50 @@ function appendSheet(
   )
 }
 
+/* =========================================================
+   GET
+   ========================================================= */
+
 export async function GET() {
   try {
     const admin =
       await checkAdmin()
 
-    /*
-     * 1. السنة الدراسية الحالية
-     */
+    /* -----------------------------------------------------
+       السنة الحالية
+       ----------------------------------------------------- */
+
     const {
       data: academicYear,
       error:
         academicYearError,
-    } = await admin
-      .from('academic_years')
-      .select('*')
-      .eq(
-        'is_current',
-        true,
-      )
-      .eq(
-        'is_active',
-        true,
-      )
-      .maybeSingle()
+    } =
+      await admin
+        .from(
+          'academic_years',
+        )
+        .select('*')
+        .eq(
+          'is_current',
+          true,
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+        .maybeSingle()
 
-    if (academicYearError) {
+    if (
+      academicYearError
+    ) {
       throw new Error(
         `تعذر قراءة السنة الدراسية الحالية: ${academicYearError.message}`,
       )
     }
 
-    if (!academicYear) {
+    if (
+      !academicYear
+    ) {
       throw new Error(
         'لا توجد سنة دراسية حالية ومفعلة.',
       )
@@ -303,9 +1109,10 @@ export async function GET() {
     const academicYearId =
       academicYear.id as string
 
-    /*
-     * 2. الطلاب
-     */
+    /* -----------------------------------------------------
+       الطلاب
+       ----------------------------------------------------- */
+
     const students =
       await getAll(
         admin,
@@ -323,9 +1130,10 @@ export async function GET() {
         'id',
       )
 
-    /*
-     * 3. الانتسابات
-     */
+    /* -----------------------------------------------------
+       الانتسابات
+       ----------------------------------------------------- */
+
     const enrollments =
       await getAll(
         admin,
@@ -343,18 +1151,16 @@ export async function GET() {
         'id',
       )
 
-    /*
-     * 4. المستويات المستخدمة
-     */
     const enrollmentLevelIds =
       idsFrom(
         enrollments,
         'level_id',
       )
 
-    /*
-     * 5. الفصول
-     */
+    /* -----------------------------------------------------
+       الفصول
+       ----------------------------------------------------- */
+
     const classes =
       await getAll(
         admin,
@@ -386,12 +1192,10 @@ export async function GET() {
         ]),
       )
 
-    /*
-     * 6. المواد والدورات
-     *
-     * تشمل جميع دورات السنة الحالية
-     * حتى لو انتهت.
-     */
+    /* -----------------------------------------------------
+       المواد والدورات
+       ----------------------------------------------------- */
+
     const courses =
       await getAll(
         admin,
@@ -409,9 +1213,10 @@ export async function GET() {
         'id',
       )
 
-    /*
-     * 7. المدفوعات
-     */
+    /* -----------------------------------------------------
+       المدفوعات
+       ----------------------------------------------------- */
+
     const payments =
       await getAll(
         admin,
@@ -423,9 +1228,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 8. طلبات التسجيل
-     */
+    /* -----------------------------------------------------
+       طلبات التسجيل
+       ----------------------------------------------------- */
+
     const registrationRequests =
       await getAll(
         admin,
@@ -437,9 +1243,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 9. التسجيلات
-     */
+    /* -----------------------------------------------------
+       التسجيلات
+       ----------------------------------------------------- */
+
     const registrations =
       await getAll(
         admin,
@@ -451,9 +1258,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 10. الإعدادات المالية
-     */
+    /* -----------------------------------------------------
+       الإعدادات المالية
+       ----------------------------------------------------- */
+
     const financialSettings =
       await getAll(
         admin,
@@ -465,9 +1273,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 11. الحركات المالية
-     */
+    /* -----------------------------------------------------
+       الحركات المالية
+       ----------------------------------------------------- */
+
     const financialTransactions =
       await getAll(
         admin,
@@ -479,9 +1288,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 12. سجلات الإشراف
-     */
+    /* -----------------------------------------------------
+       سجلات الإشراف
+       ----------------------------------------------------- */
+
     const supervisionRecords =
       await getAll(
         admin,
@@ -493,9 +1303,10 @@ export async function GET() {
           ),
       )
 
-    /*
-     * 13. الرحلات
-     */
+    /* -----------------------------------------------------
+       الرحلات
+       ----------------------------------------------------- */
+
     const trips =
       await getAll(
         admin,
@@ -513,9 +1324,10 @@ export async function GET() {
         'id',
       )
 
-    /*
-     * 14. مستويات الرحلات
-     */
+    /* -----------------------------------------------------
+       مستويات الرحلات
+       ----------------------------------------------------- */
+
     const tripLevels =
       tripIds.length > 0
         ? await getAll(
@@ -529,9 +1341,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 15. طلاب الرحلات
-     */
+    /* -----------------------------------------------------
+       طلاب الرحلات
+       ----------------------------------------------------- */
+
     const tripStudents =
       tripIds.length > 0
         ? await getAll(
@@ -545,13 +1358,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 16. الحضور
-     *
-     * لا يحتوي جدول attendance
-     * على academic_year_id،
-     * لذلك نستخدم طلاب السنة الحالية.
-     */
+    /* -----------------------------------------------------
+       الحضور
+       ----------------------------------------------------- */
+
     const attendance =
       await getAll(
         admin,
@@ -563,7 +1373,7 @@ export async function GET() {
           ) {
             return query.eq(
               'student_id',
-              '00000000-0000-0000-0000-000000000000',
+              EMPTY_UUID,
             )
           }
 
@@ -574,9 +1384,10 @@ export async function GET() {
         },
       )
 
-    /*
-     * 17. معلمو المواد
-     */
+    /* -----------------------------------------------------
+       معلمو المواد
+       ----------------------------------------------------- */
+
     const courseTeachers =
       courseIds.length > 0
         ? await getAll(
@@ -590,9 +1401,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 18. تعيين الطلاب للمعلمين
-     */
+    /* -----------------------------------------------------
+       تعيين الطلاب للمعلمين
+       ----------------------------------------------------- */
+
     const teacherStudentAssignments =
       courseIds.length > 0 ||
       studentIds.length > 0
@@ -639,15 +1451,16 @@ export async function GET() {
 
               return query.eq(
                 'id',
-                '00000000-0000-0000-0000-000000000000',
+                EMPTY_UUID,
               )
             },
           )
         : []
 
-    /*
-     * 19. المعلمون المرتبطون بالسنة
-     */
+    /* -----------------------------------------------------
+       المعلمون المرتبطون بالسنة
+       ----------------------------------------------------- */
+
     const courseTeacherIds =
       Array.from(
         new Set(
@@ -707,9 +1520,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 20. المستويات
-     */
+    /* -----------------------------------------------------
+       المستويات
+       ----------------------------------------------------- */
+
     const levels =
       levelIds.length > 0
         ? await getAll(
@@ -721,9 +1535,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 21. القيم الديناميكية للطلاب
-     */
+    /* -----------------------------------------------------
+       القيم الديناميكية للطلاب
+       ----------------------------------------------------- */
+
     const studentDynamicValues =
       studentIds.length > 0
         ? await getAll(
@@ -737,9 +1552,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 22. الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       الحقول المخصصة
+       ----------------------------------------------------- */
+
     const customFields =
       await getAll(
         admin,
@@ -752,9 +1568,10 @@ export async function GET() {
         'id',
       )
 
-    /*
-     * 23. خيارات الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       خيارات الحقول المخصصة
+       ----------------------------------------------------- */
+
     const customFieldOptions =
       customFieldIds.length > 0
         ? await getAll(
@@ -768,9 +1585,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 24. ظهور الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       ظهور الحقول المخصصة
+       ----------------------------------------------------- */
+
     const customFieldVisibility =
       customFieldIds.length > 0
         ? await getAll(
@@ -784,9 +1602,10 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 25. قيم الحقول المخصصة للطلاب الحاليين
-     */
+    /* -----------------------------------------------------
+       قيم الحقول المخصصة
+       ----------------------------------------------------- */
+
     const customFieldValues =
       studentIds.length > 0
         ? await getAll(
@@ -805,33 +1624,200 @@ export async function GET() {
           )
         : []
 
-    /*
-     * 26. الحقول الديناميكية
-     */
+    /* -----------------------------------------------------
+       الحقول الديناميكية
+       ----------------------------------------------------- */
+
     const dynamicFields =
       await getAll(
         admin,
         'dynamic_fields',
       )
 
-    /*
-     * 27. حالات الحضور
-     */
+    /* -----------------------------------------------------
+       حالات الحضور
+       ----------------------------------------------------- */
+
     const attendanceStatuses =
       await getAll(
         admin,
         'attendance_statuses',
       )
 
-    /*
-     * إنشاء ملف Excel
-     */
+    /* =====================================================
+       خرائط الأسماء
+       ===================================================== */
+
+    const academicYearMap =
+      makeMap(
+        [academicYear],
+        'id',
+        'name',
+      )
+
+    const studentMap =
+      makeMap(
+        students,
+        'id',
+        'name',
+      )
+
+    const enrollmentMap =
+      new Map<
+        string,
+        string
+      >()
+
+    for (
+      const row of enrollments
+    ) {
+      if (
+        typeof row.id !==
+        'string'
+      ) {
+        continue
+      }
+
+      const studentName =
+        typeof row.student_id ===
+          'string'
+          ? studentMap.get(
+              row.student_id,
+            )
+          : undefined
+
+      const levelName =
+        typeof row.level_id ===
+          'string'
+          ? levels.find(
+              (level) =>
+                level.id ===
+                row.level_id,
+            )?.name
+          : undefined
+
+      const className =
+        typeof row.class_id ===
+          'string'
+          ? classes.find(
+              (item) =>
+                item.id ===
+                row.class_id,
+            )?.name
+          : undefined
+
+      const parts =
+        [
+          studentName,
+          levelName,
+          className,
+        ].filter(
+          Boolean,
+        )
+
+      enrollmentMap.set(
+        row.id,
+        parts.length > 0
+          ? parts.join(
+              ' - ',
+            )
+          : row.id,
+      )
+    }
+
+    const levelMap =
+      makeMap(
+        levels,
+        'id',
+        'name',
+      )
+
+    const classMap =
+      makeMap(
+        classes,
+        'id',
+        'name',
+      )
+
+    const courseMap =
+      makeMap(
+        courses,
+        'id',
+        'name',
+      )
+
+    const teacherMap =
+      makeMap(
+        teachers,
+        'id',
+        'name',
+      )
+
+    const tripMap =
+      makeMap(
+        trips,
+        'id',
+        'name',
+      )
+
+    const attendanceStatusMap =
+      makeMap(
+        attendanceStatuses,
+        'id',
+        'name',
+      )
+
+    const customFieldMap =
+      makeMap(
+        customFields,
+        'id',
+        'name',
+      )
+
+    const dynamicFieldMap =
+      makeMap(
+        dynamicFields,
+        'id',
+        'name',
+      )
+
+    const context: RowContext =
+      {
+        academicYears:
+          academicYearMap,
+        students:
+          studentMap,
+        enrollments:
+          enrollmentMap,
+        levels:
+          levelMap,
+        classes:
+          classMap,
+        courses:
+          courseMap,
+        teachers:
+          teacherMap,
+        trips:
+          tripMap,
+        attendanceStatuses:
+          attendanceStatusMap,
+        customFields:
+          customFieldMap,
+        dynamicFields:
+          dynamicFieldMap,
+      }
+
+    /* =====================================================
+       إنشاء Excel
+       ===================================================== */
+
     const workbook =
       XLSX.utils.book_new()
 
-    /*
-     * معلومات النسخة
-     */
+    /* -----------------------------------------------------
+       معلومات النسخة
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'معلومات النسخة',
@@ -839,270 +1825,835 @@ export async function GET() {
         {
           'السنة الدراسية':
             academicYear.name,
-          'معرف السنة':
+
+          'معرف السنة الدراسية':
             academicYear.id,
+
           'تاريخ البداية':
             academicYear.start_date,
+
           'تاريخ النهاية':
             academicYear.end_date,
+
           'السنة الحالية':
-            academicYear.is_current,
+            readableBoolean(
+              academicYear.is_current,
+            ),
+
           'السنة مفعلة':
-            academicYear.is_active,
+            readableBoolean(
+              academicYear.is_active,
+            ),
+
           'الرسوم السنوية':
             academicYear.annual_fee,
+
           'تاريخ إنشاء النسخة':
             new Date().toISOString(),
         },
       ],
     )
 
-    /*
-     * السنة الدراسية
-     */
+    /* -----------------------------------------------------
+       السنوات الدراسية
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'السنوات الدراسية',
       [academicYear],
+      context,
     )
 
-    /*
-     * الطلاب
-     */
+    /* -----------------------------------------------------
+       الطلاب
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الطلاب',
       students,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+      ],
     )
 
-    /*
-     * الانتسابات
-     *
-     * تم تغيير اسم الـ Sheet حتى لا يتكرر
-     * مع Sheet التسجيلات.
-     */
+    /* -----------------------------------------------------
+       الانتسابات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'انتساب الطلاب',
       enrollments,
+      context,
+      [
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'level_id',
+
+          label:
+            'المستوى',
+
+          lookup:
+            levelMap,
+        },
+        {
+          column:
+            'class_id',
+
+          label:
+            'الفصل',
+
+          lookup:
+            classMap,
+        },
+      ],
     )
 
-    /*
-     * المستويات
-     */
+    /* -----------------------------------------------------
+       المستويات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'المستويات',
       levels,
+      context,
     )
 
-    /*
-     * الفصول
-     */
+    /* -----------------------------------------------------
+       الفصول
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الفصول',
       classes,
+      context,
+      [
+        {
+          column:
+            'level_id',
+
+          label:
+            'المستوى',
+
+          lookup:
+            levelMap,
+        },
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+      ],
     )
 
-    /*
-     * المواد والدورات
-     */
+    /* -----------------------------------------------------
+       المواد والدورات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'المواد والدورات',
       courses,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+      ],
     )
 
-    /*
-     * المدفوعات
-     */
+    /* -----------------------------------------------------
+       المدفوعات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'المدفوعات',
       payments,
+      context,
+      [
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+      ],
     )
 
-    /*
-     * طلبات التسجيل
-     */
+    /* -----------------------------------------------------
+       طلبات التسجيل
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'طلبات التسجيل',
       registrationRequests,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'level_id',
+
+          label:
+            'المستوى',
+
+          lookup:
+            levelMap,
+        },
+        {
+          column:
+            'class_id',
+
+          label:
+            'الفصل',
+
+          lookup:
+            classMap,
+        },
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'reviewed_by',
+
+          label:
+            'مراجع الطلب - المعرف الداخلي',
+        },
+      ],
     )
 
-    /*
-     * التسجيلات
-     */
+    /* -----------------------------------------------------
+       التسجيلات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'التسجيلات',
       registrations,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'level_id',
+
+          label:
+            'المستوى',
+
+          lookup:
+            levelMap,
+        },
+        {
+          column:
+            'class_id',
+
+          label:
+            'الفصل',
+
+          lookup:
+            classMap,
+        },
+      ],
     )
 
-    /*
-     * الإعدادات المالية
-     */
+    /* -----------------------------------------------------
+       الإعدادات المالية
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'إعدادات المالية',
       financialSettings,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+      ],
     )
 
-    /*
-     * الحركات المالية
-     */
+    /* -----------------------------------------------------
+       الحركات المالية
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الحركات المالية',
       financialTransactions,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'payment_id',
+
+          label:
+            'معرف الدفعة',
+        },
+      ],
     )
 
-    /*
-     * الحضور
-     */
+    /* -----------------------------------------------------
+       الحضور
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الحضور',
       attendance,
+      context,
+      [
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'enrollment_id',
+
+          label:
+            'انتساب الطالب',
+
+          lookup:
+            enrollmentMap,
+        },
+        {
+          column:
+            'course_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'status_id',
+
+          label:
+            'حالة الحضور',
+
+          lookup:
+            attendanceStatusMap,
+        },
+      ],
     )
 
-    /*
-     * حالات الحضور
-     */
+    /* -----------------------------------------------------
+       حالات الحضور
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'حالات الحضور',
       attendanceStatuses,
+      context,
     )
 
-    /*
-     * المعلمون
-     */
+    /* -----------------------------------------------------
+       المعلمون
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'المعلمون',
       teachers,
+      context,
     )
 
-    /*
-     * معلمو المواد
-     */
+    /* -----------------------------------------------------
+       معلمو المواد
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'معلمو المواد',
       courseTeachers,
+      context,
+      [
+        {
+          column:
+            'course_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'teacher_id',
+
+          label:
+            'المعلم',
+
+          lookup:
+            teacherMap,
+        },
+      ],
     )
 
-    /*
-     * تعيين الطلاب للمعلمين
-     */
+    /* -----------------------------------------------------
+       تعيين الطلاب للمعلمين
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'تعيين الطلاب للمعلمين',
       teacherStudentAssignments,
+      context,
+      [
+        {
+          column:
+            'course_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'teacher_id',
+
+          label:
+            'المعلم',
+
+          lookup:
+            teacherMap,
+        },
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+      ],
     )
 
-    /*
-     * القيم الديناميكية للطلاب
-     */
+    /* -----------------------------------------------------
+       القيم الديناميكية للطلاب
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'القيم الديناميكية للطلاب',
       studentDynamicValues,
+      context,
+      [
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'field_id',
+
+          label:
+            'الحقل',
+
+          lookup:
+            dynamicFieldMap,
+        },
+      ],
     )
 
-    /*
-     * الحقول الديناميكية
-     */
+    /* -----------------------------------------------------
+       الحقول الديناميكية
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الحقول الديناميكية',
       dynamicFields,
+      context,
     )
 
-    /*
-     * الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       الحقول المخصصة
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الحقول المخصصة',
       customFields,
+      context,
     )
 
-    /*
-     * خيارات الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       خيارات الحقول المخصصة
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'خيارات الحقول المخصصة',
       customFieldOptions,
+      context,
+      [
+        {
+          column:
+            'custom_field_id',
+
+          label:
+            'الحقل المخصص',
+
+          lookup:
+            customFieldMap,
+        },
+      ],
     )
 
-    /*
-     * ظهور الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       ظهور الحقول المخصصة
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'ظهور الحقول المخصصة',
       customFieldVisibility,
+      context,
+      [
+        {
+          column:
+            'custom_field_id',
+
+          label:
+            'الحقل المخصص',
+
+          lookup:
+            customFieldMap,
+        },
+      ],
     )
 
-    /*
-     * قيم الحقول المخصصة
-     */
+    /* -----------------------------------------------------
+       قيم الحقول المخصصة
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'قيم الحقول المخصصة',
       customFieldValues,
+      context,
+      [
+        {
+          column:
+            'custom_field_id',
+
+          label:
+            'الحقل المخصص',
+
+          lookup:
+            customFieldMap,
+        },
+        {
+          column:
+            'record_id',
+
+          label:
+            'السجل المرتبط',
+        },
+      ],
     )
 
-    /*
-     * سجلات الإشراف
-     */
+    /* -----------------------------------------------------
+       سجلات الإشراف
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'سجلات الإشراف',
       supervisionRecords,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'course_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'teacher_id',
+
+          label:
+            'المعلم',
+
+          lookup:
+            teacherMap,
+        },
+      ],
     )
 
-    /*
-     * الرحلات
-     */
+    /* -----------------------------------------------------
+       الرحلات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'الرحلات',
       trips,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'course_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            courseMap,
+        },
+      ],
     )
 
-    /*
-     * مستويات الرحلات
-     */
+    /* -----------------------------------------------------
+       مستويات الرحلات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'مستويات الرحلات',
       tripLevels,
+      context,
+      [
+        {
+          column:
+            'trip_id',
+
+          label:
+            'الرحلة',
+
+          lookup:
+            tripMap,
+        },
+        {
+          column:
+            'level_id',
+
+          label:
+            'المستوى',
+
+          lookup:
+            levelMap,
+        },
+      ],
     )
 
-    /*
-     * طلاب الرحلات
-     */
+    /* -----------------------------------------------------
+       طلاب الرحلات
+       ----------------------------------------------------- */
+
     appendSheet(
       workbook,
       'طلاب الرحلات',
       tripStudents,
+      context,
+      [
+        {
+          column:
+            'trip_id',
+
+          label:
+            'الرحلة',
+
+          lookup:
+            tripMap,
+        },
+        {
+          column:
+            'student_id',
+
+          label:
+            'الطالب',
+
+          lookup:
+            studentMap,
+        },
+        {
+          column:
+            'enrollment_id',
+
+          label:
+            'انتساب الطالب',
+
+          lookup:
+            enrollmentMap,
+        },
+      ],
     )
 
-    /*
-     * إنشاء ملف XLSX
-     */
+    /* =====================================================
+       إنشاء الملف
+       ===================================================== */
+
     const buffer =
       XLSX.write(
         workbook,
         {
-          bookType: 'xlsx',
-          type: 'buffer',
+          bookType:
+            'xlsx',
+
+          type:
+            'buffer',
         },
       )
 
@@ -1119,6 +2670,7 @@ export async function GET() {
       buffer as BodyInit,
       {
         status: 200,
+
         headers: {
           'Content-Type':
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
