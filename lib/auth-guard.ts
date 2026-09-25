@@ -34,12 +34,14 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      * 1. Supabase Auth
      * --------------------------------------------------
      */
-    const supabase = await createSupabaseServerClient()
+    const supabase =
+      await createSupabaseServerClient()
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } =
+      await supabase.auth.getUser()
 
     if (authError || !user) {
       return {
@@ -55,8 +57,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      */
     const cookieStore = await cookies()
 
-    const sessionId = cookieStore.get(SESSION_COOKIE)?.value
-    const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
+    const sessionId =
+      cookieStore.get(
+        SESSION_COOKIE,
+      )?.value
+
+    const deviceToken =
+      cookieStore.get(
+        DEVICE_COOKIE,
+      )?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -73,21 +82,27 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const {
       data: session,
       error: sessionError,
-    } = await supabaseAdmin
-      .from('active_sessions')
-      .select(
-        `
+    } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .select(
+          `
           id,
           auth_user_id,
           trusted_device_id,
           is_active,
-          login_at,
           last_activity_at
-        `,
-      )
-      .eq('id', sessionId)
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
+          `,
+        )
+        .eq(
+          'id',
+          sessionId,
+        )
+        .eq(
+          'auth_user_id',
+          user.id,
+        )
+        .maybeSingle()
 
     if (
       sessionError ||
@@ -103,18 +118,17 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     /*
      * --------------------------------------------------
      * 4. انتهاء الخمول: 20 دقيقة
+     *
+     * لا يوجد حد أقصى للجلسة.
+     * النشاط الحقيقي يتم تحديثه من ActivityTracker.
      * --------------------------------------------------
-     *
-     * لا يوجد هنا حد أقصى للجلسة.
-     *
-     * إذا كان المستخدم نشطًا، تستمر الجلسة.
-     * إذا لم يحدث نشاط لمدة 20 دقيقة، تنتهي.
      */
     const now = Date.now()
 
-    const lastActivity = new Date(
-      session.last_activity_at,
-    ).getTime()
+    const lastActivity =
+      new Date(
+        session.last_activity_at,
+      ).getTime()
 
     const idleTimeout =
       IDLE_TIMEOUT_MINUTES *
@@ -123,9 +137,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     if (
       Number.isNaN(lastActivity) ||
-      now - lastActivity >= idleTimeout
+      now - lastActivity >=
+        idleTimeout
     ) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -141,23 +158,26 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const {
       data: profile,
       error: profileError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select(
-        'id, auth_user_id, is_active',
-      )
-      .eq(
-        'auth_user_id',
-        user.id,
-      )
-      .maybeSingle()
+    } =
+      await supabaseAdmin
+        .from('user_profiles')
+        .select(
+          'id, auth_user_id, is_active',
+        )
+        .eq(
+          'auth_user_id',
+          user.id,
+        )
+        .maybeSingle()
 
     if (
       profileError ||
       !profile ||
       !profile.is_active
     ) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -170,41 +190,45 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
      * 6. الجهاز الموثوق
      * --------------------------------------------------
      */
-    const deviceTokenHash = await sha256(
-      deviceToken,
-    )
+    const deviceTokenHash =
+      await sha256(
+        deviceToken,
+      )
 
     const {
       data: device,
       error: deviceError,
-    } = await supabaseAdmin
-      .from('trusted_devices')
-      .select(
-        'id, auth_user_id, status',
-      )
-      .eq(
-        'id',
-        session.trusted_device_id,
-      )
-      .eq(
-        'auth_user_id',
-        user.id,
-      )
-      .eq(
-        'device_token_hash',
-        deviceTokenHash,
-      )
-      .eq(
-        'status',
-        'approved',
-      )
-      .maybeSingle()
+    } =
+      await supabaseAdmin
+        .from('trusted_devices')
+        .select(
+          'id, auth_user_id, status',
+        )
+        .eq(
+          'id',
+          session.trusted_device_id,
+        )
+        .eq(
+          'auth_user_id',
+          user.id,
+        )
+        .eq(
+          'device_token_hash',
+          deviceTokenHash,
+        )
+        .eq(
+          'status',
+          'approved',
+        )
+        .maybeSingle()
 
     if (
       deviceError ||
       !device
     ) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+      )
 
       return {
         allowed: false,
@@ -214,30 +238,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     /*
      * --------------------------------------------------
-     * 7. تحديث آخر نشاط
-     * --------------------------------------------------
+     * 7. السماح
      *
-     * بما أن المستخدم وصل إلى Guard بنجاح،
-     * نعتبر هذا نشاطًا حقيقيًا للنظام.
+     * مهم:
+     * لا نحدث last_activity_at هنا.
      *
-     * لذلك الجلسة تستمر طالما المستخدم يستخدم
-     * الصفحات والـ API المحمية.
-     */
-    const activityNow =
-      new Date().toISOString()
-
-    await supabaseAdmin
-      .from('active_sessions')
-      .update({
-        last_activity_at: activityNow,
-      })
-      .eq('id', session.id)
-      .eq('auth_user_id', user.id)
-      .eq('is_active', true)
-
-    /*
-     * --------------------------------------------------
-     * 8. السماح
+     * طلبات API / polling ليست نشاطًا للمستخدم.
      * --------------------------------------------------
      */
     return {
@@ -278,8 +284,14 @@ async function closeSession(
       logout_at: now,
       last_activity_at: now,
     })
-    .eq('id', sessionId)
-    .eq('is_active', true)
+    .eq(
+      'id',
+      sessionId,
+    )
+    .eq(
+      'is_active',
+      true,
+    )
 }
 
 /*
