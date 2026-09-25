@@ -1,7 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import {
+  AlertCircle,
+  Download,
+  Loader2,
+} from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Button } from '@/components/ui/button'
@@ -15,27 +19,96 @@ import {
 
 export default function Page() {
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null)
 
   async function handleBackup() {
     try {
       setLoading(true)
+      setErrorMessage(null)
 
-      const response = await fetch('/api/admin/backup', {
-        method: 'GET',
-      })
+      const response = await fetch(
+        '/api/admin/backup',
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+      )
 
+      /*
+       * إذا فشل الـ API، نحاول قراءة
+       * رسالة الخطأ الحقيقية.
+       */
       if (!response.ok) {
-        throw new Error('تعذر إنشاء النسخة الاحتياطية.')
+        let message =
+          `فشل إنشاء النسخة الاحتياطية. HTTP ${response.status}`
+
+        try {
+          const data =
+            await response.json()
+
+          if (
+            data &&
+            typeof data.error === 'string'
+          ) {
+            message = data.error
+          }
+        } catch {
+          try {
+            const text =
+              await response.text()
+
+            if (text) {
+              message = text
+            }
+          } catch {
+            // نستخدم الرسالة الافتراضية.
+          }
+        }
+
+        throw new Error(message)
       }
 
-      const blob = await response.blob()
+      /*
+       * التأكد أن الرد فعلاً Excel.
+       */
+      const contentType =
+        response.headers.get(
+          'content-type',
+        ) || ''
 
-      const url = window.URL.createObjectURL(blob)
+      if (
+        !contentType.includes(
+          'spreadsheetml',
+        ) &&
+        !contentType.includes(
+          'application/vnd.ms-excel',
+        )
+      ) {
+        const text =
+          await response.text()
 
-      const link = document.createElement('a')
+        throw new Error(
+          text ||
+            `الـ API رجع نوع ملف غير متوقع: ${contentType}`,
+        )
+      }
+
+      const blob =
+        await response.blob()
+
+      /*
+       * إنشاء رابط التنزيل.
+       */
+      const url =
+        window.URL.createObjectURL(blob)
+
+      const link =
+        document.createElement('a')
 
       link.href = url
-      link.download = 'T3LEEM-Backup.xlsx'
+      link.download =
+        'T3LEEM-Backup.xlsx'
 
       document.body.appendChild(link)
 
@@ -45,10 +118,15 @@ export default function Page() {
 
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Backup download error:', error)
+      console.error(
+        'Backup download error:',
+        error,
+      )
 
-      alert(
-        'تعذر إنشاء النسخة الاحتياطية. حاول مرة أخرى.',
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ غير معروف.',
       )
     } finally {
       setLoading(false)
@@ -64,16 +142,37 @@ export default function Page() {
 
       <Card>
         <CardHeader>
-          <CardTitle>نسخة بيانات السنة الحالية</CardTitle>
+          <CardTitle>
+            نسخة بيانات السنة الحالية
+          </CardTitle>
 
           <CardDescription>
-            سيتم إنشاء ملف Excel يحتوي على بيانات السنة الدراسية
-            الحالية فقط، مع وضع كل قسم في ورقة مستقلة.
-            وتشمل النسخة الدورات التي انتهت داخل السنة الحالية.
+            سيتم إنشاء ملف Excel يحتوي
+            على بيانات السنة الدراسية
+            الحالية، مع وضع كل قسم في
+            ورقة مستقلة.
           </CardDescription>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="space-y-4">
+          {errorMessage && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <div className="flex gap-3">
+                <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
+
+                <div className="min-w-0">
+                  <p className="font-semibold text-destructive">
+                    تعذر إنشاء النسخة الاحتياطية
+                  </p>
+
+                  <p className="mt-1 break-words text-sm text-muted-foreground">
+                    {errorMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Button
             type="button"
             onClick={handleBackup}
