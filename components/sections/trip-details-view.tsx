@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Archive,
   ArrowRight,
   Check,
   CheckSquare,
@@ -209,19 +210,6 @@ function getResponseLabel(response: ResponseStatus) {
   }
 }
 
-function getResponseClass(response: ResponseStatus) {
-  switch (response) {
-    case 'accepted':
-      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-
-    case 'rejected':
-      return 'bg-red-500/10 text-red-700 dark:text-red-400'
-
-    default:
-      return 'bg-muted text-muted-foreground'
-  }
-}
-
 function getResponseSourceLabel(source: ResponseSource) {
   switch (source) {
     case 'student':
@@ -267,6 +255,7 @@ export function TripDetailsView({
   const [refreshing, setRefreshing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [closing, setClosing] = useState(false)
 
   const [paymentSavingId, setPaymentSavingId] =
     useState<string | null>(null)
@@ -421,16 +410,6 @@ export function TripDetailsView({
       (student) => student.eligible,
     )
   }, [data])
-
-  const selectedStudents = useMemo(() => {
-    if (!data) return []
-
-    const selected = new Set(selectedIds)
-
-    return data.students.filter((student) =>
-      selected.has(student.id),
-    )
-  }, [data, selectedIds])
 
   const tripResults = useMemo(() => {
     if (!data) {
@@ -961,6 +940,69 @@ export function TripDetailsView({
     }
   }
 
+  async function closeTrip() {
+    if (!data) return
+
+    if (data.trip.status !== 'published') {
+      return
+    }
+
+    const confirmed = window.confirm(
+      'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
+    )
+
+    if (!confirmed) return
+
+    setClosing(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        '/api/trips',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            id: tripId,
+            status: 'closed',
+          }),
+        },
+      )
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر إغلاق الرحلة.',
+        )
+      }
+
+      setSuccess(
+        'تم إغلاق الرحلة بنجاح، وتم نقلها إلى الرحلات السابقة.',
+      )
+
+      await loadData({ silent: true })
+    } catch (error) {
+      console.error(
+        'Close trip error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إغلاق الرحلة.',
+      )
+    } finally {
+      setClosing(false)
+    }
+  }
+
   async function downloadExcel() {
     if (!data) return
 
@@ -1005,7 +1047,7 @@ export function TripDetailsView({
             student.attendance_late,
           مستأذن:
             student.attendance_excused,
-          'الرد':
+          الرد:
             getResponseLabel(
               student.response,
             ),
@@ -1200,6 +1242,27 @@ export function TripDetailsView({
             <Download className="h-4 w-4" />
             تنزيل Excel
           </button>
+
+          {trip.status === 'published' && (
+            <button
+              type="button"
+              onClick={closeTrip}
+              disabled={closing}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 text-sm font-semibold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            >
+              {closing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري الإغلاق...
+                </>
+              ) : (
+                <>
+                  <Archive className="h-4 w-4" />
+                  إغلاق الرحلة
+                </>
+              )}
+            </button>
+          )}
 
           <button
             type="button"
@@ -1719,12 +1782,12 @@ export function TripDetailsView({
         </div>
       ) : null}
 
-      {/* Closed / Published notice */}
+      {/* Published / Closed notice */}
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           {trip.status === 'published'
             ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
-            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع.'}
+            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
         </div>
       )}
 
@@ -1748,7 +1811,6 @@ export function TripDetailsView({
       {/* Students section */}
       {canEdit && (
         <div className="overflow-hidden rounded-xl border bg-card">
-          {/* Section header */}
           <div className="border-b p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -1783,7 +1845,6 @@ export function TripDetailsView({
             </div>
           </div>
 
-          {/* Filters */}
           <div className="border-b bg-muted/20 p-4">
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
               <div className="relative">
@@ -1858,7 +1919,6 @@ export function TripDetailsView({
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckSquare className="h-4 w-4" />
-
                 تحديد الظاهر
               </button>
 
@@ -1878,7 +1938,6 @@ export function TripDetailsView({
             </div>
           </div>
 
-          {/* Students table */}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1150px] text-sm">
               <thead>
@@ -2231,7 +2290,6 @@ export function TripDetailsView({
             </table>
           </div>
 
-          {/* Bottom actions */}
           <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
