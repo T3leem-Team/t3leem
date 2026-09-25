@@ -10,13 +10,19 @@ const PAGE_SIZE = 1000
 
 type Row = Record<string, unknown>
 
-function getSupabaseAdmin() {
+function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!url || !serviceRoleKey) {
+  if (!url) {
     throw new Error(
-      'Supabase server environment variables are missing.',
+      'NEXT_PUBLIC_SUPABASE_URL غير موجود في Environment Variables.'
+    )
+  }
+
+  if (!serviceRoleKey) {
+    throw new Error(
+      'SUPABASE_SERVICE_ROLE_KEY غير موجود في Environment Variables.'
     )
   }
 
@@ -28,13 +34,19 @@ function getSupabaseAdmin() {
   })
 }
 
-async function getAuthenticatedAdmin() {
+async function checkAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!url || !anonKey) {
+  if (!url) {
     throw new Error(
-      'Supabase public environment variables are missing.',
+      'NEXT_PUBLIC_SUPABASE_URL غير موجود.'
+    )
+  }
+
+  if (!anonKey) {
+    throw new Error(
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY غير موجود.'
     )
   }
 
@@ -48,64 +60,83 @@ async function getAuthenticatedAdmin() {
         getAll() {
           return cookieStore.getAll()
         },
-
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(
               ({ name, value, options }) => {
                 cookieStore.set(name, value, options)
-              },
+              }
             )
           } catch {
-            // لا نحتاج لتعديل الكوكيز أثناء إنشاء النسخة.
+            // لا نحتاج لتعديل الكوكيز هنا.
           }
         },
       },
-    },
+    }
   )
 
   const {
     data: { user },
-    error: userError,
+    error: authError,
   } = await supabase.auth.getUser()
 
-  if (userError || !user) {
-    return null
+  if (authError) {
+    throw new Error(
+      `خطأ في التحقق من تسجيل الدخول: ${authError.message}`
+    )
   }
 
-  const admin = getSupabaseAdmin()
+  if (!user) {
+    throw new Error(
+      'لم يتم العثور على جلسة تسجيل دخول.'
+    )
+  }
 
-  const { data: profile, error: profileError } =
-    await admin
-      .from('user_profiles')
-      .select('id, auth_user_id, role, is_active')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
+  const admin = getAdminClient()
 
-  if (profileError || !profile) {
-    return null
+  const {
+    data: profile,
+    error: profileError,
+  } = await admin
+    .from('user_profiles')
+    .select(
+      'id, auth_user_id, username, full_name, role, is_active'
+    )
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(
+      `تعذر قراءة صلاحيات المستخدم: ${profileError.message}`
+    )
+  }
+
+  if (!profile) {
+    throw new Error(
+      'لم يتم العثور على ملف المستخدم في user_profiles.'
+    )
   }
 
   if (!profile.is_active) {
-    return null
+    throw new Error(
+      'حساب المستخدم غير مفعل.'
+    )
   }
 
   if (profile.role !== 'Admin') {
-    return null
+    throw new Error(
+      `هذا الإجراء متاح لمدير النظام فقط. الدور الحالي: ${profile.role}`
+    )
   }
 
-  return {
-    user,
-    profile,
-    admin,
-  }
+  return admin
 }
 
-async function fetchAll(
-  admin: ReturnType<typeof getSupabaseAdmin>,
-  table: string,
+async function getAll(
+  admin: ReturnType<typeof getAdminClient>,
+  table: string
 ) {
-  const rows: Row[] = []
+  const result: Row[] = []
 
   let from = 0
 
@@ -122,30 +153,30 @@ async function fetchAll(
 
     if (error) {
       throw new Error(
-        `Failed to read ${table}: ${error.message}`,
+        `خطأ في جدول ${table}: ${error.message}`
       )
     }
 
-    const page = (data ?? []) as Row[]
+    const rows = (data ?? []) as Row[]
 
-    rows.push(...page)
+    result.push(...rows)
 
-    if (page.length < PAGE_SIZE) {
+    if (rows.length < PAGE_SIZE) {
       break
     }
 
     from += PAGE_SIZE
   }
 
-  return rows
+  return result
 }
 
-async function fetchByAcademicYear(
-  admin: ReturnType<typeof getSupabaseAdmin>,
+async function getByAcademicYear(
+  admin: ReturnType<typeof getAdminClient>,
   table: string,
-  academicYearId: string,
+  academicYearId: string
 ) {
-  const rows: Row[] = []
+  const result: Row[] = []
 
   let from = 0
 
@@ -163,47 +194,44 @@ async function fetchByAcademicYear(
 
     if (error) {
       throw new Error(
-        `Failed to read ${table}: ${error.message}`,
+        `خطأ في جدول ${table}: ${error.message}`
       )
     }
 
-    const page = (data ?? []) as Row[]
+    const rows = (data ?? []) as Row[]
 
-    rows.push(...page)
+    result.push(...rows)
 
-    if (page.length < PAGE_SIZE) {
+    if (rows.length < PAGE_SIZE) {
       break
     }
 
     from += PAGE_SIZE
   }
 
-  return rows
+  return result
 }
 
-async function fetchByIds(
-  admin: ReturnType<typeof getSupabaseAdmin>,
+async function getByIds(
+  admin: ReturnType<typeof getAdminClient>,
   table: string,
   column: string,
-  ids: string[],
+  ids: string[]
 ) {
   if (ids.length === 0) {
     return []
   }
 
-  const rows: Row[] = []
+  const result: Row[] = []
 
   const chunkSize = 500
 
   for (
-    let index = 0;
-    index < ids.length;
-    index += chunkSize
+    let i = 0;
+    i < ids.length;
+    i += chunkSize
   ) {
-    const chunk = ids.slice(
-      index,
-      index + chunkSize,
-    )
+    const chunk = ids.slice(i, i + chunkSize)
 
     let from = 0
 
@@ -221,15 +249,15 @@ async function fetchByIds(
 
       if (error) {
         throw new Error(
-          `Failed to read ${table}: ${error.message}`,
+          `خطأ في جدول ${table}: ${error.message}`
         )
       }
 
-      const page = (data ?? []) as Row[]
+      const rows = (data ?? []) as Row[]
 
-      rows.push(...page)
+      result.push(...rows)
 
-      if (page.length < PAGE_SIZE) {
+      if (rows.length < PAGE_SIZE) {
         break
       }
 
@@ -237,93 +265,77 @@ async function fetchByIds(
     }
   }
 
-  return rows
+  return result
+}
+
+function cleanRows(rows: Row[]) {
+  return rows.map((row) => {
+    const output: Row = {}
+
+    for (const [key, value] of Object.entries(row)) {
+      if (Array.isArray(value)) {
+        output[key] = value.join(', ')
+      } else if (
+        value !== null &&
+        typeof value === 'object'
+      ) {
+        output[key] = JSON.stringify(value)
+      } else {
+        output[key] = value
+      }
+    }
+
+    return output
+  })
 }
 
 function addSheet(
   workbook: XLSX.WorkBook,
   name: string,
-  rows: Row[],
+  rows: Row[]
 ) {
-  const safeName = name.slice(0, 31)
+  const sheetName = name.slice(0, 31)
 
   if (rows.length === 0) {
-    const worksheet = XLSX.utils.aoa_to_sheet([
+    const sheet = XLSX.utils.aoa_to_sheet([
       ['لا توجد بيانات'],
     ])
 
     XLSX.utils.book_append_sheet(
       workbook,
-      worksheet,
-      safeName,
+      sheet,
+      sheetName
     )
 
     return
   }
 
-  const worksheet = XLSX.utils.json_to_sheet(rows)
+  const sheet = XLSX.utils.json_to_sheet(
+    cleanRows(rows)
+  )
 
   XLSX.utils.book_append_sheet(
     workbook,
-    worksheet,
-    safeName,
+    sheet,
+    sheetName
   )
-}
-
-function sanitizeRows(rows: Row[]) {
-  return rows.map((row) => {
-    const result: Row = {}
-
-    for (const [key, value] of Object.entries(row)) {
-      if (Array.isArray(value)) {
-        result[key] = value.join(', ')
-      } else if (
-        value !== null &&
-        typeof value === 'object'
-      ) {
-        result[key] = JSON.stringify(value)
-      } else {
-        result[key] = value
-      }
-    }
-
-    return result
-  })
 }
 
 export async function GET() {
   try {
     /*
-     * ---------------------------------------------------------
      * 1. التحقق من المستخدم
-     * ---------------------------------------------------------
      */
 
-    const auth = await getAuthenticatedAdmin()
-
-    if (!auth) {
-      return NextResponse.json(
-        {
-          error:
-            'غير مصرح لك بإنشاء النسخة الاحتياطية.',
-        },
-        {
-          status: 403,
-        },
-      )
-    }
-
-    const { admin } = auth
+    const admin = await checkAdmin()
 
     /*
-     * ---------------------------------------------------------
-     * 2. جلب السنة الدراسية الحالية
-     * ---------------------------------------------------------
+     * 2. السنة الحالية
      */
 
     const {
       data: currentYear,
-      error: currentYearError,
+      error: yearError,
     } = await admin
       .from('academic_years')
       .select('*')
@@ -332,30 +344,23 @@ export async function GET() {
       .limit(1)
       .maybeSingle()
 
-    if (currentYearError) {
+    if (yearError) {
       throw new Error(
-        `تعذر قراءة السنة الدراسية الحالية: ${currentYearError.message}`,
+        `خطأ في academic_years: ${yearError.message}`
       )
     }
 
     if (!currentYear) {
-      return NextResponse.json(
-        {
-          error:
-            'لا توجد سنة دراسية حالية مفعلة.',
-        },
-        {
-          status: 400,
-        },
+      throw new Error(
+        'لا توجد سنة دراسية حالية مفعلة.'
       )
     }
 
-    const academicYearId = currentYear.id as string
+    const academicYearId =
+      String(currentYear.id)
 
     /*
-     * ---------------------------------------------------------
-     * 3. البيانات الأساسية للسنة الحالية
-     * ---------------------------------------------------------
+     * 3. جلب بيانات السنة الحالية
      */
 
     const [
@@ -371,133 +376,129 @@ export async function GET() {
       supervisionRecords,
       trips,
     ] = await Promise.all([
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'classes',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'courses',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'enrollments',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'students',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'payments',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'registrations',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'registration_requests',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'financial_settings',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'financial_transactions',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'supervision_records',
-        academicYearId,
+        academicYearId
       ),
 
-      fetchByAcademicYear(
+      getByAcademicYear(
         admin,
         'trips',
-        academicYearId,
+        academicYearId
       ),
     ])
 
     /*
-     * ---------------------------------------------------------
-     * 4. استخراج المعرفات المرتبطة بالسنة الحالية
-     * ---------------------------------------------------------
+     * 4. IDs
      */
 
     const studentIds = students
       .map((row) => row.id)
       .filter(
         (id): id is string =>
-          typeof id === 'string',
+          typeof id === 'string'
       )
 
     const enrollmentIds = enrollments
       .map((row) => row.id)
       .filter(
         (id): id is string =>
-          typeof id === 'string',
+          typeof id === 'string'
       )
 
     const courseIds = courses
       .map((row) => row.id)
       .filter(
         (id): id is string =>
-          typeof id === 'string',
-      )
-
-    const classIds = classes
-      .map((row) => row.id)
-      .filter(
-        (id): id is string =>
-          typeof id === 'string',
+          typeof id === 'string'
       )
 
     const levelIds = Array.from(
       new Set(
         [
           ...enrollments.map(
-            (row) => row.level_id,
+            (row) => row.level_id
           ),
           ...classes.map(
-            (row) => row.level_id,
+            (row) => row.level_id
           ),
           ...registrations.map(
-            (row) => row.level_id,
+            (row) => row.level_id
           ),
           ...registrationRequests.map(
-            (row) => row.level_id,
+            (row) => row.level_id
           ),
         ].filter(
           (id): id is string =>
-            typeof id === 'string',
-        ),
-      ),
+            typeof id === 'string'
+        )
+      )
     )
 
+    const tripIds = trips
+      .map((row) => row.id)
+      .filter(
+        (id): id is string =>
+          typeof id === 'string'
+      )
+
     /*
-     * ---------------------------------------------------------
      * 5. البيانات المرتبطة
-     * ---------------------------------------------------------
      */
 
     const [
@@ -511,504 +512,383 @@ export async function GET() {
       customFieldOptions,
       customFieldVisibility,
       attendanceStatuses,
+      teachers,
       tripLevels,
       tripStudents,
     ] = await Promise.all([
-      fetchByIds(
+      getByIds(
         admin,
         'levels',
         'id',
-        levelIds,
+        levelIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'attendance',
         'student_id',
-        studentIds,
+        studentIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'course_teachers',
         'course_id',
-        courseIds,
+        courseIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'teacher_student_assignments',
         'student_id',
-        studentIds,
+        studentIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'student_dynamic_values',
         'student_id',
-        studentIds,
+        studentIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'custom_field_values',
         'record_id',
-        studentIds,
+        studentIds
       ),
 
-      fetchAll(
+      getAll(
         admin,
-        'custom_fields',
+        'custom_fields'
       ),
 
-      fetchAll(
+      getAll(
         admin,
-        'custom_field_options',
+        'custom_field_options'
       ),
 
-      fetchAll(
+      getAll(
         admin,
-        'custom_field_visibility',
+        'custom_field_visibility'
       ),
 
-      fetchAll(
+      getAll(
         admin,
-        'attendance_statuses',
+        'attendance_statuses'
       ),
 
-      fetchByIds(
+      getByIds(
+        admin,
+        'teachers',
+        'id',
+        Array.from(
+          new Set(
+            courseTeachers
+              .map(
+                (row) => row.teacher_id
+              )
+              .concat(
+                teacherAssignments.map(
+                  (row) =>
+                    row.teacher_id
+                )
+              )
+              .filter(
+                (id): id is string =>
+                  typeof id ===
+                  'string'
+              )
+          )
+        )
+      ),
+
+      getByIds(
         admin,
         'trip_levels',
         'trip_id',
-        trips
-          .map((row) => row.id)
-          .filter(
-            (id): id is string =>
-              typeof id === 'string',
-          ),
+        tripIds
       ),
 
-      fetchByIds(
+      getByIds(
         admin,
         'trip_students',
-        'student_id',
-        studentIds,
+        'trip_id',
+        tripIds
       ),
     ])
 
     /*
-     * ---------------------------------------------------------
-     * 6. تصفية الحضور للدورة/الطلاب الحالية
-     * ---------------------------------------------------------
+     * 6. الحضور
      */
 
-    const currentCourseIdSet =
-      new Set(courseIds)
-
-    const currentEnrollmentIdSet =
-      new Set(enrollmentIds)
-
-    const currentStudentIdSet =
+    const currentStudentIds =
       new Set(studentIds)
 
-    const currentAttendance = attendance.filter(
-      (row) => {
+    const currentCourseIds =
+      new Set(courseIds)
+
+    const currentEnrollmentIds =
+      new Set(enrollmentIds)
+
+    const currentAttendance =
+      attendance.filter((row) => {
+        const studentId =
+          typeof row.student_id ===
+          'string'
+            ? row.student_id
+            : null
+
         const courseId =
-          typeof row.course_id === 'string'
+          typeof row.course_id ===
+          'string'
             ? row.course_id
             : null
 
         const enrollmentId =
-          typeof row.enrollment_id === 'string'
+          typeof row.enrollment_id ===
+          'string'
             ? row.enrollment_id
             : null
 
-        const studentId =
-          typeof row.student_id === 'string'
-            ? row.student_id
-            : null
-
         return (
-          (courseId &&
-            currentCourseIdSet.has(courseId)) ||
-          (enrollmentId &&
-            currentEnrollmentIdSet.has(
-              enrollmentId,
-            )) ||
           (studentId &&
-            currentStudentIdSet.has(studentId))
+            currentStudentIds.has(
+              studentId
+            )) ||
+          (courseId &&
+            currentCourseIds.has(
+              courseId
+            )) ||
+          (enrollmentId &&
+            currentEnrollmentIds.has(
+              enrollmentId
+            ))
         )
-      },
-    )
+      })
 
     /*
-     * ---------------------------------------------------------
-     * 7. تصفية course_teachers
-     * ---------------------------------------------------------
+     * 7. ربط المعلمين بالدورات
      */
 
     const currentCourseTeachers =
       courseTeachers.filter((row) => {
         const courseId =
-          typeof row.course_id === 'string'
+          typeof row.course_id ===
+          'string'
             ? row.course_id
             : null
 
         return (
           courseId !== null &&
-          currentCourseIdSet.has(courseId)
+          currentCourseIds.has(courseId)
         )
       })
 
     /*
-     * ---------------------------------------------------------
-     * 8. المعلمون المرتبطون بالسنة الحالية
-     * ---------------------------------------------------------
-     */
-
-    const teacherIds = Array.from(
-      new Set(
-        currentCourseTeachers
-          .map((row) => row.teacher_id)
-          .concat(
-            teacherAssignments.map(
-              (row) => row.teacher_id,
-            ),
-          )
-          .filter(
-            (id): id is string =>
-              typeof id === 'string',
-          ),
-      ),
-    )
-
-    const teachers = await fetchByIds(
-      admin,
-      'teachers',
-      'id',
-      teacherIds,
-    )
-
-    /*
-     * ---------------------------------------------------------
-     * 9. تصفية teacher_student_assignments
-     * ---------------------------------------------------------
+     * 8. إسناد الطلاب
      */
 
     const currentTeacherAssignments =
       teacherAssignments.filter((row) => {
         const studentId =
-          typeof row.student_id === 'string'
+          typeof row.student_id ===
+          'string'
             ? row.student_id
             : null
 
         const courseId =
-          typeof row.course_id === 'string'
+          typeof row.course_id ===
+          'string'
             ? row.course_id
             : null
 
         return (
           (studentId &&
-            currentStudentIdSet.has(studentId)) ||
+            currentStudentIds.has(
+              studentId
+            )) ||
           (courseId &&
-            currentCourseIdSet.has(courseId))
+            currentCourseIds.has(
+              courseId
+            ))
         )
       })
 
     /*
-     * ---------------------------------------------------------
-     * 10. تصفية trip_students
-     * ---------------------------------------------------------
+     * 9. Excel
      */
 
-    const tripIds = new Set(
-      trips
-        .map((row) => row.id)
-        .filter(
-          (id): id is string =>
-            typeof id === 'string',
-        ),
-    )
+    const workbook =
+      XLSX.utils.book_new()
 
-    const currentTripStudents =
-      tripStudents.filter((row) => {
-        const tripId =
-          typeof row.trip_id === 'string'
-            ? row.trip_id
-            : null
-
-        return (
-          tripId !== null &&
-          tripIds.has(tripId)
-        )
-      })
-
-    /*
-     * ---------------------------------------------------------
-     * 11. تصفية trip_levels
-     * ---------------------------------------------------------
-     */
-
-    const currentTripLevels =
-      tripLevels.filter((row) => {
-        const tripId =
-          typeof row.trip_id === 'string'
-            ? row.trip_id
-            : null
-
-        return (
-          tripId !== null &&
-          tripIds.has(tripId)
-        )
-      })
-
-    /*
-     * ---------------------------------------------------------
-     * 12. Excel
-     * ---------------------------------------------------------
-     */
-
-    const workbook = XLSX.utils.book_new()
-
-    /*
-     * السنة الحالية
-     */
     addSheet(
       workbook,
       'Academic Year',
-      sanitizeRows([currentYear]),
+      [currentYear]
     )
 
-    /*
-     * المستويات
-     */
     addSheet(
       workbook,
       'Levels',
-      sanitizeRows(levels),
+      levels
     )
 
-    /*
-     * الفصول
-     */
     addSheet(
       workbook,
       'Classes',
-      sanitizeRows(classes),
+      classes
     )
 
-    /*
-     * الطلاب
-     */
     addSheet(
       workbook,
       'Students',
-      sanitizeRows(students),
+      students
     )
 
-    /*
-     * التسجيلات الأكاديمية
-     */
     addSheet(
       workbook,
       'Enrollments',
-      sanitizeRows(enrollments),
+      enrollments
     )
 
-    /*
-     * الدورات
-     */
     addSheet(
       workbook,
       'Courses',
-      sanitizeRows(courses),
+      courses
     )
 
-    /*
-     * المعلمون
-     */
     addSheet(
       workbook,
       'Teachers',
-      sanitizeRows(teachers),
+      teachers
     )
 
-    /*
-     * ربط المعلمين بالدورات
-     */
     addSheet(
       workbook,
       'Course Teachers',
-      sanitizeRows(currentCourseTeachers),
+      currentCourseTeachers
     )
 
-    /*
-     * إسناد الطلاب للمعلمين
-     */
     addSheet(
       workbook,
       'Teacher Assignments',
-      sanitizeRows(currentTeacherAssignments),
+      currentTeacherAssignments
     )
 
-    /*
-     * الحضور
-     */
     addSheet(
       workbook,
       'Attendance',
-      sanitizeRows(currentAttendance),
+      currentAttendance
     )
 
-    /*
-     * حالات الحضور
-     */
     addSheet(
       workbook,
       'Attendance Statuses',
-      sanitizeRows(attendanceStatuses),
+      attendanceStatuses
     )
 
-    /*
-     * المدفوعات
-     */
     addSheet(
       workbook,
       'Payments',
-      sanitizeRows(payments),
+      payments
     )
 
-    /*
-     * التسجيلات
-     */
     addSheet(
       workbook,
       'Registrations',
-      sanitizeRows(registrations),
+      registrations
     )
 
-    /*
-     * طلبات التسجيل
-     */
     addSheet(
       workbook,
       'Registration Requests',
-      sanitizeRows(registrationRequests),
+      registrationRequests
     )
 
-    /*
-     * الحقول المخصصة
-     */
     addSheet(
       workbook,
       'Custom Fields',
-      sanitizeRows(customFields),
+      customFields
     )
 
-    /*
-     * خيارات الحقول المخصصة
-     */
     addSheet(
       workbook,
       'Custom Field Options',
-      sanitizeRows(customFieldOptions),
+      customFieldOptions
     )
 
-    /*
-     * ظهور الحقول المخصصة
-     */
     addSheet(
       workbook,
       'Custom Field Visibility',
-      sanitizeRows(customFieldVisibility),
+      customFieldVisibility
     )
 
-    /*
-     * قيم الحقول المخصصة
-     */
     addSheet(
       workbook,
       'Custom Field Values',
-      sanitizeRows(customFieldValues),
+      customFieldValues
     )
 
-    /*
-     * القيم الديناميكية القديمة/الحالية
-     */
     addSheet(
       workbook,
       'Student Dynamic Values',
-      sanitizeRows(studentDynamicValues),
+      studentDynamicValues
     )
 
-    /*
-     * الإعداد المالي للسنة
-     */
     addSheet(
       workbook,
       'Financial Settings',
-      sanitizeRows(financialSettings),
+      financialSettings
     )
 
-    /*
-     * العمليات المالية
-     */
     addSheet(
       workbook,
       'Financial Transactions',
-      sanitizeRows(financialTransactions),
+      financialTransactions
     )
 
-    /*
-     * سجلات الإشراف
-     */
     addSheet(
       workbook,
       'Supervision Records',
-      sanitizeRows(supervisionRecords),
+      supervisionRecords
     )
 
-    /*
-     * الرحلات
-     */
     addSheet(
       workbook,
       'Trips',
-      sanitizeRows(trips),
+      trips
     )
 
-    /*
-     * مستويات الرحلات
-     */
     addSheet(
       workbook,
       'Trip Levels',
-      sanitizeRows(currentTripLevels),
+      tripLevels
     )
 
-    /*
-     * طلاب الرحلات
-     */
     addSheet(
       workbook,
       'Trip Students',
-      sanitizeRows(currentTripStudents),
+      tripStudents
     )
 
     /*
-     * ---------------------------------------------------------
-     * 13. إنشاء الملف
-     * ---------------------------------------------------------
+     * 10. إنشاء الملف
      */
 
-    const buffer = XLSX.write(workbook, {
-      bookType: 'xlsx',
-      type: 'buffer',
-      compression: true,
-    })
+    const buffer = XLSX.write(
+      workbook,
+      {
+        bookType: 'xlsx',
+        type: 'buffer',
+        compression: true,
+      }
+    )
 
     const fileName =
-      `T3LEEM-Backup-${String(currentYear.name ?? 'Current-Year')}.xlsx`
+      `T3LEEM-Backup-${String(
+        currentYear.name ?? 'Current-Year'
+      )}.xlsx`
 
     return new NextResponse(buffer, {
       status: 200,
@@ -1017,7 +897,9 @@ export async function GET() {
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 
         'Content-Disposition':
-          `attachment; filename="${encodeURIComponent(fileName)}"`,
+          `attachment; filename="${encodeURIComponent(
+            fileName
+          )}"`,
 
         'Cache-Control':
           'no-store, no-cache, must-revalidate',
@@ -1027,8 +909,8 @@ export async function GET() {
     })
   } catch (error) {
     console.error(
-      'T3LEEM backup error:',
-      error,
+      'T3LEEM BACKUP ERROR:',
+      error
     )
 
     return NextResponse.json(
@@ -1036,11 +918,11 @@ export async function GET() {
         error:
           error instanceof Error
             ? error.message
-            : 'تعذر إنشاء النسخة الاحتياطية.',
+            : 'خطأ غير معروف في إنشاء النسخة الاحتياطية.',
       },
       {
         status: 500,
-      },
+      }
     )
   }
 }
