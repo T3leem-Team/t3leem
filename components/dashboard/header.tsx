@@ -1,35 +1,73 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import {
-  Bell,
-  ChevronDown,
-  LogOut,
+  Check,
   Menu,
-  Moon,
-  Palette,
   Search,
+  Bell,
+  Palette,
   Sun,
-  User,
+  Moon,
+  LogOut,
 } from 'lucide-react'
-
+import { navItems } from '@/lib/nav'
 import { supabase } from '@/lib/supabase'
 
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+function currentTitle(pathname: string) {
+  const match = navItems.find((item) =>
+    item.href === '/'
+      ? pathname === '/'
+      : pathname.startsWith(item.href),
+  )
 
-type HeaderProps = {
-  title: string
-  onMenuClick?: () => void
-  userName?: string
-  userRole?: string
-  onLogout?: () => void
+  return match?.title ?? 'تعليم'
+}
+
+const themes = [
+  {
+    name: 'أخضر',
+    value: 'green',
+    light: 'oklch(0.52 0.09 155)',
+    dark: 'oklch(0.65 0.11 155)',
+  },
+  {
+    name: 'أزرق',
+    value: 'blue',
+    light: 'oklch(0.52 0.13 250)',
+    dark: 'oklch(0.68 0.14 250)',
+  },
+  {
+    name: 'بنفسجي',
+    value: 'purple',
+    light: 'oklch(0.52 0.13 290)',
+    dark: 'oklch(0.68 0.14 290)',
+  },
+  {
+    name: 'برتقالي',
+    value: 'orange',
+    light: 'oklch(0.62 0.15 55)',
+    dark: 'oklch(0.72 0.16 55)',
+  },
+  {
+    name: 'أحمر',
+    value: 'red',
+    light: 'oklch(0.55 0.18 25)',
+    dark: 'oklch(0.68 0.18 25)',
+  },
+  {
+    name: 'وردي',
+    value: 'pink',
+    light: 'oklch(0.58 0.15 350)',
+    dark: 'oklch(0.7 0.16 350)',
+  },
+]
+
+type UserProfile = {
+  username: string
+  full_name: string
+  role: string
 }
 
 type AuditLog = {
@@ -47,546 +85,826 @@ type NotificationItem = {
   createdAt: string
 }
 
-const colorThemes = [
-  {
-    name: 'أزرق',
-    value: 'blue',
-    color: 'bg-blue-500',
-  },
-  {
-    name: 'بنفسجي',
-    value: 'violet',
-    color: 'bg-violet-500',
-  },
-  {
-    name: 'أخضر',
-    value: 'green',
-    color: 'bg-green-500',
-  },
-  {
-    name: 'برتقالي',
-    value: 'orange',
-    color: 'bg-orange-500',
-  },
-  {
-    name: 'وردي',
-    value: 'rose',
-    color: 'bg-rose-500',
-  },
-]
+function getInitials(name: string) {
+  const cleanName = name.trim()
+
+  if (!cleanName) {
+    return 'م أ'
+  }
+
+  const words = cleanName.split(/\s+/)
+
+  if (words.length === 1) {
+    return words[0].slice(0, 2)
+  }
+
+  return `${words[0][0]}${words[1][0]}`
+}
 
 function formatRelativeTime(dateString: string) {
   const date = new Date(dateString)
   const now = new Date()
 
-  const diff = Math.max(0, now.getTime() - date.getTime())
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
+  const diffSeconds = Math.floor(
+    (now.getTime() - date.getTime()) / 1000,
+  )
 
-  if (minutes < 1) return 'الآن'
+  if (diffSeconds < 60) {
+    return 'الآن'
+  }
 
-  if (minutes === 1) return 'قبل دقيقة'
+  const minutes = Math.floor(
+    diffSeconds / 60,
+  )
 
   if (minutes < 60) {
-    return `قبل ${minutes} دقائق`
+    return minutes === 1
+      ? 'قبل دقيقة'
+      : `قبل ${minutes} دقائق`
   }
 
-  if (hours === 1) return 'قبل ساعة'
+  const hours = Math.floor(
+    minutes / 60,
+  )
 
   if (hours < 24) {
-    return `قبل ${hours} ساعات`
+    return hours === 1
+      ? 'قبل ساعة'
+      : `قبل ${hours} ساعات`
   }
 
-  if (days === 1) return 'أمس'
+  const days = Math.floor(
+    hours / 24,
+  )
+
+  if (days === 1) {
+    return 'أمس'
+  }
 
   if (days < 7) {
     return `قبل ${days} أيام`
   }
 
-  return date.toLocaleDateString('ar-BH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return date.toLocaleDateString(
+    'ar-BH',
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    },
+  )
 }
 
 export function Header({
-  title,
   onMenuClick,
-  userName = 'المستخدم',
-  userRole = 'مستخدم',
-  onLogout,
-}: HeaderProps) {
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [loadingNotifications, setLoadingNotifications] = useState(false)
+}: {
+  onMenuClick: () => void
+}) {
+  const pathname = usePathname()
 
-  const notificationsRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  const [profileOpen, setProfileOpen] =
+    useState(false)
+  const [notificationsOpen, setNotificationsOpen] =
+    useState(false)
 
-  const [darkMode, setDarkMode] = useState(false)
-  const [showThemes, setShowThemes] = useState(false)
+  const [mode, setMode] =
+    useState<'light' | 'dark'>('light')
+
+  const [theme, setTheme] = useState('green')
+
+  const [profile, setProfile] =
+    useState<UserProfile | null>(null)
+
+  const [loadingProfile, setLoadingProfile] =
+    useState(true)
+
+  const [notifications, setNotifications] =
+    useState<NotificationItem[]>([])
+
+  const [loadingNotifications, setLoadingNotifications] =
+    useState(false)
+
+  const menuRef =
+    useRef<HTMLDivElement>(null)
+
+  const profileRef =
+    useRef<HTMLDivElement>(null)
+
+  const notificationsRef =
+    useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
+    const savedMode =
+      localStorage.getItem('t3leem-mode')
 
-    const isDark =
-      savedTheme === 'dark' ||
-      (!savedTheme &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
+    const savedTheme =
+      localStorage.getItem('t3leem-theme')
 
-    setDarkMode(isDark)
+    const initialMode =
+      savedMode === 'dark'
+        ? 'dark'
+        : 'light'
 
-    document.documentElement.classList.toggle('dark', isDark)
+    const initialTheme =
+      themes.some(
+        (item) => item.value === savedTheme,
+      )
+        ? savedTheme!
+        : 'green'
+
+    setMode(initialMode)
+    setTheme(initialTheme)
+
+    applyTheme(
+      initialMode,
+      initialTheme,
+    )
   }, [])
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        notificationsRef.current &&
-        !notificationsRef.current.contains(event.target as Node)
-      ) {
-        setNotificationsOpen(false)
+    async function loadProfile() {
+      try {
+        setLoadingProfile(true)
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+
+        if (!user) {
+          setProfile(null)
+          return
+        }
+
+        const { data, error } =
+          await supabase
+            .from('user_profiles')
+            .select(
+              'username, full_name, role',
+            )
+            .eq(
+              'auth_user_id',
+              user.id,
+            )
+            .maybeSingle()
+
+        if (error) {
+          console.error(
+            'Profile load error:',
+            error,
+          )
+
+          return
+        }
+
+        if (data) {
+          setProfile(data)
+        }
+      } catch (error) {
+        console.error(
+          'Profile request error:',
+          error,
+        )
+      } finally {
+        setLoadingProfile(false)
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    loadProfile()
   }, [])
 
   async function loadNotifications() {
     try {
       setLoadingNotifications(true)
 
-      const { data: logs, error: logsError } = await supabase
-        .from('auth_audit_logs')
-        .select(`
-          id,
-          auth_user_id,
-          event_type,
-          success,
-          created_at
-        `)
-        .eq('event_type', 'login_success')
-        .eq('success', true)
-        .order('created_at', { ascending: false })
-        .limit(10)
+      const { data: logs, error: logsError } =
+        await supabase
+          .from('auth_audit_logs')
+          .select(
+            `
+            id,
+            auth_user_id,
+            event_type,
+            success,
+            created_at
+            `,
+          )
+          .eq(
+            'event_type',
+            'login_success',
+          )
+          .eq(
+            'success',
+            true,
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            },
+          )
+          .limit(10)
 
       if (logsError) {
-        console.error('Failed to load notifications:', logsError)
+        console.error(
+          'Notifications load error:',
+          logsError,
+        )
+
         setNotifications([])
         return
       }
 
-      const auditLogs = (logs ?? []) as AuditLog[]
-
-      if (auditLogs.length === 0) {
+      if (!logs || logs.length === 0) {
         setNotifications([])
         return
       }
 
       const userIds = [
         ...new Set(
-          auditLogs
-            .map((item) => item.auth_user_id)
-            .filter(Boolean),
+          logs.map(
+            (log: AuditLog) =>
+              log.auth_user_id,
+          ),
         ),
       ]
 
-      if (userIds.length === 0) {
-        setNotifications([])
-        return
-      }
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('user_profiles')
-        .select(`
-          auth_user_id,
-          username,
-          full_name
-        `)
-        .in('auth_user_id', userIds)
+      const {
+        data: profiles,
+        error: profilesError,
+      } =
+        await supabase
+          .from('user_profiles')
+          .select(
+            `
+            auth_user_id,
+            username,
+            full_name
+            `,
+          )
+          .in(
+            'auth_user_id',
+            userIds,
+          )
 
       if (profilesError) {
-        console.error('Failed to load notification users:', profilesError)
-
-        setNotifications(
-          auditLogs.map((log) => ({
-            id: log.id,
-            userName: 'مستخدم',
-            username: '',
-            createdAt: log.created_at,
-          })),
+        console.error(
+          'Notification profiles load error:',
+          profilesError,
         )
-
-        return
       }
 
-      const profileMap = new Map(
-        (profiles ?? []).map((profile) => [
-          profile.auth_user_id,
+      const profileMap =
+        new Map<
+          string,
           {
-            username: profile.username ?? '',
-            full_name: profile.full_name ?? '',
-          },
-        ]),
+            username: string
+            full_name: string
+          }
+        >()
+
+      ;(profiles ?? []).forEach(
+        (item) => {
+          profileMap.set(
+            item.auth_user_id,
+            {
+              username:
+                item.username,
+              full_name:
+                item.full_name,
+            },
+          )
+        },
       )
 
-      const result: NotificationItem[] = auditLogs.map((log) => {
-        const profile = profileMap.get(log.auth_user_id)
+      const items: NotificationItem[] =
+        logs.map(
+          (log: AuditLog) => {
+            const userProfile =
+              profileMap.get(
+                log.auth_user_id,
+              )
 
-        return {
-          id: log.id,
-          userName:
-            profile?.full_name ||
-            profile?.username ||
-            'مستخدم',
-          username: profile?.username || '',
-          createdAt: log.created_at,
-        }
-      })
+            return {
+              id: log.id,
+              userName:
+                userProfile?.full_name ||
+                userProfile?.username ||
+                'مستخدم',
+              username:
+                userProfile?.username ||
+                '',
+              createdAt:
+                log.created_at,
+            }
+          },
+        )
 
-      setNotifications(result)
+      setNotifications(items)
     } catch (error) {
-      console.error('Notifications error:', error)
+      console.error(
+        'Notifications request error:',
+        error,
+      )
+
       setNotifications([])
     } finally {
       setLoadingNotifications(false)
     }
   }
 
-  function toggleDarkMode() {
-    const next = !darkMode
+  useEffect(() => {
+    function handleClickOutside(
+      event: MouseEvent,
+    ) {
+      const target =
+        event.target as Node
 
-    setDarkMode(next)
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
+        setOpen(false)
+      }
 
-    document.documentElement.classList.toggle('dark', next)
+      if (
+        profileRef.current &&
+        !profileRef.current.contains(
+          target,
+        )
+      ) {
+        setProfileOpen(false)
+      }
 
-    localStorage.setItem('theme', next ? 'dark' : 'light')
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(
+          target,
+        )
+      ) {
+        setNotificationsOpen(false)
+      }
+    }
+
+    document.addEventListener(
+      'mousedown',
+      handleClickOutside,
+    )
+
+    return () => {
+      document.removeEventListener(
+        'mousedown',
+        handleClickOutside,
+      )
+    }
+  }, [])
+
+  function applyTheme(
+    selectedMode: 'light' | 'dark',
+    selectedTheme: string,
+  ) {
+    const selected = themes.find(
+      (item) =>
+        item.value === selectedTheme,
+    )
+
+    if (!selected) {
+      return
+    }
+
+    const root =
+      document.documentElement
+
+    root.classList.toggle(
+      'dark',
+      selectedMode === 'dark',
+    )
+
+    root.classList.toggle(
+      'light',
+      selectedMode === 'light',
+    )
+
+    const primary =
+      selectedMode === 'dark'
+        ? selected.dark
+        : selected.light
+
+    root.style.setProperty(
+      '--primary',
+      primary,
+    )
+
+    root.style.setProperty(
+      '--ring',
+      primary,
+    )
+
+    root.style.setProperty(
+      '--sidebar-primary',
+      primary,
+    )
+
+    root.style.setProperty(
+      '--sidebar-ring',
+      primary,
+    )
+
+    root.style.setProperty(
+      '--chart-1',
+      primary,
+    )
+
+    root.style.setProperty(
+      '--secondary',
+      selectedMode === 'dark'
+        ? 'oklch(0.30 0.03 200)'
+        : 'oklch(0.95 0.02 185)',
+    )
   }
 
-  function changeColorTheme(value: string) {
-    document.documentElement.setAttribute('data-theme', value)
-    localStorage.setItem('color-theme', value)
-    setShowThemes(false)
+  function changeMode(
+    nextMode: 'light' | 'dark',
+  ) {
+    setMode(nextMode)
+
+    localStorage.setItem(
+      't3leem-mode',
+      nextMode,
+    )
+
+    applyTheme(
+      nextMode,
+      theme,
+    )
   }
+
+  function changeTheme(
+    nextTheme: string,
+  ) {
+    setTheme(nextTheme)
+
+    localStorage.setItem(
+      't3leem-theme',
+      nextTheme,
+    )
+
+    applyTheme(
+      mode,
+      nextTheme,
+    )
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      })
+    } catch (error) {
+      console.error(
+        'Logout request error:',
+        error,
+      )
+    } finally {
+      window.location.href = '/login'
+    }
+  }
+
+  const displayName =
+    profile?.full_name ||
+    profile?.username ||
+    'مدير النظام'
 
   const initials =
-    userName
-      ?.trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part.charAt(0))
-      .join('')
-      .toUpperCase() || 'U'
+    getInitials(displayName)
 
   return (
-    <header className="relative z-50 flex h-16 w-full items-center justify-between border-b bg-background px-4 md:px-6">
-      {/* الجانب الأيسر */}
-      <div className="flex min-w-0 items-center gap-3">
-        {onMenuClick && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onMenuClick}
-            className="shrink-0"
-          >
-            <Menu className="size-5" />
-          </Button>
-        )}
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md md:px-6">
+      <button
+        type="button"
+        onClick={onMenuClick}
+        className="rounded-lg p-2 text-muted-foreground hover:bg-muted lg:hidden"
+        aria-label="فتح القائمة"
+      >
+        <Menu className="size-5" />
+      </button>
 
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold">
-            {title}
-          </h1>
-        </div>
+      <h1 className="text-base font-semibold md:text-lg">
+        {currentTitle(pathname)}
+      </h1>
+
+      <div className="relative mr-auto hidden md:block">
+        <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+        <input
+          type="search"
+          placeholder="بحث عن طالب، معلم، طلب..."
+          className="h-9 w-64 rounded-lg border border-border bg-card pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+        />
       </div>
 
-      {/* الجانب الأيمن */}
-      <div className="flex shrink-0 items-center gap-1 md:gap-2">
-        {/* البحث */}
-        <div className="relative hidden md:block">
-          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-          <input
-            type="text"
-            placeholder="بحث..."
-            className="h-9 w-48 rounded-lg border bg-muted/30 pl-3 pr-9 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        {/* الألوان */}
-        <div className="relative">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowThemes((value) => !value)}
-            title="الألوان"
-          >
-            <Palette className="size-5" />
-          </Button>
-
-          {showThemes && (
-            <>
-              <div
-                className="fixed inset-0 z-[90]"
-                onClick={() => setShowThemes(false)}
-              />
-
-              <div className="absolute left-0 top-full z-[100] mt-2 w-44 rounded-xl border bg-background p-2 shadow-2xl">
-                <div className="mb-2 px-2 py-1 text-sm font-semibold">
-                  لون الواجهة
-                </div>
-
-                {colorThemes.map((theme) => (
-                  <button
-                    key={theme.value}
-                    type="button"
-                    onClick={() => changeColorTheme(theme.value)}
-                    className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm transition hover:bg-muted"
-                  >
-                    <span
-                      className={`size-4 rounded-full ${theme.color}`}
-                    />
-
-                    <span>{theme.name}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* الوضع الليلي */}
-        <Button
+      <div
+        ref={menuRef}
+        className="relative"
+      >
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          onClick={toggleDarkMode}
-          title={darkMode ? 'الوضع الفاتح' : 'الوضع الليلي'}
+          onClick={() =>
+            setOpen(
+              (value) => !value,
+            )
+          }
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="تخصيص المظهر"
+          aria-expanded={open}
         >
-          {darkMode ? (
-            <Sun className="size-5" />
-          ) : (
-            <Moon className="size-5" />
+          <Palette className="size-5" />
+        </button>
+
+        {open && (
+          <div className="absolute left-0 top-full mt-2 w-64 rounded-xl border border-border bg-card p-4 shadow-lg">
+            <div>
+              <p className="text-sm font-semibold">
+                مظهر التطبيق
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                اختر الوضع واللون الأساسي
+              </p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  changeMode('light')
+                }
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  mode === 'light'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border hover:bg-muted'
+                }`}
+              >
+                <Sun className="size-4" />
+                نهاري
+
+                {mode === 'light' && (
+                  <Check className="size-3.5" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  changeMode('dark')
+                }
+                className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  mode === 'dark'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border hover:bg-muted'
+                }`}
+              >
+                <Moon className="size-4" />
+                دارك
+
+                {mode === 'dark' && (
+                  <Check className="size-3.5" />
+                )}
+              </button>
+            </div>
+
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="mb-3 text-xs font-medium text-muted-foreground">
+                اللون الأساسي
+              </p>
+
+              <div className="grid grid-cols-6 gap-2">
+                {themes.map((item) => {
+                  const selected =
+                    theme === item.value
+
+                  const color =
+                    mode === 'dark'
+                      ? item.dark
+                      : item.light
+
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      title={item.name}
+                      onClick={() =>
+                        changeTheme(
+                          item.value,
+                        )
+                      }
+                      className={`relative flex size-9 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
+                        selected
+                          ? 'border-foreground'
+                          : 'border-transparent'
+                      }`}
+                      style={{
+                        backgroundColor:
+                          color,
+                      }}
+                      aria-label={
+                        item.name
+                      }
+                    >
+                      {selected && (
+                        <Check className="size-4 text-white drop-shadow" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Notifications */}
+      <div
+        ref={notificationsRef}
+        className="relative z-[100]"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            const next =
+              !notificationsOpen
+
+            setNotificationsOpen(next)
+
+            if (next) {
+              loadNotifications()
+            }
+          }}
+          className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="الإشعارات"
+          aria-expanded={
+            notificationsOpen
+          }
+        >
+          <Bell className="size-5" />
+
+          {notifications.length > 0 && (
+            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
           )}
-        </Button>
+        </button>
 
-        {/* الإشعارات */}
-        <div
-          ref={notificationsRef}
-          className="relative z-[100]"
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              const next = !notificationsOpen
-
-              setNotificationsOpen(next)
-
-              if (next) {
-                loadNotifications()
-              }
-            }}
-            title="الإشعارات"
-            className="relative"
+        {notificationsOpen && (
+          <div
+            className="
+              absolute
+              right-0
+              top-full
+              z-[9999]
+              mt-2
+              w-80
+              max-w-[calc(100vw-2rem)]
+              overflow-hidden
+              rounded-xl
+              border
+              border-border
+              bg-card
+              shadow-2xl
+            "
           >
-            <Bell className="size-5" />
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold">
+                آخر النشاطات
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                آخر عمليات الدخول إلى النظام
+              </p>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto">
+              {loadingNotifications ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  جاري تحميل النشاطات...
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  لا توجد عمليات دخول مسجلة.
+                </div>
+              ) : (
+                notifications.map(
+                  (item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {getInitials(
+                          item.userName,
+                        )}
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {item.userName}
+                        </p>
+
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          سجل دخول إلى النظام
+                        </p>
+                      </div>
+
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatRelativeTime(
+                          item.createdAt,
+                        )}
+                      </span>
+                    </div>
+                  ),
+                )
+              )}
+            </div>
 
             {notifications.length > 0 && (
-              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
-            )}
-          </Button>
-
-          {notificationsOpen && (
-            <div
-              className="
-                absolute
-                right-0
-                top-full
-                z-[9999]
-                mt-2
-                w-[360px]
-                max-w-[calc(100vw-24px)]
-                overflow-hidden
-                rounded-xl
-                border
-                bg-background
-                shadow-2xl
-              "
-            >
-              {/* رأس النافذة */}
-              <div className="border-b bg-background px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold">
-                      آخر النشاطات
-                    </h3>
-
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      آخر عمليات الدخول إلى النظام
-                    </p>
-                  </div>
-
-                  <div className="flex size-9 items-center justify-center rounded-full bg-primary/10">
-                    <Bell className="size-4 text-primary" />
-                  </div>
-                </div>
-              </div>
-
-              {/* المحتوى */}
-              <div className="max-h-[420px] overflow-y-auto">
-                {loadingNotifications ? (
-                  <div className="flex items-center justify-center px-4 py-10">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-
-                      <span>جاري تحميل النشاطات...</span>
-                    </div>
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <div className="px-4 py-10 text-center">
-                    <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
-                      <Bell className="size-5 text-muted-foreground" />
-                    </div>
-
-                    <p className="text-sm font-medium">
-                      لا توجد نشاطات
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      لا توجد عمليات دخول مسجلة حالياً
-                    </p>
-                  </div>
-                ) : (
-                  <div className="divide-y">
-                    {notifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        className="flex items-start gap-3 px-4 py-3 transition hover:bg-muted/50"
-                      >
-                        {/* الصورة */}
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                          {notification.userName
-                            .trim()
-                            .split(/\s+/)
-                            .slice(0, 2)
-                            .map((part) => part.charAt(0))
-                            .join('')
-                            .toUpperCase() || 'U'}
-                        </div>
-
-                        {/* المعلومات */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-sm font-medium">
-                              {notification.userName}
-                            </p>
-
-                            <span className="shrink-0 text-[11px] text-muted-foreground">
-                              {formatRelativeTime(
-                                notification.createdAt,
-                              )}
-                            </span>
-                          </div>
-
-                          {notification.username && (
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                              @{notification.username}
-                            </p>
-                          )}
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            سجل دخول إلى النظام
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* أسفل النافذة */}
-              <div className="border-t bg-muted/20 px-4 py-2.5 text-center">
-                <p className="text-[11px] text-muted-foreground">
+              <div className="border-t border-border px-4 py-2.5">
+                <p className="text-center text-xs text-muted-foreground">
                   يتم عرض آخر 10 عمليات دخول
                 </p>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
+      </div>
 
-        {/* المستخدم */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="ml-1 flex h-10 items-center gap-2 rounded-lg px-2"
-            >
-              <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+      {/* Profile */}
+      <div
+        ref={profileRef}
+        className="relative"
+      >
+        <button
+          type="button"
+          onClick={() =>
+            setProfileOpen(
+              (value) => !value,
+            )
+          }
+          className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-muted"
+          aria-label="حساب المستخدم"
+          aria-expanded={profileOpen}
+        >
+          <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+            {loadingProfile
+              ? '...'
+              : initials}
+          </span>
+
+          <div className="hidden text-right lg:block">
+            <p className="max-w-32 truncate text-sm font-medium">
+              {loadingProfile
+                ? 'جارٍ التحميل...'
+                : displayName}
+            </p>
+
+            <p className="text-xs text-muted-foreground">
+              {profile?.role ||
+                'Admin'}
+            </p>
+          </div>
+        </button>
+
+        {profileOpen && (
+          <div className="absolute left-0 top-full mt-2 w-64 rounded-xl border border-border bg-card p-3 shadow-lg">
+            <div className="flex items-center gap-3 border-b border-border pb-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                 {initials}
-              </div>
-
-              <div className="hidden text-right lg:block">
-                <div className="max-w-32 truncate text-sm font-medium">
-                  {userName}
-                </div>
-
-                <div className="max-w-32 truncate text-xs text-muted-foreground">
-                  {userRole}
-                </div>
-              </div>
-
-              <ChevronDown className="hidden size-4 lg:block" />
-            </Button>
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent
-            align="end"
-            className="w-56"
-          >
-            <div className="flex items-center gap-3 px-2 py-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                {initials}
-              </div>
+              </span>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {userName}
+                <p className="truncate text-sm font-semibold">
+                  {displayName}
                 </p>
 
                 <p className="truncate text-xs text-muted-foreground">
-                  {userRole}
+                  @{profile?.username ||
+                    'admin'}
+                </p>
+
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {profile?.role ||
+                    'Admin'}
                 </p>
               </div>
             </div>
 
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem>
-              <User className="ml-2 size-4" />
-              الملف الشخصي
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem
-              onClick={onLogout}
-              className="text-destructive focus:text-destructive"
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-3 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
             >
-              <LogOut className="ml-2 size-4" />
+              <LogOut className="size-4" />
               تسجيل الخروج
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </button>
+          </div>
+        )}
       </div>
     </header>
   )
