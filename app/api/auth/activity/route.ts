@@ -27,57 +27,123 @@ export async function POST() {
       error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
-      return NextResponse.json(
-        {
-          authenticated: false,
-        },
-        { status: 401 },
-      )
-    }
-
     const cookieStore = await cookies()
 
     const sessionId =
       cookieStore.get(SESSION_COOKIE)?.value
 
-    if (!sessionId) {
-      return NextResponse.json(
+    /*
+     * إذا لم تعد جلسة Supabase موجودة،
+     * ننظف Cookie الخاصة بجلسة T3LEEM أيضًا.
+     */
+    if (authError || !user) {
+      const response = NextResponse.json(
         {
           authenticated: false,
         },
         { status: 401 },
       )
+
+      response.cookies.set(
+        SESSION_COOKIE,
+        '',
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
+        },
+      )
+
+      return response
+    }
+
+    if (!sessionId) {
+      const response = NextResponse.json(
+        {
+          authenticated: false,
+        },
+        { status: 401 },
+      )
+
+      response.cookies.set(
+        SESSION_COOKIE,
+        '',
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
+        },
+      )
+
+      return response
     }
 
     const {
       data: session,
       error: sessionError,
-    } = await supabaseAdmin
-      .from('active_sessions')
-      .select(`
-        id,
-        auth_user_id,
-        is_active,
-        last_activity_at
-      `)
-      .eq('id', sessionId)
-      .eq('auth_user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle()
+    } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .select(`
+          id,
+          auth_user_id,
+          is_active,
+          last_activity_at
+        `)
+        .eq('id', sessionId)
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
 
-    if (sessionError || !session) {
-      return NextResponse.json(
+    /*
+     * الجلسة غير موجودة أو تم إغلاقها مسبقًا.
+     */
+    if (
+      sessionError ||
+      !session ||
+      !session.is_active
+    ) {
+      const response = NextResponse.json(
         {
           authenticated: false,
+          reason: 'session_inactive',
         },
         { status: 401 },
       )
+
+      response.cookies.set(
+        SESSION_COOKIE,
+        '',
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
+        },
+      )
+
+      try {
+        await supabase.auth.signOut()
+      } catch (error) {
+        console.error(
+          'Supabase sign out error:',
+          error,
+        )
+      }
+
+      return response
     }
 
-    /*
-     * التحقق من آخر نشاط حقيقي
-     */
     const now = Date.now()
 
     const lastActivity =
@@ -91,7 +157,7 @@ export async function POST() {
       1000
 
     /*
-     * إذا مرّت 20 دقيقة بدون نشاط
+     * انتهاء مهلة الخمول: 20 دقيقة.
      */
     if (
       Number.isNaN(lastActivity) ||
@@ -108,20 +174,54 @@ export async function POST() {
           last_activity_at: closedAt,
         })
         .eq('id', session.id)
+        .eq('auth_user_id', user.id)
         .eq('is_active', true)
 
-      return NextResponse.json(
+      /*
+       * إنهاء جلسة Supabase.
+       */
+      try {
+        await supabase.auth.signOut()
+      } catch (error) {
+        console.error(
+          'Supabase sign out after idle timeout error:',
+          error,
+        )
+      }
+
+      /*
+       * تنظيف Cookie الخاصة بالجلسة.
+       * Device Token يبقى كما هو حتى لا نطلب
+       * اعتماد الجهاز مرة أخرى.
+       */
+      const response = NextResponse.json(
         {
           authenticated: false,
           reason: 'idle_timeout',
         },
         { status: 401 },
       )
+
+      response.cookies.set(
+        SESSION_COOKIE,
+        '',
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
+        },
+      )
+
+      return response
     }
 
     /*
-     * يوجد نشاط حقيقي
-     * لذلك نحدث آخر نشاط
+     * الجلسة ما زالت فعالة،
+     * لذلك نحدّث وقت آخر نشاط.
      */
     const updatedAt =
       new Date().toISOString()
