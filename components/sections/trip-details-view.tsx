@@ -21,6 +21,11 @@ import {
 
 import { supabase } from '@/lib/supabase'
 
+import {
+  loadTripDetailsCache,
+  setTripDetailsCache,
+} from '@/lib/trips-cache'
+
 type TripStatus =
   | 'draft'
   | 'pending_approval'
@@ -249,13 +254,23 @@ export function TripDetailsView({
 }: {
   tripId: string
 }) {
-  const [data, setData] = useState<ApiResponse | null>(null)
+  const [data, setData] =
+    useState<ApiResponse | null>(null)
 
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState(false)
-  const [closing, setClosing] = useState(false)
+  const [loading, setLoading] =
+    useState(true)
+
+  const [refreshing, setRefreshing] =
+    useState(false)
+
+  const [saving, setSaving] =
+    useState(false)
+
+  const [publishing, setPublishing] =
+    useState(false)
+
+  const [closing, setClosing] =
+    useState(false)
 
   const [paymentSavingId, setPaymentSavingId] =
     useState<string | null>(null)
@@ -263,8 +278,10 @@ export function TripDetailsView({
   const [responseSavingId, setResponseSavingId] =
     useState<string | null>(null)
 
-  const [directPublishAllowed, setDirectPublishAllowed] =
-    useState(false)
+  const [
+    directPublishAllowed,
+    setDirectPublishAllowed,
+  ] = useState(false)
 
   const [settingsLoading, setSettingsLoading] =
     useState(true)
@@ -273,7 +290,8 @@ export function TripDetailsView({
   const [success, setSuccess] = useState('')
 
   const [search, setSearch] = useState('')
-  const [levelFilter, setLevelFilter] = useState('all')
+  const [levelFilter, setLevelFilter] =
+    useState('all')
 
   const [showEligibleOnly, setShowEligibleOnly] =
     useState(true)
@@ -322,8 +340,13 @@ export function TripDetailsView({
 
   async function loadData(options?: {
     silent?: boolean
+    force?: boolean
   }) {
-    const silent = options?.silent ?? false
+    const silent =
+      options?.silent ?? false
+
+    const force =
+      options?.force ?? false
 
     if (silent) {
       setRefreshing(true)
@@ -335,26 +358,16 @@ export function TripDetailsView({
     setSuccess('')
 
     try {
-      const response = await fetch(
-        `/api/trips/${encodeURIComponent(
+      const result =
+        await loadTripDetailsCache(
           tripId,
-        )}/students`,
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ??
-            'تعذر تحميل بيانات الرحلة.',
+          {
+            force,
+          },
         )
-      }
 
-      const nextData = result as ApiResponse
+      const nextData =
+        result as unknown as ApiResponse
 
       setData(nextData)
 
@@ -363,7 +376,9 @@ export function TripDetailsView({
           .filter(
             (student) => student.selected,
           )
-          .map((student) => student.id),
+          .map(
+            (student) => student.id,
+          ),
       )
 
       const nextPaymentInputs: Record<
@@ -371,14 +386,20 @@ export function TripDetailsView({
         string
       > = {}
 
-      nextData.students.forEach((student) => {
-        nextPaymentInputs[student.id] =
-          student.payment_amount > 0
-            ? String(student.payment_amount)
-            : ''
-      })
+      nextData.students.forEach(
+        (student) => {
+          nextPaymentInputs[student.id] =
+            student.payment_amount > 0
+              ? String(
+                  student.payment_amount,
+                )
+              : ''
+        },
+      )
 
-      setPaymentInputs(nextPaymentInputs)
+      setPaymentInputs(
+        nextPaymentInputs,
+      )
     } catch (error) {
       console.error(
         'Load trip students error:',
@@ -421,26 +442,30 @@ export function TripDetailsView({
       }
     }
 
-    const students = data.students.filter(
-      (student) => student.selected,
-    )
+    const students =
+      data.students.filter(
+        (student) => student.selected,
+      )
 
     return {
       total: students.length,
 
       accepted: students.filter(
         (student) =>
-          student.response === 'accepted',
+          student.response ===
+          'accepted',
       ).length,
 
       rejected: students.filter(
         (student) =>
-          student.response === 'rejected',
+          student.response ===
+          'rejected',
       ).length,
 
       pending: students.filter(
         (student) =>
-          student.response === 'pending',
+          student.response ===
+          'pending',
       ).length,
     }
   }, [data])
@@ -452,14 +477,17 @@ export function TripDetailsView({
       search.trim().toLowerCase()
 
     return data.students
-      .filter((student) => student.selected)
+      .filter(
+        (student) => student.selected,
+      )
       .filter((student) => {
         if (responseFilter === 'all') {
           return true
         }
 
         return (
-          student.response === responseFilter
+          student.response ===
+          responseFilter
         )
       })
       .filter((student) => {
@@ -473,7 +501,8 @@ export function TripDetailsView({
             : ''
 
         const personalId =
-          typeof student.personal_id === 'string'
+          typeof student.personal_id ===
+          'string'
             ? student.personal_id
             : ''
 
@@ -488,10 +517,14 @@ export function TripDetailsView({
             .includes(normalizedSearch) ||
           personalId
             .toLowerCase()
-            .includes(normalizedSearch) ||
+            .includes(
+              normalizedSearch,
+            ) ||
           phone
             .toLowerCase()
-            .includes(normalizedSearch)
+            .includes(
+              normalizedSearch,
+            )
         )
       })
   }, [
@@ -501,54 +534,68 @@ export function TripDetailsView({
   ])
 
   const filteredStudents = useMemo(() => {
-    if (!data || !Array.isArray(data.students)) {
+    if (
+      !data ||
+      !Array.isArray(data.students)
+    ) {
       return []
     }
 
     const normalizedSearch =
       search.trim().toLowerCase()
 
-    return data.students.filter((student) => {
-      if (
-        showEligibleOnly &&
-        student.eligible !== true
-      ) {
-        return false
-      }
+    return data.students.filter(
+      (student) => {
+        if (
+          showEligibleOnly &&
+          student.eligible !== true
+        ) {
+          return false
+        }
 
-      const name =
-        typeof student.name === 'string'
-          ? student.name
-          : ''
+        const name =
+          typeof student.name === 'string'
+            ? student.name
+            : ''
 
-      const personalId =
-        typeof student.personal_id === 'string'
-          ? student.personal_id
-          : ''
+        const personalId =
+          typeof student.personal_id ===
+          'string'
+            ? student.personal_id
+            : ''
 
-      const phone =
-        typeof student.phone === 'string'
-          ? student.phone
-          : ''
+        const phone =
+          typeof student.phone === 'string'
+            ? student.phone
+            : ''
 
-      const matchesSearch =
-        !normalizedSearch ||
-        name
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        personalId
-          .toLowerCase()
-          .includes(normalizedSearch) ||
-        phone
-          .toLowerCase()
-          .includes(normalizedSearch)
+        const matchesSearch =
+          !normalizedSearch ||
+          name
+            .toLowerCase()
+            .includes(normalizedSearch) ||
+          personalId
+            .toLowerCase()
+            .includes(
+              normalizedSearch,
+            ) ||
+          phone
+            .toLowerCase()
+            .includes(
+              normalizedSearch,
+            )
 
-      const matchesLevel =
-        levelFilter === 'all' ||
-        student.level?.id === levelFilter
+        const matchesLevel =
+          levelFilter === 'all' ||
+          student.level?.id ===
+            levelFilter
 
-      return matchesSearch && matchesLevel
-    })
+        return (
+          matchesSearch &&
+          matchesLevel
+        )
+      },
+    )
   }, [
     data,
     search,
@@ -556,7 +603,8 @@ export function TripDetailsView({
     showEligibleOnly,
   ])
 
-  const selectedCount = selectedIds.length
+  const selectedCount =
+    selectedIds.length
 
   const canEdit =
     data?.trip.status !== 'closed' &&
@@ -565,7 +613,22 @@ export function TripDetailsView({
   const canEditParticipantData =
     data?.trip.status !== 'closed'
 
-  function toggleStudent(studentId: string) {
+  function syncDetailsCache(
+    nextData: ApiResponse,
+  ) {
+    setTripDetailsCache(tripId, {
+      trip: nextData.trip,
+      course: nextData.course,
+      levels: nextData.levels,
+      lesson_dates:
+        nextData.lesson_dates,
+      students: nextData.students,
+    })
+  }
+
+  function toggleStudent(
+    studentId: string,
+  ) {
     if (!canEdit) return
 
     setSelectedIds((current) => {
@@ -585,11 +648,13 @@ export function TripDetailsView({
     setSelectedIds((current) => {
       const next = new Set(current)
 
-      filteredStudents.forEach((student) => {
-        if (student.eligible) {
-          next.add(student.id)
-        }
-      })
+      filteredStudents.forEach(
+        (student) => {
+          if (student.eligible) {
+            next.add(student.id)
+          }
+        },
+      )
 
       return Array.from(next)
     })
@@ -626,7 +691,8 @@ export function TripDetailsView({
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             student_ids: selectedIds,
@@ -634,7 +700,8 @@ export function TripDetailsView({
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -647,7 +714,10 @@ export function TripDetailsView({
         'تم حفظ الطلاب في الرحلة بنجاح.',
       )
 
-      await loadData({ silent: true })
+      await loadData({
+        silent: true,
+        force: true,
+      })
     } catch (error) {
       console.error(
         'Save trip students error:',
@@ -691,7 +761,8 @@ export function TripDetailsView({
     }
 
     const roundedAmount =
-      Math.round(amount * 1000) / 1000
+      Math.round(amount * 1000) /
+      1000
 
     setPaymentSavingId(student.id)
     setError('')
@@ -705,17 +776,20 @@ export function TripDetailsView({
         {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'payment',
             student_id: student.id,
-            payment_amount: roundedAmount,
+            payment_amount:
+              roundedAmount,
           }),
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -727,28 +801,39 @@ export function TripDetailsView({
       setData((current) => {
         if (!current) return current
 
-        return {
+        const nextData = {
           ...current,
-          students: current.students.map(
-            (item) =>
-              item.id === student.id
-                ? {
-                    ...item,
-                    payment_amount:
-                      roundedAmount,
-                  }
-                : item,
-          ),
+          students:
+            current.students.map(
+              (item) =>
+                item.id === student.id
+                  ? {
+                      ...item,
+                      payment_amount:
+                        roundedAmount,
+                    }
+                  : item,
+            ),
         }
+
+        syncDetailsCache(
+          nextData,
+        )
+
+        return nextData
       })
 
-      setPaymentInputs((current) => ({
-        ...current,
-        [student.id]:
-          roundedAmount > 0
-            ? String(roundedAmount)
-            : '',
-      }))
+      setPaymentInputs(
+        (current) => ({
+          ...current,
+          [student.id]:
+            roundedAmount > 0
+              ? String(
+                  roundedAmount,
+                )
+              : '',
+        }),
+      )
 
       setSuccess(
         `تم حفظ دفع الطالب ${student.name}.`,
@@ -787,17 +872,20 @@ export function TripDetailsView({
         {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'response',
             student_id: student.id,
-            response: responseValue,
+            response:
+              responseValue,
           }),
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -812,36 +900,48 @@ export function TripDetailsView({
       setData((current) => {
         if (!current) return current
 
-        return {
+        const nextData = {
           ...current,
-          students: current.students.map(
-            (item) => {
-              if (item.id !== student.id) {
-                return item
-              }
+          students:
+            current.students.map(
+              (item) => {
+                if (
+                  item.id !==
+                  student.id
+                ) {
+                  return item
+                }
 
-              return {
-                ...item,
-                response:
-                  updatedStudent?.response ??
-                  responseValue,
-                response_note:
-                  updatedStudent?.response_note ??
-                  null,
-                response_source:
-                  updatedStudent?.response_source ??
-                  (responseValue === 'pending'
-                    ? null
-                    : 'admin'),
-                responded_at:
-                  updatedStudent?.responded_at ??
-                  (responseValue === 'pending'
-                    ? null
-                    : new Date().toISOString()),
-              }
-            },
-          ),
+                return {
+                  ...item,
+                  response:
+                    updatedStudent?.response ??
+                    responseValue,
+                  response_note:
+                    updatedStudent?.response_note ??
+                    null,
+                  response_source:
+                    updatedStudent?.response_source ??
+                    (responseValue ===
+                    'pending'
+                      ? null
+                      : 'admin'),
+                  responded_at:
+                    updatedStudent?.responded_at ??
+                    (responseValue ===
+                    'pending'
+                      ? null
+                      : new Date().toISOString()),
+                }
+              },
+            ),
         }
+
+        syncDetailsCache(
+          nextData,
+        )
+
+        return nextData
       })
 
       setSuccess(
@@ -884,9 +984,10 @@ export function TripDetailsView({
       return
     }
 
-    const confirmed = window.confirm(
-      'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
-    )
+    const confirmed =
+      window.confirm(
+        'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
+      )
 
     if (!confirmed) return
 
@@ -910,7 +1011,8 @@ export function TripDetailsView({
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -923,7 +1025,10 @@ export function TripDetailsView({
         'تم نشر الرحلة بنجاح.',
       )
 
-      await loadData({ silent: true })
+      await loadData({
+        silent: true,
+        force: true,
+      })
     } catch (error) {
       console.error(
         'Publish trip error:',
@@ -947,9 +1052,10 @@ export function TripDetailsView({
       return
     }
 
-    const confirmed = window.confirm(
-      'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
-    )
+    const confirmed =
+      window.confirm(
+        'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
+      )
 
     if (!confirmed) return
 
@@ -973,7 +1079,8 @@ export function TripDetailsView({
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -986,7 +1093,10 @@ export function TripDetailsView({
         'تم إغلاق الرحلة بنجاح، وتم نقلها إلى الرحلات السابقة.',
       )
 
-      await loadData({ silent: true })
+      await loadData({
+        silent: true,
+        force: true,
+      })
     } catch (error) {
       console.error(
         'Close trip error:',
@@ -1007,11 +1117,14 @@ export function TripDetailsView({
     if (!data) return
 
     try {
-      const XLSX = await import('xlsx')
+      const XLSX =
+        await import('xlsx')
 
-      const students = data.students.filter(
-        (student) => student.selected,
-      )
+      const students =
+        data.students.filter(
+          (student) =>
+            student.selected,
+        )
 
       if (students.length === 0) {
         setError(
@@ -1025,9 +1138,11 @@ export function TripDetailsView({
           '#': index + 1,
           الطالب: student.name,
           'الرقم الشخصي':
-            student.personal_id ?? '',
+            student.personal_id ??
+            '',
           المستوى:
-            student.level?.name ?? '',
+            student.level?.name ??
+            '',
           الهاتف:
             student.phone ??
             student.whatsapp ??
@@ -1062,26 +1177,32 @@ export function TripDetailsView({
                 )
               : '',
           الدفع:
-            student.payment_amount > 0
+            student.payment_amount >
+            0
               ? student.payment_amount
               : 0,
           'حالة الدفع':
-            student.payment_amount > 0
+            student.payment_amount >
+            0
               ? 'مدفوع'
               : 'غير مدفوع',
           'ملاحظة الرد':
-            student.response_note ?? '',
+            student.response_note ??
+            '',
           'ملاحظات الدورة':
             student.course_notes
               .map(
-                (note) => note.note,
+                (note) =>
+                  note.note,
               )
               .join(' | '),
         }),
       )
 
       const worksheet =
-        XLSX.utils.json_to_sheet(rows)
+        XLSX.utils.json_to_sheet(
+          rows,
+        )
 
       const workbook =
         XLSX.utils.book_new()
@@ -1118,7 +1239,8 @@ export function TripDetailsView({
             /[\\/:*?"<>|]/g,
             '',
           )
-          .trim() || 'الرحلة'
+          .trim() ||
+        'الرحلة'
 
       XLSX.writeFile(
         workbook,
@@ -1141,7 +1263,8 @@ export function TripDetailsView({
   }
 
   function goBack() {
-    window.location.href = '/trips'
+    window.location.href =
+      '/trips'
   }
 
   if (loading) {
@@ -1152,6 +1275,7 @@ export function TripDetailsView({
       >
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
+
           <span>
             جاري تحميل الرحلة...
           </span>
@@ -1172,6 +1296,7 @@ export function TripDetailsView({
           className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4" />
+
           العودة إلى الرحلات
         </button>
 
@@ -1203,6 +1328,7 @@ export function TripDetailsView({
             className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowRight className="h-4 w-4" />
+
             العودة إلى الرحلات
           </button>
 
@@ -1240,10 +1366,12 @@ export function TripDetailsView({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
+
             تنزيل Excel
           </button>
 
-          {trip.status === 'published' && (
+          {trip.status ===
+            'published' && (
             <button
               type="button"
               onClick={closeTrip}
@@ -1253,11 +1381,13 @@ export function TripDetailsView({
               {closing ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
+
                   جاري الإغلاق...
                 </>
               ) : (
                 <>
                   <Archive className="h-4 w-4" />
+
                   إغلاق الرحلة
                 </>
               )}
@@ -1267,7 +1397,10 @@ export function TripDetailsView({
           <button
             type="button"
             onClick={() =>
-              loadData({ silent: true })
+              loadData({
+                silent: true,
+                force: true,
+              })
             }
             disabled={refreshing}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
@@ -1365,7 +1498,8 @@ export function TripDetailsView({
             </p>
 
             <p className="mt-1 font-medium">
-              {trip.attendance_min != null
+              {trip.attendance_min !=
+              null
                 ? `${trip.attendance_min}%`
                 : 'بدون حد'}
             </p>
@@ -1377,7 +1511,8 @@ export function TripDetailsView({
             </p>
 
             <p className="mt-1 font-medium">
-              {trip.attendance_max != null
+              {trip.attendance_max !=
+              null
                 ? `${trip.attendance_max}%`
                 : 'بدون حد'}
             </p>
@@ -1395,7 +1530,8 @@ export function TripDetailsView({
       </div>
 
       {/* Results */}
-      {trip.status === 'published' ||
+      {trip.status ===
+        'published' ||
       trip.status === 'closed' ? (
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between">
@@ -1508,7 +1644,9 @@ export function TripDetailsView({
                   </div>
 
                   <select
-                    value={responseFilter}
+                    value={
+                      responseFilter
+                    }
                     onChange={(event) =>
                       setResponseFilter(
                         event.target
@@ -1579,7 +1717,8 @@ export function TripDetailsView({
                   </thead>
 
                   <tbody>
-                    {resultStudents.length === 0 ? (
+                    {resultStudents.length ===
+                    0 ? (
                       <tr>
                         <td
                           colSpan={9}
@@ -1642,7 +1781,9 @@ export function TripDetailsView({
                                   responseSavingId ===
                                     student.id
                                 }
-                                onChange={(event) =>
+                                onChange={(
+                                  event,
+                                ) =>
                                   saveResponse(
                                     student,
                                     event
@@ -1785,7 +1926,8 @@ export function TripDetailsView({
       {/* Published / Closed notice */}
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-          {trip.status === 'published'
+          {trip.status ===
+          'published'
             ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
             : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
         </div>
@@ -1893,7 +2035,8 @@ export function TripDetailsView({
                   }
                   onChange={(event) =>
                     setShowEligibleOnly(
-                      event.target.checked,
+                      event.target
+                        .checked,
                     )
                   }
                   className="h-4 w-4"
@@ -1919,6 +2062,7 @@ export function TripDetailsView({
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckSquare className="h-4 w-4" />
+
                 تحديد الظاهر
               </button>
 
@@ -1929,7 +2073,8 @@ export function TripDetailsView({
                 }
                 disabled={
                   !canEdit ||
-                  filteredStudents.length === 0
+                  filteredStudents.length ===
+                    0
                 }
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2078,7 +2223,8 @@ export function TripDetailsView({
                           </td>
 
                           <td className="max-w-[260px] px-4 py-3">
-                            {student.course_notes
+                            {student
+                              .course_notes
                               .length > 0 ? (
                               <div className="space-y-1">
                                 {student.course_notes
@@ -2133,7 +2279,9 @@ export function TripDetailsView({
                                 responseSavingId ===
                                   student.id
                               }
-                              onChange={(event) =>
+                              onChange={(
+                                event,
+                              ) =>
                                 saveResponse(
                                   student,
                                   event
@@ -2317,11 +2465,13 @@ export function TripDetailsView({
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
+
                     جاري الحفظ...
                   </>
                 ) : (
                   <>
                     <Check className="h-4 w-4" />
+
                     حفظ الطلاب
                   </>
                 )}
@@ -2329,7 +2479,8 @@ export function TripDetailsView({
             </div>
 
             {/* Publish */}
-            {trip.status === 'draft' && (
+            {trip.status ===
+              'draft' && (
               <div className="border-t pt-4">
                 <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -2369,11 +2520,13 @@ export function TripDetailsView({
                     {publishing ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
+
                         جاري النشر...
                       </>
                     ) : (
                       <>
                         <Send className="h-4 w-4" />
+
                         نشر الرحلة
                       </>
                     )}
