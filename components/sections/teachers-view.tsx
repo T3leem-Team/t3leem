@@ -7,6 +7,7 @@ import {
 } from 'react'
 import {
   ArrowLeftRight,
+  History,
   Plus,
   Search,
   Trash2,
@@ -42,11 +43,24 @@ type Assignment = {
   courseId: string
   teacherId: string
   studentId: string
+  subjectId: string
+}
+
+type TeacherCourseSubject = {
+  courseId: string
+  teacherId: string
+  subjectId: string
+  subjectName: string
+}
+
+type ManagedCourse = Course & {
+  isClosed: boolean
+  closedAt: string | null
 }
 
 type TeachersCache = {
   teachers: Teacher[]
-  courses: Course[]
+  courses: ManagedCourse[]
   students: Student[]
   assignments: Assignment[]
   attendanceStatuses: AttendanceStatus[]
@@ -54,6 +68,7 @@ type TeachersCache = {
   allowTeacherTransfer: boolean
   allowTeacherRemove: boolean
   courseTeacherIds: Record<string, string[]>
+  teacherCourseSubjects: TeacherCourseSubject[]
 }
 
 let teachersCache: TeachersCache | null = null
@@ -87,6 +102,9 @@ function updateTeachersCache(
     courseTeacherIds:
       teachersCache?.courseTeacherIds ??
       {},
+    teacherCourseSubjects:
+      teachersCache?.teacherCourseSubjects ??
+      [],
     ...patch,
   }
 }
@@ -99,7 +117,7 @@ export function TeachersView() {
   )
 
   const [courses, setCourses] = useState<
-    Course[]
+    ManagedCourse[]
   >(
     teachersCache?.courses ?? [],
   )
@@ -131,6 +149,14 @@ export function TeachersView() {
       [],
   )
 
+  const [
+    teacherCourseSubjects,
+    setTeacherCourseSubjects,
+  ] = useState<TeacherCourseSubject[]>(
+    teachersCache?.teacherCourseSubjects ??
+      [],
+  )
+
   const [loading, setLoading] =
     useState(
       teachersCache === null,
@@ -146,9 +172,6 @@ export function TeachersView() {
     null,
   )
 
-  /*
-   * صلاحيات النقل والمسح القادمة من إعدادات الإشراف
-   */
   const [
     allowTeacherTransfer,
     setAllowTeacherTransfer,
@@ -185,6 +208,7 @@ export function TeachersView() {
       | 'students'
       | 'addStudents'
       | 'attendance'
+      | 'previousCourses'
     >('students')
 
   const [
@@ -238,16 +262,12 @@ export function TeachersView() {
       {},
   )
 
-  /*
-   * ---------------------------------------------------------
-   * تحميل البيانات
-   * ---------------------------------------------------------
-   *
-   * إذا كانت البيانات موجودة في الـcache:
-   * - لا نظهر loading
-   * - تظهر البيانات مباشرة
-   * - نحدثها في الخلفية
-   */
+  const [
+    selectedPreviousCourseId,
+    setSelectedPreviousCourseId,
+  ] = useState<string | null>(
+    null,
+  )
 
   const loadData = async (
     showLoading = false,
@@ -270,12 +290,6 @@ export function TeachersView() {
     setStatusMessage('')
 
     try {
-      /*
-       * تحميل إعدادات الإشراف
-       *
-       * إذا لم نستطع قراءة الإعدادات، نغلق
-       * النقل والمسح احتياطياً.
-       */
       const {
         data: supervisionSettings,
         error:
@@ -361,7 +375,7 @@ export function TeachersView() {
       } = await supabase
         .from('courses')
         .select(
-          'id, name, start_date, end_date, days, created_at',
+          'id, name, start_date, end_date, days, created_at, is_closed, closed_at',
         )
         .eq(
           'academic_year_id',
@@ -379,7 +393,7 @@ export function TeachersView() {
         return
       }
 
-      const mappedCourses: Course[] = (
+      const mappedCourses: ManagedCourse[] = (
         courseRows ?? []
       ).map((course) => ({
         id: course.id,
@@ -393,6 +407,10 @@ export function TeachersView() {
         )
           ? course.days
           : [],
+        isClosed:
+          Boolean(course.is_closed),
+        closedAt:
+          course.closed_at ?? null,
       }))
 
       setCourses(mappedCourses)
@@ -439,6 +457,209 @@ export function TeachersView() {
         courseTeacherRows =
           data ?? []
       }
+
+      /*
+       * -----------------------------------------------------
+       * المواد المرتبطة بالدورة والمعلمين
+       *
+       * الدورة
+       *   ↓
+       * المادة
+       *   ↓
+       * المعلم
+       *
+       * المادة تُجهز من إعدادات الدورة.
+       * صفحة المعلم لا تختار المادة.
+       * -----------------------------------------------------
+       */
+
+      let courseSubjectRows: {
+        id: string
+        course_id: string
+        subject_id: string
+      }[] = []
+
+      if (
+        courseIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('course_subjects')
+          .select(
+            'id, course_id, subject_id',
+          )
+          .in(
+            'course_id',
+            courseIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل مواد الدورات: ${error.message}`,
+          )
+
+          return
+        }
+
+        courseSubjectRows =
+          data ?? []
+      }
+
+      const subjectIds =
+        Array.from(
+          new Set(
+            courseSubjectRows.map(
+              (row) =>
+                row.subject_id,
+            ),
+          ),
+        )
+
+      let subjectRows: {
+        id: string
+        name: string
+        is_active: boolean
+      }[] = []
+
+      if (
+        subjectIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('subjects')
+          .select(
+            'id, name, is_active',
+          )
+          .in(
+            'id',
+            subjectIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل المواد الدراسية: ${error.message}`,
+          )
+
+          return
+        }
+
+        subjectRows =
+          data ?? []
+      }
+
+      let courseSubjectTeacherRows: {
+        id: string
+        course_subject_id: string
+        teacher_id: string
+      }[] = []
+
+      if (
+        courseSubjectRows.length >
+        0
+      ) {
+        const courseSubjectIds =
+          courseSubjectRows.map(
+            (row) => row.id,
+          )
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'course_subject_teachers',
+          )
+          .select(
+            'id, course_subject_id, teacher_id',
+          )
+          .in(
+            'course_subject_id',
+            courseSubjectIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل ارتباط المواد بالمعلمين: ${error.message}`,
+          )
+
+          return
+        }
+
+        courseSubjectTeacherRows =
+          data ?? []
+      }
+
+      const subjectMap =
+        new Map(
+          subjectRows.map(
+            (subject) => [
+              subject.id,
+              subject,
+            ],
+          ),
+        )
+
+      const courseSubjectMap =
+        new Map(
+          courseSubjectRows.map(
+            (row) => [
+              row.id,
+              row,
+            ],
+          ),
+        )
+
+      const mappedTeacherCourseSubjects: TeacherCourseSubject[] =
+        courseSubjectTeacherRows
+          .map((row) => {
+            const courseSubject =
+              courseSubjectMap.get(
+                row.course_subject_id,
+              )
+
+            if (!courseSubject) {
+              return null
+            }
+
+            const subject =
+              subjectMap.get(
+                courseSubject.subject_id,
+              )
+
+            if (!subject) {
+              return null
+            }
+
+            return {
+              courseId:
+                courseSubject.course_id,
+              teacherId:
+                row.teacher_id,
+              subjectId:
+                subject.id,
+              subjectName:
+                subject.name,
+            }
+          })
+          .filter(
+            (
+              item,
+            ): item is TeacherCourseSubject =>
+              item !== null,
+          )
+
+      setTeacherCourseSubjects(
+        mappedTeacherCourseSubjects,
+      )
+
+      updateTeachersCache({
+        teacherCourseSubjects:
+          mappedTeacherCourseSubjects,
+      })
 
       const teacherIds =
         Array.from(
@@ -550,7 +771,7 @@ export function TeachersView() {
         return
       }
 
-      const studentIds =
+      const enrolledStudentIds =
         Array.from(
           new Set(
             (
@@ -574,7 +795,8 @@ export function TeachersView() {
       }[] = []
 
       if (
-        studentIds.length > 0
+        enrolledStudentIds.length >
+        0
       ) {
         const {
           data,
@@ -586,7 +808,7 @@ export function TeachersView() {
           )
           .in(
             'id',
-            studentIds,
+            enrolledStudentIds,
           )
 
         if (error) {
@@ -610,6 +832,101 @@ export function TeachersView() {
             ],
           ),
         )
+
+      /*
+       * تحميل جميع التوزيعات، بما فيها توزيعات
+       * الدورات المغلقة، حتى تبقى البيانات التاريخية
+       * متاحة.
+       */
+      let rawAssignmentRows: {
+        id: string
+        course_id: string
+        teacher_id: string
+        student_id: string
+        subject_id: string
+      }[] = []
+
+      if (
+        courseIds.length > 0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'teacher_student_assignments',
+          )
+          .select(
+            'id, course_id, teacher_id, student_id, subject_id',
+          )
+          .in(
+            'course_id',
+            courseIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل توزيع الطلاب: ${error.message}`,
+          )
+
+          return
+        }
+
+        rawAssignmentRows =
+          data ?? []
+      }
+
+      const assignmentStudentIds =
+        Array.from(
+          new Set(
+            rawAssignmentRows.map(
+              (row) =>
+                row.student_id,
+            ),
+          ),
+        )
+
+      const missingStudentIds =
+        assignmentStudentIds.filter(
+          (studentId) =>
+            !studentMap.has(
+              studentId,
+            ),
+        )
+
+      if (
+        missingStudentIds.length >
+        0
+      ) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('students')
+          .select(
+            'id, student_id, name, personal_id, phone, status',
+          )
+          .in(
+            'id',
+            missingStudentIds,
+          )
+
+        if (error) {
+          setStatusMessage(
+            `خطأ في تحميل بعض الطلاب السابقين: ${error.message}`,
+          )
+
+          return
+        }
+
+        for (const student of data ??
+          []) {
+          studentMap.set(
+            student.id,
+            student,
+          )
+        }
+      }
 
       const mappedStudents: Student[] =
         (
@@ -664,6 +981,47 @@ export function TeachersView() {
               student !== null,
           )
 
+      const mappedStudentIds =
+        new Set(
+          mappedStudents.map(
+            (student) =>
+              student.id,
+          ),
+        )
+
+      for (const studentId of missingStudentIds) {
+        const student =
+          studentMap.get(
+            studentId,
+          )
+
+        if (
+          !student ||
+          mappedStudentIds.has(
+            studentId,
+          )
+        ) {
+          continue
+        }
+
+        mappedStudents.push({
+          id: student.id,
+          studentId:
+            student.student_id ??
+            '',
+          name: student.name,
+          personalId:
+            student.personal_id ??
+            '',
+          phone:
+            student.phone ??
+            '',
+          levelId: '',
+          levelName: '—',
+          enrollmentId: '',
+        })
+      }
+
       setStudents(
         mappedStudents,
       )
@@ -673,47 +1031,20 @@ export function TeachersView() {
           mappedStudents,
       })
 
-      let assignmentRows: Assignment[] =
-        []
-
-      if (
-        courseIds.length > 0
-      ) {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from(
-            'teacher_student_assignments',
-          )
-          .select(
-            'id, course_id, teacher_id, student_id',
-          )
-          .in(
-            'course_id',
-            courseIds,
-          )
-
-        if (error) {
-          setStatusMessage(
-            `خطأ في تحميل توزيع الطلاب: ${error.message}`,
-          )
-
-          return
-        }
-
-        assignmentRows = (
-          data ?? []
-        ).map((row) => ({
-          id: row.id,
-          courseId:
-            row.course_id,
-          teacherId:
-            row.teacher_id,
-          studentId:
-            row.student_id,
-        }))
-      }
+      const assignmentRows: Assignment[] =
+        rawAssignmentRows.map(
+          (row) => ({
+            id: row.id,
+            courseId:
+              row.course_id,
+            teacherId:
+              row.teacher_id,
+            studentId:
+              row.student_id,
+            subjectId:
+              row.subject_id,
+          }),
+        )
 
       setAssignments(
         assignmentRows,
@@ -816,18 +1147,6 @@ export function TeachersView() {
           mappedStatuses,
       })
 
-      if (
-        mappedStatuses.length ===
-        0
-      ) {
-        setStatusMessage(
-          `تم تسجيل الدخول، لكن Supabase لم يرجع حالات الحضور. عدد السجلات: ${
-            statusRows?.length ??
-            0
-          }`,
-        )
-      }
-
       let attendanceRows: {
         id: string
         student_id: string
@@ -914,14 +1233,6 @@ export function TeachersView() {
     }
   }
 
-  /*
-   * أول دخول:
-   * إذا لا يوجد cache يظهر loading.
-   *
-   * الرجوع للصفحة:
-   * البيانات موجودة بالفعل، لذلك تظهر فوراً
-   * و loadData يعمل بالخلفية.
-   */
   useEffect(() => {
     void loadData(
       teachersCache === null,
@@ -929,10 +1240,6 @@ export function TeachersView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /*
-   * إذا تغيرت بيانات الحضور من AttendanceView
-   * نحدث الـcache أيضاً.
-   */
   const updateAttendanceRecords = (
     value:
       | AttendanceRecord[]
@@ -958,6 +1265,11 @@ export function TeachersView() {
     )
   }
 
+  /*
+   * الدورة الحالية:
+   * نحافظ على منطق الصفحة الحالي:
+   * أول دورة في القائمة هي الدورة الحالية.
+   */
   const currentCourse =
     courses[0] ?? null
 
@@ -1008,6 +1320,36 @@ export function TeachersView() {
         selectedTeacherId,
     ) ?? null
 
+  /*
+   * المادة الحالية للمعلم.
+   * لا يوجد اختيار للمادة في هذه الصفحة.
+   */
+  const selectedTeacherSubjects =
+    currentCourse &&
+    selectedTeacherId
+      ? teacherCourseSubjects.filter(
+          (item) =>
+            item.courseId ===
+              currentCourse.id &&
+            item.teacherId ===
+              selectedTeacherId,
+        )
+      : []
+
+  const selectedTeacherSubject =
+    selectedTeacherSubjects[0] ??
+    null
+
+  const selectedTeacherSubjectNames =
+    Array.from(
+      new Set(
+        selectedTeacherSubjects.map(
+          (item) =>
+            item.subjectName,
+        ),
+      ),
+    )
+
   const assignedStudentIds =
     selectedTeacherId &&
     currentCourse
@@ -1035,10 +1377,18 @@ export function TeachersView() {
   const availableGrades =
     Array.from(
       new Set(
-        students.map(
-          (student) =>
-            student.levelName,
-        ),
+        students
+          .filter((student) =>
+            Boolean(
+              student.levelName &&
+                student.levelName !==
+                  '—',
+            ),
+          )
+          .map(
+            (student) =>
+              student.levelName,
+          ),
       ),
     ).sort((a, b) =>
       a.localeCompare(b, 'ar'),
@@ -1176,6 +1526,196 @@ export function TeachersView() {
     ).length
   }
 
+  /*
+   * الدورات السابقة للمعلم:
+   * فقط الدورات المغلقة في السنة الحالية
+   * والتي كان المعلم مرتبطًا بها.
+   */
+  const previousCoursesForTeacher =
+    useMemo(() => {
+      if (!selectedTeacherId) {
+        return []
+      }
+
+      return courses
+        .filter(
+          (course) =>
+            course.isClosed &&
+            course.id !==
+              currentCourse?.id &&
+            (
+              courseTeacherIds[
+                course.id
+              ] ?? []
+            ).includes(
+              selectedTeacherId,
+            ),
+        )
+        .map((course) => {
+          const subjects =
+            teacherCourseSubjects.filter(
+              (item) =>
+                item.courseId ===
+                  course.id &&
+                item.teacherId ===
+                  selectedTeacherId,
+            )
+
+          return {
+            course,
+            subjects,
+          }
+        })
+    }, [
+      courses,
+      selectedTeacherId,
+      currentCourse,
+      courseTeacherIds,
+      teacherCourseSubjects,
+    ])
+
+  const selectedPreviousCourse =
+    previousCoursesForTeacher.find(
+      (item) =>
+        item.course.id ===
+        selectedPreviousCourseId,
+    ) ??
+    previousCoursesForTeacher[0] ??
+    null
+
+  /*
+   * نسبة الحضور:
+   *
+   * حاضر + متأخر + مستأذن = حضور
+   * غائب = يدخل في المقام
+   * لم يسجل = لا يدخل في النسبة
+   *
+   * النقل والمسح لا يغيران أي سجل من attendance.
+   */
+  const getAttendancePercentage = (
+    courseId: string,
+    studentId: string,
+  ) => {
+    const statusMap =
+      new Map(
+        attendanceStatuses.map(
+          (status) => [
+            status.id,
+            status.name,
+          ],
+        ),
+      )
+
+    const records =
+      attendanceRecords.filter(
+        (record) =>
+          record.courseId ===
+            courseId &&
+          record.studentId ===
+            studentId,
+      )
+
+    /*
+     * إذا وجد أكثر من سجل لنفس اليوم،
+     * نستخدم آخر سجل حتى لا تتضاعف النسبة.
+     */
+    const dailyRecords =
+      new Map<
+        string,
+        AttendanceRecord
+      >()
+
+    for (const record of records) {
+      dailyRecords.set(
+        `${record.studentId}_${record.attendanceDate}`,
+        record,
+      )
+    }
+
+    let attended = 0
+    let absent = 0
+
+    for (const record of dailyRecords.values()) {
+      const status =
+        statusMap.get(
+          record.statusId,
+        )
+
+      if (
+        status === 'حاضر' ||
+        status === 'متأخر' ||
+        status === 'مستأذن'
+      ) {
+        attended += 1
+      } else if (
+        status === 'غائب'
+      ) {
+        absent += 1
+      }
+    }
+
+    const denominator =
+      attended + absent
+
+    if (denominator === 0) {
+      return null
+    }
+
+    return (
+      Math.round(
+        (attended /
+          denominator) *
+          1000,
+      ) / 10
+    )
+  }
+
+  const previousCourseAssignments =
+    selectedPreviousCourse
+      ? assignments.filter(
+          (assignment) =>
+            assignment.courseId ===
+              selectedPreviousCourse
+                .course.id &&
+            assignment.teacherId ===
+              selectedTeacherId,
+        )
+      : []
+
+  const previousCourseStudents =
+    previousCourseAssignments
+      .map((assignment) => {
+        const student =
+          students.find(
+            (item) =>
+              item.id ===
+              assignment.studentId,
+          )
+
+        if (!student) {
+          return null
+        }
+
+        return {
+          assignment,
+          student,
+          percentage:
+            getAttendancePercentage(
+              assignment.courseId,
+              assignment.studentId,
+            ),
+        }
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          assignment: Assignment
+          student: Student
+          percentage: number | null
+        } => item !== null,
+      )
+
   const openTeacher = (
     teacherId: string,
   ) => {
@@ -1200,6 +1740,24 @@ export function TeachersView() {
     setSelectedAttendanceDate(
       null,
     )
+
+    const previousCourses =
+      courses.filter(
+        (course) =>
+          course.isClosed &&
+          (
+            courseTeacherIds[
+              course.id
+            ] ?? []
+          ).includes(
+            teacherId,
+          ),
+      )
+
+    setSelectedPreviousCourseId(
+      previousCourses[0]?.id ??
+        null,
+    )
   }
 
   const closeTeacher = () => {
@@ -1222,12 +1780,18 @@ export function TeachersView() {
     setSelectedAttendanceDate(
       null,
     )
+
+    setSelectedPreviousCourseId(
+      null,
+    )
   }
 
   const openAddStudents = () => {
     setSelectedGrade('')
 
     setSelectedStudentIds([])
+
+    setStatusMessage('')
 
     setActivePanel(
       'addStudents',
@@ -1262,6 +1826,45 @@ export function TeachersView() {
       return
     }
 
+    /*
+     * المادة تُسحب تلقائيًا من إعدادات
+     * الدورة والمعلم.
+     */
+    if (
+      selectedTeacherSubjects.length ===
+      0
+    ) {
+      setStatusMessage(
+        'لا توجد مادة مخصصة لهذا المعلم في الدورة الحالية. يرجى ضبط المادة من إعدادات الدورة أولًا.',
+      )
+
+      return
+    }
+
+    if (
+      selectedTeacherSubjects.length >
+      1
+    ) {
+      setStatusMessage(
+        `هذا المعلم مرتبط بأكثر من مادة في الدورة الحالية: ${selectedTeacherSubjectNames.join(
+          '، ',
+        )}. يجب أن يكون للمعلم مادة واحدة قبل بدء تعيين الطلاب.`,
+      )
+
+      return
+    }
+
+    const subjectId =
+      selectedTeacherSubject?.subjectId
+
+    if (!subjectId) {
+      setStatusMessage(
+        'تعذر تحديد مادة المعلم تلقائيًا.',
+      )
+
+      return
+    }
+
     setSaving(true)
 
     setStatusMessage(
@@ -1276,7 +1879,7 @@ export function TeachersView() {
         'teacher_student_assignments',
       )
       .select(
-        'id, course_id, teacher_id, student_id',
+        'id, course_id, teacher_id, student_id, subject_id',
       )
       .eq(
         'course_id',
@@ -1308,6 +1911,8 @@ export function TeachersView() {
           row.teacher_id,
         studentId:
           row.student_id,
+        subjectId:
+          row.subject_id,
       }))
 
     const alreadyWithCurrentTeacher =
@@ -1390,6 +1995,8 @@ export function TeachersView() {
             selectedTeacherId,
           student_id:
             studentId,
+          subject_id:
+            subjectId,
         }),
       )
 
@@ -1400,7 +2007,7 @@ export function TeachersView() {
         )
         .insert(rows)
         .select(
-          'id, course_id, teacher_id, student_id',
+          'id, course_id, teacher_id, student_id, subject_id',
         )
 
     if (error) {
@@ -1422,6 +2029,8 @@ export function TeachersView() {
           row.teacher_id,
         studentId:
           row.student_id,
+        subjectId:
+          row.subject_id,
       }))
 
     setAssignments(
@@ -1463,14 +2072,86 @@ export function TeachersView() {
       return
     }
 
+    const assignment =
+      assignments.find(
+        (item) =>
+          item.courseId ===
+            currentCourse?.id &&
+          item.teacherId ===
+            selectedTeacherId &&
+          item.studentId ===
+            studentId,
+      )
+
+    if (!assignment) {
+      setStatusMessage(
+        'تعذر العثور على ربط الطالب الحالي.',
+      )
+
+      return
+    }
+
     setTransferStudentId(
       studentId,
     )
 
     setTransferTeacherId('')
 
+    setStatusMessage('')
+
     setIsTransferOpen(true)
   }
+
+  /*
+   * المعلمون المتاحون للنقل:
+   * أي معلم مرتبط بالدورة الحالية ما عدا المعلم الحالي.
+   *
+   * المادة لا تُختار يدويًا.
+   * عند النقل نأخذ مادة المعلم الجديد تلقائيًا.
+   */
+  const transferTeachers =
+    useMemo(() => {
+      if (
+        !selectedTeacher ||
+        !currentCourse
+      ) {
+        return []
+      }
+
+      return operationalTeachers
+        .filter(
+          (teacher) =>
+            teacher.id !==
+            selectedTeacher.id,
+        )
+        .map((teacher) => {
+          const subjects =
+            teacherCourseSubjects.filter(
+              (item) =>
+                item.courseId ===
+                  currentCourse.id &&
+                item.teacherId ===
+                  teacher.id,
+            )
+
+          return {
+            teacher,
+            subjects,
+          }
+        })
+    }, [
+      operationalTeachers,
+      selectedTeacher,
+      currentCourse,
+      teacherCourseSubjects,
+    ])
+
+  const selectedTransferTeacher =
+    transferTeachers.find(
+      (item) =>
+        item.teacher.id ===
+        transferTeacherId,
+    ) ?? null
 
   const saveTransfer = async () => {
     if (
@@ -1502,13 +2183,95 @@ export function TeachersView() {
       )
 
     if (!assignment) {
+      setStatusMessage(
+        'تعذر العثور على ربط الطالب الحالي.',
+      )
+
       return
     }
 
+    const targetTeacher =
+      transferTeachers.find(
+        (item) =>
+          item.teacher.id ===
+          transferTeacherId,
+      )
+
+    if (!targetTeacher) {
+      setStatusMessage(
+        'المعلم الجديد غير مرتبط بالدورة الحالية.',
+      )
+
+      return
+    }
+
+    /*
+     * عند النقل:
+     *
+     * المعلم القديم ❌
+     * المادة القديمة ❌
+     *
+     * المعلم الجديد ✅
+     * مادة المعلم الجديد ✅
+     *
+     * الحضور والغياب لا يتغير.
+     */
+    if (
+      targetTeacher.subjects.length ===
+      0
+    ) {
+      setStatusMessage(
+        'المعلم الجديد لا توجد له مادة مخصصة في هذه الدورة. يرجى ضبط المادة من إعدادات الدورة أولًا.',
+      )
+
+      return
+    }
+
+    if (
+      targetTeacher.subjects.length >
+      1
+    ) {
+      const subjectNames =
+        Array.from(
+          new Set(
+            targetTeacher.subjects.map(
+              (item) =>
+                item.subjectName,
+            ),
+          ),
+        )
+
+      setStatusMessage(
+        `لا يمكن نقل الطالب حاليًا لأن المعلم الجديد مرتبط بأكثر من مادة: ${subjectNames.join(
+          '، ',
+        )}. يجب تحديد مادة واحدة للمعلم من إعدادات الدورة.`,
+      )
+
+      return
+    }
+
+    const targetSubject =
+      targetTeacher.subjects[0]
+
+    if (!targetSubject?.subjectId) {
+      setStatusMessage(
+        'تعذر تحديد مادة المعلم الجديد.',
+      )
+
+      return
+    }
+
+    /*
+     * مهم:
+     * نحدث teacher_id و subject_id معًا.
+     *
+     * attendance غير مرتبط بهذا التعديل
+     * لذلك يبقى محفوظًا بدون أي تغيير.
+     */
     setSaving(true)
 
     setStatusMessage(
-      'جاري نقل الطالب...',
+      'جاري نقل الطالب وتحديث مادة المعلم...',
     )
 
     const {
@@ -1521,6 +2284,8 @@ export function TeachersView() {
       .update({
         teacher_id:
           transferTeacherId,
+        subject_id:
+          targetSubject.subjectId,
         updated_at:
           new Date().toISOString(),
       })
@@ -1529,7 +2294,7 @@ export function TeachersView() {
         assignment.id,
       )
       .select(
-        'id, course_id, teacher_id, student_id',
+        'id, course_id, teacher_id, student_id, subject_id',
       )
       .single()
 
@@ -1543,6 +2308,19 @@ export function TeachersView() {
       return
     }
 
+    const updatedAssignment: Assignment =
+      {
+        id: data.id,
+        courseId:
+          data.course_id,
+        teacherId:
+          data.teacher_id,
+        studentId:
+          data.student_id,
+        subjectId:
+          data.subject_id,
+      }
+
     setAssignments(
       (current) => {
         const next =
@@ -1550,15 +2328,7 @@ export function TeachersView() {
             (item) =>
               item.id ===
               assignment.id
-                ? {
-                    id: data.id,
-                    courseId:
-                      data.course_id,
-                    teacherId:
-                      data.teacher_id,
-                    studentId:
-                      data.student_id,
-                  }
+                ? updatedAssignment
                 : item,
           )
 
@@ -1579,7 +2349,7 @@ export function TeachersView() {
     setIsTransferOpen(false)
 
     setStatusMessage(
-      'تم نقل الطالب بنجاح ✅',
+      `تم نقل الطالب إلى ${targetTeacher.teacher.name} وتحديث المادة إلى ${targetSubject.subjectName} بنجاح ✅`,
     )
 
     setSaving(false)
@@ -1598,7 +2368,7 @@ export function TeachersView() {
 
       const confirmed =
         window.confirm(
-          `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء توزيع الطالب على المعلم فقط، ولن يتم حذف الطالب من النظام أو حذف سجلات حضوره.`,
+          `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء ربط الطالب بالمعلم والمادة فقط، ولن يتم حذف الطالب من النظام أو حذف أو تعديل أي سجل من سجلات الحضور والغياب.`,
         )
 
       if (!confirmed) {
@@ -1613,6 +2383,12 @@ export function TeachersView() {
         'جاري مسح الطالب من المعلم...',
       )
 
+      /*
+       * المسح يحذف الربط الحالي فقط.
+       *
+       * لا نلمس attendance نهائيًا.
+       * الطالب نفسه لا يُحذف.
+       */
       const { error } =
         await supabase
           .from(
@@ -1666,7 +2442,7 @@ export function TeachersView() {
       )
 
       setStatusMessage(
-        `تم مسح ${student.name} من المعلم بنجاح ✅`,
+        `تم مسح ${student.name} من المعلم والمادة بنجاح، وسجلات الحضور محفوظة كما هي ✅`,
       )
     }
 
@@ -1816,6 +2592,10 @@ export function TeachersView() {
                     </th>
 
                     <th className="px-4 py-3 text-right font-medium">
+                      المادة
+                    </th>
+
+                    <th className="px-4 py-3 text-right font-medium">
                       المستوى
                     </th>
 
@@ -1867,6 +2647,28 @@ export function TeachersView() {
                           ),
                         )
 
+                      const teacherSubjects =
+                        Array.from(
+                          new Set(
+                            teacherCourseSubjects
+                              .filter(
+                                (
+                                  item,
+                                ) =>
+                                  item.courseId ===
+                                    currentCourse?.id &&
+                                  item.teacherId ===
+                                    teacher.id,
+                              )
+                              .map(
+                                (
+                                  item,
+                                ) =>
+                                  item.subjectName,
+                              ),
+                          ),
+                        )
+
                       return (
                         <tr
                           key={
@@ -1897,6 +2699,34 @@ export function TeachersView() {
                                 teacher.name
                               }
                             </button>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            {teacherSubjects.length >
+                            0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {teacherSubjects.map(
+                                  (
+                                    subject,
+                                  ) => (
+                                    <span
+                                      key={
+                                        subject
+                                      }
+                                      className="rounded-full bg-muted px-2.5 py-1 text-xs"
+                                    >
+                                      {
+                                        subject
+                                      }
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                —
+                              </span>
+                            )}
                           </td>
 
                           <td className="px-4 py-4">
@@ -1954,7 +2784,27 @@ export function TeachersView() {
                   }
                 </h2>
 
-                <p className="text-sm text-muted-foreground">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>
+                    {currentCourse?.name ??
+                      '—'}
+                  </span>
+
+                  {selectedTeacherSubjectNames.length >
+                    0 && (
+                    <>
+                      <span>•</span>
+
+                      <span className="font-medium text-foreground">
+                        {selectedTeacherSubjectNames.join(
+                          '، ',
+                        )}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <p className="mt-1 text-sm text-muted-foreground">
                   {getStudentCount(
                     selectedTeacher.id,
                   )}{' '}
@@ -1988,6 +2838,21 @@ export function TeachersView() {
                     }
                   </p>
                 </div>
+
+                {selectedTeacherSubjectNames.length >
+                  0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      المادة
+                    </p>
+
+                    <p className="font-semibold">
+                      {selectedTeacherSubjectNames.join(
+                        '، ',
+                      )}
+                    </p>
+                  </div>
+                )}
 
                 {currentCourse && (
                   <>
@@ -2035,7 +2900,7 @@ export function TeachersView() {
             </div>
 
             <div className="border-b px-4 py-3 sm:px-6">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant={
                     activePanel ===
@@ -2074,6 +2939,31 @@ export function TeachersView() {
                   }}
                 >
                   الحضور والغياب
+                </Button>
+
+                <Button
+                  variant={
+                    activePanel ===
+                    'previousCourses'
+                      ? 'default'
+                      : 'outline'
+                  }
+                  onClick={() => {
+                    setActivePanel(
+                      'previousCourses',
+                    )
+
+                    const firstCourse =
+                      previousCoursesForTeacher[0]
+
+                    setSelectedPreviousCourseId(
+                      firstCourse?.course.id ??
+                        null,
+                    )
+                  }}
+                >
+                  <History className="size-4" />
+                  الدورات السابقة
                 </Button>
               </div>
             </div>
@@ -2263,6 +3153,29 @@ export function TeachersView() {
                       <p className="text-sm text-muted-foreground">
                         اختر الطلاب من الطلاب المسجلين في السنة الدراسية الحالية.
                       </p>
+
+                      <div className="mt-3 rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          سيتم الإضافة تلقائيًا إلى
+                        </p>
+
+                        <p className="mt-1 font-medium">
+                          {currentCourse?.name ??
+                            '—'}
+                        </p>
+
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          المادة:{' '}
+                          <span className="font-medium text-foreground">
+                            {selectedTeacherSubjectNames.length >
+                            0
+                              ? selectedTeacherSubjectNames.join(
+                                  '، ',
+                                )
+                              : 'غير محددة'}
+                          </span>
+                        </p>
+                      </div>
                     </div>
 
                     <Button
@@ -2277,6 +3190,33 @@ export function TeachersView() {
                       <X className="size-4" />
                     </Button>
                   </div>
+
+                  {selectedTeacherSubjects.length ===
+                    0 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      لا توجد مادة مخصصة لهذا المعلم في هذه الدورة.
+                      <br />
+                      يرجى تحديد المادة للمعلم من إعدادات الدورة قبل
+                      بدء تعيين الطلاب.
+                    </div>
+                  )}
+
+                  {selectedTeacherSubjects.length >
+                    1 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      المعلم مرتبط بأكثر من مادة في هذه الدورة:
+                      <span className="font-medium">
+                        {' '}
+                        {selectedTeacherSubjectNames.join(
+                          '، ',
+                        )}
+                      </span>
+                      .
+                      <br />
+                      لا يوجد اختيار مادة في هذه الصفحة، لذلك يجب أن
+                      تكون مادة المعلم محددة بشكل واحد من إعدادات الدورة.
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">
@@ -2455,7 +3395,9 @@ export function TeachersView() {
                       disabled={
                         saving ||
                         selectedStudentIds.length ===
-                          0
+                          0 ||
+                        selectedTeacherSubjects.length !==
+                          1
                       }
                     >
                       {saving
@@ -2504,6 +3446,233 @@ export function TeachersView() {
                   }
                 />
               )}
+
+              {activePanel ===
+                'previousCourses' && (
+                <div className="space-y-5">
+                  <div>
+                    <h3 className="font-semibold">
+                      الدورات السابقة
+                    </h3>
+
+                    <p className="text-sm text-muted-foreground">
+                      الدورات المغلقة لهذا المعلم في السنة الدراسية الحالية.
+                    </p>
+                  </div>
+
+                  {previousCoursesForTeacher.length ===
+                  0 ? (
+                    <div className="rounded-lg border border-dashed p-10 text-center">
+                      <History className="mx-auto size-8 text-muted-foreground" />
+
+                      <p className="mt-3 font-medium">
+                        لا توجد دورات سابقة
+                      </p>
+
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        لا توجد دورة مغلقة مرتبطة بهذا المعلم في السنة الحالية.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">
+                          الدورة السابقة
+                        </label>
+
+                        <select
+                          value={
+                            selectedPreviousCourseId ??
+                            ''
+                          }
+                          onChange={(
+                            event,
+                          ) =>
+                            setSelectedPreviousCourseId(
+                              event.target
+                                .value ||
+                                null,
+                            )
+                          }
+                          className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                        >
+                          {previousCoursesForTeacher.map(
+                            ({
+                              course,
+                              subjects,
+                            }) => (
+                              <option
+                                key={
+                                  course.id
+                                }
+                                value={
+                                  course.id
+                                }
+                              >
+                                {course.name}
+                                {subjects.length >
+                                0
+                                  ? ` — ${Array.from(
+                                      new Set(
+                                        subjects.map(
+                                          (
+                                            subject,
+                                          ) =>
+                                            subject.subjectName,
+                                        ),
+                                      ),
+                                    ).join(
+                                      '، ',
+                                    )}`
+                                  : ''}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </div>
+
+                      {selectedPreviousCourse && (
+                        <Card>
+                          <CardContent className="space-y-5 p-5">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div>
+                                <p className="text-xs text-muted-foreground">
+                                  الدورة
+                                </p>
+
+                                <h3 className="mt-1 text-lg font-semibold">
+                                  {
+                                    selectedPreviousCourse
+                                      .course
+                                      .name
+                                  }
+                                </h3>
+
+                                <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                                  {selectedPreviousCourse
+                                    .subjects
+                                    .length >
+                                    0 && (
+                                    <span className="rounded-full bg-muted px-3 py-1.5">
+                                      المادة:{' '}
+                                      {Array.from(
+                                        new Set(
+                                          selectedPreviousCourse.subjects.map(
+                                            (
+                                              subject,
+                                            ) =>
+                                              subject.subjectName,
+                                          ),
+                                        ),
+                                      ).join(
+                                        '، ',
+                                      )}
+                                    </span>
+                                  )}
+
+                                  <span className="rounded-full bg-muted px-3 py-1.5">
+                                    {selectedPreviousCourse
+                                      .course
+                                      .startDate
+                                      ? new Intl.DateTimeFormat(
+                                          'ar-BH',
+                                          {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                          },
+                                        ).format(
+                                          new Date(
+                                            `${selectedPreviousCourse.course.startDate}T00:00:00`,
+                                          ),
+                                        )
+                                      : '—'}{' '}
+                                    —{' '}
+                                    {selectedPreviousCourse
+                                      .course
+                                      .endDate
+                                      ? new Intl.DateTimeFormat(
+                                          'ar-BH',
+                                          {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                          },
+                                        ).format(
+                                          new Date(
+                                            `${selectedPreviousCourse.course.endDate}T00:00:00`,
+                                          ),
+                                        )
+                                      : '—'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <span className="rounded-full bg-muted px-3 py-1.5 text-sm">
+                                {previousCourseStudents.length}{' '}
+                                طالب
+                              </span>
+                            </div>
+
+                            {previousCourseStudents.length ===
+                            0 ? (
+                              <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+                                لا يوجد طلاب مسندون لهذا المعلم في هذه الدورة.
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto rounded-lg border">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-muted/50">
+                                    <tr>
+                                      <th className="px-4 py-3 text-right font-medium">
+                                        الطالب
+                                      </th>
+
+                                      <th className="px-4 py-3 text-right font-medium">
+                                        نسبة الحضور
+                                      </th>
+                                    </tr>
+                                  </thead>
+
+                                  <tbody>
+                                    {previousCourseStudents.map(
+                                      ({
+                                        assignment,
+                                        student,
+                                        percentage,
+                                      }) => (
+                                        <tr
+                                          key={
+                                            assignment.id
+                                          }
+                                          className="border-t"
+                                        >
+                                          <td className="px-4 py-3 font-medium">
+                                            {
+                                              student.name
+                                            }
+                                          </td>
+
+                                          <td className="px-4 py-3 font-semibold tabular-nums">
+                                            {percentage ===
+                                            null
+                                              ? '—'
+                                              : `${percentage}%`}
+                                          </td>
+                                        </tr>
+                                      ),
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2525,24 +3694,35 @@ export function TeachersView() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() =>
+                    onClick={() => {
                       setIsTransferOpen(
                         false,
                       )
-                    }
+
+                      setTransferStudentId(
+                        null,
+                      )
+
+                      setTransferTeacherId(
+                        '',
+                      )
+                    }}
+                    disabled={saving}
                   >
                     <X className="size-4" />
                   </Button>
                 </div>
 
                 <p className="text-sm text-muted-foreground">
-                  سيتم نقل الطالب من{' '}
+                  سيتم إلغاء الربط الحالي ونقل الطالب إلى المعلم الجديد.
+                  <br />
                   <span className="font-medium text-foreground">
-                    {
-                      selectedTeacher.name
-                    }
-                  </span>{' '}
-                  إلى المعلم الجديد.
+                    المادة ستتغير تلقائيًا إلى مادة المعلم الجديد.
+                  </span>
+                  <br />
+                  <span className="font-medium text-foreground">
+                    سجلات الحضور والغياب لن تتأثر.
+                  </span>
                 </p>
 
                 <div className="rounded-lg border bg-muted/30 p-4">
@@ -2557,6 +3737,56 @@ export function TeachersView() {
                       )?.name
                     }
                   </p>
+
+                  {(() => {
+                    const currentAssignment =
+                      assignments.find(
+                        (item) =>
+                          item.courseId ===
+                            currentCourse.id &&
+                          item.teacherId ===
+                            selectedTeacher.id &&
+                          item.studentId ===
+                            transferStudentId,
+                      )
+
+                    const currentSubject =
+                      currentAssignment
+                        ? teacherCourseSubjects.find(
+                            (item) =>
+                              item.courseId ===
+                                currentCourse.id &&
+                              item.teacherId ===
+                                selectedTeacher.id &&
+                              item.subjectId ===
+                                currentAssignment.subjectId,
+                          )
+                        : null
+
+                    return (
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <div>
+                          المعلم الحالي:{' '}
+                          <span className="font-medium text-foreground">
+                            {
+                              selectedTeacher.name
+                            }
+                          </span>
+                        </div>
+
+                        <div>
+                          المادة الحالية:{' '}
+                          <span className="font-medium text-foreground">
+                            {currentSubject?.subjectName ??
+                              selectedTeacherSubjectNames.join(
+                                '، ',
+                              ) ||
+                              '—'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="space-y-2">
@@ -2570,30 +3800,40 @@ export function TeachersView() {
                     }
                     onChange={(
                       event,
-                    ) =>
+                    ) => {
                       setTransferTeacherId(
                         event.target
                           .value,
                       )
-                    }
+
+                      setStatusMessage(
+                        '',
+                      )
+                    }}
                     className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
                   >
                     <option value="">
                       اختر المعلم
                     </option>
 
-                    {operationalTeachers
-                      .filter(
-                        (
-                          teacher,
-                        ) =>
-                          teacher.id !==
-                          selectedTeacher.id,
-                      )
-                      .map(
-                        (
-                          teacher,
-                        ) => (
+                    {transferTeachers.map(
+                      ({
+                        teacher,
+                        subjects,
+                      }) => {
+                        const subjectNames =
+                          Array.from(
+                            new Set(
+                              subjects.map(
+                                (
+                                  subject,
+                                ) =>
+                                  subject.subjectName,
+                              ),
+                            ),
+                          )
+
+                        return (
                           <option
                             key={
                               teacher.id
@@ -2602,23 +3842,73 @@ export function TeachersView() {
                               teacher.id
                             }
                           >
-                            {
-                              teacher.name
-                            }
+                            {teacher.name}
+                            {subjectNames.length >
+                            0
+                              ? ` — ${subjectNames.join(
+                                  '، ',
+                                )}`
+                              : ' — لا توجد مادة'}
                           </option>
-                        ),
-                      )}
+                        )
+                      },
+                    )}
                   </select>
                 </div>
+
+                {transferTeacherId && (
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      بعد النقل ستكون المادة
+                    </p>
+
+                    <p className="mt-1 font-medium">
+                      {selectedTransferTeacher &&
+                      selectedTransferTeacher
+                        .subjects.length ===
+                        1
+                        ? selectedTransferTeacher
+                            .subjects[0]
+                            .subjectName
+                        : selectedTransferTeacher
+                              ?.subjects.length ===
+                            0
+                          ? 'غير محددة'
+                          : 'أكثر من مادة'}
+                    </p>
+                  </div>
+                )}
+
+                {transferTeacherId &&
+                  selectedTransferTeacher &&
+                  selectedTransferTeacher
+                    .subjects.length !==
+                    1 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                      {selectedTransferTeacher
+                        .subjects.length ===
+                      0
+                        ? 'لا يمكن النقل إلى هذا المعلم قبل تحديد مادته في إعدادات الدورة.'
+                        : 'لا يمكن النقل لأن هذا المعلم مرتبط بأكثر من مادة في الدورة. يجب تحديد مادة واحدة للمعلم.'}
+                    </div>
+                  )}
 
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
                     variant="outline"
-                    onClick={() =>
+                    onClick={() => {
                       setIsTransferOpen(
                         false,
                       )
-                    }
+
+                      setTransferStudentId(
+                        null,
+                      )
+
+                      setTransferTeacherId(
+                        '',
+                      )
+                    }}
                     disabled={saving}
                   >
                     إلغاء
@@ -2630,7 +3920,11 @@ export function TeachersView() {
                     }
                     disabled={
                       saving ||
-                      !transferTeacherId
+                      !transferTeacherId ||
+                      !selectedTransferTeacher ||
+                      selectedTransferTeacher
+                        .subjects.length !==
+                        1
                     }
                   >
                     <ArrowLeftRight className="size-4" />
