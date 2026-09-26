@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   CalendarDays,
+  Download,
   Eye,
   Lock,
   Plus,
@@ -11,6 +12,8 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+
+import * as XLSX from 'xlsx'
 
 import { supabase } from '@/lib/supabase'
 
@@ -82,6 +85,44 @@ type SummaryData = {
   }
 }
 
+type ExportStudent = {
+  id: string
+  name: string
+  personalId: string
+  gender: string
+  age: string
+  phone: string
+  whatsapp: string
+  notes: string
+  healthNotes: string
+  levelName: string
+  className: string
+}
+
+type ExportAssignment = {
+  studentId: string
+  teacherId: string
+  teacherName: string
+  subjectName: string
+}
+
+type ExportAttendance = {
+  student_id: string
+  attendance_date: string
+  status_id: string
+  note: string | null
+}
+
+type ExportStatus = {
+  id: string
+  name: string
+}
+
+type ExportLesson = {
+  date: string
+  dayName: string
+}
+
 const days: { value: DayOfWeek; label: string }[] = [
   { value: 'sunday', label: 'الأحد' },
   { value: 'monday', label: 'الاثنين' },
@@ -117,6 +158,20 @@ const formatDate = (value: string | null) => {
   }
 }
 
+const formatExcelDate = (value: string | null) => {
+  if (!value) return ''
+
+  try {
+    return new Intl.DateTimeFormat('ar-BH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(`${value}T00:00:00`))
+  } catch {
+    return value
+  }
+}
+
 const getDayNumber = (date: Date): DayOfWeek => {
   const map: DayOfWeek[] = [
     'sunday',
@@ -129,6 +184,15 @@ const getDayNumber = (date: Date): DayOfWeek => {
   ]
 
   return map[date.getDay()]
+}
+
+const getDayLabel = (
+  day: DayOfWeek,
+) => {
+  return (
+    days.find((item) => item.value === day)
+      ?.label ?? ''
+  )
 }
 
 const countLessonDays = (
@@ -179,6 +243,77 @@ const countLessonDays = (
   return count
 }
 
+const getLessonDates = (
+  startDate: string,
+  endDate: string,
+  courseDays: DayOfWeek[],
+): ExportLesson[] => {
+  if (!startDate || !endDate || courseDays.length === 0) {
+    return []
+  }
+
+  const start = new Date(`${startDate}T00:00:00`)
+  const end = new Date(`${endDate}T00:00:00`)
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    start > end
+  ) {
+    return []
+  }
+
+  const today = new Date()
+
+  const todayOnly = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  )
+
+  const effectiveEnd = end < todayOnly ? end : todayOnly
+
+  if (start > effectiveEnd) {
+    return []
+  }
+
+  const result: ExportLesson[] = []
+  const current = new Date(start)
+
+  while (current <= effectiveEnd) {
+    const day = getDayNumber(current)
+
+    if (courseDays.includes(day)) {
+      const year = current.getFullYear()
+      const month = String(
+        current.getMonth() + 1,
+      ).padStart(2, '0')
+      const date = String(
+        current.getDate(),
+      ).padStart(2, '0')
+
+      result.push({
+        date: `${year}-${month}-${date}`,
+        dayName: getDayLabel(day),
+      })
+    }
+
+    current.setDate(current.getDate() + 1)
+  }
+
+  return result
+}
+
+const safeFileName = (
+  value: string,
+) => {
+  return value
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, '-')
+    .slice(0, 100)
+}
+
 export default function Page() {
   const [years, setYears] = useState<AcademicYear[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
@@ -189,23 +324,38 @@ export default function Page() {
   const [loadingSubjects, setLoadingSubjects] = useState(true)
 
   const [saving, setSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [closingId, setClosingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null)
+  const [closingId, setClosingId] =
+    useState<string | null>(null)
 
-  const [supabaseStatus, setSupabaseStatus] = useState('')
+  const [exportingExcel, setExportingExcel] =
+    useState(false)
 
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [supabaseStatus, setSupabaseStatus] =
+    useState('')
 
-  const [yearName, setYearName] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [annualFee, setAnnualFee] = useState('')
+  const [showForm, setShowForm] =
+    useState(false)
+  const [editingId, setEditingId] =
+    useState<string | null>(null)
 
-  const [courses, setCourses] = useState<Course[]>([])
+  const [yearName, setYearName] =
+    useState('')
+  const [startDate, setStartDate] =
+    useState('')
+  const [endDate, setEndDate] =
+    useState('')
+  const [annualFee, setAnnualFee] =
+    useState('')
 
-  const [selectedSummaryCourse, setSelectedSummaryCourse] =
-    useState<Course | null>(null)
+  const [courses, setCourses] =
+    useState<Course[]>([])
+
+  const [
+    selectedSummaryCourse,
+    setSelectedSummaryCourse,
+  ] = useState<Course | null>(null)
 
   const [summaryData, setSummaryData] =
     useState<SummaryData | null>(null)
@@ -220,7 +370,9 @@ export default function Page() {
       const { data, error } = await supabase
         .from('teachers')
         .select('id, name, is_active')
-        .order('name', { ascending: true })
+        .order('name', {
+          ascending: true,
+        })
 
       if (error) {
         setSupabaseStatus(
@@ -230,13 +382,15 @@ export default function Page() {
         return
       }
 
-      const mapped: Teacher[] = (data ?? []).map(
-        (teacher) => ({
-          id: teacher.id,
-          name: teacher.name ?? '',
-          isActive: Boolean(teacher.is_active),
-        }),
-      )
+      const mapped: Teacher[] = (
+        data ?? []
+      ).map((teacher) => ({
+        id: teacher.id,
+        name: teacher.name ?? '',
+        isActive: Boolean(
+          teacher.is_active,
+        ),
+      }))
 
       mapped.sort((a, b) =>
         a.name.localeCompare(b.name, 'ar'),
@@ -256,7 +410,9 @@ export default function Page() {
       const { data, error } = await supabase
         .from('subjects')
         .select('id, name, is_active')
-        .order('name', { ascending: true })
+        .order('name', {
+          ascending: true,
+        })
 
       if (error) {
         setSupabaseStatus(
@@ -266,13 +422,15 @@ export default function Page() {
         return
       }
 
-      const mapped: Subject[] = (data ?? []).map(
-        (subject) => ({
-          id: subject.id,
-          name: subject.name ?? '',
-          isActive: Boolean(subject.is_active),
-        }),
-      )
+      const mapped: Subject[] = (
+        data ?? []
+      ).map((subject) => ({
+        id: subject.id,
+        name: subject.name ?? '',
+        isActive: Boolean(
+          subject.is_active,
+        ),
+      }))
 
       mapped.sort((a, b) =>
         a.name.localeCompare(b.name, 'ar'),
@@ -293,7 +451,9 @@ export default function Page() {
       .select(
         'id, name, start_date, end_date, annual_fee, created_at',
       )
-      .order('created_at', { ascending: false })
+      .order('created_at', {
+        ascending: false,
+      })
 
     if (error) {
       setSupabaseStatus(
@@ -307,7 +467,9 @@ export default function Page() {
 
     if (academicYears.length === 0) {
       setYears([])
-      setSupabaseStatus('متصل بـ Supabase ✅')
+      setSupabaseStatus(
+        'متصل بـ Supabase ✅',
+      )
       setLoadingYears(false)
       return
     }
@@ -324,7 +486,10 @@ export default function Page() {
       .select(
         'id, academic_year_id, name, start_date, end_date, days, is_closed, closed_at, created_at',
       )
-      .in('academic_year_id', yearIds)
+      .in(
+        'academic_year_id',
+        yearIds,
+      )
       .order('created_at', {
         ascending: true,
       })
@@ -337,9 +502,9 @@ export default function Page() {
       return
     }
 
-    const courseIds = (courseData ?? []).map(
-      (course) => course.id,
-    )
+    const courseIds = (
+      courseData ?? []
+    ).map((course) => course.id)
 
     let courseTeacherData: {
       course_id: string
@@ -363,8 +528,13 @@ export default function Page() {
         error: relationError,
       } = await supabase
         .from('course_teachers')
-        .select('course_id, teacher_id')
-        .in('course_id', courseIds)
+        .select(
+          'course_id, teacher_id',
+        )
+        .in(
+          'course_id',
+          courseIds,
+        )
 
       if (relationError) {
         setSupabaseStatus(
@@ -374,15 +544,21 @@ export default function Page() {
         return
       }
 
-      courseTeacherData = relationData ?? []
+      courseTeacherData =
+        relationData ?? []
 
       const {
         data: courseSubjects,
         error: courseSubjectsError,
       } = await supabase
         .from('course_subjects')
-        .select('id, course_id, subject_id')
-        .in('course_id', courseIds)
+        .select(
+          'id, course_id, subject_id',
+        )
+        .in(
+          'course_id',
+          courseIds,
+        )
 
       if (courseSubjectsError) {
         setSupabaseStatus(
@@ -392,18 +568,24 @@ export default function Page() {
         return
       }
 
-      courseSubjectData = courseSubjects ?? []
+      courseSubjectData =
+        courseSubjects ?? []
 
-      const courseSubjectIds = courseSubjectData.map(
-        (item) => item.id,
-      )
+      const courseSubjectIds =
+        courseSubjectData.map(
+          (item) => item.id,
+        )
 
-      if (courseSubjectIds.length > 0) {
+      if (
+        courseSubjectIds.length > 0
+      ) {
         const {
           data: subjectTeacherData,
           error: subjectTeacherError,
         } = await supabase
-          .from('course_subject_teachers')
+          .from(
+            'course_subject_teachers',
+          )
           .select(
             'course_subject_id, teacher_id',
           )
@@ -427,10 +609,13 @@ export default function Page() {
 
     const mappedYears: AcademicYear[] =
       academicYears.map((year) => {
-        const yearCourses = (courseData ?? [])
+        const yearCourses = (
+          courseData ?? []
+        )
           .filter(
             (course) =>
-              course.academic_year_id === year.id,
+              course.academic_year_id ===
+              year.id,
           )
           .map((course) => {
             const legacyTeacherIds =
@@ -448,13 +633,15 @@ export default function Page() {
             const courseSubjects =
               courseSubjectData.filter(
                 (item) =>
-                  item.course_id === course.id,
+                  item.course_id ===
+                  course.id,
               )
 
             const assignments: TeacherAssignment[] =
               []
 
-            const teacherIds = new Set<string>()
+            const teacherIds =
+              new Set<string>()
 
             courseSubjectTeacherData
               .filter((relation) =>
@@ -483,7 +670,8 @@ export default function Page() {
                       relation.course_subject_id,
                   )
 
-                if (!courseSubject) return
+                if (!courseSubject)
+                  return
 
                 if (existing) {
                   if (
@@ -508,7 +696,9 @@ export default function Page() {
 
             legacyTeacherIds.forEach(
               (teacherId) => {
-                teacherIds.add(teacherId)
+                teacherIds.add(
+                  teacherId,
+                )
 
                 if (
                   !assignments.some(
@@ -530,28 +720,35 @@ export default function Page() {
               name: course.name ?? '',
               startDate:
                 course.start_date ?? '',
-              endDate: course.end_date ?? '',
-              days: Array.isArray(course.days)
+              endDate:
+                course.end_date ?? '',
+              days: Array.isArray(
+                course.days,
+              )
                 ? (course.days as DayOfWeek[])
                 : [],
-              teacherIds: Array.from(
-                teacherIds,
-              ),
+              teacherIds:
+                Array.from(
+                  teacherIds,
+                ),
               teacherAssignments:
                 assignments,
               isClosed: Boolean(
                 course.is_closed,
               ),
               closedAt:
-                course.closed_at ?? null,
+                course.closed_at ??
+                null,
             }
           })
 
         return {
           id: year.id,
           name: year.name ?? '',
-          startDate: year.start_date ?? '',
-          endDate: year.end_date ?? '',
+          startDate:
+            year.start_date ?? '',
+          endDate:
+            year.end_date ?? '',
           annualFee: Number(
             year.annual_fee ?? 0,
           ),
@@ -560,7 +757,9 @@ export default function Page() {
       })
 
     setYears(mappedYears)
-    setSupabaseStatus('متصل بـ Supabase ✅')
+    setSupabaseStatus(
+      'متصل بـ Supabase ✅',
+    )
     setLoadingYears(false)
   }
 
@@ -584,7 +783,9 @@ export default function Page() {
     return source.map((course) => ({
       ...course,
       days: [...course.days],
-      teacherIds: [...course.teacherIds],
+      teacherIds: [
+        ...course.teacherIds,
+      ],
       teacherAssignments:
         course.teacherAssignments.map(
           (assignment) => ({
@@ -619,7 +820,9 @@ export default function Page() {
     setAnnualFee(
       String(year.annualFee ?? ''),
     )
-    setCourses(cloneCourses(year.courses))
+    setCourses(
+      cloneCourses(year.courses),
+    )
     setSupabaseStatus('')
     setShowForm(true)
   }
@@ -652,25 +855,6 @@ export default function Page() {
     setShowForm(true)
   }
 
-  /*
-   * حفظ علاقات الدورة:
-   *
-   * 1. نقرأ العلاقات الحالية.
-   * 2. نحذف ربط المواد بالمعلمين للدورة.
-   * 3. نحذف course_subjects التي لم تعد مستخدمة.
-   * 4. نُبقي المواد الموجودة والمستخدمة.
-   * 5. نضيف المواد الجديدة.
-   * 6. نعيد بناء course_subject_teachers.
-   * 7. نعيد بناء course_teachers.
-   *
-   * مهم:
-   * هذه العملية لا تمس:
-   * - students
-   * - enrollments
-   * - attendance
-   * - teacher_student_assignments
-   * - subjects نفسها
-   */
   const saveCourseRelations = async (
     courseId: string,
     course: Course,
@@ -678,21 +862,26 @@ export default function Page() {
     const normalizedAssignments =
       course.teacherAssignments
         .map((assignment) => ({
-          teacherId: assignment.teacherId,
+          teacherId:
+            assignment.teacherId,
           subjectIds: Array.from(
-            new Set(assignment.subjectIds),
+            new Set(
+              assignment.subjectIds,
+            ),
           ),
         }))
         .filter(
           (assignment) =>
             assignment.teacherId &&
-            assignment.subjectIds.length > 0,
+            assignment.subjectIds
+              .length > 0,
         )
 
     const teacherIds = Array.from(
       new Set(
         normalizedAssignments.map(
-          (item) => item.teacherId,
+          (item) =>
+            item.teacherId,
         ),
       ),
     )
@@ -701,18 +890,23 @@ export default function Page() {
       Array.from(
         new Set(
           normalizedAssignments.flatMap(
-            (item) => item.subjectIds,
+            (item) =>
+              item.subjectIds,
           ),
         ),
       )
 
     const {
       data: existingSubjects,
-      error: existingSubjectsError,
+      error:
+        existingSubjectsError,
     } = await supabase
       .from('course_subjects')
       .select('id, subject_id')
-      .eq('course_id', courseId)
+      .eq(
+        'course_id',
+        courseId,
+      )
 
     if (existingSubjectsError) {
       return existingSubjectsError
@@ -721,51 +915,43 @@ export default function Page() {
     const existingSubjectRows =
       existingSubjects ?? []
 
-    /*
-     * نحذف أولاً جميع ربط المواد بالمعلمين
-     * لأن course_subjects لا يمكن حذفها وهي
-     * ما زالت مرتبطة بها.
-     */
     const existingCourseSubjectIds =
       existingSubjectRows.map(
         (item) => item.id,
       )
 
     if (
-      existingCourseSubjectIds.length > 0
+      existingCourseSubjectIds.length >
+      0
     ) {
       const {
-        error: deleteSubjectTeachersError,
+        error:
+          deleteSubjectTeachersError,
       } = await supabase
-        .from('course_subject_teachers')
+        .from(
+          'course_subject_teachers',
+        )
         .delete()
         .in(
           'course_subject_id',
           existingCourseSubjectIds,
         )
 
-      if (deleteSubjectTeachersError) {
+      if (
+        deleteSubjectTeachersError
+      ) {
         return deleteSubjectTeachersError
       }
     }
 
-    /*
-     * المواد الموجودة حالياً في الدورة والتي
-     * ما زالت مستخدمة نحتفظ بها.
-     */
     const subjectsToKeep =
-      existingSubjectRows.filter((item) =>
-        selectedSubjectIds.includes(
-          item.subject_id,
-        ),
+      existingSubjectRows.filter(
+        (item) =>
+          selectedSubjectIds.includes(
+            item.subject_id,
+          ),
       )
 
-    /*
-     * المواد التي لم تعد مستخدمة في الدورة.
-     * نحذف ربطها بالدورة فقط.
-     *
-     * لا نحذف السجل من subjects.
-     */
     const subjectsToDelete =
       existingSubjectRows.filter(
         (item) =>
@@ -774,9 +960,12 @@ export default function Page() {
           ),
       )
 
-    if (subjectsToDelete.length > 0) {
+    if (
+      subjectsToDelete.length > 0
+    ) {
       const {
-        error: deleteUnusedSubjectsError,
+        error:
+          deleteUnusedSubjectsError,
       } = await supabase
         .from('course_subjects')
         .delete()
@@ -787,15 +976,13 @@ export default function Page() {
           ),
         )
 
-      if (deleteUnusedSubjectsError) {
+      if (
+        deleteUnusedSubjectsError
+      ) {
         return deleteUnusedSubjectsError
       }
     }
 
-    /*
-     * نضيف المواد الجديدة التي لم تكن موجودة
-     * سابقاً في الدورة.
-     */
     const subjectsToInsert =
       selectedSubjectIds.filter(
         (subjectId) =>
@@ -806,16 +993,21 @@ export default function Page() {
           ),
       )
 
-    if (subjectsToInsert.length > 0) {
+    if (
+      subjectsToInsert.length > 0
+    ) {
       const {
-        error: insertSubjectsError,
+        error:
+          insertSubjectsError,
       } = await supabase
         .from('course_subjects')
         .insert(
           subjectsToInsert.map(
             (subjectId) => ({
-              course_id: courseId,
-              subject_id: subjectId,
+              course_id:
+                courseId,
+              subject_id:
+                subjectId,
             }),
           ),
         )
@@ -825,37 +1017,37 @@ export default function Page() {
       }
     }
 
-    /*
-     * نعيد تحميل course_subjects بعد
-     * الإضافة والحذف حتى تكون IDs محدثة.
-     */
     const {
       data: refreshedSubjects,
-      error: refreshedSubjectsError,
+      error:
+        refreshedSubjectsError,
     } = await supabase
       .from('course_subjects')
       .select('id, subject_id')
-      .eq('course_id', courseId)
+      .eq(
+        'course_id',
+        courseId,
+      )
 
     if (refreshedSubjectsError) {
       return refreshedSubjectsError
     }
 
     const subjectIdToCourseSubjectId =
-      new Map<string, string>()
+      new Map<
+        string,
+        string
+      >()
 
-    ;(refreshedSubjects ?? []).forEach(
-      (item) => {
-        subjectIdToCourseSubjectId.set(
-          item.subject_id,
-          item.id,
-        )
-      },
-    )
+    ;(
+      refreshedSubjects ?? []
+    ).forEach((item) => {
+      subjectIdToCourseSubjectId.set(
+        item.subject_id,
+        item.id,
+      )
+    })
 
-    /*
-     * إعادة بناء ربط المادة بالمعلمين.
-     */
     const subjectTeacherRows: {
       course_subject_id: string
       teacher_id: string
@@ -883,44 +1075,50 @@ export default function Page() {
       }
     }
 
-    /*
-     * حماية إضافية من أي تكرار.
-     */
     const uniqueSubjectTeacherRows =
       Array.from(
         new Map(
-          subjectTeacherRows.map((row) => [
-            `${row.course_subject_id}:${row.teacher_id}`,
-            row,
-          ]),
+          subjectTeacherRows.map(
+            (row) => [
+              `${row.course_subject_id}:${row.teacher_id}`,
+              row,
+            ],
+          ),
         ).values(),
       )
 
     if (
-      uniqueSubjectTeacherRows.length > 0
+      uniqueSubjectTeacherRows.length >
+      0
     ) {
       const {
-        error: insertSubjectTeachersError,
+        error:
+          insertSubjectTeachersError,
       } = await supabase
-        .from('course_subject_teachers')
+        .from(
+          'course_subject_teachers',
+        )
         .insert(
           uniqueSubjectTeacherRows,
         )
 
-      if (insertSubjectTeachersError) {
+      if (
+        insertSubjectTeachersError
+      ) {
         return insertSubjectTeachersError
       }
     }
 
-    /*
-     * إعادة بناء course_teachers.
-     */
     const {
-      error: deleteCourseTeachersError,
+      error:
+        deleteCourseTeachersError,
     } = await supabase
       .from('course_teachers')
       .delete()
-      .eq('course_id', courseId)
+      .eq(
+        'course_id',
+        courseId,
+      )
 
     if (deleteCourseTeachersError) {
       return deleteCourseTeachersError
@@ -928,17 +1126,24 @@ export default function Page() {
 
     if (teacherIds.length > 0) {
       const {
-        error: insertCourseTeachersError,
+        error:
+          insertCourseTeachersError,
       } = await supabase
         .from('course_teachers')
         .insert(
-          teacherIds.map((teacherId) => ({
-            course_id: courseId,
-            teacher_id: teacherId,
-          })),
+          teacherIds.map(
+            (teacherId) => ({
+              course_id:
+                courseId,
+              teacher_id:
+                teacherId,
+            }),
+          ),
         )
 
-      if (insertCourseTeachersError) {
+      if (
+        insertCourseTeachersError
+      ) {
         return insertCourseTeachersError
       }
     }
@@ -960,40 +1165,53 @@ export default function Page() {
 
       if (!course.name.trim()) {
         setSupabaseStatus(
-          `يرجى إدخال اسم الدورة ${index + 1}`,
+          `يرجى إدخال اسم الدورة ${
+            index + 1
+          }`,
         )
         return false
       }
 
       if (course.days.length === 0) {
         setSupabaseStatus(
-          `يرجى اختيار يوم واحد على الأقل للدورة ${index + 1}`,
+          `يرجى اختيار يوم واحد على الأقل للدورة ${
+            index + 1
+          }`,
         )
         return false
       }
 
       if (
-        course.teacherAssignments.length ===
-        0
+        course.teacherAssignments
+          .length === 0
       ) {
         setSupabaseStatus(
-          `يرجى إضافة معلم واحد على الأقل للدورة ${index + 1}`,
+          `يرجى إضافة معلم واحد على الأقل للدورة ${
+            index + 1
+          }`,
         )
         return false
       }
 
       for (const assignment of course.teacherAssignments) {
-        if (assignment.subjectIds.length === 0) {
-          const teacher = teachers.find(
-            (item) =>
-              item.id ===
-              assignment.teacherId,
-          )
+        if (
+          assignment.subjectIds
+            .length === 0
+        ) {
+          const teacher =
+            teachers.find(
+              (item) =>
+                item.id ===
+                assignment.teacherId,
+            )
 
           setSupabaseStatus(
             `المادة إجبارية للمعلم "${
-              teacher?.name ?? 'المعلم'
-            }" في الدورة ${index + 1}`,
+              teacher?.name ??
+              'المعلم'
+            }" في الدورة ${
+              index + 1
+            }`,
           )
 
           return false
@@ -1005,7 +1223,8 @@ export default function Page() {
   }
 
   const handleSave = async () => {
-    const trimmedName = yearName.trim()
+    const trimmedName =
+      yearName.trim()
 
     const parsedAnnualFee =
       annualFee.trim() === ''
@@ -1020,7 +1239,9 @@ export default function Page() {
     }
 
     if (
-      !Number.isFinite(parsedAnnualFee) ||
+      !Number.isFinite(
+        parsedAnnualFee,
+      ) ||
       parsedAnnualFee < 0
     ) {
       setSupabaseStatus(
@@ -1034,7 +1255,9 @@ export default function Page() {
     }
 
     setSaving(true)
-    setSupabaseStatus('جاري الحفظ...')
+    setSupabaseStatus(
+      'جاري الحفظ...',
+    )
 
     try {
       if (editingId !== null) {
@@ -1045,9 +1268,12 @@ export default function Page() {
           .from('academic_years')
           .update({
             name: trimmedName,
-            start_date: startDate || null,
-            end_date: endDate || null,
-            annual_fee: parsedAnnualFee,
+            start_date:
+              startDate || null,
+            end_date:
+              endDate || null,
+            annual_fee:
+              parsedAnnualFee,
           })
           .eq('id', editingId)
           .select(
@@ -1062,25 +1288,27 @@ export default function Page() {
           return
         }
 
-        const savedCourses: Course[] = []
+        const savedCourses: Course[] =
+          []
 
         for (const course of courses) {
           let courseId = course.id
 
-          /*
-           * الدورة المغلقة لا يتم تعديلها إطلاقاً.
-           */
           if (courseId) {
             if (course.isClosed) {
               savedCourses.push({
                 ...course,
-                days: [...course.days],
+                days: [
+                  ...course.days,
+                ],
                 teacherIds: [
                   ...course.teacherIds,
                 ],
                 teacherAssignments:
                   course.teacherAssignments.map(
-                    (assignment) => ({
+                    (
+                      assignment,
+                    ) => ({
                       teacherId:
                         assignment.teacherId,
                       subjectIds: [
@@ -1095,40 +1323,53 @@ export default function Page() {
 
             const {
               data: updatedCourse,
-              error: updateCourseError,
+              error:
+                updateCourseError,
             } = await supabase
               .from('courses')
               .update({
                 name: course.name.trim(),
                 start_date:
-                  course.startDate || null,
+                  course.startDate ||
+                  null,
                 end_date:
-                  course.endDate || null,
+                  course.endDate ||
+                  null,
                 days: course.days,
               })
-              .eq('id', courseId)
+              .eq(
+                'id',
+                courseId,
+              )
               .eq(
                 'academic_year_id',
                 editingId,
               )
-              .eq('is_closed', false)
+              .eq(
+                'is_closed',
+                false,
+              )
               .select(
                 'id, name, start_date, end_date, days, is_closed, closed_at',
               )
               .single()
 
-            if (updateCourseError) {
+            if (
+              updateCourseError
+            ) {
               setSupabaseStatus(
                 `خطأ في حفظ الدورة "${course.name}": ${updateCourseError.message}`,
               )
               return
             }
 
-            courseId = updatedCourse.id
+            courseId =
+              updatedCourse.id
           } else {
             const {
               data: insertedCourse,
-              error: insertCourseError,
+              error:
+                insertCourseError,
             } = await supabase
               .from('courses')
               .insert({
@@ -1136,9 +1377,11 @@ export default function Page() {
                   editingId,
                 name: course.name.trim(),
                 start_date:
-                  course.startDate || null,
+                  course.startDate ||
+                  null,
                 end_date:
-                  course.endDate || null,
+                  course.endDate ||
+                  null,
                 days: course.days,
               })
               .select(
@@ -1146,14 +1389,17 @@ export default function Page() {
               )
               .single()
 
-            if (insertCourseError) {
+            if (
+              insertCourseError
+            ) {
               setSupabaseStatus(
                 `خطأ في إضافة الدورة "${course.name}": ${insertCourseError.message}`,
               )
               return
             }
 
-            courseId = insertedCourse.id
+            courseId =
+              insertedCourse.id
           }
 
           if (!courseId) {
@@ -1179,9 +1425,13 @@ export default function Page() {
           savedCourses.push({
             id: courseId,
             name: course.name.trim(),
-            startDate: course.startDate,
-            endDate: course.endDate,
-            days: [...course.days],
+            startDate:
+              course.startDate,
+            endDate:
+              course.endDate,
+            days: [
+              ...course.days,
+            ],
             teacherIds: [
               ...new Set(
                 course.teacherAssignments.map(
@@ -1192,7 +1442,9 @@ export default function Page() {
             ],
             teacherAssignments:
               course.teacherAssignments.map(
-                (assignment) => ({
+                (
+                  assignment,
+                ) => ({
                   teacherId:
                     assignment.teacherId,
                   subjectIds: [
@@ -1205,24 +1457,33 @@ export default function Page() {
           })
         }
 
-        const mappedUpdatedYear: AcademicYear = {
-          id: updatedYear.id,
-          name: updatedYear.name ?? '',
-          startDate:
-            updatedYear.start_date ?? '',
-          endDate:
-            updatedYear.end_date ?? '',
-          annualFee: Number(
-            updatedYear.annual_fee ?? 0,
-          ),
-          courses: savedCourses,
-        }
+        const mappedUpdatedYear: AcademicYear =
+          {
+            id: updatedYear.id,
+            name:
+              updatedYear.name ??
+              '',
+            startDate:
+              updatedYear.start_date ??
+              '',
+            endDate:
+              updatedYear.end_date ??
+              '',
+            annualFee: Number(
+              updatedYear.annual_fee ??
+                0,
+            ),
+            courses:
+              savedCourses,
+          }
 
         setYears((current) =>
-          current.map((year) =>
-            year.id === editingId
-              ? mappedUpdatedYear
-              : year,
+          current.map(
+            (year) =>
+              year.id ===
+              editingId
+                ? mappedUpdatedYear
+                : year,
           ),
         )
 
@@ -1235,13 +1496,17 @@ export default function Page() {
       }
 
       const {
-        error: resetCurrentError,
+        error:
+          resetCurrentError,
       } = await supabase
         .from('academic_years')
         .update({
           is_current: false,
         })
-        .eq('is_current', true)
+        .eq(
+          'is_current',
+          true,
+        )
 
       if (resetCurrentError) {
         setSupabaseStatus(
@@ -1257,9 +1522,12 @@ export default function Page() {
         .from('academic_years')
         .insert({
           name: trimmedName,
-          start_date: startDate || null,
-          end_date: endDate || null,
-          annual_fee: parsedAnnualFee,
+          start_date:
+            startDate || null,
+          end_date:
+            endDate || null,
+          annual_fee:
+            parsedAnnualFee,
           is_current: true,
           is_active: true,
         })
@@ -1275,21 +1543,26 @@ export default function Page() {
         return
       }
 
-      const savedCourses: Course[] = []
+      const savedCourses: Course[] =
+        []
 
       for (const course of courses) {
         const {
           data: insertedCourse,
-          error: insertCourseError,
+          error:
+            insertCourseError,
         } = await supabase
           .from('courses')
           .insert({
-            academic_year_id: newYear.id,
+            academic_year_id:
+              newYear.id,
             name: course.name.trim(),
             start_date:
-              course.startDate || null,
+              course.startDate ||
+              null,
             end_date:
-              course.endDate || null,
+              course.endDate ||
+              null,
             days: course.days,
           })
           .select(
@@ -1319,11 +1592,15 @@ export default function Page() {
 
         savedCourses.push({
           id: insertedCourse.id,
-          name: insertedCourse.name ?? '',
+          name:
+            insertedCourse.name ??
+            '',
           startDate:
-            insertedCourse.start_date ?? '',
+            insertedCourse.start_date ??
+            '',
           endDate:
-            insertedCourse.end_date ?? '',
+            insertedCourse.end_date ??
+            '',
           days: Array.isArray(
             insertedCourse.days,
           )
@@ -1332,13 +1609,16 @@ export default function Page() {
           teacherIds: [
             ...new Set(
               course.teacherAssignments.map(
-                (item) => item.teacherId,
+                (item) =>
+                  item.teacherId,
               ),
             ),
           ],
           teacherAssignments:
             course.teacherAssignments.map(
-              (assignment) => ({
+              (
+                assignment,
+              ) => ({
                 teacherId:
                   assignment.teacherId,
                 subjectIds: [
@@ -1351,18 +1631,22 @@ export default function Page() {
         })
       }
 
-      const mappedNewYear: AcademicYear = {
-        id: newYear.id,
-        name: newYear.name ?? '',
-        startDate:
-          newYear.start_date ?? '',
-        endDate:
-          newYear.end_date ?? '',
-        annualFee: Number(
-          newYear.annual_fee ?? 0,
-        ),
-        courses: savedCourses,
-      }
+      const mappedNewYear: AcademicYear =
+        {
+          id: newYear.id,
+          name:
+            newYear.name ?? '',
+          startDate:
+            newYear.start_date ?? '',
+          endDate:
+            newYear.end_date ?? '',
+          annualFee: Number(
+            newYear.annual_fee ??
+              0,
+          ),
+          courses:
+            savedCourses,
+        }
 
       setYears((current) => [
         mappedNewYear,
@@ -1382,27 +1666,40 @@ export default function Page() {
   const closeCourse = async (
     course: Course,
   ) => {
-    if (!course.id || course.isClosed) {
+    if (
+      !course.id ||
+      course.isClosed
+    ) {
       return
     }
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من إغلاق دورة "${course.name}"؟\n\nبعد الإغلاق لن يمكن تعديل الدورة أو تغيير المعلمين والمواد المرتبطة بها.\n\nلن يتم حذف أي بيانات.`,
-    )
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من إغلاق دورة "${course.name}"؟\n\nبعد الإغلاق لن يمكن تعديل الدورة أو تغيير المعلمين والمواد المرتبطة بها.\n\nلن يتم حذف أي بيانات.`,
+      )
 
     if (!confirmed) return
 
     setClosingId(course.id)
-    setSupabaseStatus('جاري إغلاق الدورة...')
+    setSupabaseStatus(
+      'جاري إغلاق الدورة...',
+    )
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from('courses')
       .update({
         is_closed: true,
-        closed_at: new Date().toISOString(),
+        closed_at:
+          new Date().toISOString(),
       })
       .eq('id', course.id)
-      .eq('is_closed', false)
+      .eq(
+        'is_closed',
+        false,
+      )
       .select(
         'id, is_closed, closed_at',
       )
@@ -1419,20 +1716,23 @@ export default function Page() {
     setYears((current) =>
       current.map((year) => ({
         ...year,
-        courses: year.courses.map(
-          (item) =>
-            item.id === course.id
-              ? {
-                  ...item,
-                  isClosed: Boolean(
-                    data.is_closed,
-                  ),
-                  closedAt:
-                    data.closed_at ??
-                    null,
-                }
-              : item,
-        ),
+        courses:
+          year.courses.map(
+            (item) =>
+              item.id ===
+              course.id
+                ? {
+                    ...item,
+                    isClosed:
+                      Boolean(
+                        data.is_closed,
+                      ),
+                    closedAt:
+                      data.closed_at ??
+                      null,
+                  }
+                : item,
+          ),
       })),
     )
 
@@ -1443,7 +1743,8 @@ export default function Page() {
               ...item,
               isClosed: true,
               closedAt:
-                data.closed_at ?? null,
+                data.closed_at ??
+                null,
             }
           : item,
       ),
@@ -1468,88 +1769,129 @@ export default function Page() {
     try {
       const {
         data: assignments,
-        error: assignmentsError,
+        error:
+          assignmentsError,
       } = await supabase
-        .from('teacher_student_assignments')
+        .from(
+          'teacher_student_assignments',
+        )
         .select('student_id')
-        .eq('course_id', course.id)
+        .eq(
+          'course_id',
+          course.id,
+        )
 
       if (assignmentsError) {
         throw assignmentsError
       }
 
-      const studentIds = Array.from(
-        new Set(
-          (assignments ?? []).map(
-            (item) => item.student_id,
+      const studentIds =
+        Array.from(
+          new Set(
+            (assignments ?? []).map(
+              (item) =>
+                item.student_id,
+            ),
           ),
-        ),
-      )
+        )
 
-      const subjectIds = Array.from(
-        new Set(
-          course.teacherAssignments.flatMap(
-            (item) => item.subjectIds,
+      const subjectIds =
+        Array.from(
+          new Set(
+            course.teacherAssignments.flatMap(
+              (item) =>
+                item.subjectIds,
+            ),
           ),
-        ),
-      )
+        )
 
-      const teacherIds = Array.from(
-        new Set(course.teacherIds),
-      )
+      const teacherIds =
+        Array.from(
+          new Set(
+            course.teacherIds,
+          ),
+        )
 
-      const lessonDays = countLessonDays(
-        course.startDate,
-        course.endDate,
-        course.days,
-      )
+      const lessonDays =
+        countLessonDays(
+          course.startDate,
+          course.endDate,
+          course.days,
+        )
 
       const {
         data: attendanceRows,
-        error: attendanceError,
+        error:
+          attendanceError,
       } = await supabase
         .from('attendance')
         .select(
           'student_id, attendance_date, status_id',
         )
-        .eq('course_id', course.id)
+        .eq(
+          'course_id',
+          course.id,
+        )
 
       if (attendanceError) {
         throw attendanceError
       }
 
-      const statusIds = Array.from(
-        new Set(
-          (attendanceRows ?? []).map(
-            (row) => row.status_id,
+      const statusIds =
+        Array.from(
+          new Set(
+            (
+              attendanceRows ??
+              []
+            ).map(
+              (row) =>
+                row.status_id,
+            ),
           ),
-        ),
-      )
+        )
 
-      let statusMap = new Map<
-        string,
-        string
-      >()
+      let statusMap =
+        new Map<
+          string,
+          string
+        >()
 
-      if (statusIds.length > 0) {
+      if (
+        statusIds.length > 0
+      ) {
         const {
           data: statuses,
-          error: statusesError,
+          error:
+            statusesError,
         } = await supabase
-          .from('attendance_statuses')
+          .from(
+            'attendance_statuses',
+          )
           .select('id, name')
-          .in('id', statusIds)
+          .in(
+            'id',
+            statusIds,
+          )
 
         if (statusesError) {
           throw statusesError
         }
 
-        statusMap = new Map(
-          (statuses ?? []).map((status) => [
-            status.id,
-            status.name ?? '',
-          ]),
-        )
+        statusMap =
+          new Map(
+            (
+              statuses ??
+              []
+            ).map(
+              (
+                status,
+              ) => [
+                status.id,
+                status.name ??
+                  '',
+              ],
+            ),
+          )
       }
 
       let present = 0
@@ -1557,45 +1899,63 @@ export default function Page() {
       let late = 0
       let excused = 0
 
-      ;(attendanceRows ?? []).forEach(
-        (row) => {
-          const status = statusMap.get(
+      ;(
+        attendanceRows ?? []
+      ).forEach((row) => {
+        const status =
+          statusMap.get(
             row.status_id,
           )
 
-          if (status === 'حاضر') {
-            present += 1
-          } else if (status === 'غائب') {
-            absent += 1
-          } else if (status === 'متأخر') {
-            late += 1
-          } else if (status === 'مستأذن') {
-            excused += 1
-          }
-        },
-      )
+        if (
+          status === 'حاضر'
+        ) {
+          present += 1
+        } else if (
+          status === 'غائب'
+        ) {
+          absent += 1
+        } else if (
+          status === 'متأخر'
+        ) {
+          late += 1
+        } else if (
+          status === 'مستأذن'
+        ) {
+          excused += 1
+        }
+      })
 
       const expectedRecords =
-        studentIds.length * lessonDays
+        studentIds.length *
+        lessonDays
 
       const recordedCount =
-        (attendanceRows ?? []).length
+        (
+          attendanceRows ?? []
+        ).length
 
-      const notRecorded = Math.max(
-        0,
-        expectedRecords - recordedCount,
-      )
+      const notRecorded =
+        Math.max(
+          0,
+          expectedRecords -
+            recordedCount,
+        )
 
       const attended =
-        present + late + excused
+        present +
+        late +
+        excused
 
       const denominator =
-        attended + absent
+        attended +
+        absent
 
       const percentage =
         denominator > 0
           ? Math.round(
-              (attended / denominator) *
+              (attended /
+                denominator) *
                 1000,
             ) / 10
           : 0
@@ -1631,6 +1991,1015 @@ export default function Page() {
     }
   }
 
+  const downloadCourseExcel = async (
+    course: Course,
+  ) => {
+    if (!course.id) {
+      return
+    }
+
+    setExportingExcel(true)
+    setSupabaseStatus(
+      'جاري تجهيز ملف Excel الكامل للدورة...',
+    )
+
+    try {
+      /*
+       * 1) جميع تعيينات الطلاب في الدورة.
+       */
+      const {
+        data: assignmentRows,
+        error:
+          assignmentError,
+      } = await supabase
+        .from(
+          'teacher_student_assignments',
+        )
+        .select(
+          'student_id, teacher_id, subject_id',
+        )
+        .eq(
+          'course_id',
+          course.id,
+        )
+
+      if (assignmentError) {
+        throw assignmentError
+      }
+
+      const rawAssignments =
+        assignmentRows ?? []
+
+      const studentIds =
+        Array.from(
+          new Set(
+            rawAssignments.map(
+              (row) =>
+                row.student_id,
+            ),
+          ),
+        )
+
+      const teacherIds =
+        Array.from(
+          new Set(
+            rawAssignments.map(
+              (row) =>
+                row.teacher_id,
+            ),
+          ),
+        )
+
+      const subjectIds =
+        Array.from(
+          new Set(
+            rawAssignments.map(
+              (row) =>
+                row.subject_id,
+            ),
+          ),
+        )
+
+      /*
+       * 2) بيانات الطلاب.
+       */
+      let students: ExportStudent[] =
+        []
+
+      if (
+        studentIds.length > 0
+      ) {
+        const {
+          data: studentRows,
+          error:
+            studentsError,
+        } = await supabase
+          .from('students')
+          .select(
+            'id, name, personal_id, gender, age, phone, whatsapp, notes, health_notes',
+          )
+          .in(
+            'id',
+            studentIds,
+          )
+
+        if (studentsError) {
+          throw studentsError
+        }
+
+        /*
+         * 3) التسجيلات لمعرفة المستوى والصف.
+         */
+        const {
+          data: enrollmentRows,
+          error:
+            enrollmentsError,
+        } = await supabase
+          .from('enrollments')
+          .select(
+            'student_id, level_id, class_id',
+          )
+          .eq(
+            'academic_year_id',
+            (
+              await supabase
+                .from('courses')
+                .select(
+                  'academic_year_id',
+                )
+                .eq(
+                  'id',
+                  course.id,
+                )
+                .single()
+            ).data?.academic_year_id ??
+              '',
+          )
+          .in(
+            'student_id',
+            studentIds,
+          )
+
+        if (enrollmentsError) {
+          throw enrollmentsError
+        }
+
+        const levelIds =
+          Array.from(
+            new Set(
+              (
+                enrollmentRows ??
+                []
+              )
+                .map(
+                  (row) =>
+                    row.level_id,
+                )
+                .filter(Boolean),
+            ),
+          )
+
+        const classIds =
+          Array.from(
+            new Set(
+              (
+                enrollmentRows ??
+                []
+              )
+                .map(
+                  (row) =>
+                    row.class_id,
+                )
+                .filter(Boolean),
+            ),
+          )
+
+        let levelMap =
+          new Map<
+            string,
+            string
+          >()
+
+        let classMap =
+          new Map<
+            string,
+            string
+          >()
+
+        if (
+          levelIds.length > 0
+        ) {
+          const {
+            data: levelRows,
+            error:
+              levelsError,
+          } = await supabase
+            .from('levels')
+            .select(
+              'id, name',
+            )
+            .in(
+              'id',
+              levelIds,
+            )
+
+          if (levelsError) {
+            throw levelsError
+          }
+
+          levelMap =
+            new Map(
+              (
+                levelRows ??
+                []
+              ).map(
+                (
+                  row,
+                ) => [
+                  row.id,
+                  row.name ??
+                    '',
+                ],
+              ),
+            )
+        }
+
+        if (
+          classIds.length > 0
+        ) {
+          const {
+            data: classRows,
+            error:
+              classesError,
+          } = await supabase
+            .from('classes')
+            .select(
+              'id, name',
+            )
+            .in(
+              'id',
+              classIds,
+            )
+
+          if (classesError) {
+            throw classesError
+          }
+
+          classMap =
+            new Map(
+              (
+                classRows ??
+                []
+              ).map(
+                (
+                  row,
+                ) => [
+                  row.id,
+                  row.name ??
+                    '',
+                ],
+              ),
+            )
+        }
+
+        const enrollmentMap =
+          new Map<
+            string,
+            {
+              levelName: string
+              className: string
+            }
+          >()
+
+        ;(
+          enrollmentRows ??
+          []
+        ).forEach(
+          (row) => {
+            enrollmentMap.set(
+              row.student_id,
+              {
+                levelName:
+                  row.level_id
+                    ? levelMap.get(
+                        row.level_id,
+                      ) ?? ''
+                    : '',
+                className:
+                  row.class_id
+                    ? classMap.get(
+                        row.class_id,
+                      ) ?? ''
+                    : '',
+              },
+            )
+          },
+        )
+
+        students = (
+          studentRows ?? []
+        ).map(
+          (student) => {
+            const enrollment =
+              enrollmentMap.get(
+                student.id,
+              )
+
+            return {
+              id: student.id,
+              name:
+                student.name ??
+                '',
+              personalId:
+                student.personal_id ??
+                '',
+              gender:
+                student.gender ??
+                '',
+              age:
+                student.age !=
+                null
+                  ? String(
+                      student.age,
+                    )
+                  : '',
+              phone:
+                student.phone ??
+                '',
+              whatsapp:
+                student.whatsapp ??
+                '',
+              notes:
+                student.notes ??
+                '',
+              healthNotes:
+                student.health_notes ??
+                '',
+              levelName:
+                enrollment
+                  ?.levelName ??
+                '',
+              className:
+                enrollment
+                  ?.className ??
+                '',
+            }
+          },
+        )
+      }
+
+      /*
+       * 4) أسماء المعلمين والمواد.
+       */
+      let teacherMap =
+        new Map<
+          string,
+          string
+        >()
+
+      let subjectMap =
+        new Map<
+          string,
+          string
+        >()
+
+      if (
+        teacherIds.length > 0
+      ) {
+        const {
+          data: teacherRows,
+          error:
+            teacherError,
+        } = await supabase
+          .from('teachers')
+          .select(
+            'id, name',
+          )
+          .in(
+            'id',
+            teacherIds,
+          )
+
+        if (teacherError) {
+          throw teacherError
+        }
+
+        teacherMap =
+          new Map(
+            (
+              teacherRows ??
+              []
+            ).map(
+              (
+                row,
+              ) => [
+                row.id,
+                row.name ??
+                  '',
+              ],
+            ),
+          )
+      }
+
+      if (
+        subjectIds.length > 0
+      ) {
+        const {
+          data: subjectRows,
+          error:
+            subjectError,
+        } = await supabase
+          .from('subjects')
+          .select(
+            'id, name',
+          )
+          .in(
+            'id',
+            subjectIds,
+          )
+
+        if (subjectError) {
+          throw subjectError
+        }
+
+        subjectMap =
+          new Map(
+            (
+              subjectRows ??
+              []
+            ).map(
+              (
+                row,
+              ) => [
+                row.id,
+                row.name ??
+                  '',
+              ],
+            ),
+          )
+      }
+
+      const assignments: ExportAssignment[] =
+        rawAssignments.map(
+          (row) => ({
+            studentId:
+              row.student_id,
+            teacherId:
+              row.teacher_id,
+            teacherName:
+              teacherMap.get(
+                row.teacher_id,
+              ) ?? '',
+            subjectName:
+              subjectMap.get(
+                row.subject_id,
+              ) ?? '',
+          }),
+        )
+
+      /*
+       * 5) جميع أيام الدروس الفعلية.
+       */
+      const lessonDates =
+        getLessonDates(
+          course.startDate,
+          course.endDate,
+          course.days,
+        )
+
+      /*
+       * 6) جميع سجلات الحضور للدورة.
+       *
+       * نقرأ note أيضاً حتى يظهر في Excel.
+       */
+      const {
+        data: attendanceRows,
+        error:
+          attendanceError,
+      } = await supabase
+        .from('attendance')
+        .select(
+          'student_id, attendance_date, status_id, note',
+        )
+        .eq(
+          'course_id',
+          course.id,
+        )
+
+      if (attendanceError) {
+        throw attendanceError
+      }
+
+      const rawAttendance =
+        (attendanceRows ??
+          []) as ExportAttendance[]
+
+      const attendanceStatusIds =
+        Array.from(
+          new Set(
+            rawAttendance.map(
+              (row) =>
+                row.status_id,
+            ),
+          ),
+        )
+
+      let statusMap =
+        new Map<
+          string,
+          string
+        >()
+
+      if (
+        attendanceStatusIds.length >
+        0
+      ) {
+        const {
+          data: statusRows,
+          error:
+            statusError,
+        } = await supabase
+          .from(
+            'attendance_statuses',
+          )
+          .select(
+            'id, name',
+          )
+          .in(
+            'id',
+            attendanceStatusIds,
+          )
+
+        if (statusError) {
+          throw statusError
+        }
+
+        statusMap =
+          new Map(
+            (
+              statusRows ??
+              []
+            ).map(
+              (
+                row: ExportStatus,
+              ) => [
+                row.id,
+                row.name ??
+                  '',
+              ],
+            ),
+          )
+      }
+
+      /*
+       * 7) فهرس سريع للحضور:
+       *
+       * studentId + date
+       */
+      const attendanceMap =
+        new Map<
+          string,
+          ExportAttendance
+        >()
+
+      rawAttendance.forEach(
+        (row) => {
+          const date =
+            String(
+              row.attendance_date,
+            ).slice(0, 10)
+
+          attendanceMap.set(
+            `${row.student_id}|${date}`,
+            row,
+          )
+        },
+      )
+
+      /*
+       * 8) فهرس التعيينات.
+       */
+      const assignmentMap =
+        new Map<
+          string,
+          ExportAssignment
+        >()
+
+      assignments.forEach(
+        (assignment) => {
+          assignmentMap.set(
+            assignment.studentId,
+            assignment,
+          )
+        },
+      )
+
+      /*
+       * 9) ورقة ملخص الطلاب.
+       */
+      const summaryRows =
+        students.map(
+          (student, index) => {
+            const studentAssignment =
+              assignmentMap.get(
+                student.id,
+              )
+
+            let present = 0
+            let absent = 0
+            let late = 0
+            let excused = 0
+            let notRecorded = 0
+
+            lessonDates.forEach(
+              (lesson) => {
+                const attendance =
+                  attendanceMap.get(
+                    `${student.id}|${lesson.date}`,
+                  )
+
+                if (!attendance) {
+                  notRecorded += 1
+                  return
+                }
+
+                const status =
+                  statusMap.get(
+                    attendance.status_id,
+                  )
+
+                if (
+                  status ===
+                  'حاضر'
+                ) {
+                  present += 1
+                } else if (
+                  status ===
+                  'غائب'
+                ) {
+                  absent += 1
+                } else if (
+                  status ===
+                  'متأخر'
+                ) {
+                  late += 1
+                } else if (
+                  status ===
+                  'مستأذن'
+                ) {
+                  excused += 1
+                } else if (
+                  status ===
+                  'لم يسجل'
+                ) {
+                  notRecorded += 1
+                }
+              },
+            )
+
+            const attended =
+              present +
+              late +
+              excused
+
+            const denominator =
+              attended +
+              absent
+
+            const percentage =
+              denominator >
+              0
+                ? Math.round(
+                    (attended /
+                      denominator) *
+                      1000,
+                  ) / 10
+                : 0
+
+            return {
+              '#':
+                index + 1,
+              'اسم الطالب':
+                student.name,
+              'الرقم الشخصي':
+                student.personalId,
+              'الجنس':
+                student.gender,
+              'العمر':
+                student.age,
+              'الهاتف':
+                student.phone,
+              'الواتساب':
+                student.whatsapp,
+              'المستوى':
+                student.levelName,
+              'الصف':
+                student.className,
+              'المعلم':
+                studentAssignment
+                  ?.teacherName ??
+                '',
+              'المادة':
+                studentAssignment
+                  ?.subjectName ??
+                '',
+              'حاضر':
+                present,
+              'غائب':
+                absent,
+              'متأخر':
+                late,
+              'مستأذن':
+                excused,
+              'لم يسجل':
+                notRecorded,
+              'إجمالي أيام الدروس':
+                lessonDates.length,
+              'أيام محتسبة للنسبة':
+                denominator,
+              'نسبة الحضور':
+                `${percentage}%`,
+              'ملاحظات الطالب':
+                student.notes,
+              'الملاحظات الصحية':
+                student.healthNotes,
+            }
+          },
+        )
+
+      /*
+       * 10) ورقة التفاصيل اليومية.
+       *
+       * كل صف = طالب + يوم درس.
+       */
+      const detailRows: Record<
+        string,
+        string | number
+      >[] = []
+
+      students.forEach(
+        (student, studentIndex) => {
+          const studentAssignment =
+            assignmentMap.get(
+              student.id,
+            )
+
+          lessonDates.forEach(
+            (lesson, lessonIndex) => {
+              const attendance =
+                attendanceMap.get(
+                  `${student.id}|${lesson.date}`,
+                )
+
+              const status =
+                attendance
+                  ? statusMap.get(
+                      attendance.status_id,
+                    ) ?? ''
+                  : 'لم يسجل'
+
+              detailRows.push({
+                '#':
+                  detailRows.length +
+                  1,
+                'رقم الطالب':
+                  studentIndex + 1,
+                'اسم الطالب':
+                  student.name,
+                'الرقم الشخصي':
+                  student.personalId,
+                'المستوى':
+                  student.levelName,
+                'الصف':
+                  student.className,
+                'المعلم':
+                  studentAssignment
+                    ?.teacherName ??
+                  '',
+                'المادة':
+                  studentAssignment
+                    ?.subjectName ??
+                  '',
+                'رقم الحصة':
+                  lessonIndex + 1,
+                'تاريخ الدرس':
+                  formatExcelDate(
+                    lesson.date,
+                  ),
+                'اليوم':
+                  lesson.dayName,
+                'الحالة':
+                  status,
+                'ملاحظة الحضور':
+                  attendance
+                    ?.note ??
+                  '',
+              })
+            },
+          )
+        },
+      )
+
+      /*
+       * 11) ورقة بيانات الدورة.
+       */
+      const teacherSubjectRows =
+        course.teacherAssignments.flatMap(
+          (assignment) => {
+            const teacherName =
+              teacherMap.get(
+                assignment.teacherId,
+              ) ??
+              teachers.find(
+                (teacher) =>
+                  teacher.id ===
+                  assignment.teacherId,
+              )?.name ??
+              ''
+
+            return assignment.subjectIds.map(
+              (subjectId) => ({
+                المعلم:
+                  teacherName,
+                المادة:
+                  subjectMap.get(
+                    subjectId,
+                  ) ??
+                  subjects.find(
+                    (subject) =>
+                      subject.id ===
+                      subjectId,
+                  )?.name ??
+                  '',
+              }),
+            )
+          },
+        )
+
+      const courseInfoRows = [
+        {
+          'اسم الدورة':
+            course.name,
+          'حالة الدورة':
+            course.isClosed
+              ? 'مغلقة'
+              : 'مفتوحة',
+          'من':
+            formatExcelDate(
+              course.startDate,
+            ),
+          'إلى':
+            formatExcelDate(
+              course.endDate,
+            ),
+          'أيام الدورة':
+            getDaysLabel(course),
+          'عدد أيام الدروس':
+            lessonDates.length,
+          'عدد الطلاب':
+            students.length,
+          'عدد المعلمين':
+            teacherIds.length,
+          'عدد المواد':
+            subjectIds.length,
+          'تاريخ الإغلاق':
+            formatDate(
+              course.closedAt,
+            ),
+        },
+      ]
+
+      const courseTeachersRows =
+        teacherSubjectRows.length >
+        0
+          ? teacherSubjectRows
+          : [
+              {
+                المعلم: '',
+                المادة: '',
+              },
+            ]
+
+      /*
+       * 12) إنشاء ملف Excel.
+       */
+      const workbook =
+        XLSX.utils.book_new()
+
+      const summarySheet =
+        XLSX.utils.json_to_sheet(
+          summaryRows,
+        )
+
+      const detailSheet =
+        XLSX.utils.json_to_sheet(
+          detailRows,
+        )
+
+      const courseSheet =
+        XLSX.utils.json_to_sheet(
+          courseInfoRows,
+        )
+
+      const teacherSheet =
+        XLSX.utils.json_to_sheet(
+          courseTeachersRows,
+        )
+
+      /*
+       * عرض أعمدة مناسب.
+       */
+      summarySheet['!cols'] = [
+        { wch: 5 },
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 30 },
+        { wch: 30 },
+      ]
+
+      detailSheet['!cols'] = [
+        { wch: 7 },
+        { wch: 12 },
+        { wch: 28 },
+        { wch: 18 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 22 },
+        { wch: 12 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 35 },
+      ]
+
+      courseSheet['!cols'] = [
+        { wch: 25 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 45 },
+        { wch: 18 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 24 },
+      ]
+
+      teacherSheet['!cols'] = [
+        { wch: 30 },
+        { wch: 30 },
+      ]
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        summarySheet,
+        'ملخص الطلاب',
+      )
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        detailSheet,
+        'تفاصيل الحضور',
+      )
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        courseSheet,
+        'بيانات الدورة',
+      )
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        teacherSheet,
+        'المعلمون والمواد',
+      )
+
+      /*
+       * 13) تنزيل الملف.
+       */
+      const fileName = `${safeFileName(
+        course.name ||
+          'الدورة',
+      )}-تفاصيل-الدورة.xlsx`
+
+      XLSX.writeFile(
+        workbook,
+        fileName,
+      )
+
+      setSupabaseStatus(
+        'تم تنزيل ملف Excel الكامل للدورة بنجاح ✅',
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ غير معروف'
+
+      setSupabaseStatus(
+        `خطأ في تنزيل Excel: ${message}`,
+      )
+    } finally {
+      setExportingExcel(false)
+    }
+  }
+
   const handleDelete = async (
     id: string,
   ) => {
@@ -1641,21 +3010,26 @@ export default function Page() {
     if (!year) return
 
     const displayName =
-      year.name || 'هذه السنة الدراسية'
+      year.name ||
+      'هذه السنة الدراسية'
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من حذف السنة الدراسية "${displayName}"؟\n\nسيتم حذف البيانات التابعة لها إذا كانت قيود قاعدة البيانات تسمح بذلك.\n\nهذا الإجراء لا يمكن التراجع عنه.`,
-    )
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من حذف السنة الدراسية "${displayName}"؟\n\nسيتم حذف البيانات التابعة لها إذا كانت قيود قاعدة البيانات تسمح بذلك.\n\nهذا الإجراء لا يمكن التراجع عنه.`,
+      )
 
     if (!confirmed) return
 
     setDeletingId(id)
-    setSupabaseStatus('جاري المسح...')
+    setSupabaseStatus(
+      'جاري المسح...',
+    )
 
-    const { error } = await supabase
-      .from('academic_years')
-      .delete()
-      .eq('id', id)
+    const { error } =
+      await supabase
+        .from('academic_years')
+        .delete()
+        .eq('id', id)
 
     if (error) {
       setSupabaseStatus(
@@ -1667,7 +3041,8 @@ export default function Page() {
 
     setYears((current) =>
       current.filter(
-        (item) => item.id !== id,
+        (item) =>
+          item.id !== id,
       ),
     )
 
@@ -1681,15 +3056,17 @@ export default function Page() {
   const getTeacherNames = (
     course: Course,
   ) => {
-    const names = course.teacherIds
-      .map(
-        (teacherId) =>
-          teachers.find(
-            (teacher) =>
-              teacher.id === teacherId,
-          )?.name,
-      )
-      .filter(Boolean) as string[]
+    const names =
+      course.teacherIds
+        .map(
+          (teacherId) =>
+            teachers.find(
+              (teacher) =>
+                teacher.id ===
+                teacherId,
+            )?.name,
+        )
+        .filter(Boolean) as string[]
 
     return names
   }
@@ -1700,7 +3077,8 @@ export default function Page() {
     const ids = Array.from(
       new Set(
         course.teacherAssignments.flatMap(
-          (item) => item.subjectIds,
+          (item) =>
+            item.subjectIds,
         ),
       ),
     )
@@ -1709,7 +3087,8 @@ export default function Page() {
       .map(
         (id) =>
           subjects.find(
-            (subject) => subject.id === id,
+            (subject) =>
+              subject.id === id,
           )?.name,
       )
       .filter(Boolean) as string[]
@@ -1763,15 +3142,27 @@ export default function Page() {
           }
           saving={saving}
           closingId={closingId}
-          onYearNameChange={setYearName}
-          onStartDateChange={setStartDate}
-          onEndDateChange={setEndDate}
-          onAnnualFeeChange={setAnnualFee}
-          onCoursesChange={setCourses}
+          onYearNameChange={
+            setYearName
+          }
+          onStartDateChange={
+            setStartDate
+          }
+          onEndDateChange={
+            setEndDate
+          }
+          onAnnualFeeChange={
+            setAnnualFee
+          }
+          onCoursesChange={
+            setCourses
+          }
           onClose={resetForm}
           onSave={handleSave}
           onCloseCourse={closeCourse}
-          onOpenSummary={openSummary}
+          onOpenSummary={
+            openSummary
+          }
         />
       ) : (
         <Card>
@@ -1798,356 +3189,378 @@ export default function Page() {
               </div>
             ) : (
               <div className="divide-y">
-                {years.map((year) => (
-                  <div
-                    key={year.id}
-                    className="flex flex-col gap-4 p-5"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold">
-                          {year.name ||
-                            'بدون اسم'}
-                        </h3>
+                {years.map(
+                  (year) => (
+                    <div
+                      key={year.id}
+                      className="flex flex-col gap-4 p-5"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold">
+                            {year.name ||
+                              'بدون اسم'}
+                          </h3>
 
-                        {(year.startDate ||
-                          year.endDate) && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {year.startDate ||
-                              '—'}{' '}
-                            →{' '}
-                            {year.endDate ||
-                              '—'}
-                          </p>
-                        )}
+                          {(
+                            year.startDate ||
+                            year.endDate
+                          ) && (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {year.startDate ||
+                                '—'}{' '}
+                              →{' '}
+                              {year.endDate ||
+                                '—'}
+                            </p>
+                          )}
 
-                        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-                          <p>
-                            الرسوم السنوية:{' '}
-                            <span className="font-medium">
-                              {year.annualFee.toFixed(
-                                3,
-                              )}{' '}
-                              د.ب
-                            </span>
-                          </p>
+                          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                            <p>
+                              الرسوم السنوية:{' '}
+                              <span className="font-medium">
+                                {year.annualFee.toFixed(
+                                  3,
+                                )}{' '}
+                                د.ب
+                              </span>
+                            </p>
 
-                          <p>
-                            عدد الدورات:{' '}
-                            <span className="font-medium">
+                            <p>
+                              عدد الدورات:{' '}
+                              <span className="font-medium">
+                                {
+                                  year
+                                    .courses
+                                    .length
+                                }
+                              </span>
+                            </p>
+
+                            <p>
+                              عدد المعلمين:{' '}
+                              <span className="font-medium">
+                                {
+                                  new Set(
+                                    year.courses.flatMap(
+                                      (
+                                        course,
+                                      ) =>
+                                        course.teacherIds,
+                                    ),
+                                  ).size
+                                }
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              openAddCourseForYear(
+                                year,
+                              )
+                            }
+                            disabled={
+                              saving ||
+                              deletingId !==
+                                null ||
+                              closingId !==
+                                null
+                            }
+                          >
+                            <Plus className="size-4" />
+                            إضافة دورة
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              openEditForm(
+                                year,
+                              )
+                            }
+                            disabled={
+                              saving ||
+                              deletingId !==
+                                null ||
+                              closingId !==
+                                null
+                            }
+                          >
+                            تعديل السنة
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              handleDelete(
+                                year.id,
+                              )
+                            }
+                            disabled={
+                              deletingId !==
+                                null ||
+                              closingId !==
+                                null
+                            }
+                          >
+                            <Trash2 className="size-4" />
+
+                            {deletingId ===
+                            year.id
+                              ? 'جاري المسح...'
+                              : 'مسح'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {year.courses
+                        .length > 0 && (
+                        <div className="rounded-lg border bg-muted/20 p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <h4 className="text-sm font-semibold">
+                              الدورات
+                            </h4>
+
+                            <span className="text-xs text-muted-foreground">
                               {
-                                year.courses
+                                year
+                                  .courses
                                   .length
-                              }
+                              }{' '}
+                              دورة
                             </span>
-                          </p>
+                          </div>
 
-                          <p>
-                            عدد المعلمين:{' '}
-                            <span className="font-medium">
-                              {
-                                new Set(
-                                  year.courses.flatMap(
-                                    (course) =>
-                                      course.teacherIds,
-                                  ),
-                                ).size
-                              }
-                            </span>
-                          </p>
-                        </div>
-                      </div>
+                          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {year.courses.map(
+                              (
+                                course,
+                                index,
+                              ) => {
+                                const teacherNames =
+                                  getTeacherNames(
+                                    course,
+                                  )
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            openAddCourseForYear(
-                              year,
-                            )
-                          }
-                          disabled={
-                            saving ||
-                            deletingId !== null ||
-                            closingId !== null
-                          }
-                        >
-                          <Plus className="size-4" />
-                          إضافة دورة
-                        </Button>
+                                const subjectNames =
+                                  getSubjectNames(
+                                    course,
+                                  )
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            openEditForm(year)
-                          }
-                          disabled={
-                            saving ||
-                            deletingId !== null ||
-                            closingId !== null
-                          }
-                        >
-                          تعديل السنة
-                        </Button>
+                                return (
+                                  <div
+                                    key={
+                                      course.id ??
+                                      index
+                                    }
+                                    className={`rounded-lg border bg-background p-4 ${
+                                      course.isClosed
+                                        ? 'border-blue-200 bg-blue-50/30'
+                                        : ''
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <p className="font-medium">
+                                            {course.name ||
+                                              `الدورة ${
+                                                index +
+                                                1
+                                              }`}
+                                          </p>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            handleDelete(
-                              year.id,
-                            )
-                          }
-                          disabled={
-                            deletingId !== null ||
-                            closingId !== null
-                          }
-                        >
-                          <Trash2 className="size-4" />
+                                          {course.isClosed ? (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-[11px] text-blue-700">
+                                              <Lock className="size-3" />
+                                              مغلقة
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-[11px] text-green-700">
+                                              <Unlock className="size-3" />
+                                              مفتوحة
+                                            </span>
+                                          )}
+                                        </div>
 
-                          {deletingId ===
-                          year.id
-                            ? 'جاري المسح...'
-                            : 'مسح'}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {year.courses.length >
-                      0 && (
-                      <div className="rounded-lg border bg-muted/20 p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <h4 className="text-sm font-semibold">
-                            الدورات
-                          </h4>
-
-                          <span className="text-xs text-muted-foreground">
-                            {year.courses.length}{' '}
-                            دورة
-                          </span>
-                        </div>
-
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                          {year.courses.map(
-                            (
-                              course,
-                              index,
-                            ) => {
-                              const teacherNames =
-                                getTeacherNames(
-                                  course,
-                                )
-
-                              const subjectNames =
-                                getSubjectNames(
-                                  course,
-                                )
-
-                              return (
-                                <div
-                                  key={
-                                    course.id ??
-                                    index
-                                  }
-                                  className={`rounded-lg border bg-background p-4 ${
-                                    course.isClosed
-                                      ? 'border-blue-200 bg-blue-50/30'
-                                      : ''
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="font-medium">
-                                          {course.name ||
-                                            `الدورة ${
-                                              index +
-                                              1
-                                            }`}
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {course.startDate ||
+                                            '—'}{' '}
+                                          →{' '}
+                                          {course.endDate ||
+                                            '—'}
                                         </p>
 
-                                        {course.isClosed ? (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-[11px] text-blue-700">
-                                            <Lock className="size-3" />
-                                            مغلقة
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-[11px] text-green-700">
-                                            <Unlock className="size-3" />
-                                            مفتوحة
-                                          </span>
+                                        {course
+                                          .days
+                                          .length >
+                                          0 && (
+                                          <p className="mt-1 text-xs text-muted-foreground">
+                                            {getDaysLabel(
+                                              course,
+                                            )}
+                                          </p>
                                         )}
                                       </div>
 
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {course.startDate ||
-                                          '—'}{' '}
-                                        →{' '}
-                                        {course.endDate ||
-                                          '—'}
-                                      </p>
+                                      <CalendarDays className="size-4 shrink-0 text-primary" />
+                                    </div>
 
-                                      {course
-                                        .days
-                                        .length >
-                                        0 && (
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                          {getDaysLabel(
-                                            course,
+                                    {teacherNames.length >
+                                      0 && (
+                                      <div className="mt-3 flex flex-wrap gap-1.5">
+                                        {teacherNames.map(
+                                          (
+                                            name,
+                                            teacherIndex,
+                                          ) => (
+                                            <span
+                                              key={`${name}-${teacherIndex}`}
+                                              className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] text-primary"
+                                            >
+                                              <UserRound className="size-3" />
+                                              {
+                                                name
+                                              }
+                                            </span>
+                                          ),
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {subjectNames.length >
+                                      0 && (
+                                      <div className="mt-2 text-xs text-muted-foreground">
+                                        <span className="font-medium">
+                                          المواد:
+                                        </span>{' '}
+                                        {subjectNames.join(
+                                          '، ',
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {course.isClosed &&
+                                      course.closedAt && (
+                                        <p className="mt-2 text-[11px] text-muted-foreground">
+                                          أغلقت في:{' '}
+                                          {formatDate(
+                                            course.closedAt,
                                           )}
                                         </p>
                                       )}
-                                    </div>
 
-                                    <CalendarDays className="size-4 shrink-0 text-primary" />
-                                  </div>
-
-                                  {teacherNames.length >
-                                    0 && (
-                                    <div className="mt-3 flex flex-wrap gap-1.5">
-                                      {teacherNames.map(
-                                        (
-                                          name,
-                                          teacherIndex,
-                                        ) => (
-                                          <span
-                                            key={`${name}-${teacherIndex}`}
-                                            className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] text-primary"
-                                          >
-                                            <UserRound className="size-3" />
-                                            {
-                                              name
-                                            }
-                                          </span>
-                                        ),
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {subjectNames.length >
-                                    0 && (
-                                    <div className="mt-2 text-xs text-muted-foreground">
-                                      <span className="font-medium">
-                                        المواد:
-                                      </span>{' '}
-                                      {subjectNames.join(
-                                        '، ',
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {course.isClosed &&
-                                    course.closedAt && (
-                                      <p className="mt-2 text-[11px] text-muted-foreground">
-                                        أغلقت في:{' '}
-                                        {formatDate(
-                                          course.closedAt,
-                                        )}
-                                      </p>
-                                    )}
-
-                                  <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
-                                    {course.isClosed ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          openSummary(
-                                            course,
-                                          )
-                                        }
-                                      >
-                                        <Eye className="size-4" />
-                                        عرض ملخص الدورة
-                                      </Button>
-                                    ) : (
-                                      <>
+                                    <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
+                                      {course.isClosed ? (
                                         <Button
                                           type="button"
                                           size="sm"
                                           variant="outline"
                                           onClick={() =>
-                                            openEditForm(
-                                              year,
-                                            )
-                                          }
-                                          disabled={
-                                            saving ||
-                                            closingId !==
-                                              null
-                                          }
-                                        >
-                                          تعديل الدورة
-                                        </Button>
-
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() =>
-                                            closeCourse(
+                                            openSummary(
                                               course,
                                             )
                                           }
-                                          disabled={
-                                            saving ||
-                                            closingId !==
-                                              null
-                                          }
                                         >
-                                          <Lock className="size-4" />
-                                          {closingId ===
-                                          course.id
-                                            ? 'جاري الإغلاق...'
-                                            : 'إغلاق الدورة'}
+                                          <Eye className="size-4" />
+                                          عرض ملخص الدورة
                                         </Button>
-                                      </>
-                                    )}
+                                      ) : (
+                                        <>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              openEditForm(
+                                                year,
+                                              )
+                                            }
+                                            disabled={
+                                              saving ||
+                                              closingId !==
+                                                null
+                                            }
+                                          >
+                                            تعديل الدورة
+                                          </Button>
+
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                              closeCourse(
+                                                course,
+                                              )
+                                            }
+                                            disabled={
+                                              saving ||
+                                              closingId !==
+                                                null
+                                            }
+                                          >
+                                            <Lock className="size-4" />
+                                            {closingId ===
+                                            course.id
+                                              ? 'جاري الإغلاق...'
+                                              : 'إغلاق الدورة'}
+                                          </Button>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )
-                            },
-                          )}
+                                )
+                              },
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {year.courses.length ===
-                      0 && (
-                      <div className="rounded-lg border border-dashed p-5 text-center">
-                        <p className="text-sm text-muted-foreground">
-                          لا توجد دورات لهذه السنة.
-                        </p>
+                      {year.courses
+                        .length ===
+                        0 && (
+                        <div className="rounded-lg border border-dashed p-5 text-center">
+                          <p className="text-sm text-muted-foreground">
+                            لا توجد دورات لهذه السنة.
+                          </p>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() =>
-                            openAddCourseForYear(
-                              year,
-                            )
-                          }
-                          disabled={
-                            saving ||
-                            deletingId !== null ||
-                            closingId !== null
-                          }
-                        >
-                          <Plus className="size-4" />
-                          إضافة دورة
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2"
+                            onClick={() =>
+                              openAddCourseForYear(
+                                year,
+                              )
+                            }
+                            disabled={
+                              saving ||
+                              deletingId !==
+                                null ||
+                              closingId !==
+                                null
+                            }
+                          >
+                            <Plus className="size-4" />
+                            إضافة دورة
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ),
+                )}
               </div>
             )}
           </CardContent>
@@ -2168,7 +3581,9 @@ export default function Page() {
                 </div>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedSummaryCourse.name}
+                  {
+                    selectedSummaryCourse.name
+                  }
                 </p>
               </div>
 
@@ -2177,7 +3592,9 @@ export default function Page() {
                 variant="outline"
                 size="icon"
                 onClick={() => {
-                  setSelectedSummaryCourse(null)
+                  setSelectedSummaryCourse(
+                    null,
+                  )
                   setSummaryData(null)
                 }}
                 aria-label="إغلاق"
@@ -2260,7 +3677,8 @@ export default function Page() {
                   <p className="mt-1 text-2xl font-semibold">
                     {summaryLoading
                       ? '...'
-                      : summaryData?.studentCount ??
+                      : summaryData
+                          ?.studentCount ??
                         0}
                   </p>
                 </div>
@@ -2271,9 +3689,11 @@ export default function Page() {
                   </p>
 
                   <p className="mt-1 text-2xl font-semibold">
-                    {summaryData?.teacherCount ??
+                    {summaryData
+                      ?.teacherCount ??
                       selectedSummaryCourse
-                        .teacherIds.length}
+                        .teacherIds
+                        .length}
                   </p>
                 </div>
 
@@ -2283,7 +3703,8 @@ export default function Page() {
                   </p>
 
                   <p className="mt-1 text-2xl font-semibold">
-                    {summaryData?.subjectCount ??
+                    {summaryData
+                      ?.subjectCount ??
                       0}
                   </p>
                 </div>
@@ -2425,9 +3846,13 @@ export default function Page() {
                         const assignedSubjects =
                           assignment.subjectIds
                             .map(
-                              (subjectId) =>
+                              (
+                                subjectId,
+                              ) =>
                                 subjects.find(
-                                  (item) =>
+                                  (
+                                    item,
+                                  ) =>
                                     item.id ===
                                     subjectId,
                                 )?.name,
@@ -2466,14 +3891,38 @@ export default function Page() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    downloadCourseExcel(
+                      selectedSummaryCourse,
+                    )
+                  }
+                  disabled={
+                    exportingExcel ||
+                    summaryLoading
+                  }
+                >
+                  <Download className="size-4" />
+                  {exportingExcel
+                    ? 'جاري تجهيز Excel...'
+                    : 'تنزيل Excel الكامل'}
+                </Button>
+
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setSelectedSummaryCourse(null)
+                    setSelectedSummaryCourse(
+                      null,
+                    )
                     setSummaryData(null)
                   }}
+                  disabled={
+                    exportingExcel
+                  }
                 >
                   إغلاق
                 </Button>
