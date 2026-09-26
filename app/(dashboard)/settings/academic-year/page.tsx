@@ -152,14 +152,14 @@ const countLessonDays = (
   }
 
   const today = new Date()
+
   const todayOnly = new Date(
     today.getFullYear(),
     today.getMonth(),
     today.getDate(),
   )
 
-  const effectiveEnd =
-    end < todayOnly ? end : todayOnly
+  const effectiveEnd = end < todayOnly ? end : todayOnly
 
   if (start > effectiveEnd) {
     return 0
@@ -316,16 +316,18 @@ export default function Page() {
       (year) => year.id,
     )
 
-    const { data: courseData, error: courseError } =
-      await supabase
-        .from('courses')
-        .select(
-          'id, academic_year_id, name, start_date, end_date, days, is_closed, closed_at, created_at',
-        )
-        .in('academic_year_id', yearIds)
-        .order('created_at', {
-          ascending: true,
-        })
+    const {
+      data: courseData,
+      error: courseError,
+    } = await supabase
+      .from('courses')
+      .select(
+        'id, academic_year_id, name, start_date, end_date, days, is_closed, closed_at, created_at',
+      )
+      .in('academic_year_id', yearIds)
+      .order('created_at', {
+        ascending: true,
+      })
 
     if (courseError) {
       setSupabaseStatus(
@@ -650,17 +652,59 @@ export default function Page() {
     setShowForm(true)
   }
 
+  /*
+   * حفظ علاقات الدورة:
+   *
+   * 1. نقرأ العلاقات الحالية.
+   * 2. نحذف ربط المواد بالمعلمين للدورة.
+   * 3. نحذف course_subjects التي لم تعد مستخدمة.
+   * 4. نُبقي المواد الموجودة والمستخدمة.
+   * 5. نضيف المواد الجديدة.
+   * 6. نعيد بناء course_subject_teachers.
+   * 7. نعيد بناء course_teachers.
+   *
+   * مهم:
+   * هذه العملية لا تمس:
+   * - students
+   * - enrollments
+   * - attendance
+   * - teacher_student_assignments
+   * - subjects نفسها
+   */
   const saveCourseRelations = async (
     courseId: string,
     course: Course,
   ) => {
+    const normalizedAssignments =
+      course.teacherAssignments
+        .map((assignment) => ({
+          teacherId: assignment.teacherId,
+          subjectIds: Array.from(
+            new Set(assignment.subjectIds),
+          ),
+        }))
+        .filter(
+          (assignment) =>
+            assignment.teacherId &&
+            assignment.subjectIds.length > 0,
+        )
+
     const teacherIds = Array.from(
       new Set(
-        course.teacherAssignments.map(
+        normalizedAssignments.map(
           (item) => item.teacherId,
         ),
       ),
     )
+
+    const selectedSubjectIds =
+      Array.from(
+        new Set(
+          normalizedAssignments.flatMap(
+            (item) => item.subjectIds,
+          ),
+        ),
+      )
 
     const {
       data: existingSubjects,
@@ -674,36 +718,117 @@ export default function Page() {
       return existingSubjectsError
     }
 
-    const selectedSubjectIds = Array.from(
-      new Set(
-        course.teacherAssignments.flatMap(
-          (item) => item.subjectIds,
-        ),
-      ),
-    )
+    const existingSubjectRows =
+      existingSubjects ?? []
 
-    for (const subjectId of selectedSubjectIds) {
-      const exists = (
-        existingSubjects ?? []
-      ).some(
-        (item) =>
-          item.subject_id === subjectId,
+    /*
+     * نحذف أولاً جميع ربط المواد بالمعلمين
+     * لأن course_subjects لا يمكن حذفها وهي
+     * ما زالت مرتبطة بها.
+     */
+    const existingCourseSubjectIds =
+      existingSubjectRows.map(
+        (item) => item.id,
       )
 
-      if (!exists) {
-        const { error } = await supabase
-          .from('course_subjects')
-          .insert({
-            course_id: courseId,
-            subject_id: subjectId,
-          })
+    if (
+      existingCourseSubjectIds.length > 0
+    ) {
+      const {
+        error: deleteSubjectTeachersError,
+      } = await supabase
+        .from('course_subject_teachers')
+        .delete()
+        .in(
+          'course_subject_id',
+          existingCourseSubjectIds,
+        )
 
-        if (error) {
-          return error
-        }
+      if (deleteSubjectTeachersError) {
+        return deleteSubjectTeachersError
       }
     }
 
+    /*
+     * المواد الموجودة حالياً في الدورة والتي
+     * ما زالت مستخدمة نحتفظ بها.
+     */
+    const subjectsToKeep =
+      existingSubjectRows.filter((item) =>
+        selectedSubjectIds.includes(
+          item.subject_id,
+        ),
+      )
+
+    /*
+     * المواد التي لم تعد مستخدمة في الدورة.
+     * نحذف ربطها بالدورة فقط.
+     *
+     * لا نحذف السجل من subjects.
+     */
+    const subjectsToDelete =
+      existingSubjectRows.filter(
+        (item) =>
+          !selectedSubjectIds.includes(
+            item.subject_id,
+          ),
+      )
+
+    if (subjectsToDelete.length > 0) {
+      const {
+        error: deleteUnusedSubjectsError,
+      } = await supabase
+        .from('course_subjects')
+        .delete()
+        .in(
+          'id',
+          subjectsToDelete.map(
+            (item) => item.id,
+          ),
+        )
+
+      if (deleteUnusedSubjectsError) {
+        return deleteUnusedSubjectsError
+      }
+    }
+
+    /*
+     * نضيف المواد الجديدة التي لم تكن موجودة
+     * سابقاً في الدورة.
+     */
+    const subjectsToInsert =
+      selectedSubjectIds.filter(
+        (subjectId) =>
+          !subjectsToKeep.some(
+            (item) =>
+              item.subject_id ===
+              subjectId,
+          ),
+      )
+
+    if (subjectsToInsert.length > 0) {
+      const {
+        error: insertSubjectsError,
+      } = await supabase
+        .from('course_subjects')
+        .insert(
+          subjectsToInsert.map(
+            (subjectId) => ({
+              course_id: courseId,
+              subject_id: subjectId,
+            }),
+          ),
+        )
+
+      if (insertSubjectsError) {
+        return insertSubjectsError
+      }
+    }
+
+    /*
+     * نعيد تحميل course_subjects بعد
+     * الإضافة والحذف حتى تكون IDs محدثة.
+     */
     const {
       data: refreshedSubjects,
       error: refreshedSubjectsError,
@@ -716,41 +841,27 @@ export default function Page() {
       return refreshedSubjectsError
     }
 
-    const courseSubjectIds = (
-      refreshedSubjects ?? []
-    ).map((item) => item.id)
-
-    if (courseSubjectIds.length > 0) {
-      const {
-        error: deleteSubjectTeachersError,
-      } = await supabase
-        .from('course_subject_teachers')
-        .delete()
-        .in(
-          'course_subject_id',
-          courseSubjectIds,
-        )
-
-      if (deleteSubjectTeachersError) {
-        return deleteSubjectTeachersError
-      }
-    }
-
     const subjectIdToCourseSubjectId =
       new Map<string, string>()
 
-    ;(
-      refreshedSubjects ?? []
-    ).forEach((item) => {
-      subjectIdToCourseSubjectId.set(
-        item.subject_id,
-        item.id,
-      )
-    })
+    ;(refreshedSubjects ?? []).forEach(
+      (item) => {
+        subjectIdToCourseSubjectId.set(
+          item.subject_id,
+          item.id,
+        )
+      },
+    )
 
-    const subjectTeacherRows = []
+    /*
+     * إعادة بناء ربط المادة بالمعلمين.
+     */
+    const subjectTeacherRows: {
+      course_subject_id: string
+      teacher_id: string
+    }[] = []
 
-    for (const assignment of course.teacherAssignments) {
+    for (const assignment of normalizedAssignments) {
       for (const subjectId of assignment.subjectIds) {
         const courseSubjectId =
           subjectIdToCourseSubjectId.get(
@@ -772,18 +883,38 @@ export default function Page() {
       }
     }
 
-    if (subjectTeacherRows.length > 0) {
+    /*
+     * حماية إضافية من أي تكرار.
+     */
+    const uniqueSubjectTeacherRows =
+      Array.from(
+        new Map(
+          subjectTeacherRows.map((row) => [
+            `${row.course_subject_id}:${row.teacher_id}`,
+            row,
+          ]),
+        ).values(),
+      )
+
+    if (
+      uniqueSubjectTeacherRows.length > 0
+    ) {
       const {
         error: insertSubjectTeachersError,
       } = await supabase
         .from('course_subject_teachers')
-        .insert(subjectTeacherRows)
+        .insert(
+          uniqueSubjectTeacherRows,
+        )
 
       if (insertSubjectTeachersError) {
         return insertSubjectTeachersError
       }
     }
 
+    /*
+     * إعادة بناء course_teachers.
+     */
     const {
       error: deleteCourseTeachersError,
     } = await supabase
@@ -936,6 +1067,9 @@ export default function Page() {
         for (const course of courses) {
           let courseId = course.id
 
+          /*
+           * الدورة المغلقة لا يتم تعديلها إطلاقاً.
+           */
           if (courseId) {
             if (course.isClosed) {
               savedCourses.push({
@@ -2063,6 +2197,7 @@ export default function Page() {
                     <p className="text-xs text-muted-foreground">
                       اسم الدورة
                     </p>
+
                     <p className="mt-1 font-medium">
                       {
                         selectedSummaryCourse.name
@@ -2074,6 +2209,7 @@ export default function Page() {
                     <p className="text-xs text-muted-foreground">
                       الحالة
                     </p>
+
                     <p className="mt-1 font-medium text-blue-600">
                       مغلقة
                     </p>
@@ -2083,6 +2219,7 @@ export default function Page() {
                     <p className="text-xs text-muted-foreground">
                       من
                     </p>
+
                     <p className="mt-1 font-medium">
                       {selectedSummaryCourse.startDate ||
                         '—'}
@@ -2093,6 +2230,7 @@ export default function Page() {
                     <p className="text-xs text-muted-foreground">
                       إلى
                     </p>
+
                     <p className="mt-1 font-medium">
                       {selectedSummaryCourse.endDate ||
                         '—'}
@@ -2103,6 +2241,7 @@ export default function Page() {
                     <p className="text-xs text-muted-foreground">
                       أيام الدورة
                     </p>
+
                     <p className="mt-1 font-medium">
                       {getDaysLabel(
                         selectedSummaryCourse,
@@ -2117,6 +2256,7 @@ export default function Page() {
                   <p className="text-xs text-muted-foreground">
                     الطلاب
                   </p>
+
                   <p className="mt-1 text-2xl font-semibold">
                     {summaryLoading
                       ? '...'
@@ -2129,6 +2269,7 @@ export default function Page() {
                   <p className="text-xs text-muted-foreground">
                     المعلمون
                   </p>
+
                   <p className="mt-1 text-2xl font-semibold">
                     {summaryData?.teacherCount ??
                       selectedSummaryCourse
@@ -2140,6 +2281,7 @@ export default function Page() {
                   <p className="text-xs text-muted-foreground">
                     المواد
                   </p>
+
                   <p className="mt-1 text-2xl font-semibold">
                     {summaryData?.subjectCount ??
                       0}
@@ -2163,6 +2305,7 @@ export default function Page() {
                         <p className="text-xs text-green-700">
                           حاضر
                         </p>
+
                         <p className="mt-1 text-xl font-semibold text-green-700">
                           {
                             summaryData
@@ -2176,6 +2319,7 @@ export default function Page() {
                         <p className="text-xs text-red-700">
                           غائب
                         </p>
+
                         <p className="mt-1 text-xl font-semibold text-red-700">
                           {
                             summaryData
@@ -2189,6 +2333,7 @@ export default function Page() {
                         <p className="text-xs text-yellow-700">
                           متأخر
                         </p>
+
                         <p className="mt-1 text-xl font-semibold text-yellow-700">
                           {
                             summaryData
@@ -2202,6 +2347,7 @@ export default function Page() {
                         <p className="text-xs text-blue-700">
                           مستأذن
                         </p>
+
                         <p className="mt-1 text-xl font-semibold text-blue-700">
                           {
                             summaryData
@@ -2215,6 +2361,7 @@ export default function Page() {
                         <p className="text-xs text-muted-foreground">
                           لم يسجل
                         </p>
+
                         <p className="mt-1 text-xl font-semibold">
                           {
                             summaryData
@@ -2228,6 +2375,7 @@ export default function Page() {
                         <p className="text-xs text-primary">
                           نسبة الحضور
                         </p>
+
                         <p className="mt-1 text-xl font-semibold text-primary">
                           {
                             summaryData
