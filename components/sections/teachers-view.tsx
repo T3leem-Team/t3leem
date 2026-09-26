@@ -32,31 +32,26 @@ import {
   Student,
 } from '@/components/sections/attendance-view'
 
+import {
+  TeachersViewPreviousCourses,
+  PreviousCourseAssignment,
+  PreviousCourseSubject,
+  PreviousManagedCourse,
+} from '@/components/sections/teachers-view-previous-courses'
+
 type Teacher = {
   id: string
   name: string
   isActive: boolean
 }
 
-type Assignment = {
-  id: string
-  courseId: string
-  teacherId: string
-  studentId: string
-  subjectId: string
-}
+type Assignment = PreviousCourseAssignment
 
-type TeacherCourseSubject = {
-  courseId: string
-  teacherId: string
-  subjectId: string
-  subjectName: string
-}
+type TeacherCourseSubject =
+  PreviousCourseSubject
 
-type ManagedCourse = Course & {
-  isClosed: boolean
-  closedAt: string | null
-}
+type ManagedCourse =
+  PreviousManagedCourse
 
 type TeachersCache = {
   teachers: Teacher[]
@@ -67,11 +62,15 @@ type TeachersCache = {
   attendanceRecords: AttendanceRecord[]
   allowTeacherTransfer: boolean
   allowTeacherRemove: boolean
-  courseTeacherIds: Record<string, string[]>
+  courseTeacherIds: Record<
+    string,
+    string[]
+  >
   teacherCourseSubjects: TeacherCourseSubject[]
 }
 
-let teachersCache: TeachersCache | null = null
+let teachersCache: TeachersCache | null =
+  null
 
 let teachersDataLoading = false
 
@@ -110,23 +109,20 @@ function updateTeachersCache(
 }
 
 export function TeachersView() {
-  const [teachers, setTeachers] = useState<
-    Teacher[]
-  >(
-    teachersCache?.teachers ?? [],
-  )
+  const [teachers, setTeachers] =
+    useState<Teacher[]>(
+      teachersCache?.teachers ?? [],
+    )
 
-  const [courses, setCourses] = useState<
-    ManagedCourse[]
-  >(
-    teachersCache?.courses ?? [],
-  )
+  const [courses, setCourses] =
+    useState<ManagedCourse[]>(
+      teachersCache?.courses ?? [],
+    )
 
-  const [students, setStudents] = useState<
-    Student[]
-  >(
-    teachersCache?.students ?? [],
-  )
+  const [students, setStudents] =
+    useState<Student[]>(
+      teachersCache?.students ?? [],
+    )
 
   const [assignments, setAssignments] =
     useState<Assignment[]>(
@@ -269,6 +265,25 @@ export function TeachersView() {
     null,
   )
 
+  /*
+   * =========================================================
+   * تحميل البيانات
+   * =========================================================
+   *
+   * مهم:
+   * إذا الكاش موجود، لا نعيد تحميل Supabase.
+   *
+   * هذا يمنع إعادة التحميل عند:
+   * - الانتقال من صفحة إلى صفحة
+   * - فتح صفحة المعلمين مرة ثانية
+   * - إعادة Mount للمكوّن
+   *
+   * البيانات تتحدث مباشرة داخل الكاش بعد:
+   * - إضافة طالب
+   * - نقل طالب
+   * - مسح طالب
+   * - تحديث الحضور
+   */
   const loadData = async (
     showLoading = false,
   ) => {
@@ -278,12 +293,19 @@ export function TeachersView() {
       return
     }
 
+    /*
+     * إذا لدينا Cache كامل، لا نحتاج Reload.
+     */
+    if (
+      teachersCache !== null
+    ) {
+      setLoading(false)
+      return
+    }
+
     teachersDataLoading = true
 
-    if (
-      showLoading ||
-      teachersCache === null
-    ) {
+    if (showLoading) {
       setLoading(true)
     }
 
@@ -393,25 +415,29 @@ export function TeachersView() {
         return
       }
 
-      const mappedCourses: ManagedCourse[] = (
-        courseRows ?? []
-      ).map((course) => ({
-        id: course.id,
-        name: course.name,
-        startDate:
-          course.start_date ?? '',
-        endDate:
-          course.end_date ?? '',
-        days: Array.isArray(
-          course.days,
+      const mappedCourses: ManagedCourse[] =
+        (courseRows ?? []).map(
+          (course) => ({
+            id: course.id,
+            name: course.name,
+            startDate:
+              course.start_date ?? '',
+            endDate:
+              course.end_date ?? '',
+            days: Array.isArray(
+              course.days,
+            )
+              ? course.days
+              : [],
+            isClosed:
+              Boolean(
+                course.is_closed,
+              ),
+            closedAt:
+              course.closed_at ??
+              null,
+          }),
         )
-          ? course.days
-          : [],
-        isClosed:
-          Boolean(course.is_closed),
-        closedAt:
-          course.closed_at ?? null,
-      }))
 
       setCourses(mappedCourses)
 
@@ -457,21 +483,6 @@ export function TeachersView() {
         courseTeacherRows =
           data ?? []
       }
-
-      /*
-       * -----------------------------------------------------
-       * المواد المرتبطة بالدورة والمعلمين
-       *
-       * الدورة
-       *   ↓
-       * المادة
-       *   ↓
-       * المعلم
-       *
-       * المادة تُجهز من إعدادات الدورة.
-       * صفحة المعلم لا تختار المادة.
-       * -----------------------------------------------------
-       */
 
       let courseSubjectRows: {
         id: string
@@ -833,11 +844,6 @@ export function TeachersView() {
           ),
         )
 
-      /*
-       * تحميل جميع التوزيعات، بما فيها توزيعات
-       * الدورات المغلقة، حتى تبقى البيانات التاريخية
-       * متاحة.
-       */
       let rawAssignmentRows: {
         id: string
         course_id: string
@@ -919,8 +925,8 @@ export function TeachersView() {
           return
         }
 
-        for (const student of data ??
-          []) {
+        for (const student of
+          data ?? []) {
           studentMap.set(
             student.id,
             student,
@@ -989,7 +995,8 @@ export function TeachersView() {
           ),
         )
 
-      for (const studentId of missingStudentIds) {
+      for (const studentId of
+        missingStudentIds) {
         const student =
           studentMap.get(
             studentId,
@@ -1234,9 +1241,19 @@ export function TeachersView() {
   }
 
   useEffect(() => {
-    void loadData(
-      teachersCache === null,
-    )
+    /*
+     * إذا البيانات موجودة بالكاش:
+     * لا يوجد أي Request جديد.
+     */
+    if (
+      teachersCache !== null
+    ) {
+      setLoading(false)
+      return
+    }
+
+    void loadData(true)
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1265,11 +1282,6 @@ export function TeachersView() {
     )
   }
 
-  /*
-   * الدورة الحالية:
-   * نحافظ على منطق الصفحة الحالي:
-   * أول دورة في القائمة هي الدورة الحالية.
-   */
   const currentCourse =
     courses[0] ?? null
 
@@ -1320,10 +1332,6 @@ export function TeachersView() {
         selectedTeacherId,
     ) ?? null
 
-  /*
-   * المادة الحالية للمعلم.
-   * لا يوجد اختيار للمادة في هذه الصفحة.
-   */
   const selectedTeacherSubjects =
     currentCourse &&
     selectedTeacherId
@@ -1526,196 +1534,6 @@ export function TeachersView() {
     ).length
   }
 
-  /*
-   * الدورات السابقة للمعلم:
-   * فقط الدورات المغلقة في السنة الحالية
-   * والتي كان المعلم مرتبطًا بها.
-   */
-  const previousCoursesForTeacher =
-    useMemo(() => {
-      if (!selectedTeacherId) {
-        return []
-      }
-
-      return courses
-        .filter(
-          (course) =>
-            course.isClosed &&
-            course.id !==
-              currentCourse?.id &&
-            (
-              courseTeacherIds[
-                course.id
-              ] ?? []
-            ).includes(
-              selectedTeacherId,
-            ),
-        )
-        .map((course) => {
-          const subjects =
-            teacherCourseSubjects.filter(
-              (item) =>
-                item.courseId ===
-                  course.id &&
-                item.teacherId ===
-                  selectedTeacherId,
-            )
-
-          return {
-            course,
-            subjects,
-          }
-        })
-    }, [
-      courses,
-      selectedTeacherId,
-      currentCourse,
-      courseTeacherIds,
-      teacherCourseSubjects,
-    ])
-
-  const selectedPreviousCourse =
-    previousCoursesForTeacher.find(
-      (item) =>
-        item.course.id ===
-        selectedPreviousCourseId,
-    ) ??
-    previousCoursesForTeacher[0] ??
-    null
-
-  /*
-   * نسبة الحضور:
-   *
-   * حاضر + متأخر + مستأذن = حضور
-   * غائب = يدخل في المقام
-   * لم يسجل = لا يدخل في النسبة
-   *
-   * النقل والمسح لا يغيران أي سجل من attendance.
-   */
-  const getAttendancePercentage = (
-    courseId: string,
-    studentId: string,
-  ) => {
-    const statusMap =
-      new Map(
-        attendanceStatuses.map(
-          (status) => [
-            status.id,
-            status.name,
-          ],
-        ),
-      )
-
-    const records =
-      attendanceRecords.filter(
-        (record) =>
-          record.courseId ===
-            courseId &&
-          record.studentId ===
-            studentId,
-      )
-
-    /*
-     * إذا وجد أكثر من سجل لنفس اليوم،
-     * نستخدم آخر سجل حتى لا تتضاعف النسبة.
-     */
-    const dailyRecords =
-      new Map<
-        string,
-        AttendanceRecord
-      >()
-
-    for (const record of records) {
-      dailyRecords.set(
-        `${record.studentId}_${record.attendanceDate}`,
-        record,
-      )
-    }
-
-    let attended = 0
-    let absent = 0
-
-    for (const record of dailyRecords.values()) {
-      const status =
-        statusMap.get(
-          record.statusId,
-        )
-
-      if (
-        status === 'حاضر' ||
-        status === 'متأخر' ||
-        status === 'مستأذن'
-      ) {
-        attended += 1
-      } else if (
-        status === 'غائب'
-      ) {
-        absent += 1
-      }
-    }
-
-    const denominator =
-      attended + absent
-
-    if (denominator === 0) {
-      return null
-    }
-
-    return (
-      Math.round(
-        (attended /
-          denominator) *
-          1000,
-      ) / 10
-    )
-  }
-
-  const previousCourseAssignments =
-    selectedPreviousCourse
-      ? assignments.filter(
-          (assignment) =>
-            assignment.courseId ===
-              selectedPreviousCourse
-                .course.id &&
-            assignment.teacherId ===
-              selectedTeacherId,
-        )
-      : []
-
-  const previousCourseStudents =
-    previousCourseAssignments
-      .map((assignment) => {
-        const student =
-          students.find(
-            (item) =>
-              item.id ===
-              assignment.studentId,
-          )
-
-        if (!student) {
-          return null
-        }
-
-        return {
-          assignment,
-          student,
-          percentage:
-            getAttendancePercentage(
-              assignment.courseId,
-              assignment.studentId,
-            ),
-        }
-      })
-      .filter(
-        (
-          item,
-        ): item is {
-          assignment: Assignment
-          student: Student
-          percentage: number | null
-        } => item !== null,
-      )
-
   const openTeacher = (
     teacherId: string,
   ) => {
@@ -1826,10 +1644,6 @@ export function TeachersView() {
       return
     }
 
-    /*
-     * المادة تُسحب تلقائيًا من إعدادات
-     * الدورة والمعلم.
-     */
     if (
       selectedTeacherSubjects.length ===
       0
@@ -1967,9 +1781,7 @@ export function TeachersView() {
       studentsToInsert.length ===
       0
     ) {
-      setSelectedStudentIds(
-        [],
-      )
+      setSelectedStudentIds([])
 
       setSelectedGrade('')
 
@@ -2102,13 +1914,6 @@ export function TeachersView() {
     setIsTransferOpen(true)
   }
 
-  /*
-   * المعلمون المتاحون للنقل:
-   * أي معلم مرتبط بالدورة الحالية ما عدا المعلم الحالي.
-   *
-   * المادة لا تُختار يدويًا.
-   * عند النقل نأخذ مادة المعلم الجديد تلقائيًا.
-   */
   const transferTeachers =
     useMemo(() => {
       if (
@@ -2205,17 +2010,6 @@ export function TeachersView() {
       return
     }
 
-    /*
-     * عند النقل:
-     *
-     * المعلم القديم ❌
-     * المادة القديمة ❌
-     *
-     * المعلم الجديد ✅
-     * مادة المعلم الجديد ✅
-     *
-     * الحضور والغياب لا يتغير.
-     */
     if (
       targetTeacher.subjects.length ===
       0
@@ -2261,13 +2055,6 @@ export function TeachersView() {
       return
     }
 
-    /*
-     * مهم:
-     * نحدث teacher_id و subject_id معًا.
-     *
-     * attendance غير مرتبط بهذا التعديل
-     * لذلك يبقى محفوظًا بدون أي تغيير.
-     */
     setSaving(true)
 
     setStatusMessage(
@@ -2383,12 +2170,6 @@ export function TeachersView() {
         'جاري مسح الطالب من المعلم...',
       )
 
-      /*
-       * المسح يحذف الربط الحالي فقط.
-       *
-       * لا نلمس attendance نهائيًا.
-       * الطالب نفسه لا يُحذف.
-       */
       const { error } =
         await supabase
           .from(
@@ -2954,10 +2735,20 @@ export function TeachersView() {
                     )
 
                     const firstCourse =
-                      previousCoursesForTeacher[0]
+                      courses.find(
+                        (course) =>
+                          course.isClosed &&
+                          (
+                            courseTeacherIds[
+                              course.id
+                            ] ?? []
+                          ).includes(
+                            selectedTeacher.id,
+                          ),
+                      )
 
                     setSelectedPreviousCourseId(
-                      firstCourse?.course.id ??
+                      firstCourse?.id ??
                         null,
                     )
                   }}
@@ -3448,231 +3239,37 @@ export function TeachersView() {
               )}
 
               {activePanel ===
-                'previousCourses' && (
-                <div className="space-y-5">
-                  <div>
-                    <h3 className="font-semibold">
-                      الدورات السابقة
-                    </h3>
-
-                    <p className="text-sm text-muted-foreground">
-                      الدورات المغلقة لهذا المعلم في السنة الدراسية الحالية.
-                    </p>
-                  </div>
-
-                  {previousCoursesForTeacher.length ===
-                  0 ? (
-                    <div className="rounded-lg border border-dashed p-10 text-center">
-                      <History className="mx-auto size-8 text-muted-foreground" />
-
-                      <p className="mt-3 font-medium">
-                        لا توجد دورات سابقة
-                      </p>
-
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        لا توجد دورة مغلقة مرتبطة بهذا المعلم في السنة الحالية.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          الدورة السابقة
-                        </label>
-
-                        <select
-                          value={
-                            selectedPreviousCourseId ??
-                            ''
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setSelectedPreviousCourseId(
-                              event.target
-                                .value ||
-                                null,
-                            )
-                          }
-                          className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                        >
-                          {previousCoursesForTeacher.map(
-                            ({
-                              course,
-                              subjects,
-                            }) => (
-                              <option
-                                key={
-                                  course.id
-                                }
-                                value={
-                                  course.id
-                                }
-                              >
-                                {course.name}
-                                {subjects.length >
-                                0
-                                  ? ` — ${Array.from(
-                                      new Set(
-                                        subjects.map(
-                                          (
-                                            subject,
-                                          ) =>
-                                            subject.subjectName,
-                                        ),
-                                      ),
-                                    ).join(
-                                      '، ',
-                                    )}`
-                                  : ''}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </div>
-
-                      {selectedPreviousCourse && (
-                        <Card>
-                          <CardContent className="space-y-5 p-5">
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                              <div>
-                                <p className="text-xs text-muted-foreground">
-                                  الدورة
-                                </p>
-
-                                <h3 className="mt-1 text-lg font-semibold">
-                                  {
-                                    selectedPreviousCourse
-                                      .course
-                                      .name
-                                  }
-                                </h3>
-
-                                <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                                  {selectedPreviousCourse
-                                    .subjects
-                                    .length >
-                                    0 && (
-                                    <span className="rounded-full bg-muted px-3 py-1.5">
-                                      المادة:{' '}
-                                      {Array.from(
-                                        new Set(
-                                          selectedPreviousCourse.subjects.map(
-                                            (
-                                              subject,
-                                            ) =>
-                                              subject.subjectName,
-                                          ),
-                                        ),
-                                      ).join(
-                                        '، ',
-                                      )}
-                                    </span>
-                                  )}
-
-                                  <span className="rounded-full bg-muted px-3 py-1.5">
-                                    {selectedPreviousCourse
-                                      .course
-                                      .startDate
-                                      ? new Intl.DateTimeFormat(
-                                          'ar-BH',
-                                          {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                          },
-                                        ).format(
-                                          new Date(
-                                            `${selectedPreviousCourse.course.startDate}T00:00:00`,
-                                          ),
-                                        )
-                                      : '—'}{' '}
-                                    —{' '}
-                                    {selectedPreviousCourse
-                                      .course
-                                      .endDate
-                                      ? new Intl.DateTimeFormat(
-                                          'ar-BH',
-                                          {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                          },
-                                        ).format(
-                                          new Date(
-                                            `${selectedPreviousCourse.course.endDate}T00:00:00`,
-                                          ),
-                                        )
-                                      : '—'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <span className="rounded-full bg-muted px-3 py-1.5 text-sm">
-                                {previousCourseStudents.length}{' '}
-                                طالب
-                              </span>
-                            </div>
-
-                            {previousCourseStudents.length ===
-                            0 ? (
-                              <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-                                لا يوجد طلاب مسندون لهذا المعلم في هذه الدورة.
-                              </div>
-                            ) : (
-                              <div className="overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm">
-                                  <thead className="bg-muted/50">
-                                    <tr>
-                                      <th className="px-4 py-3 text-right font-medium">
-                                        الطالب
-                                      </th>
-
-                                      <th className="px-4 py-3 text-right font-medium">
-                                        نسبة الحضور
-                                      </th>
-                                    </tr>
-                                  </thead>
-
-                                  <tbody>
-                                    {previousCourseStudents.map(
-                                      ({
-                                        assignment,
-                                        student,
-                                        percentage,
-                                      }) => (
-                                        <tr
-                                          key={
-                                            assignment.id
-                                          }
-                                          className="border-t"
-                                        >
-                                          <td className="px-4 py-3 font-medium">
-                                            {
-                                              student.name
-                                            }
-                                          </td>
-
-                                          <td className="px-4 py-3 font-semibold tabular-nums">
-                                            {percentage ===
-                                            null
-                                              ? '—'
-                                              : `${percentage}%`}
-                                          </td>
-                                        </tr>
-                                      ),
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                'previousCourses' &&
+                selectedTeacher && (
+                  <TeachersViewPreviousCourses
+                    teacherId={
+                      selectedTeacher.id
+                    }
+                    courses={courses}
+                    assignments={
+                      assignments
+                    }
+                    students={students}
+                    attendanceStatuses={
+                      attendanceStatuses
+                    }
+                    attendanceRecords={
+                      attendanceRecords
+                    }
+                    courseTeacherIds={
+                      courseTeacherIds
+                    }
+                    teacherCourseSubjects={
+                      teacherCourseSubjects
+                    }
+                    selectedCourseId={
+                      selectedPreviousCourseId
+                    }
+                    onSelectedCourseChange={
+                      setSelectedPreviousCourseId
+                    }
+                  />
+                )}
             </div>
           </div>
         </div>
@@ -3777,7 +3374,7 @@ export function TeachersView() {
                         <div>
                           المادة الحالية:{' '}
                           <span className="font-medium text-foreground">
-                            {currentSubject?.subjectName ??
+                            {currentSubject?.subjectName ||
                               selectedTeacherSubjectNames.join(
                                 '، ',
                               ) ||
