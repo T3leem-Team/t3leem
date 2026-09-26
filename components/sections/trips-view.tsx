@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { TripsForm } from './trips-form'
+import { loadTripsCache } from '@/lib/trips-cache'
 
 type TripStatus =
   | 'draft'
@@ -137,8 +138,10 @@ export function TripsView() {
 
   async function loadTrips(options?: {
     silent?: boolean
+    force?: boolean
   }) {
     const silent = options?.silent ?? false
+    const force = options?.force ?? false
 
     if (silent) {
       setRefreshing(true)
@@ -149,36 +152,17 @@ export function TripsView() {
     setError('')
 
     try {
-      const response = await fetch('/api/trips', {
-        method: 'GET',
-        cache: 'no-store',
+      const data = await loadTripsCache({
+        force,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ?? 'تعذر تحميل الرحلات.'
-        )
-      }
-
-      setTrips(
-        Array.isArray(data?.trips)
-          ? data.trips
-          : []
-      )
+      setTrips(data.trips as Trip[])
 
       setAcademicYears(
-        Array.isArray(data?.academicYears)
-          ? data.academicYears
-          : []
+        data.academicYears as AcademicYear[]
       )
 
-      setCourses(
-        Array.isArray(data?.courses)
-          ? data.courses
-          : []
-      )
+      setCourses(data.courses as Course[])
     } catch (error) {
       console.error('Load trips error:', error)
 
@@ -267,7 +251,10 @@ export function TripsView() {
         )
       }
 
-      await loadTrips({ silent: true })
+      await loadTrips({
+        silent: true,
+        force: true,
+      })
     } catch (error) {
       console.error('Delete trip error:', error)
 
@@ -285,7 +272,10 @@ export function TripsView() {
     setFormOpen(false)
     setEditingTrip(null)
 
-    loadTrips({ silent: true })
+    loadTrips({
+      silent: true,
+      force: true,
+    })
   }
 
   function handleCloseForm() {
@@ -326,7 +316,10 @@ export function TripsView() {
           <button
             type="button"
             onClick={() =>
-              loadTrips({ silent: true })
+              loadTrips({
+                silent: true,
+                force: true,
+              })
             }
             disabled={refreshing}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
