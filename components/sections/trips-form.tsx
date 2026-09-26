@@ -8,6 +8,8 @@ import {
   X,
 } from 'lucide-react'
 
+import { loadTripsCache } from '@/lib/trips-cache'
+
 type AcademicYear = {
   id: string
   name: string
@@ -177,6 +179,10 @@ export function TripsForm({
   /*
    * تحميل المستويات + مستويات الرحلة
    * في حالة التعديل.
+   *
+   * يتم استخدام نفس الكاش المشترك
+   * الخاص بقسم الرحلات بدل طلب /api/trips
+   * مرة أخرى.
    */
   useEffect(() => {
     let cancelled = false
@@ -185,23 +191,7 @@ export function TripsForm({
       setLoadingData(true)
 
       try {
-        const response = await fetch(
-          '/api/trips',
-          {
-            method: 'GET',
-            cache: 'no-store',
-          },
-        )
-
-        const data =
-          await response.json()
-
-        if (!response.ok) {
-          throw new Error(
-            data?.error ??
-              'تعذر تحميل بيانات الرحلة.',
-          )
-        }
+        const data = await loadTripsCache()
 
         if (cancelled) return
 
@@ -210,7 +200,9 @@ export function TripsForm({
             ? data.levels
             : []
 
-        setLevels(loadedLevels)
+        setLevels(
+          loadedLevels as Level[],
+        )
 
         if (trip?.id) {
           const tripLevels =
