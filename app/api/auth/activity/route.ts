@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 const SESSION_COOKIE = 't3leem_session_id'
-const IDLE_TIMEOUT_MINUTES = 20
+const IDLE_TIMEOUT_MINUTES = 1
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
