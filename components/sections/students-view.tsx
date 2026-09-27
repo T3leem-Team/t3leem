@@ -12,6 +12,7 @@ import {
   Pencil,
   Download,
   X,
+  Loader2,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -115,8 +116,7 @@ type StudentsViewCache = {
   supabaseStatus: string
 }
 
-let studentsViewCache: StudentsViewCache | null =
-  null
+let studentsViewCache: StudentsViewCache | null = null
 
 let studentsViewLoading = false
 
@@ -522,7 +522,21 @@ export function StudentsView() {
     setSupabaseStatus,
   ] = useState(
     studentsViewCache?.supabaseStatus ??
-      'جاري الاختبار...'
+      'جاري تحميل بيانات النظام...'
+  )
+
+  /*
+   * مؤشر تحميل عام.
+   *
+   * يظهر فقط عند أول تحميل فعلي بدون كاش.
+   * إذا كانت البيانات موجودة في الكاش تظهر مباشرة
+   * ويحدث التحديث في الخلفية بدون تعطيل الصفحة.
+   */
+  const [
+    isLoadingStudents,
+    setIsLoadingStudents,
+  ] = useState(
+    studentsViewCache === null
   )
 
   const [
@@ -668,13 +682,6 @@ export function StudentsView() {
   >(null)
 
   useEffect(() => {
-    /*
-     * إذا كان هناك كاش، فالبيانات ظهرت مباشرة
-     * من useState أعلاه.
-     *
-     * الآن نحدثها في الخلفية بدون إظهار Loading.
-     */
-
     const loadData = async () => {
       /*
        * لا نسمح بتشغيل أكثر من تحديث
@@ -690,15 +697,16 @@ export function StudentsView() {
         studentsViewCache !== null
 
       /*
-       * في أول دخول فقط نظهر حالة التحميل.
+       * فقط عند عدم وجود كاش نظهر مؤشر التحميل.
        *
-       * عند الرجوع للصفحة مع وجود الكاش:
-       * لا نغير الحالة حتى تبقى البيانات
-       * ظاهرة بشكل طبيعي.
+       * إذا يوجد كاش:
+       * البيانات تظهر فوراً والتحديث يعمل بالخلفية.
        */
       if (!hasCache) {
+        setIsLoadingStudents(true)
+
         setSupabaseStatus(
-          'جاري تحميل بيانات النظام...'
+          'جاري تحميل قائمة الطلاب والبيانات المرتبطة...'
         )
       }
 
@@ -1667,10 +1675,6 @@ export function StudentsView() {
 
         /*
          * حفظ آخر نسخة في الكاش.
-         *
-         * نستخدم البيانات المحلية التي تم
-         * بناؤها للتو، وليس state، لأن setState
-         * لا يحدث بشكل فوري.
          */
         studentsViewCache = {
           academicLevels:
@@ -1725,6 +1729,7 @@ export function StudentsView() {
         }
       } finally {
         studentsViewLoading = false
+        setIsLoadingStudents(false)
       }
     }
 
@@ -1735,9 +1740,6 @@ export function StudentsView() {
    * ============================================================
    * الحذف الجماعي
    * ============================================================
-   *
-   * هذه الدالة تستقبل IDs الطلاب المحددين من StudentsTable
-   * وتحذفهم من جدول students في Supabase.
    */
   const deleteSelectedStudents = async (
     studentIds: string[]
@@ -1773,9 +1775,6 @@ export function StudentsView() {
               !ids.includes(student.id)
           )
 
-        /*
-         * تحديث الكاش أيضاً.
-         */
         if (studentsViewCache) {
           studentsViewCache = {
             ...studentsViewCache,
@@ -1787,10 +1786,6 @@ export function StudentsView() {
       }
     )
 
-    /*
-     * إذا كان الطالب المحدد حالياً
-     * ضمن الطلاب المحذوفين، نلغي التحديد.
-     */
     if (
       selectedStudentId &&
       ids.includes(selectedStudentId)
@@ -2230,8 +2225,23 @@ export function StudentsView() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-md border bg-muted/30 px-4 py-3 text-sm">
-        {supabaseStatus}
+      {/* حالة التحميل / الاتصال */}
+      <div
+        className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm transition-all ${
+          isLoadingStudents
+            ? 'border-primary/30 bg-primary/5'
+            : 'bg-muted/30'
+        }`}
+      >
+        {isLoadingStudents && (
+          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+        )}
+
+        <span>
+          {isLoadingStudents
+            ? 'جاري تحميل قائمة الطلاب والبيانات المرتبطة...'
+            : supabaseStatus}
+        </span>
       </div>
 
       <PageHeader
@@ -2429,11 +2439,6 @@ export function StudentsView() {
                               : student
                         )
 
-                      /*
-                       * تحديث الكاش أيضاً حتى إذا
-                       * خرج المستخدم من الصفحة ورجع
-                       * قبل التحديث الخلفي.
-                       */
                       if (
                         studentsViewCache
                       ) {
@@ -2507,9 +2512,6 @@ export function StudentsView() {
                             selectedStudentId
                         )
 
-                      /*
-                       * تحديث الكاش أيضاً.
-                       */
                       if (
                         studentsViewCache
                       ) {
