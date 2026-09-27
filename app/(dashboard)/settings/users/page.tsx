@@ -40,17 +40,9 @@ type User = {
   is_active: boolean
   created_at: string
   updated_at: string
-
-  // الصلاحيات الإضافية الخاصة بالمستخدم فقط
   permissionIds: string[]
-
-  // صلاحيات الدور
   rolePermissionIds: string[]
-
-  // جميع الصلاحيات الفعلية = صلاحيات الدور + الإضافية
   effectivePermissionIds: string[]
-
-  // أقسام لوحة التحكم
   sectionIds: string[]
 }
 
@@ -121,11 +113,9 @@ export default function Page() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('Teacher')
 
-  // الصلاحيات الإضافية فقط
   const [selectedPermissions, setSelectedPermissions] =
     useState<string[]>([])
 
-  // أقسام لوحة التحكم
   const [selectedSections, setSelectedSections] =
     useState<string[]>([])
 
@@ -238,9 +228,6 @@ export default function Page() {
     setPassword('')
     setRole(user.role)
 
-    // مهم:
-    // نضع فقط الصلاحيات الإضافية في selectedPermissions
-    // ولا نضع صلاحيات الدور فيها.
     setSelectedPermissions([
       ...(user.permissionIds ?? []),
     ])
@@ -262,7 +249,6 @@ export default function Page() {
     const currentRolePermissionIds =
       getRolePermissionIds(role)
 
-    // لا نسمح بتحويل صلاحية الدور إلى صلاحية فردية
     if (
       currentRolePermissionIds.includes(
         permissionId,
@@ -339,8 +325,6 @@ export default function Page() {
       const rolePermissionIds =
         getRolePermissionIds(role)
 
-      // إزالة أي صلاحية موجودة أصلًا في الدور
-      // من قائمة الصلاحيات الفردية.
       const additionalPermissionIds =
         Array.from(
           new Set(
@@ -375,7 +359,6 @@ export default function Page() {
               ? { password }
               : {}),
 
-            // إضافية فقط
             permissionIds:
               additionalPermissionIds,
 
@@ -402,7 +385,6 @@ export default function Page() {
 
             role,
 
-            // إضافية فقط
             permissionIds:
               additionalPermissionIds,
 
@@ -506,7 +488,6 @@ export default function Page() {
                 isActive:
                   !user.is_active,
 
-                // نحافظ على الإضافية فقط
                 permissionIds:
                   user.permissionIds ??
                   [],
@@ -648,6 +629,16 @@ export default function Page() {
         ]),
       )
     }
+
+  /*
+   * إذا كان عدد المستخدمين أكثر من 10:
+   * يكون الـ Scroll داخل منطقة الجدول فقط.
+   *
+   * إذا كان 10 أو أقل:
+   * لا نضيف overflow/ارتفاع محدد.
+   */
+  const hasInternalScroll =
+    filteredUsers.length > 10
 
   return (
     <div className="space-y-6">
@@ -883,8 +874,6 @@ export default function Page() {
                         .value as Role,
                     )
 
-                    // تنظيف أي صلاحية إضافية
-                    // أصبحت جزءًا من الدور الجديد
                     const newRole =
                       event.target
                         .value as Role
@@ -1081,7 +1070,6 @@ export default function Page() {
                   permissions.length >
                     0 && (
                     <div className="absolute right-0 top-full z-50 mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
-                      {/* صلاحيات الدور */}
                       {currentRolePermissions.length >
                         0 && (
                         <div className="mb-4 rounded-lg border bg-muted/30 p-3">
@@ -1132,7 +1120,6 @@ export default function Page() {
                         </div>
                       )}
 
-                      {/* الصلاحيات الإضافية */}
                       <div>
                         <div className="mb-2">
                           <p className="text-sm font-semibold">
@@ -1333,301 +1320,374 @@ export default function Page() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1350px] text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="px-5 py-4 text-right font-medium">
-                      المستخدم
-                    </th>
+            <>
+              {/* منطقة الجدول */}
+              <div
+                className={
+                  hasInternalScroll
+                    ? 'max-h-[690px] overflow-y-auto overflow-x-auto'
+                    : 'overflow-x-auto'
+                }
+              >
+                <table className="w-full min-w-[1450px] text-sm">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="border-b bg-background shadow-sm">
+                      <th className="w-[70px] px-5 py-4 text-center font-semibold">
+                        #
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      البريد الإلكتروني
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        المستخدم
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      الدور
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        البريد الإلكتروني
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      القسم
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        الدور
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      أقسام لوحة التحكم
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        القسم
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      الصلاحيات الفعلية
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        أقسام لوحة التحكم
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      الحالة
-                    </th>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        الصلاحيات الفعلية
+                      </th>
 
-                    <th className="px-5 py-4 text-right font-medium">
-                      الإجراءات
-                    </th>
-                  </tr>
-                </thead>
+                      <th className="px-5 py-4 text-right font-semibold">
+                        الحالة
+                      </th>
 
-                <tbody className="divide-y">
-                  {filteredUsers.map(
-                    (user) => {
-                      const effectivePermissionIds =
-                        getEffectivePermissionIds(
-                          user,
-                        )
+                      <th className="px-5 py-4 text-right font-semibold">
+                        الإجراءات
+                      </th>
+                    </tr>
+                  </thead>
 
-                      const rolePermissionIds =
-                        user.rolePermissionIds ??
-                        getRolePermissionIds(
-                          user.role,
-                        )
+                  <tbody className="divide-y">
+                    {filteredUsers.map(
+                      (user, index) => {
+                        const effectivePermissionIds =
+                          getEffectivePermissionIds(
+                            user,
+                          )
 
-                      const additionalPermissionIds =
-                        user.permissionIds ??
-                        []
+                        const rolePermissionIds =
+                          user.rolePermissionIds ??
+                          getRolePermissionIds(
+                            user.role,
+                          )
 
-                      return (
-                        <tr
-                          key={
-                            user.id
-                          }
-                          className="transition-colors hover:bg-muted/20"
-                        >
-                          <td className="px-5 py-4">
-                            <div>
-                              <p className="font-medium">
-                                {
-                                  user.full_name
-                                }
-                              </p>
+                        const additionalPermissionIds =
+                          user.permissionIds ??
+                          []
 
-                              <p
-                                className="mt-1 text-xs text-muted-foreground"
+                        return (
+                          <tr
+                            key={
+                              user.id
+                            }
+                            className="transition-colors hover:bg-muted/20"
+                          >
+                            {/* السيريال */}
+                            <td className="px-5 py-4 text-center">
+                              <span className="inline-flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
+                                {index + 1}
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <div>
+                                <p className="font-medium">
+                                  {
+                                    user.full_name
+                                  }
+                                </p>
+
+                                <p
+                                  className="mt-1 text-xs text-muted-foreground"
+                                  dir="ltr"
+                                >
+                                  @
+                                  {
+                                    user.username
+                                  }
+                                </p>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <span
+                                className="text-sm"
                                 dir="ltr"
                               >
-                                @
-                                {
-                                  user.username
-                                }
-                              </p>
-                            </div>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <span
-                              className="text-sm"
-                              dir="ltr"
-                            >
-                              {user.email ||
-                                '—'}
-                            </span>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <Badge variant="neutral">
-                              {getRoleLabel(
-                                user.role,
-                              )}
-                            </Badge>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            {user.department ||
-                              '—'}
-                          </td>
-
-                          {/* أقسام لوحة التحكم */}
-                          <td className="max-w-[360px] px-5 py-4">
-                            {(
-                              user.sectionIds ??
-                              []
-                            ).length ===
-                            0 ? (
-                              <span className="text-xs text-muted-foreground">
-                                لا توجد أقسام
+                                {user.email ||
+                                  '—'}
                               </span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {(
-                                  user.sectionIds ??
-                                  []
-                                )
-                                  .slice(
-                                    0,
-                                    3,
-                                  )
-                                  .map(
-                                    (
-                                      id,
-                                    ) => (
-                                      <Badge
-                                        key={
-                                          id
-                                        }
-                                        variant="neutral"
-                                      >
-                                        {getSectionName(
-                                          id,
-                                        )}
-                                      </Badge>
-                                    ),
-                                  )}
+                            </td>
 
-                                {(
-                                  user.sectionIds ??
-                                  []
-                                ).length >
-                                  3 && (
-                                  <Badge variant="neutral">
-                                    +
-                                    {(
-                                      user.sectionIds ??
-                                      []
-                                    ).length -
-                                      3}
-                                  </Badge>
+                            <td className="px-5 py-4">
+                              <Badge variant="neutral">
+                                {getRoleLabel(
+                                  user.role,
                                 )}
-                              </div>
-                            )}
-                          </td>
+                              </Badge>
+                            </td>
 
-                          {/* الصلاحيات الفعلية */}
-                          <td className="max-w-[400px] px-5 py-4">
-                            {effectivePermissionIds.length ===
-                            0 ? (
-                              <span className="text-xs text-muted-foreground">
-                                لا توجد صلاحيات
-                              </span>
-                            ) : (
-                              <div className="space-y-2">
+                            <td className="px-5 py-4">
+                              {user.department ||
+                                '—'}
+                            </td>
+
+                            {/* أقسام لوحة التحكم */}
+                            <td className="max-w-[360px] px-5 py-4">
+                              {(
+                                user.sectionIds ??
+                                []
+                              ).length ===
+                              0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد أقسام
+                                </span>
+                              ) : (
                                 <div className="flex flex-wrap gap-1">
-                                  {effectivePermissionIds
+                                  {(
+                                    user.sectionIds ??
+                                    []
+                                  )
                                     .slice(
                                       0,
-                                      4,
+                                      3,
                                     )
                                     .map(
                                       (
                                         id,
-                                      ) => {
-                                        const isRolePermission =
-                                          rolePermissionIds.includes(
+                                      ) => (
+                                        <Badge
+                                          key={
+                                            id
+                                          }
+                                          variant="neutral"
+                                        >
+                                          {getSectionName(
                                             id,
-                                          )
-
-                                        return (
-                                          <Badge
-                                            key={
-                                              id
-                                            }
-                                            variant="neutral"
-                                          >
-                                            {getPermissionName(
-                                              id,
-                                            )}
-
-                                            {isRolePermission &&
-                                              ' • دور'}
-                                          </Badge>
-                                        )
-                                      },
+                                          )}
+                                        </Badge>
+                                      ),
                                     )}
 
-                                  {effectivePermissionIds.length >
-                                    4 && (
+                                  {(
+                                    user.sectionIds ??
+                                    []
+                                  ).length >
+                                    3 && (
                                     <Badge variant="neutral">
                                       +
-                                      {effectivePermissionIds.length -
-                                        4}
+                                      {(
+                                        user.sectionIds ??
+                                        []
+                                      ).length -
+                                        3}
                                     </Badge>
                                   )}
                                 </div>
+                              )}
+                            </td>
 
-                                <div className="text-xs text-muted-foreground">
-                                  {rolePermissionIds.length >
-                                    0 &&
-                                    `${rolePermissionIds.length} من الدور`}
+                            {/* الصلاحيات الفعلية */}
+                            <td className="max-w-[400px] px-5 py-4">
+                              {effectivePermissionIds.length ===
+                              0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد صلاحيات
+                                </span>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="flex flex-wrap gap-1">
+                                    {effectivePermissionIds
+                                      .slice(
+                                        0,
+                                        4,
+                                      )
+                                      .map(
+                                        (
+                                          id,
+                                        ) => {
+                                          const isRolePermission =
+                                            rolePermissionIds.includes(
+                                              id,
+                                            )
 
-                                  {rolePermissionIds.length >
-                                    0 &&
-                                    additionalPermissionIds.length >
+                                          return (
+                                            <Badge
+                                              key={
+                                                id
+                                              }
+                                              variant="neutral"
+                                            >
+                                              {getPermissionName(
+                                                id,
+                                              )}
+
+                                              {isRolePermission &&
+                                                ' • دور'}
+                                            </Badge>
+                                          )
+                                        },
+                                      )}
+
+                                    {effectivePermissionIds.length >
+                                      4 && (
+                                      <Badge variant="neutral">
+                                        +
+                                        {effectivePermissionIds.length -
+                                          4}
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  <div className="text-xs text-muted-foreground">
+                                    {rolePermissionIds.length >
                                       0 &&
-                                    ' • '}
+                                      `${rolePermissionIds.length} من الدور`}
 
-                                  {additionalPermissionIds.length >
-                                    0 &&
-                                    `${additionalPermissionIds.length} إضافية`}
+                                    {rolePermissionIds.length >
+                                      0 &&
+                                      additionalPermissionIds.length >
+                                        0 &&
+                                      ' • '}
+
+                                    {additionalPermissionIds.length >
+                                      0 &&
+                                      `${additionalPermissionIds.length} إضافية`}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </td>
+                              )}
+                            </td>
 
-                          <td className="px-5 py-4">
-                            {user.is_active ? (
-                              <Badge variant="success">
-                                نشط
-                              </Badge>
-                            ) : (
-                              <Badge variant="neutral">
-                                معطل
-                              </Badge>
-                            )}
-                          </td>
+                            {/* الحالة */}
+                            <td className="px-5 py-4">
+                              {user.is_active ? (
+                                <Badge variant="success">
+                                  نشط
+                                </Badge>
+                              ) : (
+                                <Badge variant="neutral">
+                                  معطل
+                                </Badge>
+                              )}
+                            </td>
 
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  openEditForm(
-                                    user,
-                                  )
-                                }
-                                disabled={
-                                  saving
-                                }
-                              >
-                                <Edit3 className="size-4" />
-                                تعديل
-                              </Button>
+                            {/* الإجراءات */}
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() =>
+                                    openEditForm(
+                                      user,
+                                    )
+                                  }
+                                  disabled={
+                                    saving
+                                  }
+                                  className="border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                                >
+                                  <Edit3 className="size-4" />
+                                  تعديل
+                                </Button>
 
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleToggleActive(
-                                    user,
-                                  )
-                                }
-                                disabled={
-                                  saving
-                                }
-                              >
-                                {saving ? (
-                                  <Loader2 className="size-4 animate-spin" />
+                                {user.is_active ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleToggleActive(
+                                        user,
+                                      )
+                                    }
+                                    disabled={
+                                      saving
+                                    }
+                                    className="border border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
+                                  >
+                                    {saving ? (
+                                      <Loader2 className="size-4 animate-spin" />
+                                    ) : (
+                                      <Power className="size-4" />
+                                    )}
+
+                                    تعطيل
+                                  </Button>
                                 ) : (
-                                  <Power className="size-4" />
-                                )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleToggleActive(
+                                        user,
+                                      )
+                                    }
+                                    disabled={
+                                      saving
+                                    }
+                                    className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
+                                  >
+                                    {saving ? (
+                                      <Loader2 className="size-4 animate-spin" />
+                                    ) : (
+                                      <Power className="size-4" />
+                                    )}
 
-                                {user.is_active
-                                  ? 'تعطيل'
-                                  : 'تفعيل'}
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )}
-                </tbody>
-              </table>
-            </div>
+                                    تفعيل
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      },
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Bottom Bar */}
+              <div className="flex flex-col gap-3 border-t bg-muted/20 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="size-4" />
+
+                  <span>
+                    عدد المستخدمين:
+                  </span>
+
+                  <span className="font-semibold text-foreground">
+                    {filteredUsers.length}
+                  </span>
+
+                  {search.trim() &&
+                    users.length !==
+                      filteredUsers.length && (
+                      <span className="text-xs">
+                        من أصل {users.length}
+                      </span>
+                    )}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  {hasInternalScroll
+                    ? 'يمكن تمرير الجدول لعرض بقية المستخدمين'
+                    : 'جميع المستخدمين ظاهرون'}
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
