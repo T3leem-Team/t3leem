@@ -57,10 +57,62 @@ export default function LoginPage() {
         return
       }
 
-      router.replace('/')
+      /*
+       * بعد نجاح تسجيل الدخول:
+       * نحدد أول قسم مسموح للمستخدم
+       * بدل إرسال الجميع إلى الصفحة الرئيسية.
+       */
+      const sectionsResponse = await fetch(
+        '/api/auth/dashboard-sections',
+        {
+          method: 'GET',
+          cache: 'no-store',
+        },
+      )
+
+      if (!sectionsResponse.ok) {
+        setError(
+          'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
+        )
+        return
+      }
+
+      const sectionsData =
+        await sectionsResponse.json()
+
+      const sections = Array.isArray(
+        sectionsData.sections,
+      )
+        ? [...sectionsData.sections].sort(
+            (
+              a: {
+                sort_order?: number
+              },
+              b: {
+                sort_order?: number
+              },
+            ) =>
+              (a.sort_order ?? 0) -
+              (b.sort_order ?? 0),
+          )
+        : []
+
+      const firstSection = sections[0]
+
+      const destination =
+        typeof firstSection?.href === 'string' &&
+        firstSection.href.trim()
+          ? firstSection.href
+          : '/'
+
+      router.replace(destination)
       router.refresh()
     } catch (error) {
-      console.error('Login request error:', error)
+      console.error(
+        'Login request error:',
+        error,
+      )
+
       setError(
         'تعذر الاتصال بالخادم. حاول مرة أخرى.',
       )
@@ -210,4 +262,3 @@ export default function LoginPage() {
     </main>
   )
 }
-
