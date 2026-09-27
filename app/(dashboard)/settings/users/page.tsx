@@ -801,13 +801,21 @@ export default function Page() {
           ) : (
             <>
               <div
+                dir="rtl"
                 className={
                   hasInternalScroll
-                    ? 'max-h-[690px] overflow-y-auto overflow-x-auto'
-                    : 'overflow-x-auto'
+                    ? 'users-table-scroll max-h-[690px] overflow-y-auto overflow-x-auto'
+                    : 'users-table-scroll overflow-x-auto'
                 }
+                style={{
+                  scrollbarColor:
+                    'var(--primary) transparent',
+                }}
               >
-                <table className="w-full min-w-[1100px] text-sm">
+                <table
+                  dir="rtl"
+                  className="w-full min-w-[1100px] text-sm"
+                >
                   <thead className="sticky top-0 z-20">
                     <tr className="border-b bg-background shadow-sm">
                       <th className="w-[70px] px-5 py-4 text-center font-semibold">
@@ -1736,7 +1744,13 @@ export default function Page() {
               </div>
 
               {/* التفاصيل */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div
+                className="users-details-scroll flex-1 overflow-y-auto p-6"
+                style={{
+                  scrollbarColor:
+                    'var(--primary) transparent',
+                }}
+              >
                 <div className="space-y-6">
                   {/* أقسام لوحة التحكم */}
                   <section>
@@ -1972,6 +1986,41 @@ export default function Page() {
             </div>
           </div>
         )}
+
+      <style jsx>{`
+        .users-table-scroll,
+        .users-details-scroll {
+          direction: rtl;
+          scrollbar-width: auto;
+          scrollbar-color: var(--primary) transparent;
+        }
+
+        .users-table-scroll::-webkit-scrollbar,
+        .users-details-scroll::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-track,
+        .users-details-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-thumb,
+        .users-details-scroll::-webkit-scrollbar-thumb {
+          background: var(--primary);
+          border: 3px solid transparent;
+          border-radius: 9999px;
+          background-clip: padding-box;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-thumb:hover,
+        .users-details-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--primary);
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+      `}</style>
     </div>
   )
 }
