@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 type DashboardSection = {
   id: string
@@ -79,7 +80,9 @@ function getUserInitials(user: CurrentUser | null) {
     return 'م'
   }
 
-  const parts = name.split(/\s+/).filter(Boolean)
+  const parts = name
+    .split(/\s+/)
+    .filter(Boolean)
 
   if (parts.length === 1) {
     return parts[0].charAt(0)
@@ -150,20 +153,33 @@ export function Sidebar({
   const [schoolSettingsError, setSchoolSettingsError] =
     useState('')
 
+  /*
+   * -------------------------------------------------------
+   * المستخدم الحالي
+   *
+   * نفس طريقة Header بالضبط:
+   * Supabase Auth -> user.id
+   * -> user_profiles.auth_user_id
+   * -------------------------------------------------------
+   */
   useEffect(() => {
     let cancelled = false
 
     async function loadCurrentUser() {
       try {
-        const response = await fetch(
-          '/api/auth/me',
-          {
-            method: 'GET',
-            cache: 'no-store',
-          },
-        )
+        setUserLoading(true)
 
-        if (!response.ok) {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          console.error(
+            'Current auth user error:',
+            userError,
+          )
+
           if (!cancelled) {
             setCurrentUser(null)
           }
@@ -171,12 +187,67 @@ export function Sidebar({
           return
         }
 
-        const data = await response.json()
+        if (!user) {
+          if (!cancelled) {
+            setCurrentUser(null)
+          }
+
+          return
+        }
+
+        const {
+          data,
+          error: profileError,
+        } = await supabase
+          .from('user_profiles')
+          .select(
+            'username, full_name, role',
+          )
+          .eq(
+            'auth_user_id',
+            user.id,
+          )
+          .maybeSingle()
+
+        if (profileError) {
+          console.error(
+            'Profile load error:',
+            profileError,
+          )
+
+          if (!cancelled) {
+            setCurrentUser({
+              id: user.id,
+              username:
+                user.email ??
+                null,
+              full_name: null,
+              email:
+                user.email ??
+                null,
+              role: null,
+            })
+          }
+
+          return
+        }
 
         if (!cancelled) {
-          setCurrentUser(
-            data?.user ?? null,
-          )
+          setCurrentUser({
+            id: user.id,
+            username:
+              data?.username ??
+              null,
+            full_name:
+              data?.full_name ??
+              null,
+            email:
+              user.email ??
+              null,
+            role:
+              data?.role ??
+              null,
+          })
         }
       } catch (error) {
         console.error(
@@ -201,6 +272,11 @@ export function Sidebar({
     }
   }, [])
 
+  /*
+   * -------------------------------------------------------
+   * الأقسام المسموحة
+   * -------------------------------------------------------
+   */
   useEffect(() => {
     let cancelled = false
 
@@ -224,11 +300,14 @@ export function Sidebar({
           return
         }
 
-        const data = await response.json()
+        const data =
+          await response.json()
 
         if (!cancelled) {
           const loadedSections =
-            Array.isArray(data.sections)
+            Array.isArray(
+              data.sections,
+            )
               ? data.sections
                   .slice()
                   .sort(
@@ -241,7 +320,9 @@ export function Sidebar({
                   )
               : []
 
-          setSections(loadedSections)
+          setSections(
+            loadedSections,
+          )
         }
       } catch {
         if (!cancelled) {
@@ -261,6 +342,11 @@ export function Sidebar({
     }
   }, [])
 
+  /*
+   * -------------------------------------------------------
+   * إعدادات المدرسة
+   * -------------------------------------------------------
+   */
   useEffect(() => {
     let cancelled = false
 
@@ -278,7 +364,8 @@ export function Sidebar({
           return
         }
 
-        const data = await response.json()
+        const data =
+          await response.json()
 
         if (
           !cancelled &&
@@ -287,9 +374,12 @@ export function Sidebar({
           const settings: SchoolSettings =
             data.settings
 
-          schoolSettingsCache = settings
+          schoolSettingsCache =
+            settings
 
-          setSchoolSettings(settings)
+          setSchoolSettings(
+            settings,
+          )
 
           setSchoolName(
             settings.school_name,
@@ -378,7 +468,8 @@ export function Sidebar({
           },
           cache: 'no-store',
           body: JSON.stringify({
-            school_name: trimmedName,
+            school_name:
+              trimmedName,
             school_subtitle:
               trimmedSubtitle,
           }),
@@ -391,7 +482,8 @@ export function Sidebar({
       } = {}
 
       try {
-        data = await response.json()
+        data =
+          await response.json()
       } catch {
         data = {}
       }
@@ -454,13 +546,14 @@ export function Sidebar({
     setLoggingOut(true)
 
     try {
-      const response = await fetch(
-        '/api/auth/logout',
-        {
-          method: 'POST',
-          cache: 'no-store',
-        },
-      )
+      const response =
+        await fetch(
+          '/api/auth/logout',
+          {
+            method: 'POST',
+            cache: 'no-store',
+          },
+        )
 
       if (!response.ok) {
         console.error(
@@ -493,7 +586,9 @@ export function Sidebar({
     ''
 
   const userInitials =
-    getUserInitials(currentUser)
+    getUserInitials(
+      currentUser,
+    )
 
   return (
     <>
@@ -517,7 +612,9 @@ export function Sidebar({
         <div className="flex h-16 items-center justify-between gap-2 border-b border-sidebar-border px-5">
           <button
             type="button"
-            onClick={openSchoolSettings}
+            onClick={
+              openSchoolSettings
+            }
             className="group flex min-w-0 items-center gap-2.5 text-right outline-none"
             title="إعدادات اسم المدرسة والنظام"
           >
@@ -528,7 +625,9 @@ export function Sidebar({
             <span className="flex min-w-0 flex-col leading-tight">
               <span className="flex items-center gap-1.5 text-lg font-bold tracking-tight">
                 <span className="truncate">
-                  {schoolSettings.school_name}
+                  {
+                    schoolSettings.school_name
+                  }
                 </span>
 
                 <Pencil className="size-3 shrink-0 text-sidebar-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -565,44 +664,54 @@ export function Sidebar({
               <div className="h-9 animate-pulse rounded-lg bg-sidebar-accent/50" />
             </div>
           ) : (
-            sections.map((section) => {
-              const active =
-                isActive(
-                  pathname,
-                  section.href,
+            sections.map(
+              (section) => {
+                const active =
+                  isActive(
+                    pathname,
+                    section.href,
+                  )
+
+                const Icon =
+                  iconMap[
+                    section.icon as keyof typeof iconMap
+                  ] ??
+                  LayoutDashboard
+
+                return (
+                  <Link
+                    key={
+                      section.id
+                    }
+                    href={
+                      section.href
+                    }
+                    onClick={
+                      onClose
+                    }
+                    aria-current={
+                      active
+                        ? 'page'
+                        : undefined
+                    }
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    )}
+                  >
+                    <Icon className="size-[18px] shrink-0" />
+
+                    <span>
+                      {
+                        section.section_name
+                      }
+                    </span>
+                  </Link>
                 )
-
-              const Icon =
-                iconMap[
-                  section.icon as keyof typeof iconMap
-                ] ??
-                LayoutDashboard
-
-              return (
-                <Link
-                  key={section.id}
-                  href={section.href}
-                  onClick={onClose}
-                  aria-current={
-                    active
-                      ? 'page'
-                      : undefined
-                  }
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    active
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                  )}
-                >
-                  <Icon className="size-[18px] shrink-0" />
-
-                  <span>
-                    {section.section_name}
-                  </span>
-                </Link>
-              )
-            })
+              },
+            )
           )}
         </nav>
 
@@ -612,8 +721,12 @@ export function Sidebar({
             <div className="absolute bottom-full right-4 left-4 mb-2 overflow-hidden rounded-xl border border-sidebar-border bg-sidebar shadow-lg">
               <button
                 type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
+                onClick={
+                  handleLogout
+                }
+                disabled={
+                  loggingOut
+                }
                 className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loggingOut ? (
@@ -635,7 +748,8 @@ export function Sidebar({
             type="button"
             onClick={() =>
               setUserMenuOpen(
-                (current) => !current,
+                (current) =>
+                  !current,
               )
             }
             aria-expanded={
@@ -679,7 +793,9 @@ export function Sidebar({
           role="dialog"
           aria-modal="true"
           aria-labelledby="school-settings-title"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event,
+          ) => {
             if (
               event.target ===
               event.currentTarget
@@ -733,9 +849,12 @@ export function Sidebar({
                   id="school-name"
                   type="text"
                   value={schoolName}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setSchoolName(
-                      event.target.value,
+                      event.target
+                        .value,
                     )
                   }
                   maxLength={100}
@@ -758,10 +877,15 @@ export function Sidebar({
                 <input
                   id="school-subtitle"
                   type="text"
-                  value={schoolSubtitle}
-                  onChange={(event) =>
+                  value={
+                    schoolSubtitle
+                  }
+                  onChange={(
+                    event,
+                  ) =>
                     setSchoolSubtitle(
-                      event.target.value,
+                      event.target
+                        .value,
                     )
                   }
                   maxLength={150}
@@ -775,7 +899,9 @@ export function Sidebar({
 
               {schoolSettingsError && (
                 <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-                  {schoolSettingsError}
+                  {
+                    schoolSettingsError
+                  }
                 </div>
               )}
             </div>
