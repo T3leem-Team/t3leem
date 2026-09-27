@@ -626,141 +626,6 @@ export async function POST(
         )
       }
 
-      /*
-       * ----------------------------------------------------
-       * إلغاء أي جلسات سابقة لنفس المستخدم
-       *
-       * المستخدم يسمح له بجلسة واحدة فقط.
-       *
-       * إذا كان مسجلًا من جهاز آخر:
-       * - الجلسة القديمة تصبح غير فعالة.
-       * - الجهاز القديم سيتم إخراجه عند أول طلب محمي.
-       *
-       * لا نلمس trusted_devices.
-       * ----------------------------------------------------
-       */
-
-      const previousLogoutAt =
-        new Date().toISOString()
-
-      const {
-        data: previousSessions,
-        error: previousSessionsError,
-      } =
-        await supabaseAdmin
-          .from('active_sessions')
-          .select('id, trusted_device_id')
-          .eq(
-            'auth_user_id',
-            profile.auth_user_id,
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-
-      if (previousSessionsError) {
-        console.error(
-          'Previous sessions lookup error:',
-          previousSessionsError,
-        )
-
-        return NextResponse.json(
-          {
-            error:
-              'تعذر إنهاء الجلسات السابقة.',
-          },
-          { status: 500 },
-        )
-      }
-
-      if (
-        previousSessions &&
-        previousSessions.length > 0
-      ) {
-        const {
-          error:
-            previousSessionsUpdateError,
-        } =
-          await supabaseAdmin
-            .from('active_sessions')
-            .update({
-              is_active:
-                false,
-              logout_at:
-                previousLogoutAt,
-            })
-            .eq(
-              'auth_user_id',
-              profile.auth_user_id,
-            )
-            .eq(
-              'is_active',
-              true,
-            )
-
-        if (
-          previousSessionsUpdateError
-        ) {
-          console.error(
-            'Previous sessions update error:',
-            previousSessionsUpdateError,
-          )
-
-          return NextResponse.json(
-            {
-              error:
-                'تعذر إنهاء الجلسات السابقة.',
-            },
-            { status: 500 },
-          )
-        }
-
-        /*
-         * تسجيل عملية إخراج الجلسات السابقة
-         * في سجل التدقيق.
-         */
-        const {
-          error:
-            forcedLogoutAuditError,
-        } =
-          await supabaseAdmin
-            .from('auth_audit_logs')
-            .insert({
-              auth_user_id:
-                profile.auth_user_id,
-              trusted_device_id:
-                device.id,
-              event_type:
-                'previous_sessions_closed',
-              success: true,
-              ip_address:
-                ipAddress,
-              user_agent:
-                userAgent,
-              metadata: {
-                username:
-                  profile.username,
-                closed_session_ids:
-                  previousSessions.map(
-                    (session) =>
-                      session.id,
-                  ),
-                new_device_id:
-                  device.id,
-              },
-            })
-
-        if (
-          forcedLogoutAuditError
-        ) {
-          console.error(
-            'Previous sessions audit error:',
-            forcedLogoutAuditError,
-          )
-        }
-      }
-
       const response =
         NextResponse.json({
           user: {
@@ -901,13 +766,11 @@ export async function POST(
 
       /*
        * ----------------------------------------------------
-       * إنشاء Active Session
+       * إنشاء Active Session الجديدة
        *
-       * لا يوجد حد 4 ساعات.
-       *
-       * expires_at مجرد تاريخ بعيد لسجل الجلسة.
-       * انتهاء الجلسة الحقيقي يتم عن طريق
-       * idle timeout = 20 دقيقة.
+       * مهم:
+       * ننشئ الجلسة الجديدة أولًا.
+       * بعد نجاحها فقط نغلق الجلسات القديمة.
        * ----------------------------------------------------
        */
 
@@ -949,10 +812,89 @@ export async function POST(
           .select('id')
           .single()
 
-      if (sessionError) {
+      /*
+       * إذا فشل إنشاء Active Session:
+       *
+       * لا نغلق أي جلسة قديمة.
+       */
+      if (
+        sessionError ||
+        !activeSession?.id
+      ) {
         console.error(
           'Active session insert error:',
           sessionError,
+        )
+
+        try {
+          await supabase.auth.signOut()
+        } catch (signOutError) {
+          console.error(
+            'Supabase cleanup error:',
+            signOutError,
+          )
+        }
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر إنشاء جلسة تسجيل الدخول.',
+          },
+          { status: 500 },
+        )
+      }
+
+      /*
+       * ----------------------------------------------------
+       * إغلاق الجلسات السابقة لنفس المستخدم
+       *
+       * الآن فقط بعد نجاح إنشاء الجلسة الجديدة.
+       *
+       * نستثني الجلسة الجديدة حتى تبقى فعالة.
+       * ----------------------------------------------------
+       */
+
+      const previousLogoutAt =
+        new Date().toISOString()
+
+      const {
+        error:
+          previousSessionsUpdateError,
+      } =
+        await supabaseAdmin
+          .from('active_sessions')
+          .update({
+            is_active:
+              false,
+            logout_at:
+              previousLogoutAt,
+          })
+          .eq(
+            'auth_user_id',
+            profile.auth_user_id,
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+          .neq(
+            'id',
+            activeSession.id,
+          )
+
+      if (
+        previousSessionsUpdateError
+      ) {
+        /*
+         * لا نفشل تسجيل الدخول الجديد هنا.
+         *
+         * الجلسة الجديدة موجودة وفعالة.
+         * نسجل الخطأ فقط حتى لا نمنع المستخدم
+         * من الدخول بسبب مشكلة في إغلاق القديمة.
+         */
+        console.error(
+          'Previous sessions update error:',
+          previousSessionsUpdateError,
         )
       }
 
@@ -962,25 +904,23 @@ export async function POST(
        * ----------------------------------------------------
        */
 
-      if (activeSession?.id) {
-        response.cookies.set(
-          SESSION_COOKIE,
-          activeSession.id,
-          {
-            httpOnly: true,
-            secure:
-              process.env.NODE_ENV ===
-              'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge:
-              SESSION_COOKIE_MAX_DAYS *
-              24 *
-              60 *
-              60,
-          },
-        )
-      }
+      response.cookies.set(
+        SESSION_COOKIE,
+        activeSession.id,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge:
+            SESSION_COOKIE_MAX_DAYS *
+            24 *
+            60 *
+            60,
+        },
+      )
 
       /*
        * ----------------------------------------------------
@@ -1007,10 +947,11 @@ export async function POST(
               username:
                 profile.username,
               active_session_id:
-                activeSession?.id ??
-                null,
+                activeSession.id,
               session_expires_at:
                 expiresAt.toISOString(),
+              single_session:
+                true,
             },
           })
 
