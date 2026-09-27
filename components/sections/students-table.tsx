@@ -949,18 +949,19 @@ export function StudentsTable({
 
         {/* =========================================
             الجدول
-            - حد أقصى يعادل تقريباً 10 صفوف
-            - السكرول العمودي داخل الجدول
             - السكرول العمودي في اليمين
-            - السكرول الأفقي أسفل منطقة الجدول
-            - منع الـ Table الداخلي من إنشاء Scroll آخر
-           ========================================= */}
+            - السكرول الأفقي أسفل الجدول
+            - الجدول RTL
+            ========================================= */}
 
         <div
-          dir="rtl"
+          dir="ltr"
           className="relative max-h-[590px] overflow-auto rounded-lg border [&>div]:overflow-visible"
         >
-          <Table className="min-w-[1200px]">
+          <Table
+            dir="rtl"
+            className="min-w-[1200px]"
+          >
 
             <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow>
@@ -1106,16 +1107,23 @@ export function StudentsTable({
                       student.id
                     )
 
+                  const isCurrentStudent =
+                    selectedStudentId ===
+                    student.id
+
                   return (
                     <TableRow
                       key={student.id}
                       data-state={
-                        selectedStudentId ===
-                        student.id
+                        isCurrentStudent
                           ? 'selected'
                           : undefined
                       }
-                      className="h-[48px] cursor-pointer"
+                      className={`h-[48px] cursor-pointer transition-colors ${
+                        isCurrentStudent
+                          ? '!bg-primary/15 hover:!bg-primary/20'
+                          : 'hover:bg-muted/50'
+                      }`}
                       onClick={() => {
                         if (selectionMode) {
                           toggleStudentSelection(
