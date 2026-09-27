@@ -63,6 +63,12 @@ type DashboardSection = {
 
 /*
  * كاش صلاحيات أقسام لوحة التحكم.
+ *
+ * الهدف:
+ * - أول دخول يتحقق من الصلاحيات.
+ * - التنقل بين الأقسام لا يظهر Loading.
+ * - الرجوع يكون سريع.
+ * - تحديث الصلاحيات يتم في الخلفية.
  */
 let sectionsCache: DashboardSection[] | null = null
 let sectionsLoading = false
@@ -110,7 +116,8 @@ async function refreshSections(
             (
               a: DashboardSection,
               b: DashboardSection,
-            ) => a.sort_order - b.sort_order,
+            ) =>
+              a.sort_order - b.sort_order,
           )
         : []
 
@@ -135,7 +142,7 @@ export function SectionRouter() {
     )
 
   /*
-   * تحميل الصلاحيات.
+   * تحميل وتحديث الصلاحيات.
    */
   useEffect(() => {
     let cancelled = false
@@ -145,7 +152,7 @@ export function SectionRouter() {
         setSections(sectionsCache)
 
         /*
-         * تحديث صامت للخلفية.
+         * تحديث صامت في الخلفية.
          */
         await refreshSections(router)
 
@@ -157,7 +164,7 @@ export function SectionRouter() {
       }
 
       /*
-       * أول دخول.
+       * أول دخول يحتاج انتظار الصلاحيات.
        */
       await refreshSections(router)
 
@@ -173,6 +180,51 @@ export function SectionRouter() {
     }
   }, [pathname, router])
 
+  /*
+   * التحويل التلقائي إذا كانت الصفحة الحالية
+   * غير مسموحة للمستخدم.
+   *
+   * مهم:
+   * هذا الـuseEffect موجود دائمًا قبل أي return
+   * حتى لا نخالف قواعد React Hooks.
+   */
+  useEffect(() => {
+    if (!sections) return
+
+    const currentSectionKey =
+      getSectionKey(pathname)
+
+    const hasAccess =
+      currentSectionKey === null ||
+      sections.some(
+        (section) =>
+          section.section_key ===
+          currentSectionKey,
+      )
+
+    if (hasAccess) return
+
+    const firstAllowedSection =
+      sections[0]
+
+    if (
+      firstAllowedSection?.href &&
+      firstAllowedSection.href !== pathname
+    ) {
+      router.replace(
+        firstAllowedSection.href,
+      )
+      return
+    }
+
+    /*
+     * المستخدم ليس لديه أي قسم مسموح.
+     */
+    if (!firstAllowedSection) {
+      router.replace('/login')
+    }
+  }, [sections, pathname, router])
+
   const isSubPage =
     pathname.split('/').filter(Boolean).length > 1
 
@@ -181,7 +233,7 @@ export function SectionRouter() {
   }
 
   /*
-   * يظهر Loading فقط عند أول تحميل.
+   * أول تحميل فقط.
    */
   if (!sections) {
     return (
@@ -205,40 +257,8 @@ export function SectionRouter() {
     )
 
   /*
-   * إذا كانت الصفحة الحالية غير مسموحة:
-   * ننتقل مباشرة إلى أول قسم مسموح.
+   * أثناء تنفيذ router.replace().
    */
-  useEffect(() => {
-    if (!sections) return
-
-    const currentKey =
-      getSectionKey(pathname)
-
-    const allowed =
-      currentKey === null ||
-      sections.some(
-        (section) =>
-          section.section_key ===
-          currentKey,
-      )
-
-    if (allowed) return
-
-    const firstAllowedSection =
-      sections[0]
-
-    if (
-      firstAllowedSection?.href &&
-      firstAllowedSection.href !== pathname
-    ) {
-      router.replace(
-        firstAllowedSection.href,
-      )
-    } else if (!firstAllowedSection) {
-      router.replace('/login')
-    }
-  }, [sections, pathname, router])
-
   if (!hasAccess) {
     return (
       <div className="flex min-h-[240px] items-center justify-center">
