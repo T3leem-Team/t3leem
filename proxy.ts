@@ -42,6 +42,9 @@ export async function proxy(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  const isApiRoute =
+    pathname.startsWith('/api/')
+
   const isPublicRoute =
     pathname === '/login' ||
     pathname === '/forgot-password' ||
@@ -49,18 +52,53 @@ export async function proxy(request: NextRequest) {
     pathname === '/student-status' ||
     pathname === '/api/auth/login'
 
-  if (!user && !isPublicRoute) {
+  /*
+   * ---------------------------------------------------------
+   * API
+   * ---------------------------------------------------------
+   *
+   * لا نعمل redirect للـAPI إلى /login.
+   *
+   * كل API مسؤول عن التحقق من المصادقة بنفسه
+   * عن طريق requireAuth() أو آلية الحماية الخاصة به.
+   *
+   * هذا مهم جدًا حتى لا يتحول طلب API غير مصادق
+   * إلى صفحة HTML /login.
+   */
+  if (isApiRoute) {
+    return response
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * الصفحات العامة
+   * ---------------------------------------------------------
+   */
+  if (isPublicRoute) {
+    return response
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * حماية صفحات النظام
+   * ---------------------------------------------------------
+   */
+  if (!user) {
     return NextResponse.redirect(
       new URL('/login', request.url),
     )
   }
 
-  if (user && pathname === '/login') {
-    return NextResponse.redirect(
-      new URL('/', request.url),
-    )
-  }
-
+  /*
+   * مهم:
+   *
+   * لا نعيد المستخدم من /login إلى /
+   * حتى لا ندخل في redirect loop عند انتهاء
+   * جلسة Supabase أو أثناء تنظيف جلسة T3LEEM.
+   *
+   * صفحة تسجيل الدخول تتعامل مع تسجيل الدخول
+   * بشكل مستقل.
+   */
   return response
 }
 
@@ -69,4 +107,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
-
