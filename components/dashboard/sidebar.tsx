@@ -39,6 +39,14 @@ type SchoolSettings = {
   updated_at?: string
 }
 
+type CurrentUser = {
+  id: string
+  username?: string | null
+  full_name?: string | null
+  email?: string | null
+  role?: string | null
+}
+
 const DEFAULT_SCHOOL_NAME = 'تعليم'
 const DEFAULT_SCHOOL_SUBTITLE = 'نظام إدارة المدارس'
 
@@ -61,6 +69,28 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
+function getUserInitials(user: CurrentUser | null) {
+  const name =
+    user?.full_name?.trim() ||
+    user?.username?.trim() ||
+    ''
+
+  if (!name) {
+    return 'م'
+  }
+
+  const parts = name.split(/\s+/).filter(Boolean)
+
+  if (parts.length === 1) {
+    return parts[0].charAt(0)
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('')
+}
+
 export function Sidebar({
   open,
   onClose,
@@ -77,6 +107,12 @@ export function Sidebar({
 
   const [loading, setLoading] = useState(true)
 
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser | null>(null)
+
+  const [userLoading, setUserLoading] =
+    useState(true)
+
   const [userMenuOpen, setUserMenuOpen] =
     useState(false)
 
@@ -88,7 +124,8 @@ export function Sidebar({
       schoolSettingsCache ?? {
         id: 1,
         school_name: DEFAULT_SCHOOL_NAME,
-        school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
+        school_subtitle:
+          DEFAULT_SCHOOL_SUBTITLE,
       },
     )
 
@@ -112,6 +149,57 @@ export function Sidebar({
 
   const [schoolSettingsError, setSchoolSettingsError] =
     useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch(
+          '/api/auth/me',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setCurrentUser(null)
+          }
+
+          return
+        }
+
+        const data = await response.json()
+
+        if (!cancelled) {
+          setCurrentUser(
+            data?.user ?? null,
+          )
+        }
+      } catch (error) {
+        console.error(
+          'Load current user error:',
+          error,
+        )
+
+        if (!cancelled) {
+          setCurrentUser(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setUserLoading(false)
+        }
+      }
+    }
+
+    loadCurrentUser()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -394,6 +482,19 @@ export function Sidebar({
     }
   }
 
+  const userName =
+    currentUser?.full_name?.trim() ||
+    currentUser?.username?.trim() ||
+    'المستخدم'
+
+  const userEmail =
+    currentUser?.email?.trim() ||
+    currentUser?.username?.trim() ||
+    ''
+
+  const userInitials =
+    getUserInitials(currentUser)
+
   return (
     <>
       {open && (
@@ -543,16 +644,20 @@ export function Sidebar({
             className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/60 p-3 text-right transition-colors hover:bg-sidebar-accent"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-sm font-semibold text-sidebar-primary-foreground">
-              م أ
+              {userLoading
+                ? '…'
+                : userInitials}
             </span>
 
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
-              <span className="text-sm font-semibold">
-                مدير النظام
+              <span className="truncate text-sm font-semibold">
+                {userLoading
+                  ? 'جاري التحميل...'
+                  : userName}
               </span>
 
               <span className="truncate text-[11px] text-sidebar-foreground/60">
-                admin@t3leem.sa
+                {userEmail}
               </span>
             </span>
 
