@@ -112,9 +112,7 @@ function formatRelativeTime(dateString: string) {
     return 'الآن'
   }
 
-  const minutes = Math.floor(
-    diffSeconds / 60,
-  )
+  const minutes = Math.floor(diffSeconds / 60)
 
   if (minutes < 60) {
     return minutes === 1
@@ -122,9 +120,7 @@ function formatRelativeTime(dateString: string) {
       : `قبل ${minutes} دقائق`
   }
 
-  const hours = Math.floor(
-    minutes / 60,
-  )
+  const hours = Math.floor(minutes / 60)
 
   if (hours < 24) {
     return hours === 1
@@ -132,9 +128,7 @@ function formatRelativeTime(dateString: string) {
       : `قبل ${hours} ساعات`
   }
 
-  const days = Math.floor(
-    hours / 24,
-  )
+  const days = Math.floor(hours / 24)
 
   if (days === 1) {
     return 'أمس'
@@ -144,14 +138,11 @@ function formatRelativeTime(dateString: string) {
     return `قبل ${days} أيام`
   }
 
-  return date.toLocaleDateString(
-    'ar-BH',
-    {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    },
-  )
+  return date.toLocaleDateString('ar-BH', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 export function Header({
@@ -162,8 +153,7 @@ export function Header({
   const pathname = usePathname()
 
   const [open, setOpen] = useState(false)
-  const [profileOpen, setProfileOpen] =
-    useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] =
     useState(false)
 
@@ -184,11 +174,9 @@ export function Header({
   const [loadingNotifications, setLoadingNotifications] =
     useState(false)
 
-  const menuRef =
-    useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  const profileRef =
-    useRef<HTMLDivElement>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
 
   const notificationsRef =
     useRef<HTMLDivElement>(null)
@@ -411,6 +399,81 @@ export function Header({
       setLoadingNotifications(false)
     }
   }
+
+  /*
+   * -------------------------------------------------------
+   * Realtime Notifications
+   * -------------------------------------------------------
+   *
+   * أي login_success جديد في auth_audit_logs
+   * يسبب تحديث الإشعارات مباشرة.
+   */
+  useEffect(() => {
+    let mounted = true
+
+    const channel =
+      supabase
+        .channel(
+          't3leem-login-notifications',
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'auth_audit_logs',
+            filter:
+              'event_type=eq.login_success',
+          },
+          async (payload) => {
+            if (!mounted) {
+              return
+            }
+
+            const newLog =
+              payload.new as AuditLog
+
+            if (
+              newLog.event_type !==
+                'login_success' ||
+              !newLog.success
+            ) {
+              return
+            }
+
+            /*
+             * إعادة تحميل آخر 10 عمليات دخول.
+             *
+             * هذا أفضل من محاولة بناء الإشعار
+             * يدويًا لأن الاسم موجود في user_profiles.
+             */
+            await loadNotifications()
+          },
+        )
+        .subscribe((status) => {
+          if (
+            status === 'CHANNEL_ERROR'
+          ) {
+            console.error(
+              'Login notifications realtime channel error',
+            )
+          }
+
+          if (
+            status === 'TIMED_OUT'
+          ) {
+            console.error(
+              'Login notifications realtime channel timed out',
+            )
+          }
+        })
+
+    return () => {
+      mounted = false
+
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   useEffect(() => {
     function handleClickOutside(
@@ -739,6 +802,12 @@ export function Header({
 
           {notifications.length > 0 && (
             <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background" />
+          )}
+
+          {notificationsOpen && (
+            <span className="sr-only">
+              الإشعارات مفتوحة
+            </span>
           )}
         </button>
 
