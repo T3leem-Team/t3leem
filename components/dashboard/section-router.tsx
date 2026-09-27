@@ -63,12 +63,6 @@ type DashboardSection = {
 
 /*
  * كاش صلاحيات أقسام لوحة التحكم.
- *
- * الهدف:
- * - الدخول لأول مرة يتحقق من الصلاحيات.
- * - التنقل بين الأقسام لا يعيد إظهار Loading.
- * - زر Back يرجع فورًا.
- * - يتم تحديث الصلاحيات في الخلفية بدون تعطيل الصفحة.
  */
 let sectionsCache: DashboardSection[] | null = null
 let sectionsLoading = false
@@ -112,7 +106,7 @@ async function refreshSections(
 
     const allowedSections: DashboardSection[] =
       Array.isArray(data.sections)
-        ? data.sections.sort(
+        ? [...data.sections].sort(
             (
               a: DashboardSection,
               b: DashboardSection,
@@ -141,12 +135,7 @@ export function SectionRouter() {
     )
 
   /*
-   * التحقق من الصلاحيات.
-   *
-   * إذا كان الكاش موجود:
-   * نعرض الصفحة فورًا بدون Loading.
-   *
-   * ثم نعمل تحديث صامت في الخلفية.
+   * تحميل الصلاحيات.
    */
   useEffect(() => {
     let cancelled = false
@@ -168,7 +157,7 @@ export function SectionRouter() {
       }
 
       /*
-       * أول دخول فقط يحتاج انتظار التحقق.
+       * أول دخول.
        */
       await refreshSections(router)
 
@@ -192,8 +181,7 @@ export function SectionRouter() {
   }
 
   /*
-   * يظهر Loading فقط في أول دخول،
-   * وليس عند الرجوع أو التنقل بعد وجود الكاش.
+   * يظهر Loading فقط عند أول تحميل.
    */
   if (!sections) {
     return (
@@ -215,6 +203,41 @@ export function SectionRouter() {
         section.section_key ===
         currentSectionKey,
     )
+
+  /*
+   * إذا كانت الصفحة الحالية غير مسموحة:
+   * ننتقل مباشرة إلى أول قسم مسموح.
+   */
+  useEffect(() => {
+    if (!sections) return
+
+    const currentKey =
+      getSectionKey(pathname)
+
+    const allowed =
+      currentKey === null ||
+      sections.some(
+        (section) =>
+          section.section_key ===
+          currentKey,
+      )
+
+    if (allowed) return
+
+    const firstAllowedSection =
+      sections[0]
+
+    if (
+      firstAllowedSection?.href &&
+      firstAllowedSection.href !== pathname
+    ) {
+      router.replace(
+        firstAllowedSection.href,
+      )
+    } else if (!firstAllowedSection) {
+      router.replace('/login')
+    }
+  }, [sections, pathname, router])
 
   if (!hasAccess) {
     return (
