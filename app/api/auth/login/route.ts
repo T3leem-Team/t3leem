@@ -626,6 +626,141 @@ export async function POST(
         )
       }
 
+      /*
+       * ----------------------------------------------------
+       * إلغاء أي جلسات سابقة لنفس المستخدم
+       *
+       * المستخدم يسمح له بجلسة واحدة فقط.
+       *
+       * إذا كان مسجلًا من جهاز آخر:
+       * - الجلسة القديمة تصبح غير فعالة.
+       * - الجهاز القديم سيتم إخراجه عند أول طلب محمي.
+       *
+       * لا نلمس trusted_devices.
+       * ----------------------------------------------------
+       */
+
+      const previousLogoutAt =
+        new Date().toISOString()
+
+      const {
+        data: previousSessions,
+        error: previousSessionsError,
+      } =
+        await supabaseAdmin
+          .from('active_sessions')
+          .select('id, trusted_device_id')
+          .eq(
+            'auth_user_id',
+            profile.auth_user_id,
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+
+      if (previousSessionsError) {
+        console.error(
+          'Previous sessions lookup error:',
+          previousSessionsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر إنهاء الجلسات السابقة.',
+          },
+          { status: 500 },
+        )
+      }
+
+      if (
+        previousSessions &&
+        previousSessions.length > 0
+      ) {
+        const {
+          error:
+            previousSessionsUpdateError,
+        } =
+          await supabaseAdmin
+            .from('active_sessions')
+            .update({
+              is_active:
+                false,
+              logout_at:
+                previousLogoutAt,
+            })
+            .eq(
+              'auth_user_id',
+              profile.auth_user_id,
+            )
+            .eq(
+              'is_active',
+              true,
+            )
+
+        if (
+          previousSessionsUpdateError
+        ) {
+          console.error(
+            'Previous sessions update error:',
+            previousSessionsUpdateError,
+          )
+
+          return NextResponse.json(
+            {
+              error:
+                'تعذر إنهاء الجلسات السابقة.',
+            },
+            { status: 500 },
+          )
+        }
+
+        /*
+         * تسجيل عملية إخراج الجلسات السابقة
+         * في سجل التدقيق.
+         */
+        const {
+          error:
+            forcedLogoutAuditError,
+        } =
+          await supabaseAdmin
+            .from('auth_audit_logs')
+            .insert({
+              auth_user_id:
+                profile.auth_user_id,
+              trusted_device_id:
+                device.id,
+              event_type:
+                'previous_sessions_closed',
+              success: true,
+              ip_address:
+                ipAddress,
+              user_agent:
+                userAgent,
+              metadata: {
+                username:
+                  profile.username,
+                closed_session_ids:
+                  previousSessions.map(
+                    (session) =>
+                      session.id,
+                  ),
+                new_device_id:
+                  device.id,
+              },
+            })
+
+        if (
+          forcedLogoutAuditError
+        ) {
+          console.error(
+            'Previous sessions audit error:',
+            forcedLogoutAuditError,
+          )
+        }
+      }
+
       const response =
         NextResponse.json({
           user: {
