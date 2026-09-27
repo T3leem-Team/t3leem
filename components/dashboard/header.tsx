@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import {
   Check,
   Menu,
-  Search,
   Bell,
   Palette,
   Sun,
@@ -593,19 +592,9 @@ export function Header({
         {currentTitle(pathname)}
       </h1>
 
-      <div className="relative mr-auto hidden md:block">
-        <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-        <input
-          type="search"
-          placeholder="بحث عن طالب، معلم، طلب..."
-          className="h-9 w-64 rounded-lg border border-border bg-card pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-        />
-      </div>
-
       <div
         ref={menuRef}
-        className="relative"
+        className="relative mr-auto"
       >
         <button
           type="button"
