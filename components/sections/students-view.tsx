@@ -1659,11 +1659,10 @@ export function StudentsView() {
 
         const finalStatus =
           currentCourse
-            ? `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-            : `متصل بـ Supabase ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+    ? `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+    : `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
 
-        /*
-         * تحديث الواجهة
+/*         * تحديث الواجهة
          */
         setStudentList(
           mappedStudents as StudentTableStudent[]
