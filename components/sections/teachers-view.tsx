@@ -573,28 +573,59 @@ export function TeachersView() {
       }
 
       const mappedCourses: ManagedCourse[] =
-        (courseRows ?? []).map(
-          (course) => ({
-            id: course.id,
-            name: course.name,
-            startDate:
-              course.start_date ?? '',
-            endDate:
-              course.end_date ?? '',
-            days: Array.isArray(
-              course.days,
+  (courseRows ?? []).map(
+    (course) => ({
+      id: course.id,
+      name: course.name,
+      startDate:
+        course.start_date ?? '',
+      endDate:
+        course.end_date ?? '',
+      days: Array.isArray(course.days)
+        ? course.days.map((day) => {
+            const normalizedDay = String(day)
+              .trim()
+              .toLowerCase()
+
+            const arabicDays: Record<
+              string,
+              string
+            > = {
+              sunday: 'الأحد',
+              monday: 'الإثنين',
+              tuesday: 'الثلاثاء',
+              wednesday: 'الأربعاء',
+              thursday: 'الخميس',
+              friday: 'الجمعة',
+              saturday: 'السبت',
+
+              الأحد: 'الأحد',
+              الاحد: 'الأحد',
+              الإثنين: 'الإثنين',
+              الاثنين: 'الإثنين',
+              الثلاثاء: 'الثلاثاء',
+              الأربعاء: 'الأربعاء',
+              الاربعاء: 'الأربعاء',
+              الخميس: 'الخميس',
+              الجمعة: 'الجمعة',
+              السبت: 'السبت',
+            }
+
+            return (
+              arabicDays[normalizedDay] ??
+              day
             )
-              ? course.days
-              : [],
-            isClosed:
-              Boolean(
-                course.is_closed,
-              ),
-            closedAt:
-              course.closed_at ??
-              null,
-          }),
-        )
+          })
+        : [],
+      isClosed:
+        Boolean(
+          course.is_closed,
+        ),
+      closedAt:
+        course.closed_at ??
+        null,
+    }),
+  )
 
       setCourses(mappedCourses)
 
