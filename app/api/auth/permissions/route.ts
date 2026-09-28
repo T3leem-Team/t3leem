@@ -23,6 +23,9 @@ const supabaseAdmin = createClient(
 const MANAGE_ASSIGNMENTS_PERMISSION_ID =
   '549e42cf-2348-4750-a943-2ca4ce51177a'
 
+const SUPERVISION_MANAGE_PERMISSION_ID =
+  '172a4a69-8046-4e80-b3d3-e5be2d63bc40'
+
 async function getCurrentAccess() {
   const {
     access,
@@ -225,7 +228,7 @@ export async function GET() {
       )
     }
 
-    const {
+    let {
       data: supervisionSettings,
       error: supervisionSettingsError,
     } =
@@ -255,24 +258,71 @@ export async function GET() {
       )
     }
 
+    /*
+     * إذا لم يوجد سجل الإعدادات الأساسي،
+     * ننشئه تلقائياً بالقيم الافتراضية.
+     */
+    if (!supervisionSettings) {
+      const {
+        data: createdSettings,
+        error: createSettingsError,
+      } =
+        await supabaseAdmin
+          .from('supervision_settings')
+          .insert({
+            id: 'default',
+            allow_teacher_transfer: true,
+            allow_teacher_remove: true,
+          })
+          .select(
+            'allow_teacher_transfer, allow_teacher_remove',
+          )
+          .single()
+
+      if (createSettingsError) {
+        console.error(
+          'Supervision settings create error:',
+          createSettingsError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر إنشاء إعدادات الإشراف.',
+          },
+          { status: 500 },
+        )
+      }
+
+      supervisionSettings =
+        createdSettings
+    }
+
     return NextResponse.json(
       {
         authenticated: true,
-        role: access.profile.role,
+
+        role:
+          access.profile.role,
+
         permissionIds:
           access.permissionIds,
+
         permissionNames:
           access.permissionNames,
+
         permissions: [],
 
         allowTeacherTransfer:
           Boolean(
-            supervisionSettings?.allow_teacher_transfer,
+            supervisionSettings
+              ?.allow_teacher_transfer,
           ),
 
         allowTeacherRemove:
           Boolean(
-            supervisionSettings?.allow_teacher_remove,
+            supervisionSettings
+              ?.allow_teacher_remove,
           ),
       },
       {
@@ -323,7 +373,7 @@ export async function PATCH(
     const canManageSupervision =
       access.profile.role === 'Admin' ||
       access.permissionIds.includes(
-        'SUPERVISION_MANAGE_PERMISSION_ID',
+        SUPERVISION_MANAGE_PERMISSION_ID,
       )
 
     if (!canManageSupervision) {
@@ -372,6 +422,94 @@ export async function PATCH(
       )
     }
 
+    /*
+     * نتأكد من وجود سجل الإعدادات.
+     * إذا لم يكن موجوداً ننشئه بالقيم الافتراضية
+     * ثم نطبق التعديل المطلوب.
+     */
+    const {
+      data: existingSettings,
+      error: existingSettingsError,
+    } =
+      await supabaseAdmin
+        .from('supervision_settings')
+        .select(
+          'allow_teacher_transfer, allow_teacher_remove',
+        )
+        .eq(
+          'id',
+          'default',
+        )
+        .maybeSingle()
+
+    if (existingSettingsError) {
+      console.error(
+        'Supervision settings lookup error:',
+        existingSettingsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر قراءة إعدادات الإشراف الحالية.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (!existingSettings) {
+      const {
+        data: createdSettings,
+        error: createError,
+      } =
+        await supabaseAdmin
+          .from('supervision_settings')
+          .insert({
+            id: 'default',
+            allow_teacher_transfer:
+              updates.allow_teacher_transfer ??
+              true,
+            allow_teacher_remove:
+              updates.allow_teacher_remove ??
+              true,
+          })
+          .select(
+            'allow_teacher_transfer, allow_teacher_remove',
+          )
+          .single()
+
+      if (createError) {
+        console.error(
+          'Supervision settings create error:',
+          createError,
+        )
+
+        return NextResponse.json(
+          {
+            error:
+              'تعذر إنشاء إعدادات الإشراف.',
+          },
+          { status: 500 },
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+
+        allowTeacherTransfer:
+          Boolean(
+            createdSettings
+              ?.allow_teacher_transfer,
+          ),
+
+        allowTeacherRemove:
+          Boolean(
+            createdSettings
+              ?.allow_teacher_remove,
+          ),
+      })
+    }
+
     const {
       data,
       error,
@@ -379,11 +517,14 @@ export async function PATCH(
       await supabaseAdmin
         .from('supervision_settings')
         .update(updates)
-        .eq('id', 'default')
+        .eq(
+          'id',
+          'default',
+        )
         .select(
           'allow_teacher_transfer, allow_teacher_remove',
         )
-        .maybeSingle()
+        .single()
 
     if (error) {
       console.error(
@@ -402,10 +543,12 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
+
       allowTeacherTransfer:
         Boolean(
           data?.allow_teacher_transfer,
         ),
+
       allowTeacherRemove:
         Boolean(
           data?.allow_teacher_remove,
