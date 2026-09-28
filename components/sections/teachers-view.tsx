@@ -487,7 +487,7 @@ export function TeachersView() {
         setPermissionsLoading(false)
       }
     }
-    }
+    
 
   /*
    * =========================================================
