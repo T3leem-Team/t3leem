@@ -18,6 +18,8 @@ import {
   Save,
   Trash2,
   Pencil,
+  FileText,
+  X,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -95,6 +97,14 @@ type AcademicYear = {
   annualFee: number
 }
 
+type MessageTemplate = {
+  id: string
+  name: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 /*
  * =========================================================
  * Cache
@@ -110,6 +120,7 @@ type CommunicationCache = {
   attendance: AttendanceRecord[]
   attendanceStatuses: AttendanceStatus[]
   payments: Payment[]
+  messageTemplates: MessageTemplate[]
   groupUrl: string
   savedGroupUrl: string
 }
@@ -188,6 +199,13 @@ export function CommunicationView() {
   )
 
   const [
+    messageTemplates,
+    setMessageTemplates,
+  ] = useState<MessageTemplate[]>(
+    communicationCache?.messageTemplates ?? []
+  )
+
+  const [
     academicYear,
     setAcademicYear,
   ] = useState<
@@ -212,11 +230,6 @@ export function CommunicationView() {
     selectedStudentIds,
     setSelectedStudentIds,
   ] = useState<string[]>([])
-
-  const [
-    message,
-    setMessage,
-  ] = useState('')
 
   const [
     groupUrl,
@@ -269,14 +282,73 @@ export function CommunicationView() {
     setOpenedStudentIds,
   ] = useState<string[]>([])
 
+  /*
+   * =========================================================
+   * Message modal
+   * =========================================================
+   */
+
+  const [
+    messageModalOpen,
+    setMessageModalOpen,
+  ] = useState(false)
+
+  const [
+    messageStudent,
+    setMessageStudent,
+  ] = useState<Student | null>(
+    null
+  )
+
+  const [
+    messageMode,
+    setMessageMode,
+  ] = useState<
+    'choose' | 'saved' | 'new'
+  >('choose')
+
+  const [
+    selectedTemplateId,
+    setSelectedTemplateId,
+  ] = useState('')
+
+  const [
+    composedMessage,
+    setComposedMessage,
+  ] = useState('')
+
+  const [
+    templateName,
+    setTemplateName,
+  ] = useState('')
+
+  const [
+    templateSaving,
+    setTemplateSaving,
+  ] = useState(false)
+
+  const [
+    templateDeletingId,
+    setTemplateDeletingId,
+  ] = useState<string | null>(
+    null
+  )
+
+  const [
+    templateMessage,
+    setTemplateMessage,
+  ] = useState('')
+
+  /*
+   * =========================================================
+   * Load data
+   * =========================================================
+   */
+
   useEffect(() => {
     let cancelled = false
 
     async function loadData() {
-      /*
-       * إذا البيانات موجودة في الكاش:
-       * لا نعيد التحميل ولا نظهر loading.
-       */
       if (
         communicationCache ||
         communicationCacheLoading
@@ -318,6 +390,7 @@ export function CommunicationView() {
             attendance: [],
             attendanceStatuses: [],
             payments: [],
+            messageTemplates: [],
             groupUrl: '',
             savedGroupUrl: '',
           }
@@ -342,6 +415,7 @@ export function CommunicationView() {
           statusesResult,
           paymentsResult,
           groupResult,
+          templatesResult,
         ] = await Promise.all([
           supabase
             .from('students')
@@ -444,7 +518,28 @@ export function CommunicationView() {
             )
             .limit(1)
             .maybeSingle(),
+
+          supabase
+            .from(
+              'communication_message_templates'
+            )
+            .select(
+              'id, name, content, created_at, updated_at'
+            )
+            .order(
+              'created_at',
+              {
+                ascending: false,
+              }
+            ),
         ])
+
+        if (templatesResult.error) {
+          console.error(
+            'Message templates load error:',
+            templatesResult.error
+          )
+        }
 
         const currentCourseIds =
           new Set(
@@ -566,13 +661,29 @@ export function CommunicationView() {
             })
           )
 
+        const nextMessageTemplates: MessageTemplate[] =
+          (
+            templatesResult.data ?? []
+          ).map(
+            (template) => ({
+              id: template.id,
+              name:
+                template.name ?? '',
+              content:
+                template.content ?? '',
+              createdAt:
+                template.created_at ??
+                '',
+              updatedAt:
+                template.updated_at ??
+                '',
+            })
+          )
+
         const nextGroupUrl =
           groupResult.data?.whatsapp_url ??
           ''
 
-        /*
-         * نحفظ كل البيانات في كاش واحد.
-         */
         communicationCache = {
           academicYear:
             currentAcademicYear,
@@ -590,6 +701,8 @@ export function CommunicationView() {
             nextAttendanceStatuses,
           payments:
             nextPayments,
+          messageTemplates:
+            nextMessageTemplates,
           groupUrl:
             nextGroupUrl,
           savedGroupUrl:
@@ -632,6 +745,10 @@ export function CommunicationView() {
           nextPayments
         )
 
+        setMessageTemplates(
+          nextMessageTemplates
+        )
+
         setGroupUrl(
           nextGroupUrl
         )
@@ -660,6 +777,12 @@ export function CommunicationView() {
       cancelled = true
     }
   }, [])
+
+  /*
+   * =========================================================
+   * Filtering
+   * =========================================================
+   */
 
   const filteredStudents =
     useMemo(() => {
@@ -954,8 +1077,6 @@ export function CommunicationView() {
       return result
     }, [
       students,
-      teachers,
-      courses,
       assignments,
       attendance,
       payments,
@@ -975,6 +1096,12 @@ export function CommunicationView() {
         )
     )
 
+  /*
+   * =========================================================
+   * WhatsApp helpers
+   * =========================================================
+   */
+
   const getWhatsAppNumber = (
     student: Student
   ) => {
@@ -988,41 +1115,517 @@ export function CommunicationView() {
     )
   }
 
-  const openWhatsApp = (
-    student: Student
-  ) => {
-    const number =
-      getWhatsAppNumber(student)
+  const getStudentCourses =
+    (studentId: string) => {
+      const courseIds =
+        Array.from(
+          new Set(
+            assignments
+              .filter(
+                (item) =>
+                  item.studentId ===
+                  studentId
+              )
+              .map(
+                (item) =>
+                  item.courseId
+              )
+          )
+        )
 
-    if (!number) {
-      return
+      return courseIds
+        .map(
+          (courseId) =>
+            courses.find(
+              (course) =>
+                course.id ===
+                courseId
+            )?.name
+        )
+        .filter(
+          (
+            value
+          ): value is string =>
+            Boolean(value)
+        )
     }
 
-    const url =
-      message.trim()
-        ? `https://wa.me/${number}?text=${encodeURIComponent(
-            message
-          )}`
-        : `https://wa.me/${number}`
+  const getStudentTeachers =
+    (studentId: string) => {
+      const teacherIds =
+        Array.from(
+          new Set(
+            assignments
+              .filter(
+                (item) =>
+                  item.studentId ===
+                  studentId
+              )
+              .map(
+                (item) =>
+                  item.teacherId
+              )
+          )
+        )
 
-    window.open(
-      url,
-      '_blank',
-      'noopener,noreferrer'
-    )
+      return teacherIds
+        .map(
+          (teacherId) =>
+            teachers.find(
+              (teacher) =>
+                teacher.id ===
+                teacherId
+            )?.name
+        )
+        .filter(
+          (
+            value
+          ): value is string =>
+            Boolean(value)
+        )
+    }
 
-    setOpenedStudentIds(
-      (current) =>
-        current.includes(
+  const getStudentAttendance =
+    (studentId: string) => {
+      const records =
+        attendance.filter(
+          (record) =>
+            record.studentId ===
+            studentId
+        )
+
+      return Array.from(
+        new Set(
+          records.map(
+            (record) =>
+              attendanceStatuses.find(
+                (status) =>
+                  status.id ===
+                  record.statusId
+              )?.name
+          )
+        )
+      ).filter(
+        (
+          value
+        ): value is string =>
+          Boolean(value)
+      )
+    }
+
+  const getStudentPaid =
+    (studentId: string) => {
+      return payments
+        .filter(
+          (payment) =>
+            payment.studentId ===
+            studentId
+        )
+        .reduce(
+          (total, payment) =>
+            total +
+            payment.amount,
+          0
+        )
+    }
+
+  const replaceTemplateVariables =
+    (
+      template: string,
+      student: Student
+    ) => {
+      const studentCourses =
+        getStudentCourses(
           student.id
         )
-          ? current
-          : [
-              ...current,
-              student.id,
-            ]
+
+      const studentTeachers =
+        getStudentTeachers(
+          student.id
+        )
+
+      const studentAttendance =
+        getStudentAttendance(
+          student.id
+        )
+
+      const paid =
+        getStudentPaid(
+          student.id
+        )
+
+      const annualFee =
+        academicYear?.annualFee ??
+        0
+
+      const remaining =
+        student.feeExempt
+          ? 0
+          : Math.max(
+              annualFee -
+                paid,
+              0
+            )
+
+      const attendanceText =
+        studentAttendance.length >
+        0
+          ? studentAttendance.join(
+              '، '
+            )
+          : 'لم يسجل'
+
+      const values: Record<
+        string,
+        string
+      > = {
+        name:
+          student.name || '',
+        phone:
+          student.phone ||
+          student.whatsapp ||
+          '',
+        whatsapp:
+          student.whatsapp ||
+          student.phone ||
+          '',
+        course:
+          studentCourses.join(
+            '، '
+          ),
+        teacher:
+          studentTeachers.join(
+            '، '
+          ),
+        attendance:
+          attendanceText,
+        paid:
+          paid.toFixed(3),
+        remaining:
+          remaining.toFixed(3),
+        payment_status:
+          student.feeExempt
+            ? 'معفي'
+            : paid >= annualFee &&
+                annualFee > 0
+              ? 'مدفوع بالكامل'
+              : paid > 0
+                ? 'مدفوع جزئياً'
+                : 'غير مدفوع',
+        date:
+          new Intl.DateTimeFormat(
+            'ar-BH',
+            {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }
+          ).format(
+            new Date()
+          ),
+      }
+
+      return template.replace(
+        /\{\{\s*([a-zA-Z_]+)\s*\}\}/g,
+        (
+          _match,
+          key: string
+        ) =>
+          values[key] ??
+          `{{${key}}}`
+      )
+    }
+
+  /*
+   * =========================================================
+   * Message modal
+   * =========================================================
+   */
+
+  const openMessageModal = (
+    student: Student
+  ) => {
+    setMessageStudent(
+      student
     )
+    setMessageModalOpen(true)
+    setMessageMode('choose')
+    setSelectedTemplateId('')
+    setComposedMessage('')
+    setTemplateName('')
+    setTemplateMessage('')
   }
+
+  const closeMessageModal =
+    () => {
+      setMessageModalOpen(false)
+      setMessageStudent(null)
+      setMessageMode('choose')
+      setSelectedTemplateId('')
+      setComposedMessage('')
+      setTemplateName('')
+      setTemplateMessage('')
+    }
+
+  const chooseSavedTemplate =
+    (
+      template: MessageTemplate
+    ) => {
+      setSelectedTemplateId(
+        template.id
+      )
+      setComposedMessage(
+        template.content
+      )
+      setMessageMode('saved')
+      setTemplateMessage('')
+    }
+
+  const createNewMessage =
+    () => {
+      setSelectedTemplateId('')
+      setComposedMessage('')
+      setMessageMode('new')
+      setTemplateMessage('')
+    }
+
+  const saveMessageTemplate =
+    async () => {
+      const name =
+        templateName.trim()
+
+      const content =
+        composedMessage.trim()
+
+      if (!name) {
+        setTemplateMessage(
+          'اكتب اسم الرسالة أولاً.'
+        )
+        return
+      }
+
+      if (!content) {
+        setTemplateMessage(
+          'اكتب نص الرسالة أولاً.'
+        )
+        return
+      }
+
+      setTemplateSaving(true)
+      setTemplateMessage('')
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from(
+          'communication_message_templates'
+        )
+        .insert({
+          name,
+          content,
+        })
+        .select(
+          'id, name, content, created_at, updated_at'
+        )
+        .single()
+
+      if (error) {
+        console.error(
+          'Save message template error:',
+          error
+        )
+
+        setTemplateMessage(
+          'تعذر حفظ الرسالة. حاول مرة أخرى.'
+        )
+        setTemplateSaving(false)
+        return
+      }
+
+      const newTemplate: MessageTemplate = {
+        id: data.id,
+        name:
+          data.name,
+        content:
+          data.content,
+        createdAt:
+          data.created_at,
+        updatedAt:
+          data.updated_at,
+      }
+
+      setMessageTemplates(
+        (current) => [
+          newTemplate,
+          ...current,
+        ]
+      )
+
+      if (communicationCache) {
+        communicationCache.messageTemplates =
+          [
+            newTemplate,
+            ...communicationCache.messageTemplates,
+          ]
+      }
+
+      setSelectedTemplateId(
+        newTemplate.id
+      )
+
+      setTemplateName('')
+
+      setTemplateMessage(
+        'تم حفظ الرسالة، وأصبحت متاحة لجميع المستخدمين.'
+      )
+
+      setTemplateSaving(false)
+    }
+
+  const deleteMessageTemplate =
+    async (
+      template: MessageTemplate
+    ) => {
+      const confirmed =
+        window.confirm(
+          `هل تريد مسح القالب «${template.name}»؟`
+        )
+
+      if (!confirmed) {
+        return
+      }
+
+      setTemplateDeletingId(
+        template.id
+      )
+      setTemplateMessage('')
+
+      const {
+        error,
+      } = await supabase
+        .from(
+          'communication_message_templates'
+        )
+        .delete()
+        .eq(
+          'id',
+          template.id
+        )
+
+      if (error) {
+        console.error(
+          'Delete message template error:',
+          error
+        )
+
+        setTemplateMessage(
+          'تعذر مسح القالب.'
+        )
+
+        setTemplateDeletingId(null)
+        return
+      }
+
+      setMessageTemplates(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !==
+              template.id
+          )
+      )
+
+      if (communicationCache) {
+        communicationCache.messageTemplates =
+          communicationCache.messageTemplates.filter(
+            (item) =>
+              item.id !==
+              template.id
+          )
+      }
+
+      if (
+        selectedTemplateId ===
+        template.id
+      ) {
+        setSelectedTemplateId('')
+      }
+
+      setTemplateDeletingId(null)
+
+      setTemplateMessage(
+        'تم مسح القالب.'
+      )
+    }
+
+  const sendCurrentMessage =
+    () => {
+      if (
+        !messageStudent
+      ) {
+        return
+      }
+
+      const number =
+        getWhatsAppNumber(
+          messageStudent
+        )
+
+      if (!number) {
+        setTemplateMessage(
+          'لا يوجد رقم WhatsApp لهذا الطالب.'
+        )
+        return
+      }
+
+      const rawMessage =
+        composedMessage.trim()
+
+      if (!rawMessage) {
+        setTemplateMessage(
+          'اكتب الرسالة أولاً.'
+        )
+        return
+      }
+
+      const finalMessage =
+        replaceTemplateVariables(
+          rawMessage,
+          messageStudent
+        )
+
+      const url =
+        `https://wa.me/${number}?text=${encodeURIComponent(
+          finalMessage
+        )}`
+
+      window.open(
+        url,
+        '_blank',
+        'noopener,noreferrer'
+      )
+
+      setOpenedStudentIds(
+        (current) =>
+          current.includes(
+            messageStudent.id
+          )
+            ? current
+            : [
+                ...current,
+                messageStudent.id,
+              ]
+      )
+
+      closeMessageModal()
+    }
+
+  /*
+   * =========================================================
+   * Students
+   * =========================================================
+   */
 
   const toggleStudent = (
     studentId: string
@@ -1034,7 +1637,8 @@ export function CommunicationView() {
         )
           ? current.filter(
               (id) =>
-                id !== studentId
+                id !==
+                studentId
             )
           : [
               ...current,
@@ -1089,6 +1693,12 @@ export function CommunicationView() {
     setSelectedAttendanceStatusId('')
   }
 
+  /*
+   * =========================================================
+   * Group
+   * =========================================================
+   */
+
   const saveGroupUrl = async () => {
     const url =
       groupUrl.trim()
@@ -1137,10 +1747,6 @@ export function CommunicationView() {
       return
     }
 
-    /*
-     * تحديث الواجهة والكاش مباشرة
-     * بدون إعادة تحميل البيانات.
-     */
     setSavedGroupUrl(url)
     setGroupUrl(url)
 
@@ -1298,7 +1904,7 @@ export function CommunicationView() {
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  اختر الفئة والطلاب ثم اكتب الرسالة مرة واحدة.
+                  اختر الفئة والطلاب ثم اختر الرسالة عند الإرسال.
                 </p>
               </div>
 
@@ -1711,7 +2317,7 @@ export function CommunicationView() {
                                 : ''
                             }
                             onClick={() =>
-                              openWhatsApp(
+                              openMessageModal(
                                 student
                               )
                             }
@@ -1726,7 +2332,7 @@ export function CommunicationView() {
                             ) : (
                               <>
                                 <Send className="size-4" />
-                                فتح WhatsApp
+                                إرسال
                               </>
                             )}
                           </Button>
@@ -1736,27 +2342,6 @@ export function CommunicationView() {
                   }
                 )
               )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                الرسالة
-              </label>
-
-              <textarea
-                value={message}
-                onChange={(
-                  event
-                ) =>
-                  setMessage(
-                    event.target
-                      .value
-                  )
-                }
-                placeholder="اكتب الرسالة التي تريد إرسالها..."
-                rows={5}
-                className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
-              />
             </div>
 
             {selectedStudents.length >
@@ -1819,7 +2404,7 @@ export function CommunicationView() {
                                 : ''
                             }
                             onClick={() =>
-                              openWhatsApp(
+                              openMessageModal(
                                 student
                               )
                             }
@@ -1832,7 +2417,7 @@ export function CommunicationView() {
                             ) : (
                               <>
                                 <Send className="size-4" />
-                                فتح WhatsApp
+                                إرسال
                               </>
                             )}
                           </Button>
@@ -1845,7 +2430,7 @@ export function CommunicationView() {
             )}
 
             <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              عند فتح WhatsApp يتحول الطالب إلى «إعادة إرسال». النظام لا يستطيع تأكيد الإرسال الفعلي بدون WhatsApp API.
+              عند الضغط على «إرسال» تختار الرسالة المحفوظة أو تنشئ رسالة جديدة، ثم تفتح WhatsApp والرسالة تكون جاهزة للإرسال.
             </div>
           </CardContent>
         </Card>
@@ -1981,6 +2566,374 @@ export function CommunicationView() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {messageModalOpen &&
+        messageStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b p-4">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  إرسال رسالة WhatsApp
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  إلى: {messageStudent.name}
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={
+                  closeMessageModal
+                }
+              >
+                <X className="size-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              {messageMode ===
+                'choose' && (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMessageMode(
+                          'saved'
+                        )
+                      }
+                      className="rounded-xl border p-5 text-right transition hover:bg-muted"
+                    >
+                      <FileText className="mb-3 size-7" />
+
+                      <div className="font-semibold">
+                        رسالة محفوظة
+                      </div>
+
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        اختر قالباً محفوظاً ومشتركاً بين المستخدمين.
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={
+                        createNewMessage
+                      }
+                      className="rounded-xl border p-5 text-right transition hover:bg-muted"
+                    >
+                      <Pencil className="mb-3 size-7" />
+
+                      <div className="font-semibold">
+                        إنشاء رسالة جديدة
+                      </div>
+
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        اكتب رسالة جديدة ثم أرسلها مباشرة.
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {messageMode ===
+                'saved' && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">
+                        الرسائل المحفوظة
+                      </div>
+
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        القوالب متاحة لجميع المستخدمين.
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={
+                        createNewMessage
+                      }
+                    >
+                      <Pencil className="size-4" />
+                      رسالة جديدة
+                    </Button>
+                  </div>
+
+                  {messageTemplates.length ===
+                  0 ? (
+                    <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      لا توجد رسائل محفوظة حالياً.
+                      <br />
+                      أنشئ أول رسالة واحفظها كقالب.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {messageTemplates.map(
+                        (template) => {
+                          const selected =
+                            selectedTemplateId ===
+                            template.id
+
+                          return (
+                            <div
+                              key={
+                                template.id
+                              }
+                              className={`rounded-lg border p-3 ${
+                                selected
+                                  ? 'border-primary bg-primary/5'
+                                  : ''
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    chooseSavedTemplate(
+                                      template
+                                    )
+                                  }
+                                  className="min-w-0 flex-1 text-right"
+                                >
+                                  <div className="font-medium">
+                                    {
+                                      template.name
+                                    }
+                                  </div>
+
+                                  <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+                                    {
+                                      template.content
+                                    }
+                                  </div>
+                                </button>
+
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={
+                                    templateDeletingId ===
+                                    template.id
+                                  }
+                                  onClick={() =>
+                                    deleteMessageTemplate(
+                                      template
+                                    )
+                                  }
+                                  className="shrink-0 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        }
+                      )}
+                    </div>
+                  )}
+
+                  {selectedTemplateId && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        الرسالة
+                      </label>
+
+                      <textarea
+                        value={
+                          composedMessage
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setComposedMessage(
+                            event.target
+                              .value
+                          )
+                        }
+                        rows={7}
+                        className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {messageMode ===
+                'new' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      الرسالة
+                    </label>
+
+                    <textarea
+                      value={
+                        composedMessage
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setComposedMessage(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="اكتب الرسالة التي تريد إرسالها..."
+                      rows={7}
+                      autoFocus
+                      className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    <div className="mb-2 font-medium text-foreground">
+                      يمكنك استخدام المتغيرات:
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        '{{name}}',
+                        '{{phone}}',
+                        '{{whatsapp}}',
+                        '{{course}}',
+                        '{{teacher}}',
+                        '{{attendance}}',
+                        '{{paid}}',
+                        '{{remaining}}',
+                        '{{payment_status}}',
+                        '{{date}}',
+                      ].map(
+                        (variable) => (
+                          <button
+                            key={
+                              variable
+                            }
+                            type="button"
+                            onClick={() =>
+                              setComposedMessage(
+                                (
+                                  current
+                                ) =>
+                                  `${current}${current ? ' ' : ''}${variable}`
+                              )
+                            }
+                            className="rounded border bg-background px-2 py-1 font-mono text-[11px] hover:bg-muted"
+                          >
+                            {
+                              variable
+                            }
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border p-3">
+                    <div className="mb-2 text-sm font-medium">
+                      حفظ هذه الرسالة كقالب للجميع
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        value={
+                          templateName
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setTemplateName(
+                            event.target
+                              .value
+                          )
+                        }
+                        placeholder="اسم الرسالة، مثلاً: تنبيه غياب"
+                        className="h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none"
+                      />
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={
+                          saveMessageTemplate
+                        }
+                        disabled={
+                          templateSaving ||
+                          !templateName.trim() ||
+                          !composedMessage.trim()
+                        }
+                      >
+                        <Save className="size-4" />
+
+                        {templateSaving
+                          ? 'جاري الحفظ...'
+                          : 'حفظ كقالب'}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {templateMessage && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                  {templateMessage}
+                </div>
+              )}
+
+              {messageMode !==
+                'choose' && (
+                <div className="flex flex-wrap justify-between gap-2 border-t pt-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setMessageMode(
+                        'choose'
+                      )
+                      setTemplateMessage('')
+                    }}
+                  >
+                    رجوع
+                  </Button>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={
+                        closeMessageModal
+                      }
+                    >
+                      إلغاء
+                    </Button>
+
+                    <Button
+                      type="button"
+                      disabled={
+                        !composedMessage.trim()
+                      }
+                      onClick={
+                        sendCurrentMessage
+                      }
+                    >
+                      <Send className="size-4" />
+                      فتح WhatsApp
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
