@@ -20,11 +20,14 @@ const supabaseAdmin = createClient(
   },
 )
 
+const MANAGE_ASSIGNMENTS_PERMISSION_ID =
+  '549e42cf-2348-4750-a943-2ca4ce51177a'
+
 export async function GET() {
   try {
     /*
      * ------------------------------------------------------
-     * التحقق من دخول المستخدم والجلسة
+     * التحقق من المستخدم
      * ------------------------------------------------------
      */
 
@@ -33,35 +36,16 @@ export async function GET() {
       response,
     } = await requireAuth()
 
-    console.log(
-      'PERMISSIONS AUTH DEBUG:',
-      {
-        access,
-        responseStatus:
-          response?.status ?? null,
-      },
-    )
-
     if (response) {
       return response
     }
 
     if (!access?.profileId) {
-      console.error(
-        'PERMISSIONS AUTH DEBUG: Missing profileId',
-        {
-          access,
-        },
-      )
-
       return NextResponse.json(
         {
           authenticated: false,
           error:
             'تعذر تحديد حساب المستخدم.',
-          debug: {
-            access,
-          },
         },
         { status: 401 },
       )
@@ -88,16 +72,6 @@ export async function GET() {
         )
         .maybeSingle()
 
-    console.log(
-      'PERMISSIONS PROFILE DEBUG:',
-      {
-        profile,
-        profileError,
-        profileId:
-          access.profileId,
-      },
-    )
-
     if (profileError) {
       console.error(
         'Permissions profile lookup error:',
@@ -117,15 +91,6 @@ export async function GET() {
       !profile ||
       !profile.is_active
     ) {
-      console.error(
-        'PERMISSIONS PROFILE DEBUG: Profile missing or inactive',
-        {
-          profile,
-          profileId:
-            access.profileId,
-        },
-      )
-
       return NextResponse.json(
         {
           authenticated: false,
@@ -155,16 +120,6 @@ export async function GET() {
           'user_profile_id',
           access.profileId,
         )
-
-    console.log(
-      'PERMISSIONS DIRECT DEBUG:',
-      {
-        directRows,
-        directError,
-        profileId:
-          access.profileId,
-      },
-    )
 
     if (directError) {
       console.error(
@@ -201,16 +156,6 @@ export async function GET() {
           profile.role,
         )
 
-    console.log(
-      'PERMISSIONS ROLE DEBUG:',
-      {
-        role:
-          profile.role,
-        roleRows,
-        roleError,
-      },
-    )
-
     if (roleError) {
       console.error(
         'Role permissions error:',
@@ -228,7 +173,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * دمج IDs
+     * دمج الصلاحيات
      * ------------------------------------------------------
      */
 
@@ -248,25 +193,18 @@ export async function GET() {
         ),
       )
 
-    console.log(
-      'PERMISSIONS IDS DEBUG:',
-      {
-        permissionIds,
-      },
-    )
-
     /*
      * ------------------------------------------------------
-     * تفاصيل الصلاحيات
+     * قراءة أسماء الصلاحيات
+     *
+     * نقرأ فقط id و name.
+     * لا نعتمد على description.
      * ------------------------------------------------------
      */
 
     let permissionRows: Array<{
       id: string
       name: string | null
-      description:
-        | string
-        | null
     }> = []
 
     if (
@@ -279,20 +217,12 @@ export async function GET() {
         await supabaseAdmin
           .from('permissions')
           .select(
-            'id, name, description',
+            'id, name',
           )
           .in(
             'id',
             permissionIds,
           )
-
-      console.log(
-        'PERMISSIONS DETAILS DEBUG:',
-        {
-          data,
-          error,
-        },
-      )
 
       if (error) {
         console.error(
@@ -304,6 +234,8 @@ export async function GET() {
           {
             error:
               'تعذر قراءة تفاصيل الصلاحيات.',
+            details:
+              error.message,
           },
           { status: 500 },
         )
@@ -338,12 +270,9 @@ export async function GET() {
      * ------------------------------------------------------
      */
 
-    const manageAssignmentsPermissionId =
-      '549e42cf-2348-4750-a943-2ca4ce51177a'
-
     const hasManageAssignments =
       permissionIds.includes(
-        manageAssignmentsPermissionId,
+        MANAGE_ASSIGNMENTS_PERMISSION_ID,
       )
 
     if (
@@ -376,26 +305,19 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * النتيجة النهائية
+     * النتيجة
      * ------------------------------------------------------
      */
 
-    const result = {
-      authenticated: true,
-      role: profile.role,
-      permissionIds,
-      permissionNames,
-      permissions:
-        permissionRows,
-    }
-
-    console.log(
-      'PERMISSIONS FINAL DEBUG:',
-      result,
-    )
-
     return NextResponse.json(
-      result,
+      {
+        authenticated: true,
+        role: profile.role,
+        permissionIds,
+        permissionNames,
+        permissions:
+          permissionRows,
+      },
       {
         headers: {
           'Cache-Control':
