@@ -22,12 +22,6 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
-    /*
-     * ------------------------------------------------------
-     * التحقق من جلسة المستخدم الحالية
-     * ------------------------------------------------------
-     */
-
     const {
       access,
       response,
@@ -50,7 +44,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * جلب بيانات المستخدم
+     * المستخدم الحالي
      * ------------------------------------------------------
      */
 
@@ -61,11 +55,7 @@ export async function GET() {
       await supabaseAdmin
         .from('user_profiles')
         .select(
-          `
-          id,
-          role,
-          is_active
-          `,
+          'id, role, is_active',
         )
         .eq(
           'id',
@@ -82,7 +72,7 @@ export async function GET() {
       return NextResponse.json(
         {
           error:
-            'تعذر قراءة صلاحيات المستخدم.',
+            'تعذر قراءة المستخدم الحالي.',
         },
         { status: 500 },
       )
@@ -104,13 +94,13 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * الصلاحيات المباشرة للمستخدم
+     * الصلاحيات المباشرة
      * ------------------------------------------------------
      */
 
     const {
-      data: directPermissions,
-      error: directPermissionsError,
+      data: directRows,
+      error: directError,
     } =
       await supabaseAdmin
         .from('user_permissions')
@@ -122,16 +112,16 @@ export async function GET() {
           access.profileId,
         )
 
-    if (directPermissionsError) {
+    if (directError) {
       console.error(
-        'Direct permissions lookup error:',
-        directPermissionsError,
+        'Direct permissions error:',
+        directError,
       )
 
       return NextResponse.json(
         {
           error:
-            'تعذر قراءة الصلاحيات المباشرة.',
+            'تعذر قراءة صلاحيات المستخدم.',
         },
         { status: 500 },
       )
@@ -144,8 +134,8 @@ export async function GET() {
      */
 
     const {
-      data: rolePermissions,
-      error: rolePermissionsError,
+      data: roleRows,
+      error: roleError,
     } =
       await supabaseAdmin
         .from('role_permissions')
@@ -157,10 +147,10 @@ export async function GET() {
           profile.role,
         )
 
-    if (rolePermissionsError) {
+    if (roleError) {
       console.error(
-        'Role permissions lookup error:',
-        rolePermissionsError,
+        'Role permissions error:',
+        roleError,
       )
 
       return NextResponse.json(
@@ -174,7 +164,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * دمج الصلاحيات المباشرة + صلاحيات الدور
+     * دمج IDs
      * ------------------------------------------------------
      */
 
@@ -182,15 +172,13 @@ export async function GET() {
       Array.from(
         new Set(
           [
-            ...(directPermissions ??
-              []).map(
-              (item) =>
-                item.permission_id,
+            ...(directRows ?? []).map(
+              (row) =>
+                row.permission_id,
             ),
-            ...(rolePermissions ??
-              []).map(
-              (item) =>
-                item.permission_id,
+            ...(roleRows ?? []).map(
+              (row) =>
+                row.permission_id,
             ),
           ].filter(Boolean),
         ),
@@ -198,41 +186,44 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * جلب تفاصيل الصلاحيات
+     * تفاصيل الصلاحيات
+     *
+     * عندنا في النظام اسم الصلاحية
+     * ومفتاح الصلاحية قد يكون مختلفًا.
+     *
+     * نقرأ البيانات المتوفرة من جدول permissions.
      * ------------------------------------------------------
      */
 
-    let permissions: Array<{
+    let permissionRows: Array<{
       id: string
-      name: string
+      name: string | null
       description:
         | string
         | null
     }> = []
 
-    if (permissionIds.length > 0) {
+    if (
+      permissionIds.length > 0
+    ) {
       const {
-        data: permissionRows,
-        error: permissionsError,
+        data,
+        error,
       } =
         await supabaseAdmin
           .from('permissions')
           .select(
-            `
-            id,
-            name,
-            description
-            `,
+            'id, name, description',
           )
           .in(
             'id',
             permissionIds,
           )
 
-      if (permissionsError) {
+      if (error) {
         console.error(
           'Permissions lookup error:',
-          permissionsError,
+          error,
         )
 
         return NextResponse.json(
@@ -244,27 +235,90 @@ export async function GET() {
         )
       }
 
-      permissions =
-        permissionRows ?? []
+      permissionRows =
+        data ?? []
     }
 
     /*
      * ------------------------------------------------------
-     * النتيجة
+     * مفاتيح الصلاحيات
+     *
+     * إذا كان name نفسه هو المفتاح:
+     * teachers.manage_assignments
+     * سيعمل مباشرة.
+     *
+     * وإذا كان الاسم عربيًا، نضيف الصلاحية
+     * المعروفة الخاصة بإدارة توزيع الطلاب
+     * بالاعتماد على ID الخاص بها.
      * ------------------------------------------------------
      */
+
+    const permissionNames =
+      permissionRows
+        .map(
+          (permission) =>
+            permission.name?.trim(),
+        )
+        .filter(
+          (
+            name,
+          ): name is string =>
+            Boolean(name),
+        )
+
+    /*
+     * ------------------------------------------------------
+     * صلاحية إدارة نقل وتوزيع الطلبة
+     *
+     * ID الخاص بها في نظام الصلاحيات:
+     * 549e42cf-2348-4750-a943-2ca4ce51177a
+     * ------------------------------------------------------
+     */
+
+    const manageAssignmentsPermissionId =
+      '549e42cf-2348-4750-a943-2ca4ce51177a'
+
+    const hasManageAssignments =
+      permissionIds.includes(
+        manageAssignmentsPermissionId,
+      )
+
+    if (
+      hasManageAssignments &&
+      !permissionNames.includes(
+        'teachers.manage_assignments',
+      )
+    ) {
+      permissionNames.push(
+        'teachers.manage_assignments',
+      )
+    }
+
+    /*
+     * ------------------------------------------------------
+     * Admin
+     * ------------------------------------------------------
+     */
+
+    if (
+      profile.role === 'Admin' &&
+      !permissionNames.includes(
+        'teachers.manage_assignments',
+      )
+    ) {
+      permissionNames.push(
+        'teachers.manage_assignments',
+      )
+    }
 
     return NextResponse.json(
       {
         authenticated: true,
         role: profile.role,
         permissionIds,
-        permissionNames:
-          permissions.map(
-            (permission) =>
-              permission.name,
-          ),
-        permissions,
+        permissionNames,
+        permissions:
+          permissionRows,
       },
       {
         headers: {
