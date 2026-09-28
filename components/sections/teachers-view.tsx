@@ -235,6 +235,16 @@ export function TeachersView() {
       allowTeacherRemove
     )
 
+    console.log('TEACHERS ACCESS', {
+      currentUserRole,
+      currentPermissionNames,
+      currentPermissionIds,
+      allowTeacherTransfer,
+      allowTeacherRemove,
+      canManageAssignments,
+      canTransferStudents,
+      canRemoveStudents,
+    })
   const [
     statusMessage,
     setStatusMessage,
