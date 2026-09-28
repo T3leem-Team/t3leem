@@ -188,14 +188,8 @@ export function TeachersView() {
    * =========================================================
    * صلاحيات المستخدم الحالي
    * =========================================================
-   *
-   * Admin:
-   *   يقدر ينقل ويمسح حتى لو المشرف قفل الميزة.
-   *
-   * Teacher:
-   *   يحتاج صلاحية teachers.manage_assignments
-   *   بالإضافة إلى فتح الميزة من إعدادات المشرف.
    */
+
   const [
     currentUserRole,
     setCurrentUserRole,
@@ -209,6 +203,11 @@ export function TeachersView() {
   ] = useState<string[]>([])
 
   const [
+    currentPermissionIds,
+    setCurrentPermissionIds,
+  ] = useState<string[]>([])
+
+  const [
     permissionsLoading,
     setPermissionsLoading,
   ] = useState(true)
@@ -217,6 +216,9 @@ export function TeachersView() {
     currentUserRole === 'Admin' ||
     currentPermissionNames.includes(
       'teachers.manage_assignments',
+    ) ||
+    currentPermissionIds.includes(
+      '549e42cf-2348-4750-a943-2ca4ce51177a',
     )
 
   const canTransferStudents =
@@ -318,22 +320,8 @@ export function TeachersView() {
    * =========================================================
    * تحميل صلاحيات المستخدم + إعدادات المشرف
    * =========================================================
-   *
-   * مهم:
-   * هذا الجزء لا يعتمد على teachersCache.
-   *
-   * السبب:
-   * إعدادات المشرف قد تتغير بينما بيانات المعلمين
-   * موجودة في الكاش.
-   *
-   * لذلك نعيد قراءة:
-   * - صلاحية المستخدم
-   * - دور المستخدم
-   * - إعدادات نقل الطلاب
-   * - إعدادات مسح الطلاب
-   *
-   * عند Mount للصفحة.
    */
+
   const loadAccessSettings =
     async () => {
       setPermissionsLoading(true)
@@ -370,6 +358,7 @@ export function TeachersView() {
          * صلاحيات المستخدم
          * -----------------------------------------------------
          */
+
         if (
           permissionsResponse.ok
         ) {
@@ -388,9 +377,18 @@ export function TeachersView() {
               ? permissionData.permissionNames
               : [],
           )
+
+          setCurrentPermissionIds(
+            Array.isArray(
+              permissionData?.permissionIds,
+            )
+              ? permissionData.permissionIds
+              : [],
+          )
         } else {
           setCurrentUserRole(null)
           setCurrentPermissionNames([])
+          setCurrentPermissionIds([])
 
           console.error(
             'Failed to load current permissions:',
@@ -403,6 +401,7 @@ export function TeachersView() {
          * إعدادات المشرف
          * -----------------------------------------------------
          */
+
         const {
           data: supervisionSettings,
           error:
@@ -460,6 +459,7 @@ export function TeachersView() {
 
         setCurrentUserRole(null)
         setCurrentPermissionNames([])
+        setCurrentPermissionIds([])
         setAllowTeacherTransfer(false)
         setAllowTeacherRemove(false)
       } finally {
@@ -472,6 +472,7 @@ export function TeachersView() {
    * تحميل البيانات
    * =========================================================
    */
+
   const loadData = async (
     showLoading = false,
   ) => {
@@ -481,13 +482,6 @@ export function TeachersView() {
       return
     }
 
-    /*
-     * إذا لدينا Cache كامل، لا نحتاج Reload للبيانات.
-     *
-     * ملاحظة:
-     * صلاحيات المستخدم وإعدادات المشرف يتم تحميلها
-     * بشكل مستقل في loadAccessSettings().
-     */
     if (
       teachersCache !== null
     ) {
@@ -1386,6 +1380,7 @@ export function TeachersView() {
    * تشغيل تحميل البيانات والصلاحيات
    * =========================================================
    */
+
   useEffect(() => {
     void loadAccessSettings()
 
