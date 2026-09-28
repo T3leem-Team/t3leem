@@ -173,7 +173,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * دمج الصلاحيات
+     * دمج IDs
      * ------------------------------------------------------
      */
 
@@ -195,108 +195,30 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * قراءة أسماء الصلاحيات
+     * الصلاحيات المستخدمة في النظام
      *
-     * نقرأ فقط id و name.
-     * لا نعتمد على description.
+     * لا نعتمد على جدول permissions
+     * لمعرفة اسم الصلاحية، لأن جدول permissions
+     * عندك لا يحتوي على name.
      * ------------------------------------------------------
      */
 
-    let permissionRows: Array<{
-      id: string
-      name: string | null
-    }> = []
-
-    if (
-      permissionIds.length > 0
-    ) {
-      const {
-        data,
-        error,
-      } =
-        await supabaseAdmin
-          .from('permissions')
-          .select(
-            'id, name',
-          )
-          .in(
-            'id',
-            permissionIds,
-          )
-
-      if (error) {
-        console.error(
-          'Permissions lookup error:',
-          error,
-        )
-
-        return NextResponse.json(
-          {
-            error:
-              'تعذر قراءة تفاصيل الصلاحيات.',
-            details:
-              error.message,
-          },
-          { status: 500 },
-        )
-      }
-
-      permissionRows =
-        data ?? []
-    }
-
-    /*
-     * ------------------------------------------------------
-     * أسماء الصلاحيات
-     * ------------------------------------------------------
-     */
-
-    const permissionNames =
-      permissionRows
-        .map(
-          (permission) =>
-            permission.name?.trim(),
-        )
-        .filter(
-          (
-            name,
-          ): name is string =>
-            Boolean(name),
-        )
-
-    /*
-     * ------------------------------------------------------
-     * صلاحية إدارة توزيع الطلاب
-     * ------------------------------------------------------
-     */
+    const permissionNames: string[] = []
 
     const hasManageAssignments =
       permissionIds.includes(
         MANAGE_ASSIGNMENTS_PERMISSION_ID,
       )
 
-    if (
-      hasManageAssignments &&
-      !permissionNames.includes(
-        'teachers.manage_assignments',
-      )
-    ) {
-      permissionNames.push(
-        'teachers.manage_assignments',
-      )
-    }
-
     /*
      * ------------------------------------------------------
-     * Admin
+     * إدارة توزيع الطلاب على المعلمين
      * ------------------------------------------------------
      */
 
     if (
-      profile.role === 'Admin' &&
-      !permissionNames.includes(
-        'teachers.manage_assignments',
-      )
+      hasManageAssignments ||
+      profile.role === 'Admin'
     ) {
       permissionNames.push(
         'teachers.manage_assignments',
@@ -315,8 +237,7 @@ export async function GET() {
         role: profile.role,
         permissionIds,
         permissionNames,
-        permissions:
-          permissionRows,
+        permissions: [],
       },
       {
         headers: {
