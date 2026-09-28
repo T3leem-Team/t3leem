@@ -104,7 +104,6 @@ function normalizeDay(value: string) {
   return normalizeText(value)
     .replace('الأحد', 'الاحد')
     .replace('الإثنين', 'الاثنين')
-    .replace('الإثنين', 'الاثنين')
     .replace('الثلاثاء', 'الثلاثاء')
     .replace('الأربعاء', 'الاربعاء')
     .replace('الخميس', 'الخميس')
@@ -745,22 +744,23 @@ export function DashboardAttendanceExport({
           type="button"
           onClick={handleCourseToToday}
           disabled={!course || exporting}
-          className="gap-2 border border-emerald-600 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+          className="h-10 w-[190px] justify-center gap-2 border border-emerald-200 bg-emerald-50 px-4 text-emerald-700 shadow-sm hover:bg-emerald-100 hover:text-emerald-800"
         >
           <FileSpreadsheet className="size-4" />
 
           {exporting
             ? 'جاري التجهيز...'
-            : 'تنزيل من بداية الدورة حتى اليوم'}
+            : 'تنزيل من بداية الدورة'}
         </Button>
 
         <Button
           type="button"
           onClick={openCustomModal}
           disabled={!course || exporting}
-          className="gap-2 border border-indigo-600 bg-indigo-600 text-white shadow-sm hover:bg-indigo-700"
+          className="h-10 w-[190px] justify-center gap-2 border border-indigo-200 bg-indigo-50 px-4 text-indigo-700 shadow-sm hover:bg-indigo-100 hover:text-indigo-800"
         >
           <CalendarRange className="size-4" />
+
           تنزيل مخصص
         </Button>
       </div>
@@ -835,7 +835,7 @@ export function DashboardAttendanceExport({
                 </div>
               )}
 
-              <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+              <div className="rounded-lg border bg-background p-3 text-sm text-muted-foreground">
                 <div className="flex items-start gap-2">
                   <Download className="mt-0.5 size-4 shrink-0" />
 
@@ -875,7 +875,7 @@ export function DashboardAttendanceExport({
                   !fromDate ||
                   !toDate
                 }
-                className="gap-2 border border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700"
+                className="h-10 gap-2 border border-indigo-200 bg-indigo-50 px-4 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800"
               >
                 <Download className="size-4" />
 
