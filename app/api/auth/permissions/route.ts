@@ -227,6 +227,46 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
+     * إعدادات الإشراف
+     *
+     * نقرأها من السيرفر باستخدام
+     * service role حتى لا تعتمد صفحة المعلمين
+     * على صلاحيات RLS الخاصة بالمستخدم.
+     * ------------------------------------------------------
+     */
+
+    const {
+      data: supervisionSettings,
+      error: supervisionSettingsError,
+    } =
+      await supabaseAdmin
+        .from('supervision_settings')
+        .select(
+          'allow_teacher_transfer, allow_teacher_remove',
+        )
+        .eq(
+          'id',
+          'default',
+        )
+        .maybeSingle()
+
+    if (supervisionSettingsError) {
+      console.error(
+        'Supervision settings error:',
+        supervisionSettingsError,
+      )
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر قراءة إعدادات الإشراف.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * ------------------------------------------------------
      * النتيجة
      * ------------------------------------------------------
      */
@@ -238,6 +278,16 @@ export async function GET() {
         permissionIds,
         permissionNames,
         permissions: [],
+
+        allowTeacherTransfer:
+          Boolean(
+            supervisionSettings?.allow_teacher_transfer,
+          ),
+
+        allowTeacherRemove:
+          Boolean(
+            supervisionSettings?.allow_teacher_remove,
+          ),
       },
       {
         headers: {
