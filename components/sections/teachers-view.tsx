@@ -184,6 +184,55 @@ export function TeachersView() {
       false,
   )
 
+  /*
+   * =========================================================
+   * صلاحيات المستخدم الحالي
+   * =========================================================
+   *
+   * Admin:
+   *   يقدر ينقل ويمسح حتى لو المشرف قفل الميزة.
+   *
+   * Teacher:
+   *   يحتاج صلاحية teachers.manage_assignments
+   *   بالإضافة إلى فتح الميزة من إعدادات المشرف.
+   */
+  const [
+    currentUserRole,
+    setCurrentUserRole,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    currentPermissionNames,
+    setCurrentPermissionNames,
+  ] = useState<string[]>([])
+
+  const [
+    permissionsLoading,
+    setPermissionsLoading,
+  ] = useState(true)
+
+  const canManageAssignments =
+    currentUserRole === 'Admin' ||
+    currentPermissionNames.includes(
+      'teachers.manage_assignments',
+    )
+
+  const canTransferStudents =
+    currentUserRole === 'Admin' ||
+    (
+      canManageAssignments &&
+      allowTeacherTransfer
+    )
+
+  const canRemoveStudents =
+    currentUserRole === 'Admin' ||
+    (
+      canManageAssignments &&
+      allowTeacherRemove
+    )
+
   const [
     statusMessage,
     setStatusMessage,
@@ -267,22 +316,161 @@ export function TeachersView() {
 
   /*
    * =========================================================
-   * تحميل البيانات
+   * تحميل صلاحيات المستخدم + إعدادات المشرف
    * =========================================================
    *
    * مهم:
-   * إذا الكاش موجود، لا نعيد تحميل Supabase.
+   * هذا الجزء لا يعتمد على teachersCache.
    *
-   * هذا يمنع إعادة التحميل عند:
-   * - الانتقال من صفحة إلى صفحة
-   * - فتح صفحة المعلمين مرة ثانية
-   * - إعادة Mount للمكوّن
+   * السبب:
+   * إعدادات المشرف قد تتغير بينما بيانات المعلمين
+   * موجودة في الكاش.
    *
-   * البيانات تتحدث مباشرة داخل الكاش بعد:
-   * - إضافة طالب
-   * - نقل طالب
-   * - مسح طالب
-   * - تحديث الحضور
+   * لذلك نعيد قراءة:
+   * - صلاحية المستخدم
+   * - دور المستخدم
+   * - إعدادات نقل الطلاب
+   * - إعدادات مسح الطلاب
+   *
+   * عند Mount للصفحة.
+   */
+  const loadAccessSettings =
+    async () => {
+      setPermissionsLoading(true)
+
+      try {
+        const [
+          permissionsResponse,
+          supervisionResult,
+        ] = await Promise.all([
+          fetch(
+            '/api/auth/permissions',
+            {
+              method: 'GET',
+              cache: 'no-store',
+            },
+          ),
+
+          supabase
+            .from(
+              'supervision_settings',
+            )
+            .select(
+              'id, allow_teacher_transfer, allow_teacher_remove',
+            )
+            .eq(
+              'id',
+              'default',
+            )
+            .maybeSingle(),
+        ])
+
+        /*
+         * -----------------------------------------------------
+         * صلاحيات المستخدم
+         * -----------------------------------------------------
+         */
+        if (
+          permissionsResponse.ok
+        ) {
+          const permissionData =
+            await permissionsResponse.json()
+
+          setCurrentUserRole(
+            permissionData?.role ??
+              null,
+          )
+
+          setCurrentPermissionNames(
+            Array.isArray(
+              permissionData?.permissionNames,
+            )
+              ? permissionData.permissionNames
+              : [],
+          )
+        } else {
+          setCurrentUserRole(null)
+          setCurrentPermissionNames([])
+
+          console.error(
+            'Failed to load current permissions:',
+            await permissionsResponse.text(),
+          )
+        }
+
+        /*
+         * -----------------------------------------------------
+         * إعدادات المشرف
+         * -----------------------------------------------------
+         */
+        const {
+          data: supervisionSettings,
+          error:
+            supervisionSettingsError,
+        } = supervisionResult
+
+        if (
+          supervisionSettingsError
+        ) {
+          setAllowTeacherTransfer(false)
+          setAllowTeacherRemove(false)
+
+          updateTeachersCache({
+            allowTeacherTransfer:
+              false,
+            allowTeacherRemove:
+              false,
+          })
+
+          console.error(
+            'Supervision settings error:',
+            supervisionSettingsError,
+          )
+        } else {
+          const nextAllowTeacherTransfer =
+            Boolean(
+              supervisionSettings?.allow_teacher_transfer,
+            )
+
+          const nextAllowTeacherRemove =
+            Boolean(
+              supervisionSettings?.allow_teacher_remove,
+            )
+
+          setAllowTeacherTransfer(
+            nextAllowTeacherTransfer,
+          )
+
+          setAllowTeacherRemove(
+            nextAllowTeacherRemove,
+          )
+
+          updateTeachersCache({
+            allowTeacherTransfer:
+              nextAllowTeacherTransfer,
+            allowTeacherRemove:
+              nextAllowTeacherRemove,
+          })
+        }
+      } catch (error) {
+        console.error(
+          'Access settings load error:',
+          error,
+        )
+
+        setCurrentUserRole(null)
+        setCurrentPermissionNames([])
+        setAllowTeacherTransfer(false)
+        setAllowTeacherRemove(false)
+      } finally {
+        setPermissionsLoading(false)
+      }
+    }
+
+  /*
+   * =========================================================
+   * تحميل البيانات
+   * =========================================================
    */
   const loadData = async (
     showLoading = false,
@@ -294,7 +482,11 @@ export function TeachersView() {
     }
 
     /*
-     * إذا لدينا Cache كامل، لا نحتاج Reload.
+     * إذا لدينا Cache كامل، لا نحتاج Reload للبيانات.
+     *
+     * ملاحظة:
+     * صلاحيات المستخدم وإعدادات المشرف يتم تحميلها
+     * بشكل مستقل في loadAccessSettings().
      */
     if (
       teachersCache !== null
@@ -312,57 +504,6 @@ export function TeachersView() {
     setStatusMessage('')
 
     try {
-      const {
-        data: supervisionSettings,
-        error:
-          supervisionSettingsError,
-      } = await supabase
-        .from('supervision_settings')
-        .select(
-          'id, allow_teacher_transfer, allow_teacher_remove',
-        )
-        .eq('id', 'default')
-        .maybeSingle()
-
-      if (supervisionSettingsError) {
-        setAllowTeacherTransfer(false)
-        setAllowTeacherRemove(false)
-
-        updateTeachersCache({
-          allowTeacherTransfer: false,
-          allowTeacherRemove: false,
-        })
-
-        setStatusMessage(
-          `خطأ في تحميل إعدادات الإشراف: ${supervisionSettingsError.message}`,
-        )
-      } else {
-        const nextAllowTeacherTransfer =
-          Boolean(
-            supervisionSettings?.allow_teacher_transfer,
-          )
-
-        const nextAllowTeacherRemove =
-          Boolean(
-            supervisionSettings?.allow_teacher_remove,
-          )
-
-        setAllowTeacherTransfer(
-          nextAllowTeacherTransfer,
-        )
-
-        setAllowTeacherRemove(
-          nextAllowTeacherRemove,
-        )
-
-        updateTeachersCache({
-          allowTeacherTransfer:
-            nextAllowTeacherTransfer,
-          allowTeacherRemove:
-            nextAllowTeacherRemove,
-        })
-      }
-
       const {
         data: academicYear,
         error: academicYearError,
@@ -1240,11 +1381,14 @@ export function TeachersView() {
     }
   }
 
+  /*
+   * =========================================================
+   * تشغيل تحميل البيانات والصلاحيات
+   * =========================================================
+   */
   useEffect(() => {
-    /*
-     * إذا البيانات موجودة بالكاش:
-     * لا يوجد أي Request جديد.
-     */
+    void loadAccessSettings()
+
     if (
       teachersCache !== null
     ) {
@@ -1879,7 +2023,7 @@ export function TeachersView() {
     studentId: string,
   ) => {
     if (
-      !allowTeacherTransfer
+      !canTransferStudents
     ) {
       return
     }
@@ -1960,7 +2104,7 @@ export function TeachersView() {
 
   const saveTransfer = async () => {
     if (
-      !allowTeacherTransfer
+      !canTransferStudents
     ) {
       return
     }
@@ -2148,7 +2292,7 @@ export function TeachersView() {
       student: Student,
     ) => {
       if (
-        !allowTeacherRemove
+        !canRemoveStudents
       ) {
         return
       }
@@ -2812,8 +2956,8 @@ export function TeachersView() {
                               المستوى
                             </th>
 
-                            {(allowTeacherTransfer ||
-                              allowTeacherRemove) && (
+                            {(canTransferStudents ||
+                              canRemoveStudents) && (
                               <th className="px-4 py-3 text-right font-medium">
                                 إجراء
                               </th>
@@ -2867,11 +3011,11 @@ export function TeachersView() {
                                     }
                                   </td>
 
-                                  {(allowTeacherTransfer ||
-                                    allowTeacherRemove) && (
+                                  {(canTransferStudents ||
+                                    canRemoveStudents) && (
                                     <td className="px-4 py-3">
                                       <div className="flex flex-wrap gap-2">
-                                        {allowTeacherTransfer && (
+                                        {canTransferStudents && (
                                           <Button
                                             variant="outline"
                                             size="sm"
@@ -2890,7 +3034,7 @@ export function TeachersView() {
                                           </Button>
                                         )}
 
-                                        {allowTeacherRemove && (
+                                        {canRemoveStudents && (
                                           <Button
                                             variant="outline"
                                             size="sm"
@@ -3279,7 +3423,7 @@ export function TeachersView() {
         transferStudentId &&
         selectedTeacher &&
         currentCourse &&
-        allowTeacherTransfer && (
+        canTransferStudents && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
             <Card className="w-full max-w-md">
               <CardContent className="space-y-4 p-5">
