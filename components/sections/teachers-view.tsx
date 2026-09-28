@@ -320,68 +320,24 @@ export function TeachersView() {
       setPermissionsLoading(true)
 
       try {
-        const [
-          permissionsResponse,
-          supervisionResult,
-        ] = await Promise.all([
-          fetch(
+        const permissionsResponse =
+          await fetch(
             '/api/auth/permissions',
             {
               method: 'GET',
               cache: 'no-store',
             },
-          ),
-
-          supabase
-            .from('supervision_settings')
-            .select(
-              'id, allow_teacher_transfer, allow_teacher_remove',
-            )
-            .eq(
-              'id',
-              'default',
-            )
-            .maybeSingle(),
-        ])
+          )
 
         /*
          * -----------------------------------------------------
-         * صلاحيات المستخدم
+         * التحقق من استجابة الصلاحيات
          * -----------------------------------------------------
          */
 
         if (
-          permissionsResponse.ok
+          !permissionsResponse.ok
         ) {
-          const permissionData =
-            await permissionsResponse.json()
-
-          console.log(
-            'TEACHERS ACCESS - permissions:',
-            permissionData,
-          )
-
-          setCurrentUserRole(
-            permissionData?.role ??
-              null,
-          )
-
-          setCurrentPermissionNames(
-            Array.isArray(
-              permissionData?.permissionNames,
-            )
-              ? permissionData.permissionNames
-              : [],
-          )
-
-          setCurrentPermissionIds(
-            Array.isArray(
-              permissionData?.permissionIds,
-            )
-              ? permissionData.permissionIds
-              : [],
-          )
-        } else {
           const errorText =
             await permissionsResponse.text()
 
@@ -391,75 +347,111 @@ export function TeachersView() {
           )
 
           setCurrentUserRole(null)
-          setCurrentPermissionNames([])
-          setCurrentPermissionIds([])
-        }
 
-        /*
-         * -----------------------------------------------------
-         * إعدادات المشرف
-         * -----------------------------------------------------
-         */
-
-        const {
-          data: supervisionSettings,
-          error:
-            supervisionSettingsError,
-        } = supervisionResult
-
-        console.log(
-          'TEACHERS ACCESS - supervision settings:',
-          supervisionSettings,
-        )
-
-        if (
-          supervisionSettingsError
-        ) {
-          setAllowTeacherTransfer(false)
-          setAllowTeacherRemove(false)
-
-          updateTeachersCache({
-            allowTeacherTransfer: false,
-            allowTeacherRemove: false,
-          })
-
-          console.error(
-            'Supervision settings error:',
-            supervisionSettingsError,
+          setCurrentPermissionNames(
+            [],
           )
-        } else {
-          const nextAllowTeacherTransfer =
-            Boolean(
-              supervisionSettings?.allow_teacher_transfer,
-            )
 
-          const nextAllowTeacherRemove =
-            Boolean(
-              supervisionSettings?.allow_teacher_remove,
-            )
-
-          console.log(
-            'TEACHERS ACCESS - transfer:',
-            nextAllowTeacherTransfer,
-            'remove:',
-            nextAllowTeacherRemove,
+          setCurrentPermissionIds(
+            [],
           )
 
           setAllowTeacherTransfer(
-            nextAllowTeacherTransfer,
+            false,
           )
 
           setAllowTeacherRemove(
-            nextAllowTeacherRemove,
+            false,
           )
 
           updateTeachersCache({
             allowTeacherTransfer:
-              nextAllowTeacherTransfer,
+              false,
             allowTeacherRemove:
-              nextAllowTeacherRemove,
+              false,
           })
+
+          return
         }
+
+        const permissionData =
+          await permissionsResponse.json()
+
+        console.log(
+          'TEACHERS ACCESS - permissions:',
+          permissionData,
+        )
+
+        /*
+         * -----------------------------------------------------
+         * صلاحيات المستخدم
+         * -----------------------------------------------------
+         */
+
+        setCurrentUserRole(
+          permissionData?.role ??
+            null,
+        )
+
+        setCurrentPermissionNames(
+          Array.isArray(
+            permissionData?.permissionNames,
+          )
+            ? permissionData.permissionNames
+            : [],
+        )
+
+        setCurrentPermissionIds(
+          Array.isArray(
+            permissionData?.permissionIds,
+          )
+            ? permissionData.permissionIds
+            : [],
+        )
+
+        /*
+         * -----------------------------------------------------
+         * إعدادات المشرف
+         *
+         * تأتي من API المحمي في السيرفر.
+         *
+         * لا نقرأ supervision_settings
+         * مباشرة من المتصفح.
+         * -----------------------------------------------------
+         */
+
+        const nextAllowTeacherTransfer =
+          Boolean(
+            permissionData?.allowTeacherTransfer,
+          )
+
+        const nextAllowTeacherRemove =
+          Boolean(
+            permissionData?.allowTeacherRemove,
+          )
+
+        console.log(
+          'TEACHERS ACCESS - transfer:',
+          nextAllowTeacherTransfer,
+          'remove:',
+          nextAllowTeacherRemove,
+        )
+
+        setAllowTeacherTransfer(
+          nextAllowTeacherTransfer,
+        )
+
+        setAllowTeacherRemove(
+          nextAllowTeacherRemove,
+        )
+
+        updateTeachersCache({
+          allowTeacherTransfer:
+            nextAllowTeacherTransfer,
+
+          allowTeacherRemove:
+            nextAllowTeacherRemove,
+        })
       } catch (error) {
         console.error(
           'Access settings load error:',
@@ -467,18 +459,34 @@ export function TeachersView() {
         )
 
         setCurrentUserRole(null)
-        setCurrentPermissionNames([])
-        setCurrentPermissionIds([])
-        setAllowTeacherTransfer(false)
-        setAllowTeacherRemove(false)
+
+        setCurrentPermissionNames(
+          [],
+        )
+
+        setCurrentPermissionIds(
+          [],
+        )
+
+        setAllowTeacherTransfer(
+          false,
+        )
+
+        setAllowTeacherRemove(
+          false,
+        )
 
         updateTeachersCache({
-          allowTeacherTransfer: false,
-          allowTeacherRemove: false,
+          allowTeacherTransfer:
+            false,
+
+          allowTeacherRemove:
+            false,
         })
       } finally {
         setPermissionsLoading(false)
       }
+    }
     }
 
   /*
