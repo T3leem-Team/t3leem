@@ -874,6 +874,139 @@ export function AttendanceView({
   }
 
   /**
+   * إلغاء حالة الحضور وحذف سجل الحضور.
+   */
+  const clearAttendance = async (
+    student: Student,
+    date: string,
+  ) => {
+    if (!currentCourse) {
+      return
+    }
+
+    if (
+      !isAttendanceAvailable ||
+      date !== activeDate
+    ) {
+      setStatusMessage(
+        'لا يمكن تعديل الحضور في هذا اليوم.',
+      )
+      return
+    }
+
+    const key = `${date}:${student.id}`
+
+    if (savingKey === key) {
+      return
+    }
+
+    const existing =
+      getRecordForStudent(
+        student.id,
+        date,
+      )
+
+    if (!existing) {
+      setLocalStatuses(
+        (current) => {
+          const next = {
+            ...current,
+          }
+
+          delete next[key]
+
+          return next
+        },
+      )
+
+      setEditingStatusKey(null)
+      return
+    }
+
+    const previousRecords =
+      attendanceRecords
+
+    const previousLocalStatus =
+      localStatuses[key]
+
+    setSavingKey(key)
+
+    /*
+     * حذف السجل من الواجهة مباشرة.
+     */
+    setAttendanceRecords(
+      (records) =>
+        records.filter(
+          (record) =>
+            record.id !==
+            existing.id,
+        ),
+    )
+
+    setLocalStatuses(
+      (current) => {
+        const next = {
+          ...current,
+        }
+
+        delete next[key]
+
+        return next
+      },
+    )
+
+    setEditingStatusKey(null)
+
+    try {
+      const {
+        error,
+      } = await supabase
+        .from('attendance')
+        .delete()
+        .eq('id', existing.id)
+
+      if (error) {
+        throw error
+      }
+
+      setStatusMessage(
+        `تم إلغاء تسجيل حضور ${student.name}`,
+      )
+    } catch (error: any) {
+      /*
+       * إذا فشل الحذف نرجع السجل كما كان.
+       */
+      setAttendanceRecords(
+        previousRecords,
+      )
+
+      setLocalStatuses(
+        (current) => {
+          const next = {
+            ...current,
+          }
+
+          if (previousLocalStatus) {
+            next[key] =
+              previousLocalStatus
+          }
+
+          return next
+        },
+      )
+
+      setStatusMessage(
+        `تعذر إلغاء الحضور: ${
+          error?.message ||
+          'خطأ غير معروف'
+        }`,
+      )
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  /**
    * حفظ الملاحظة.
    *
    * الكتابة نفسها محلية فقط.
@@ -1247,6 +1380,10 @@ export function AttendanceView({
                                       statusName,
                                     )
 
+                                  const isSelected =
+                                    status ===
+                                    statusName
+
                                   return (
                                     <button
                                       key={
@@ -1256,14 +1393,29 @@ export function AttendanceView({
                                       disabled={
                                         saving
                                       }
-                                      onClick={() =>
+                                      onClick={() => {
+                                        if (
+                                          isSelected &&
+                                          status
+                                        ) {
+                                          clearAttendance(
+                                            student,
+                                            activeDate,
+                                          )
+                                          return
+                                        }
+
                                         saveAttendance(
                                           student,
                                           activeDate,
                                           statusName,
                                         )
-                                      }
-                                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${styles.normal} ${
+                                      }}
+                                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                        isSelected
+                                          ? styles.selected
+                                          : styles.normal
+                                      } ${
                                         saving
                                           ? 'cursor-not-allowed opacity-50'
                                           : ''
