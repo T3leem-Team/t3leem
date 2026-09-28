@@ -22,21 +22,46 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    /*
+     * ------------------------------------------------------
+     * التحقق من دخول المستخدم والجلسة
+     * ------------------------------------------------------
+     */
+
     const {
       access,
       response,
     } = await requireAuth()
+
+    console.log(
+      'PERMISSIONS AUTH DEBUG:',
+      {
+        access,
+        responseStatus:
+          response?.status ?? null,
+      },
+    )
 
     if (response) {
       return response
     }
 
     if (!access?.profileId) {
+      console.error(
+        'PERMISSIONS AUTH DEBUG: Missing profileId',
+        {
+          access,
+        },
+      )
+
       return NextResponse.json(
         {
           authenticated: false,
           error:
             'تعذر تحديد حساب المستخدم.',
+          debug: {
+            access,
+          },
         },
         { status: 401 },
       )
@@ -63,6 +88,16 @@ export async function GET() {
         )
         .maybeSingle()
 
+    console.log(
+      'PERMISSIONS PROFILE DEBUG:',
+      {
+        profile,
+        profileError,
+        profileId:
+          access.profileId,
+      },
+    )
+
     if (profileError) {
       console.error(
         'Permissions profile lookup error:',
@@ -82,6 +117,15 @@ export async function GET() {
       !profile ||
       !profile.is_active
     ) {
+      console.error(
+        'PERMISSIONS PROFILE DEBUG: Profile missing or inactive',
+        {
+          profile,
+          profileId:
+            access.profileId,
+        },
+      )
+
       return NextResponse.json(
         {
           authenticated: false,
@@ -111,6 +155,16 @@ export async function GET() {
           'user_profile_id',
           access.profileId,
         )
+
+    console.log(
+      'PERMISSIONS DIRECT DEBUG:',
+      {
+        directRows,
+        directError,
+        profileId:
+          access.profileId,
+      },
+    )
 
     if (directError) {
       console.error(
@@ -146,6 +200,16 @@ export async function GET() {
           'role',
           profile.role,
         )
+
+    console.log(
+      'PERMISSIONS ROLE DEBUG:',
+      {
+        role:
+          profile.role,
+        roleRows,
+        roleError,
+      },
+    )
 
     if (roleError) {
       console.error(
@@ -184,14 +248,16 @@ export async function GET() {
         ),
       )
 
+    console.log(
+      'PERMISSIONS IDS DEBUG:',
+      {
+        permissionIds,
+      },
+    )
+
     /*
      * ------------------------------------------------------
      * تفاصيل الصلاحيات
-     *
-     * عندنا في النظام اسم الصلاحية
-     * ومفتاح الصلاحية قد يكون مختلفًا.
-     *
-     * نقرأ البيانات المتوفرة من جدول permissions.
      * ------------------------------------------------------
      */
 
@@ -220,6 +286,14 @@ export async function GET() {
             permissionIds,
           )
 
+      console.log(
+        'PERMISSIONS DETAILS DEBUG:',
+        {
+          data,
+          error,
+        },
+      )
+
       if (error) {
         console.error(
           'Permissions lookup error:',
@@ -241,15 +315,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * مفاتيح الصلاحيات
-     *
-     * إذا كان name نفسه هو المفتاح:
-     * teachers.manage_assignments
-     * سيعمل مباشرة.
-     *
-     * وإذا كان الاسم عربيًا، نضيف الصلاحية
-     * المعروفة الخاصة بإدارة توزيع الطلاب
-     * بالاعتماد على ID الخاص بها.
+     * أسماء الصلاحيات
      * ------------------------------------------------------
      */
 
@@ -268,10 +334,7 @@ export async function GET() {
 
     /*
      * ------------------------------------------------------
-     * صلاحية إدارة نقل وتوزيع الطلبة
-     *
-     * ID الخاص بها في نظام الصلاحيات:
-     * 549e42cf-2348-4750-a943-2ca4ce51177a
+     * صلاحية إدارة توزيع الطلاب
      * ------------------------------------------------------
      */
 
@@ -311,15 +374,28 @@ export async function GET() {
       )
     }
 
+    /*
+     * ------------------------------------------------------
+     * النتيجة النهائية
+     * ------------------------------------------------------
+     */
+
+    const result = {
+      authenticated: true,
+      role: profile.role,
+      permissionIds,
+      permissionNames,
+      permissions:
+        permissionRows,
+    }
+
+    console.log(
+      'PERMISSIONS FINAL DEBUG:',
+      result,
+    )
+
     return NextResponse.json(
-      {
-        authenticated: true,
-        role: profile.role,
-        permissionIds,
-        permissionNames,
-        permissions:
-          permissionRows,
-      },
+      result,
       {
         headers: {
           'Cache-Control':
