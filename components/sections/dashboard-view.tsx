@@ -1921,24 +1921,40 @@ export function DashboardView() {
             count:
               stats.presentCount,
             icon: UserCheck,
+            color:
+              'border-emerald-200 bg-emerald-50 text-emerald-700',
+            iconColor:
+              'bg-emerald-100 text-emerald-700',
           },
           {
             label: 'غائبون',
             count:
               stats.absentCount,
             icon: UserX,
+            color:
+              'border-red-200 bg-red-50 text-red-700',
+            iconColor:
+              'bg-red-100 text-red-700',
           },
           {
             label: 'متأخرون',
             count:
               stats.lateCount,
             icon: Clock3,
+            color:
+              'border-amber-200 bg-amber-50 text-amber-700',
+            iconColor:
+              'bg-amber-100 text-amber-700',
           },
           {
             label: 'مستأذنون',
             count:
               stats.excusedCount,
             icon: ClipboardCheck,
+            color:
+              'border-sky-200 bg-sky-50 text-sky-700',
+            iconColor:
+              'bg-sky-100 text-sky-700',
           },
         ]
 
@@ -2264,12 +2280,11 @@ export function DashboardView() {
 
           <Button
             type="button"
-            variant="outline"
             onClick={() =>
               void loadData(true)
             }
             disabled={refreshing}
-            className="gap-2"
+            className="h-10 min-w-[120px] gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100"
           >
             <RefreshCw
               className={
@@ -2286,7 +2301,7 @@ export function DashboardView() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Search className="size-5 text-primary" />
+              <Search className="size-5 text-slate-500" />
               البحث السريع عن طالب
             </CardTitle>
           </CardHeader>
@@ -2303,7 +2318,7 @@ export function DashboardView() {
                   )
                 }
                 placeholder="ابحث بالاسم أو الرقم الشخصي أو رقم الطالب..."
-                className="h-11 w-full rounded-lg border bg-background px-10 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
+                className="h-11 w-full rounded-lg border bg-background px-10 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
               />
 
               {studentSearch && (
@@ -2384,7 +2399,7 @@ export function DashboardView() {
                             </div>
 
                             {result.attendanceStatus && (
-                              <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                              <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
                                 {
                                   result.attendanceStatus
                                 }
@@ -2407,7 +2422,7 @@ export function DashboardView() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium">
-                  <BookOpen className="size-4 text-primary" />
+                  <BookOpen className="size-4 text-slate-500" />
                   الدورة
                 </label>
 
@@ -2423,7 +2438,7 @@ export function DashboardView() {
                         .value,
                     )
                   }}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
                 >
                   {courses.length ===
                     0 && (
@@ -2453,7 +2468,7 @@ export function DashboardView() {
 
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-medium">
-                  <CalendarCheck className="size-4 text-primary" />
+                  <CalendarCheck className="size-4 text-slate-500" />
                   التاريخ
                 </label>
 
@@ -2470,7 +2485,7 @@ export function DashboardView() {
                         .value,
                     )
                   }}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-primary/30"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
                 />
               </div>
             </div>
@@ -2494,7 +2509,7 @@ export function DashboardView() {
                   </p>
                 </div>
 
-                <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600">
                   <Users className="size-5" />
                 </div>
               </div>
@@ -2516,7 +2531,7 @@ export function DashboardView() {
                   </p>
                 </div>
 
-                <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
                   <UserCheck className="size-5" />
                 </div>
               </div>
@@ -2538,7 +2553,7 @@ export function DashboardView() {
                   </p>
                 </div>
 
-                <div className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-600">
                   <UserX className="size-5" />
                 </div>
               </div>
@@ -2551,15 +2566,14 @@ export function DashboardView() {
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="flex items-center gap-2">
-                <CalendarCheck className="size-5 text-primary" />
+                <CalendarCheck className="size-5 text-slate-500" />
                 ملخص الحضور
               </CardTitle>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {/* زر تفاصيل الحضور الحالي */}
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                {/* تفاصيل الحضور */}
                 <Button
                   type="button"
-                  variant="outline"
                   onClick={() =>
                     setAttendanceDetailsOpen(
                       true,
@@ -2571,13 +2585,13 @@ export function DashboardView() {
                     lessonDateStatus !==
                       'lesson'
                   }
-                  className="gap-2"
+                  className="h-10 min-w-[150px] flex-1 gap-2 border border-violet-200 bg-violet-50 px-4 text-violet-700 shadow-sm hover:bg-violet-100 sm:flex-none"
                 >
                   <Users className="size-4" />
                   تفاصيل الحضور
                 </Button>
 
-                {/* أزرار Excel أصبحت في الملف المنفصل */}
+                {/* Excel */}
                 <DashboardAttendanceExport
                   course={selectedCourse}
                   academicYear={
@@ -2600,7 +2614,7 @@ export function DashboardView() {
           </CardHeader>
 
           <CardContent>
-            <div className="rounded-xl border bg-muted/20 p-4">
+            <div className="rounded-xl border bg-background p-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   {lessonDateStatus ===
@@ -2610,7 +2624,14 @@ export function DashboardView() {
                         نسبة الحضور
                       </p>
 
-                      <p className="mt-1 text-3xl font-bold">
+                      <p
+                        className={`mt-1 text-3xl font-bold ${
+                          attendancePercentage >=
+                          60
+                            ? 'text-emerald-600'
+                            : 'text-red-600'
+                        }`}
+                      >
                         {
                           attendancePercentage
                         }
@@ -2688,8 +2709,8 @@ export function DashboardView() {
 
             {lessonDateStatus ===
               'not-started' && (
-              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
                   لم تبدأ الدورة بعد
@@ -2708,8 +2729,8 @@ export function DashboardView() {
 
             {lessonDateStatus ===
               'ended' && (
-              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
                   انتهت الدورة
@@ -2728,8 +2749,8 @@ export function DashboardView() {
 
             {lessonDateStatus ===
               'no-lesson' && (
-              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
                   لا يوجد درس هذا اليوم
@@ -2743,8 +2764,8 @@ export function DashboardView() {
 
             {lessonDateStatus ===
               'no-course' && (
-              <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+                <CalendarCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
                   لا توجد دورة محددة
@@ -2767,15 +2788,17 @@ export function DashboardView() {
                           key={
                             item.label
                           }
-                          className="rounded-xl border p-4"
+                          className={`rounded-xl border p-4 ${item.color}`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <div
+                              className={`flex size-10 items-center justify-center rounded-lg ${item.iconColor}`}
+                            >
                               <Icon className="size-5" />
                             </div>
 
                             <div>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs opacity-80">
                                 {
                                   item.label
                                 }
@@ -2799,8 +2822,8 @@ export function DashboardView() {
               'lesson' &&
               attendanceItems.length ===
                 0 && (
-                <div className="mt-4 rounded-xl border border-dashed bg-muted/10 px-6 py-8 text-center">
-                  <CalendarCheck className="mx-auto size-7 text-muted-foreground/50" />
+                <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+                  <CalendarCheck className="mx-auto size-7 text-slate-300" />
 
                   <p className="mt-3 text-sm font-medium text-muted-foreground">
                     لا توجد سجلات حضور لهذا اليوم
@@ -2830,20 +2853,20 @@ export function DashboardView() {
                 '/enrollment',
               )
             }
-            className="w-full rounded-xl border bg-card p-4 text-right shadow-sm transition-colors hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-right shadow-sm transition-colors hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-200"
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
                   <ClipboardCheck className="size-5" />
                 </div>
 
                 <div>
-                  <p className="font-medium">
+                  <p className="font-medium text-amber-900">
                     طلبات تسجيل جديدة
                   </p>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-amber-700/80">
                     لديك{' '}
                     {
                       pendingRegistrationCount
@@ -2853,7 +2876,7 @@ export function DashboardView() {
                 </div>
               </div>
 
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-sm font-semibold text-amber-800">
                 {
                   pendingRegistrationCount
                 }
@@ -2866,15 +2889,15 @@ export function DashboardView() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="size-5 text-primary" />
+              <ClipboardCheck className="size-5 text-slate-500" />
               تعليقات المعلمين على الطلبة
             </CardTitle>
           </CardHeader>
 
           <CardContent>
-            <div className="flex min-h-[110px] items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 text-center">
+            <div className="flex min-h-[110px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
               <div>
-                <ClipboardCheck className="mx-auto size-7 text-muted-foreground/50" />
+                <ClipboardCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
                   تعليقات المعلمين ستظهر هنا
