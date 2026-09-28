@@ -28,7 +28,6 @@ import {
   AttendanceStatus,
   AttendanceRecord,
   AttendanceNotes,
-  Course,
   Student,
 } from '@/components/sections/attendance-view'
 
@@ -62,10 +61,7 @@ type TeachersCache = {
   attendanceRecords: AttendanceRecord[]
   allowTeacherTransfer: boolean
   allowTeacherRemove: boolean
-  courseTeacherIds: Record<
-    string,
-    string[]
-  >
+  courseTeacherIds: Record<string, string[]>
   teacherCourseSubjects: TeacherCourseSubject[]
 }
 
@@ -87,23 +83,17 @@ function updateTeachersCache(
     assignments:
       teachersCache?.assignments ?? [],
     attendanceStatuses:
-      teachersCache?.attendanceStatuses ??
-      [],
+      teachersCache?.attendanceStatuses ?? [],
     attendanceRecords:
-      teachersCache?.attendanceRecords ??
-      [],
+      teachersCache?.attendanceRecords ?? [],
     allowTeacherTransfer:
-      teachersCache?.allowTeacherTransfer ??
-      false,
+      teachersCache?.allowTeacherTransfer ?? false,
     allowTeacherRemove:
-      teachersCache?.allowTeacherRemove ??
-      false,
+      teachersCache?.allowTeacherRemove ?? false,
     courseTeacherIds:
-      teachersCache?.courseTeacherIds ??
-      {},
+      teachersCache?.courseTeacherIds ?? {},
     teacherCourseSubjects:
-      teachersCache?.teacherCourseSubjects ??
-      [],
+      teachersCache?.teacherCourseSubjects ?? [],
     ...patch,
   }
 }
@@ -133,24 +123,21 @@ export function TeachersView() {
     attendanceStatuses,
     setAttendanceStatuses,
   ] = useState<AttendanceStatus[]>(
-    teachersCache?.attendanceStatuses ??
-      [],
+    teachersCache?.attendanceStatuses ?? [],
   )
 
   const [
     attendanceRecords,
     setAttendanceRecords,
   ] = useState<AttendanceRecord[]>(
-    teachersCache?.attendanceRecords ??
-      [],
+    teachersCache?.attendanceRecords ?? [],
   )
 
   const [
     teacherCourseSubjects,
     setTeacherCourseSubjects,
   ] = useState<TeacherCourseSubject[]>(
-    teachersCache?.teacherCourseSubjects ??
-      [],
+    teachersCache?.teacherCourseSubjects ?? [],
   )
 
   const [loading, setLoading] =
@@ -212,8 +199,16 @@ export function TeachersView() {
     setPermissionsLoading,
   ] = useState(true)
 
+  /*
+   * =========================================================
+   * منطق صلاحيات النقل والمسح
+   *
+   * Admin أو المستخدم الذي لديه الصلاحية
+   * يحتاج أيضًا أن يكون إعداد المشرف مفتوحًا.
+   * =========================================================
+   */
+
   const canManageAssignments =
-    currentUserRole === 'Admin' ||
     currentPermissionNames.includes(
       'teachers.manage_assignments',
     ) ||
@@ -222,29 +217,30 @@ export function TeachersView() {
     )
 
   const canTransferStudents =
-    currentUserRole === 'Admin' ||
+    allowTeacherTransfer &&
     (
-      canManageAssignments &&
-      allowTeacherTransfer
+      currentUserRole === 'Admin' ||
+      canManageAssignments
     )
 
   const canRemoveStudents =
-    currentUserRole === 'Admin' ||
+    allowTeacherRemove &&
     (
-      canManageAssignments &&
-      allowTeacherRemove
+      currentUserRole === 'Admin' ||
+      canManageAssignments
     )
 
-    console.log('TEACHERS ACCESS', {
-      currentUserRole,
-      currentPermissionNames,
-      currentPermissionIds,
-      allowTeacherTransfer,
-      allowTeacherRemove,
-      canManageAssignments,
-      canTransferStudents,
-      canRemoveStudents,
-    })
+  console.log('TEACHERS ACCESS', {
+    currentUserRole,
+    currentPermissionNames,
+    currentPermissionIds,
+    allowTeacherTransfer,
+    allowTeacherRemove,
+    canManageAssignments,
+    canTransferStudents,
+    canRemoveStudents,
+  })
+
   const [
     statusMessage,
     setStatusMessage,
@@ -256,9 +252,7 @@ export function TeachersView() {
   const [
     selectedTeacherId,
     setSelectedTeacherId,
-  ] = useState<string | null>(
-    null,
-  )
+  ] = useState<string | null>(null)
 
   const [activePanel, setActivePanel] =
     useState<
@@ -286,9 +280,7 @@ export function TeachersView() {
   const [
     transferStudentId,
     setTransferStudentId,
-  ] = useState<string | null>(
-    null,
-  )
+  ] = useState<string | null>(null)
 
   const [
     transferTeacherId,
@@ -298,37 +290,28 @@ export function TeachersView() {
   const [
     selectedAttendanceDate,
     setSelectedAttendanceDate,
-  ] = useState<string | null>(
-    null,
-  )
+  ] = useState<string | null>(null)
 
   const [
     attendanceNotes,
     setAttendanceNotes,
-  ] = useState<AttendanceNotes>(
-    {},
-  )
+  ] = useState<AttendanceNotes>({})
 
   const [
     courseTeacherIds,
     setCourseTeacherIds,
-  ] = useState<
-    Record<string, string[]>
-  >(
-    teachersCache?.courseTeacherIds ??
-      {},
+  ] = useState<Record<string, string[]>>(
+    teachersCache?.courseTeacherIds ?? {},
   )
 
   const [
     selectedPreviousCourseId,
     setSelectedPreviousCourseId,
-  ] = useState<string | null>(
-    null,
-  )
+  ] = useState<string | null>(null)
 
   /*
    * =========================================================
-   * تحميل صلاحيات المستخدم + إعدادات المشرف
+   * تحميل الصلاحيات + إعدادات المشرف
    * =========================================================
    */
 
@@ -350,9 +333,7 @@ export function TeachersView() {
           ),
 
           supabase
-            .from(
-              'supervision_settings',
-            )
+            .from('supervision_settings')
             .select(
               'id, allow_teacher_transfer, allow_teacher_remove',
             )
@@ -375,6 +356,11 @@ export function TeachersView() {
           const permissionData =
             await permissionsResponse.json()
 
+          console.log(
+            'TEACHERS ACCESS - permissions:',
+            permissionData,
+          )
+
           setCurrentUserRole(
             permissionData?.role ??
               null,
@@ -396,14 +382,17 @@ export function TeachersView() {
               : [],
           )
         } else {
-          setCurrentUserRole(null)
-          setCurrentPermissionNames([])
-          setCurrentPermissionIds([])
+          const errorText =
+            await permissionsResponse.text()
 
           console.error(
             'Failed to load current permissions:',
-            await permissionsResponse.text(),
+            errorText,
           )
+
+          setCurrentUserRole(null)
+          setCurrentPermissionNames([])
+          setCurrentPermissionIds([])
         }
 
         /*
@@ -418,6 +407,11 @@ export function TeachersView() {
             supervisionSettingsError,
         } = supervisionResult
 
+        console.log(
+          'TEACHERS ACCESS - supervision settings:',
+          supervisionSettings,
+        )
+
         if (
           supervisionSettingsError
         ) {
@@ -425,10 +419,8 @@ export function TeachersView() {
           setAllowTeacherRemove(false)
 
           updateTeachersCache({
-            allowTeacherTransfer:
-              false,
-            allowTeacherRemove:
-              false,
+            allowTeacherTransfer: false,
+            allowTeacherRemove: false,
           })
 
           console.error(
@@ -445,6 +437,13 @@ export function TeachersView() {
             Boolean(
               supervisionSettings?.allow_teacher_remove,
             )
+
+          console.log(
+            'TEACHERS ACCESS - transfer:',
+            nextAllowTeacherTransfer,
+            'remove:',
+            nextAllowTeacherRemove,
+          )
 
           setAllowTeacherTransfer(
             nextAllowTeacherTransfer,
@@ -472,6 +471,11 @@ export function TeachersView() {
         setCurrentPermissionIds([])
         setAllowTeacherTransfer(false)
         setAllowTeacherRemove(false)
+
+        updateTeachersCache({
+          allowTeacherTransfer: false,
+          allowTeacherRemove: false,
+        })
       } finally {
         setPermissionsLoading(false)
       }
