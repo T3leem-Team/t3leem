@@ -272,6 +272,32 @@ export function Header({
       try {
         setLoadingNotifications(true)
 
+        /*
+         * حساب بداية ونهاية اليوم حسب توقيت البحرين.
+         * قاعدة البيانات تخزن created_at كـ UTC،
+         * لذلك نحول بداية ونهاية اليوم إلى ISO قبل الاستعلام.
+         */
+        const now = new Date()
+
+        const bahrainDate =
+          new Intl.DateTimeFormat(
+            'en-CA',
+            {
+              timeZone: 'Asia/Bahrain',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            },
+          ).format(now)
+
+        const startOfDay = new Date(
+          `${bahrainDate}T00:00:00+03:00`,
+        )
+
+        const endOfDay = new Date(
+          `${bahrainDate}T23:59:59.999+03:00`,
+        )
+
         const {
           data: logs,
           error: logsError,
@@ -293,6 +319,14 @@ export function Header({
           .eq(
             'success',
             true,
+          )
+          .gte(
+            'created_at',
+            startOfDay.toISOString(),
+          )
+          .lte(
+            'created_at',
+            endOfDay.toISOString(),
           )
           .order(
             'created_at',
@@ -411,11 +445,8 @@ export function Header({
     }, [])
 
   /*
-   * تحميل آخر عمليات الدخول مباشرة
-   * عند فتح الـDashboard، وليس فقط عند فتح الجرس.
-   *
-   * هذا يضمن ظهور login_success الحالي
-   * إذا كان موجوداً في قاعدة البيانات.
+   * تحميل عمليات دخول اليوم مباشرة
+   * عند فتح الـDashboard.
    */
   useEffect(() => {
     void loadNotifications()
@@ -426,7 +457,7 @@ export function Header({
    * Realtime Notifications
    * -------------------------------------------------------
    *
-   * أي login_success جديد في auth_audit_logs
+   * أي login_success جديد اليوم
    * يسبب تحديث الإشعارات مباشرة.
    */
   useEffect(() => {
@@ -848,11 +879,11 @@ export function Header({
           >
             <div className="border-b border-border px-4 py-3">
               <p className="text-sm font-semibold">
-                آخر النشاطات
+                آخر نشاطات اليوم
               </p>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                آخر عمليات الدخول إلى النظام
+                آخر عمليات الدخول إلى النظام اليوم
               </p>
             </div>
 
@@ -863,7 +894,7 @@ export function Header({
                 </div>
               ) : notifications.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  لا توجد عمليات دخول مسجلة.
+                  لا توجد عمليات دخول مسجلة اليوم.
                 </div>
               ) : (
                 notifications.map(
@@ -902,7 +933,7 @@ export function Header({
             {notifications.length > 0 && (
               <div className="border-t border-border px-4 py-2.5">
                 <p className="text-center text-xs text-muted-foreground">
-                  يتم عرض آخر 10 عمليات دخول
+                  يتم عرض آخر 10 عمليات دخول اليوم
                 </p>
               </div>
             )}
