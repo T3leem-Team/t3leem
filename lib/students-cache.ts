@@ -6,13 +6,13 @@ import type {
   StudentAttendanceRecord,
   StudentAttendanceSummary,
   StudentCourseStatus,
-} from '@/components/dashboard/student-details'
+} from '@/components/sections/student-details'
 
 import type {
   StudentDynamicField,
   StudentTableStudent,
   StudentTableCourse,
-} from '@/components/dashboard/students/students-table'
+} from '@/components/sections/students-table'
 
 export type AcademicLevel = {
   id: string
