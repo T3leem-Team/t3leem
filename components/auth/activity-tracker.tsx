@@ -11,7 +11,9 @@ export function ActivityTracker() {
     let stopped = false
 
     async function sendActivity() {
-      if (stopped) return
+      if (stopped) {
+        return
+      }
 
       const now = Date.now()
 
@@ -25,20 +27,24 @@ export function ActivityTracker() {
       lastSentRef.current = now
 
       try {
-        const response = await fetch(
-          '/api/auth/activity',
-          {
-            method: 'POST',
-            credentials: 'include',
-            cache: 'no-store',
-          },
-        )
+        const response =
+          await fetch(
+            '/api/auth/activity',
+            {
+              method: 'POST',
+              credentials: 'include',
+              cache: 'no-store',
+            },
+          )
 
-        if (response.status === 401) {
+        if (
+          response.status === 401 &&
+          !stopped
+        ) {
           window.location.replace('/login')
         }
       } catch {
-        // لا نسجل خروج بسبب مشكلة شبكة مؤقتة
+        // لا نسجل خروج بسبب مشكلة شبكة مؤقتة.
       }
     }
 
