@@ -8,10 +8,25 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const access = await validateCurrentAccess()
+  const access =
+    await validateCurrentAccess()
 
   if (!access.allowed) {
-    redirect('/login?reason=session_expired')
+    if (
+      access.reason ===
+      'guard_error'
+    ) {
+      throw new Error(
+        'تعذر التحقق من جلسة المستخدم مؤقتًا.',
+      )
+    }
+
+    redirect(
+      `/login?reason=${encodeURIComponent(
+        access.reason ??
+          'session_expired',
+      )}`,
+    )
   }
 
   return (
