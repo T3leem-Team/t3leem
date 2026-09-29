@@ -80,11 +80,8 @@ export function StudentsView() {
   const [
     academicLevels,
     setAcademicLevels,
-  ] = useState<
-    AcademicLevel[]
-  >(
-    initialCache?.academicLevels ??
-      []
+  ] = useState<AcademicLevel[]>(
+    initialCache?.academicLevels ?? []
   )
 
   const [
@@ -107,30 +104,26 @@ export function StudentsView() {
     currentAnnualFee,
     setCurrentAnnualFee,
   ] = useState(
-    initialCache?.currentAnnualFee ??
-      0
+    initialCache?.currentAnnualFee ?? 0
   )
 
   const [courses, setCourses] =
     useState<Course[]>(
-      initialCache?.courses ??
-        []
+      initialCache?.courses ?? []
     )
 
   const [
     currentCourseId,
     setCurrentCourseId,
   ] = useState<string | null>(
-    initialCache?.currentCourseId ??
-      null
+    initialCache?.currentCourseId ?? null
   )
 
   const [
     currentCourseName,
     setCurrentCourseName,
   ] = useState(
-    initialCache?.currentCourseName ??
-      ''
+    initialCache?.currentCourseName ?? ''
   )
 
   const [search, setSearch] =
@@ -146,9 +139,7 @@ export function StudentsView() {
   const [
     visibleColumns,
     setVisibleColumns,
-  ] = useState<
-    Record<string, boolean>
-  >({
+  ] = useState<Record<string, boolean>>({
     name: true,
     personalId: true,
     grade: true,
@@ -161,31 +152,22 @@ export function StudentsView() {
   const [
     dynamicFields,
     setDynamicFields,
-  ] = useState<
-    StudentDynamicField[]
-  >(
-    initialCache?.dynamicFields ??
-      []
+  ] = useState<StudentDynamicField[]>(
+    initialCache?.dynamicFields ?? []
   )
 
   const [
     studentList,
     setStudentList,
-  ] = useState<
-    StudentTableStudent[]
-  >(
-    initialCache?.studentList ??
-      []
+  ] = useState<StudentTableStudent[]>(
+    initialCache?.studentList ?? []
   )
 
   const [
     attendanceStatuses,
     setAttendanceStatuses,
-  ] = useState<
-    AttendanceStatus[]
-  >(
-    initialCache?.attendanceStatuses ??
-      []
+  ] = useState<AttendanceStatus[]>(
+    initialCache?.attendanceStatuses ?? []
   )
 
   const [
@@ -201,16 +183,12 @@ export function StudentsView() {
   const [
     editingStudentId,
     setEditingStudentId,
-  ] = useState<string | null>(
-    null
-  )
+  ] = useState<string | null>(null)
 
   const [
     detailsStudent,
     setDetailsStudent,
-  ] = useState<any | null>(
-    null
-  )
+  ] = useState<any | null>(null)
 
   const [
     detailsMode,
@@ -227,11 +205,11 @@ export function StudentsView() {
    * إذا كان الكاش جاهز:
    * تظهر الصفحة فوراً.
    *
-   * بعدها loadStudentsCache يعمل تحديثاً
-   * في الخلفية.
-   *
    * إذا كان preload شغالاً:
    * نفس الـ Promise يستخدمه هذا المكان.
+   *
+   * إذا لم يوجد كاش:
+   * يتم تحميل البيانات من Supabase.
    */
   useEffect(() => {
     let cancelled = false
@@ -249,10 +227,14 @@ export function StudentsView() {
       }
 
       try {
+        /*
+         * لا نستخدم force هنا.
+         *
+         * إذا كان الكاش موجوداً يرجعه مباشرة.
+         * وإذا كان preload شغالاً يستخدم نفس الـ Promise.
+         */
         const data =
-          await loadStudentsCache({
-            force: true,
-          })
+          await loadStudentsCache()
 
         if (cancelled) {
           return
@@ -446,8 +428,7 @@ export function StudentsView() {
 
           const dynamicText =
             Object.values(
-              student.dynamicValues ??
-                {}
+              student.dynamicValues ?? {}
             ).join(' ')
 
           const courseStatusText =
