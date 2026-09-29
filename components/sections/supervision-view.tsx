@@ -1040,6 +1040,39 @@ export function SupervisionView() {
           profile?.id ?? null
       }
 
+      /*
+       * عند إلغاء يوم دراسي:
+       * نحذف فقط سجلات الحضور الخاصة
+       * بنفس الدورة ونفس التاريخ.
+       *
+       * لا يتم حذف الطلاب أو التسجيلات
+       * أو الإسنادات أو أي بيانات أخرى.
+       */
+      if (
+        selectedType ===
+        'day_cancelled'
+      ) {
+        const {
+          error: attendanceDeleteError,
+        } = await supabase
+          .from('attendance')
+          .delete()
+          .eq(
+            'course_id',
+            selectedCourseId,
+          )
+          .eq(
+            'attendance_date',
+            selectedDate,
+          )
+
+        if (attendanceDeleteError) {
+          throw new Error(
+            `تعذر حذف سجلات الحضور لليوم الملغي: ${attendanceDeleteError.message}`,
+          )
+        }
+      }
+
       const {
         error: insertError,
       } =
@@ -1781,7 +1814,7 @@ export function SupervisionView() {
                     <p className="text-sm leading-6 text-muted-foreground">
                       {selectedType ===
                       'day_cancelled'
-                        ? 'عند تسجيل إلغاء اليوم، لن يدخل هذا اليوم ضمن الأيام الفعلية المستخدمة لحساب نسبة الحضور للدورة.'
+                        ? 'عند تسجيل إلغاء اليوم، سيتم حذف سجلات الحضور المسجلة لهذا اليوم في هذه الدورة، ولن يدخل اليوم ضمن الأيام الفعلية المستخدمة لحساب نسبة الحضور.'
                         : 'عند تسجيل إلغاء الدرس، سيتم استثناء درس هذا المعلم فقط من حساب الحضور في هذا اليوم، بينما تستمر بقية الدروس بشكل طبيعي.'}
                     </p>
                   </div>
