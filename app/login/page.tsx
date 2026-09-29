@@ -283,7 +283,7 @@ export default function LoginPage() {
       className="flex min-h-screen items-center justify-center bg-background px-4 py-8"
     >
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm sm:p-8">
           <div className="flex flex-col items-center text-center">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
               <GraduationCap className="size-7" />
@@ -320,7 +320,7 @@ export default function LoginPage() {
                 placeholder="أدخل اسم المستخدم"
                 autoComplete="username"
                 disabled={isBusy}
-                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-11 w-full rounded-lg border border-input/90 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
 
@@ -347,7 +347,7 @@ export default function LoginPage() {
                   placeholder="أدخل كلمة المرور"
                   autoComplete="current-password"
                   disabled={isBusy}
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-11 w-full rounded-lg border border-input/90 bg-background px-3 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
                 <button
@@ -377,7 +377,7 @@ export default function LoginPage() {
             {error && (
               <div
                 role="alert"
-                className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+                className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
               >
                 {error}
               </div>
