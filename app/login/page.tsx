@@ -256,6 +256,7 @@ export default function LoginPage() {
        * الانتقال. الصفحة الحالية ستختفي بمجرد
        * اكتمال الانتقال إلى الصفحة الجديدة.
        */
+
     } catch (error) {
       console.error(
         'Login request error:',
@@ -380,7 +381,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isBusy}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-90 ${
+                redirecting
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 hover:bg-emerald-700'
+                  : 'bg-primary text-primary-foreground hover:opacity-90'
+              }`}
             >
               {isBusy && (
                 <Loader2 className="size-4 animate-spin" />
