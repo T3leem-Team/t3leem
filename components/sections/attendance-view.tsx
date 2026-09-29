@@ -473,6 +473,30 @@ export function AttendanceView({
     () => new Set(),
   )
 
+  /*
+   * وضع إكمال غير المسجلين.
+   */
+  const [
+    showUnrecordedOnly,
+    setShowUnrecordedOnly,
+  ] = useState(false)
+
+  /*
+   * فتح قائمة تحديد الكل.
+   */
+  const [
+    showBulkStatusMenu,
+    setShowBulkStatusMenu,
+  ] = useState(false)
+
+  /*
+   * الحفظ الجماعي جارٍ.
+   */
+  const [
+    isBulkSaving,
+    setIsBulkSaving,
+  ] = useState(false)
+
   const todayString =
     getTodayString()
 
@@ -486,12 +510,6 @@ export function AttendanceView({
 
   /*
    * تحميل جميع تواريخ الإلغاء للدورة.
-   *
-   * يتم استبعاد:
-   * day_cancelled
-   * lesson_cancelled
-   *
-   * من نسبة الحضور.
    */
   useEffect(() => {
     if (!currentCourse) {
@@ -555,14 +573,7 @@ export function AttendanceView({
   }, [currentCourse?.id])
 
   /*
-   * التحقق من إلغاء اليوم أو الحصة
-   * للتاريخ المحدد.
-   *
-   * day_cancelled:
-   * إلغاء اليوم الدراسي بالكامل.
-   *
-   * lesson_cancelled:
-   * إلغاء الحصة في هذا التاريخ.
+   * التحقق من إلغاء اليوم أو الحصة.
    */
   useEffect(() => {
     if (!currentCourse || !activeDate) {
@@ -689,10 +700,6 @@ export function AttendanceView({
     isCancelled,
   ])
 
-  /*
-   * لا نعتبر الحضور متاحًا أثناء فحص
-   * حالة الإلغاء.
-   */
   const isAttendanceAvailable =
     dateState === 'valid' &&
     !isCheckingCancellation
@@ -738,6 +745,55 @@ export function AttendanceView({
     )
   }
 
+  /*
+   * إحصائية تسجيل اليوم.
+   *
+   * null = لا يوجد سجل حضور فعلي.
+   */
+  const attendanceSummary =
+    useMemo(() => {
+      let recorded = 0
+
+      for (const student of assignedStudents) {
+        const status =
+          getStudentStatus(
+            student.id,
+            activeDate,
+          )
+
+        if (status) {
+          recorded += 1
+        }
+      }
+
+      const total =
+        assignedStudents.length
+
+      const unrecorded =
+        Math.max(
+          total - recorded,
+          0,
+        )
+
+      return {
+        total,
+        recorded,
+        unrecorded,
+        allRecorded:
+          total > 0 &&
+          unrecorded === 0,
+      }
+    }, [
+      assignedStudents,
+      activeDate,
+      attendanceRecords,
+      attendanceStatuses,
+      localStatuses,
+    ])
+
+  /*
+   * نسب الحضور.
+   */
   const attendancePercentages =
     useMemo(() => {
       if (!currentCourse) {
@@ -795,6 +851,21 @@ export function AttendanceView({
       },
     )
 
+  /*
+   * عند تفعيل "إكمال غير المسجلين"
+   * نعرض فقط الطلاب الذين لا توجد لهم حالة.
+   */
+  const displayedStudents =
+    showUnrecordedOnly
+      ? filteredStudents.filter(
+          (student) =>
+            !getStudentStatus(
+              student.id,
+              activeDate,
+            ),
+        )
+      : filteredStudents
+
   /**
    * فحص إضافي قبل الكتابة.
    *
@@ -838,7 +909,7 @@ export function AttendanceView({
     }
 
   /**
-   * حفظ حالة الحضور.
+   * حفظ حالة طالب واحد.
    */
   const saveAttendance = async (
     student: Student,
@@ -877,7 +948,10 @@ export function AttendanceView({
 
     const key = `${date}:${student.id}`
 
-    if (savingKey === key) {
+    if (
+      savingKey === key ||
+      isBulkSaving
+    ) {
       return
     }
 
@@ -963,9 +1037,6 @@ export function AttendanceView({
     )
 
     try {
-      /*
-       * فحص إضافي قبل الكتابة.
-       */
       const isCancelledNow =
         await checkCancellationBeforeSave(
           date,
@@ -1131,6 +1202,477 @@ export function AttendanceView({
   }
 
   /**
+   * تحديد الكل بحالة واحدة.
+   *
+   * مهم:
+   * لا نهتم بالحالة السابقة للطالب.
+   * يتم استبدالها بالحالة المختارة.
+   */
+  const saveAllAttendance =
+    async (
+      statusName: AttendanceStatusName,
+    ) => {
+      if (!currentCourse) {
+        return
+      }
+
+      if (
+        isCancelled ||
+        !isAttendanceAvailable ||
+        activeDate !==
+          selectedAttendanceDate &&
+          selectedAttendanceDate !==
+            null
+      ) {
+        setStatusMessage(
+          isCancelled
+            ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
+            : 'لا يمكن تسجيل الحضور في هذا اليوم.',
+        )
+        return
+      }
+
+      if (
+        assignedStudents.length ===
+        0
+      ) {
+        setStatusMessage(
+          'لا يوجد طلاب لتسجيل الحضور.',
+        )
+        return
+      }
+
+      const statusId =
+        getStatusIdByName(
+          attendanceStatuses,
+          statusName,
+        )
+
+      if (!statusId) {
+        setStatusMessage(
+          `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
+        )
+        return
+      }
+
+      if (isBulkSaving) {
+        return
+      }
+
+      setIsBulkSaving(true)
+      setShowBulkStatusMenu(false)
+      setEditingStatusKey(null)
+
+      try {
+        /*
+         * فحص الإلغاء قبل بدء العملية.
+         */
+        const isCancelledNow =
+          await checkCancellationBeforeSave(
+            activeDate,
+          )
+
+        if (isCancelledNow) {
+          throw new Error(
+            'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
+          )
+        }
+
+        /*
+         * نقرأ السجلات الموجودة فعليًا
+         * لهذا اليوم والدورة قبل الكتابة.
+         */
+        const {
+          data: existingData,
+          error: existingError,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+          )
+          .eq(
+            'course_id',
+            currentCourse.id,
+          )
+          .eq(
+            'attendance_date',
+            activeDate,
+          )
+
+        if (existingError) {
+          throw existingError
+        }
+
+        const existingByStudent =
+          new Map<
+            string,
+            AttendanceRecord
+          >()
+
+        for (const row of
+          existingData ?? []) {
+          existingByStudent.set(
+            row.student_id,
+            {
+              id: row.id,
+              studentId:
+                row.student_id,
+              enrollmentId:
+                row.enrollment_id ??
+                null,
+              courseId:
+                row.course_id,
+              attendanceDate:
+                row.attendance_date,
+              statusId:
+                row.status_id,
+              note:
+                row.note ?? '',
+            },
+          )
+        }
+
+        /*
+         * نحتفظ بالنسخة الحالية لاسترجاعها
+         * إذا فشلت العملية.
+         */
+        const previousRecords =
+          attendanceRecords
+
+        /*
+         * حفظ الطلاب واحدًا تلو الآخر.
+         *
+         * هذا يحافظ على نفس منطق قاعدة البيانات
+         * الموجود في الحفظ الفردي ولا يفترض وجود
+         * unique constraint إضافي.
+         */
+        const savedRecords: AttendanceRecord[] =
+          []
+
+        for (const student of
+          assignedStudents) {
+          const existing =
+            existingByStudent.get(
+              student.id,
+            )
+
+          const key = `${activeDate}:${student.id}`
+
+          if (existing) {
+            const {
+              data,
+              error,
+            } = await supabase
+              .from('attendance')
+              .update({
+                status_id: statusId,
+                enrollment_id:
+                  student.enrollmentId ||
+                  null,
+                note:
+                  attendanceNotes[key] ??
+                  existing.note ??
+                  null,
+              })
+              .eq(
+                'id',
+                existing.id,
+              )
+              .select(
+                'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+              )
+              .single()
+
+            if (error) {
+              throw new Error(
+                `تعذر حفظ ${student.name}: ${error.message}`,
+              )
+            }
+
+            if (data) {
+              savedRecords.push({
+                id: data.id,
+                studentId:
+                  data.student_id,
+                enrollmentId:
+                  data.enrollment_id ??
+                  null,
+                courseId:
+                  data.course_id,
+                attendanceDate:
+                  data.attendance_date,
+                statusId:
+                  data.status_id,
+                note:
+                  data.note ?? '',
+              })
+            }
+          } else {
+            const {
+              data,
+              error,
+            } = await supabase
+              .from('attendance')
+              .insert({
+                student_id:
+                  student.id,
+                enrollment_id:
+                  student.enrollmentId ||
+                  null,
+                attendance_date:
+                  activeDate,
+                status_id:
+                  statusId,
+                note:
+                  attendanceNotes[key] ||
+                  null,
+                course_id:
+                  currentCourse.id,
+              })
+              .select(
+                'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+              )
+              .single()
+
+            if (error) {
+              throw new Error(
+                `تعذر حفظ ${student.name}: ${error.message}`,
+              )
+            }
+
+            if (data) {
+              savedRecords.push({
+                id: data.id,
+                studentId:
+                  data.student_id,
+                enrollmentId:
+                  data.enrollment_id ??
+                  null,
+                courseId:
+                  data.course_id,
+                attendanceDate:
+                  data.attendance_date,
+                statusId:
+                  data.status_id,
+                note:
+                  data.note ?? '',
+              })
+            }
+          }
+        }
+
+        /*
+         * تحديث الواجهة بالحالات المختارة.
+         */
+        setLocalStatuses(
+          (current) => {
+            const next = {
+              ...current,
+            }
+
+            for (const student of
+              assignedStudents) {
+              next[
+                `${activeDate}:${student.id}`
+              ] = statusName
+            }
+
+            return next
+          },
+        )
+
+        /*
+         * استبدال سجلات اليوم بالسجلات
+         * التي أكدتها Supabase.
+         */
+        setAttendanceRecords(
+          (records) => {
+            const untouched =
+              records.filter(
+                (record) =>
+                  !(
+                    record.courseId ===
+                      currentCourse.id &&
+                    record.attendanceDate ===
+                      activeDate
+                  ),
+              )
+
+            return [
+              ...untouched,
+              ...savedRecords,
+            ]
+          },
+        )
+
+        /*
+         * تحقق نهائي من قاعدة البيانات.
+         *
+         * لا نعرض "تم تسجيل الجميع"
+         * إلا إذا كانت كل سجلات الطلاب موجودة.
+         */
+        const {
+          data: verificationData,
+          error: verificationError,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'student_id, status_id',
+          )
+          .eq(
+            'course_id',
+            currentCourse.id,
+          )
+          .eq(
+            'attendance_date',
+            activeDate,
+          )
+
+        if (verificationError) {
+          throw verificationError
+        }
+
+        const verifiedStudentIds =
+          new Set(
+            (verificationData ?? []).map(
+              (row) =>
+                row.student_id,
+            ),
+          )
+
+        const verifiedCount =
+          assignedStudents.filter(
+            (student) =>
+              verifiedStudentIds.has(
+                student.id,
+              ),
+          ).length
+
+        if (
+          verifiedCount !==
+          assignedStudents.length
+        ) {
+          const remaining =
+            assignedStudents.length -
+            verifiedCount
+
+          setStatusMessage(
+            `لم يكتمل التسجيل — باقي ${remaining} من ${assignedStudents.length} طالب.`,
+          )
+
+          return
+        }
+
+        setStatusMessage(
+          `تم تسجيل حالة جميع الطلاب (${assignedStudents.length}/${assignedStudents.length})`,
+        )
+      } catch (error: any) {
+        /*
+         * لا نرجع localStatuses هنا بالكامل؛
+         * لأن بعض الطلاب قد يكونون حفظوا فعليًا
+         * قبل حدوث الخطأ.
+         *
+         * لذلك نعيد تحميل سجلات اليوم من Supabase.
+         */
+        const {
+          data: refreshedData,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+          )
+          .eq(
+            'course_id',
+            currentCourse.id,
+          )
+          .eq(
+            'attendance_date',
+            activeDate,
+          )
+
+        const refreshedRecords: AttendanceRecord[] =
+          (refreshedData ?? []).map(
+            (row) => ({
+              id: row.id,
+              studentId:
+                row.student_id,
+              enrollmentId:
+                row.enrollment_id ??
+                null,
+              courseId:
+                row.course_id,
+              attendanceDate:
+                row.attendance_date,
+              statusId:
+                row.status_id,
+              note:
+                row.note ?? '',
+            }),
+          )
+
+        setAttendanceRecords(
+          (records) => [
+            ...records.filter(
+              (record) =>
+                !(
+                  record.courseId ===
+                    currentCourse.id &&
+                  record.attendanceDate ===
+                    activeDate
+                ),
+            ),
+            ...refreshedRecords,
+          ],
+        )
+
+        /*
+         * السجلات الفعلية في Supabase هي المصدر
+         * النهائي للحالة.
+         */
+        setLocalStatuses(
+          (current) => {
+            const next = {
+              ...current,
+            }
+
+            for (const student of
+              assignedStudents) {
+              const record =
+                refreshedRecords.find(
+                  (item) =>
+                    item.studentId ===
+                    student.id,
+                )
+
+              const status =
+                getStatusName(
+                  attendanceStatuses,
+                  record?.statusId,
+                )
+
+              const key = `${activeDate}:${student.id}`
+
+              if (status) {
+                next[key] = status
+              } else {
+                delete next[key]
+              }
+            }
+
+            return next
+          },
+        )
+
+        setStatusMessage(
+          error?.message ||
+            'تعذر إكمال تسجيل جميع الطلاب.',
+        )
+      } finally {
+        setIsBulkSaving(false)
+      }
+    }
+
+  /**
    * إلغاء حالة الحضور وحذف سجل الحضور.
    */
   const clearAttendance = async (
@@ -1156,7 +1698,10 @@ export function AttendanceView({
 
     const key = `${date}:${student.id}`
 
-    if (savingKey === key) {
+    if (
+      savingKey === key ||
+      isBulkSaving
+    ) {
       return
     }
 
@@ -1191,9 +1736,6 @@ export function AttendanceView({
 
     setSavingKey(key)
 
-    /*
-     * حذف السجل من الواجهة مباشرة.
-     */
     setAttendanceRecords(
       (records) =>
         records.filter(
@@ -1244,9 +1786,6 @@ export function AttendanceView({
         `تم إلغاء تسجيل حضور ${student.name}`,
       )
     } catch (error: any) {
-      /*
-       * إذا فشل الحذف نرجع السجل كما كان.
-       */
       setAttendanceRecords(
         previousRecords,
       )
@@ -1279,9 +1818,6 @@ export function AttendanceView({
 
   /**
    * حفظ الملاحظة.
-   *
-   * الكتابة نفسها محلية فقط.
-   * الحفظ في Supabase يحصل عند مغادرة الخانة.
    */
   const saveNote = async (
     student: Student,
@@ -1290,7 +1826,6 @@ export function AttendanceView({
   ) => {
     const key = `${date}:${student.id}`
 
-    // تحديث محلي مباشر بدون أي طلب إلى Supabase
     setAttendanceNotes(
       (current) => ({
         ...current,
@@ -1298,10 +1833,6 @@ export function AttendanceView({
       }),
     )
 
-    /*
-     * اليوم أو الحصة الملغاة لا يسمح
-     * بتعديل ملاحظات الحضور.
-     */
     if (isCancelled) {
       return
     }
@@ -1312,8 +1843,6 @@ export function AttendanceView({
         date,
       )
 
-    // إذا لم يوجد سجل حضور، تبقى الملاحظة محليًا
-    // وسيتم حفظها عند اختيار حالة الحضور.
     if (!existing) {
       return
     }
@@ -1327,7 +1856,6 @@ export function AttendanceView({
       return
     }
 
-    // إذا لم تتغير الملاحظة فلا نرسل طلبًا جديدًا
     if (
       (existing.note ?? '') ===
       value
@@ -1335,7 +1863,6 @@ export function AttendanceView({
       return
     }
 
-    // إذا كان الحفظ لنفس الطالب جاريًا
     if (
       savingNoteKey === key
     ) {
@@ -1467,13 +1994,15 @@ export function AttendanceView({
             )
 
             setEditingStatusKey(null)
+            setShowUnrecordedOnly(false)
+            setShowBulkStatusMenu(false)
             setStatusMessage('')
           }}
           className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
       </div>
 
-      {/* حالة فحص إلغاء اليوم أو الحصة */}
+      {/* حالة فحص الإلغاء */}
       {isCheckingCancellation && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
@@ -1597,39 +2126,214 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* رسالة الحفظ */}
-      {statusMessage &&
-        isAttendanceAvailable && (
-        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          {statusMessage}
-        </div>
-      )}
-
       {/* محتوى الحضور */}
       {isAttendanceAvailable && (
         <>
-          {/* البحث */}
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(event) =>
-              setSearchTerm(
-                event.target.value,
-              )
-            }
-            placeholder="بحث عن طالب..."
-            className="h-10 w-full max-w-md rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
+          {/* حالة اكتمال التسجيل */}
+          <div
+            className={`rounded-xl border px-4 py-3 ${
+              attendanceSummary.allRecorded
+                ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
+                : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="text-lg">
+                  {attendanceSummary.allRecorded
+                    ? '✓'
+                    : '!'
+                  }
+                </span>
+
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">
+                    {attendanceSummary.allRecorded
+                      ? `تم تسجيل حالة جميع الطلاب (${attendanceSummary.recorded}/${attendanceSummary.total})`
+                      : `لم يكتمل التسجيل — باقي ${attendanceSummary.unrecorded} من ${attendanceSummary.total}`}
+                  </div>
+
+                  {!attendanceSummary.allRecorded && (
+                    <div className="mt-0.5 text-xs opacity-80">
+                      المسجل: {attendanceSummary.recorded} من{' '}
+                      {attendanceSummary.total}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {!attendanceSummary.allRecorded && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUnrecordedOnly(
+                      true,
+                    )
+                    setShowBulkStatusMenu(
+                      false,
+                    )
+                  }}
+                  className="shrink-0 rounded-lg border border-red-300 bg-background px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                >
+                  إكمال غير المسجلين
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* أدوات الحضور */}
+          <div className="rounded-xl border bg-card p-3">
+            <div className="flex flex-col gap-3">
+              {/* البحث */}
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(
+                    event.target.value,
+                  )
+                }
+                placeholder="بحث عن طالب..."
+                className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  {/* تحديد الكل */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={
+                        isBulkSaving ||
+                        assignedStudents.length ===
+                          0
+                      }
+                      onClick={() =>
+                        setShowBulkStatusMenu(
+                          (current) =>
+                            !current,
+                        )
+                      }
+                      className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isBulkSaving
+                        ? 'جارٍ تسجيل الكل...'
+                        : 'تحديد الكل'}
+                    </button>
+
+                    {showBulkStatusMenu && (
+                      <div className="absolute right-0 top-12 z-20 min-w-[180px] rounded-xl border bg-background p-2 shadow-lg">
+                        <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                          اختر الحالة للجميع
+                        </div>
+
+                        <div className="space-y-1">
+                          {attendanceStatusNames.map(
+                            (
+                              statusName,
+                            ) => {
+                              const styles =
+                                getStatusClasses(
+                                  statusName,
+                                )
+
+                              return (
+                                <button
+                                  key={
+                                    statusName
+                                  }
+                                  type="button"
+                                  disabled={
+                                    isBulkSaving
+                                  }
+                                  onClick={() =>
+                                    saveAllAttendance(
+                                      statusName,
+                                    )
+                                  }
+                                  className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
+                                >
+                                  {statusName}
+                                </button>
+                              )
+                            },
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* إكمال / عرض الجميع */}
+                  {!attendanceSummary.allRecorded &&
+                    !showUnrecordedOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUnrecordedOnly(
+                            true,
+                          )
+                          setShowBulkStatusMenu(
+                            false,
+                          )
+                        }}
+                        className="h-10 rounded-lg border border-red-300 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
+                      >
+                        إكمال غير المسجلين (
+                        {
+                          attendanceSummary.unrecorded
+                        }
+                        )
+                      </button>
+                    )}
+
+                  {showUnrecordedOnly && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowUnrecordedOnly(
+                          false,
+                        )
+                      }
+                      className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted"
+                    >
+                      عرض جميع الطلاب
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  {showUnrecordedOnly
+                    ? `عرض غير المسجلين فقط: ${displayedStudents.length}`
+                    : `إجمالي الطلاب: ${assignedStudents.length}`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* رسالة الحفظ */}
+          {statusMessage && (
+            <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+              {statusMessage}
+            </div>
+          )}
 
           {/* قائمة الطلبة */}
           <div className="space-y-4">
-            {filteredStudents.length ===
+            {displayedStudents.length ===
             0 ? (
-              <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                لا يوجد طلبة.
+              <div
+                className={`rounded-xl border border-dashed p-10 text-center text-sm ${
+                  showUnrecordedOnly
+                    ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                {showUnrecordedOnly
+                  ? '✓ تم تسجيل حالة جميع الطلاب.'
+                  : 'لا يوجد طلبة.'}
               </div>
             ) : (
-              filteredStudents.map(
+              displayedStudents.map(
                 (student) => {
                   const key = `${activeDate}:${student.id}`
 
@@ -1656,7 +2360,8 @@ export function AttendanceView({
                     ] ?? 0
 
                   const saving =
-                    savingKey === key
+                    savingKey === key ||
+                    isBulkSaving
 
                   const savingNote =
                     savingNoteKey === key
@@ -1797,7 +2502,7 @@ export function AttendanceView({
                   }
 
                   /*
-                   * تم اختيار الحالة
+                   * تم اختيار الحالة.
                    */
                   const selectedStyles =
                     getStatusClasses(
