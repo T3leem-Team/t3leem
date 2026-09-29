@@ -3,6 +3,8 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { clearAllCaches } from '@/lib/clear-all-caches'
+
 const HEARTBEAT_INTERVAL = 30_000
 
 export function SessionHeartbeat() {
@@ -31,6 +33,8 @@ export function SessionHeartbeat() {
         }
 
         if (response.status === 401) {
+          clearAllCaches()
+
           router.replace('/login')
           router.refresh()
           return
