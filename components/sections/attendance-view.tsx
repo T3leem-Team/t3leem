@@ -170,12 +170,16 @@ function getAttendancePercentage(
   courseId: string,
   attendanceRecords: AttendanceRecord[],
   attendanceStatuses: AttendanceStatus[],
+  cancelledDates: Set<string>,
 ) {
   const studentRecords =
     attendanceRecords.filter(
       (record) =>
         record.studentId === studentId &&
-        record.courseId === courseId,
+        record.courseId === courseId &&
+        !cancelledDates.has(
+          record.attendanceDate,
+        ),
     )
 
   let attended = 0
@@ -453,8 +457,13 @@ export function AttendanceView({
   ] = useState(false)
 
   const [
-    isCheckingDayCancellation,
-    setIsCheckingDayCancellation,
+    isLessonCancelled,
+    setIsLessonCancelled,
+  ] = useState(false)
+
+  const [
+    isCheckingCancellation,
+    setIsCheckingCancellation,
   ] = useState(false)
 
   const todayString =
@@ -465,23 +474,27 @@ export function AttendanceView({
     todayString
 
   /*
-   * التحقق من إلغاء اليوم الدراسي.
+   * التحقق من إلغاء اليوم أو الحصة.
    *
-   * يتم الفحص حسب:
-   * course_id + record_date + type=day_cancelled
+   * day_cancelled:
+   * إلغاء اليوم الدراسي بالكامل.
+   *
+   * lesson_cancelled:
+   * إلغاء الحصة في هذا التاريخ.
    */
   useEffect(() => {
     if (!currentCourse || !activeDate) {
       setIsDayCancelled(false)
-      setIsCheckingDayCancellation(false)
+      setIsLessonCancelled(false)
+      setIsCheckingCancellation(false)
       return
     }
 
     let cancelled = false
 
-    const checkCancelledDay =
+    const checkCancellation =
       async () => {
-        setIsCheckingDayCancellation(
+        setIsCheckingCancellation(
           true,
         )
 
@@ -490,7 +503,7 @@ export function AttendanceView({
           error,
         } = await supabase
           .from('supervision_records')
-          .select('id')
+          .select('id, type')
           .eq(
             'course_id',
             currentCourse.id,
@@ -499,27 +512,42 @@ export function AttendanceView({
             'record_date',
             activeDate,
           )
-          .eq(
-            'type',
+          .in('type', [
             'day_cancelled',
-          )
-          .limit(1)
-          .maybeSingle()
+            'lesson_cancelled',
+          ])
 
         if (cancelled) {
           return
         }
 
-        setIsDayCancelled(
-          !error && !!data,
-        )
+        if (error) {
+          setIsDayCancelled(false)
+          setIsLessonCancelled(false)
+        } else {
+          setIsDayCancelled(
+            (data ?? []).some(
+              (record) =>
+                record.type ===
+                'day_cancelled',
+            ),
+          )
 
-        setIsCheckingDayCancellation(
+          setIsLessonCancelled(
+            (data ?? []).some(
+              (record) =>
+                record.type ===
+                'lesson_cancelled',
+            ),
+          )
+        }
+
+        setIsCheckingCancellation(
           false,
         )
       }
 
-    void checkCancelledDay()
+    void checkCancellation()
 
     return () => {
       cancelled = true
@@ -528,6 +556,10 @@ export function AttendanceView({
     currentCourse?.id,
     activeDate,
   ])
+
+  const isCancelled =
+    isDayCancelled ||
+    isLessonCancelled
 
   const dateState = useMemo(() => {
     if (!currentCourse) {
@@ -563,7 +595,7 @@ export function AttendanceView({
       return 'no-lesson' as const
     }
 
-    if (isDayCancelled) {
+    if (isCancelled) {
       return 'cancelled' as const
     }
 
@@ -576,17 +608,16 @@ export function AttendanceView({
     activeDate,
     currentCourse,
     todayString,
-    isDayCancelled,
+    isCancelled,
   ])
 
   /*
    * لا نعتبر الحضور متاحًا أثناء فحص
-   * حالة إلغاء اليوم حتى لا تظهر القائمة
-   * للحظات قبل وصول نتيجة Supabase.
+   * حالة الإلغاء.
    */
   const isAttendanceAvailable =
     dateState === 'valid' &&
-    !isCheckingDayCancellation
+    !isCheckingCancellation
 
   const getRecordForStudent = (
     studentId: string,
@@ -647,6 +678,21 @@ export function AttendanceView({
             currentCourse.id,
             attendanceRecords,
             attendanceStatuses,
+            new Set(
+              attendanceRecords
+                .filter(
+                  (record) =>
+                    record.courseId ===
+                      currentCourse.id &&
+                    cancelledDates.has(
+                      record.attendanceDate,
+                    ),
+                )
+                .map(
+                  (record) =>
+                    record.attendanceDate,
+                ),
+            ),
           )
       }
 
@@ -656,7 +702,80 @@ export function AttendanceView({
       attendanceRecords,
       attendanceStatuses,
       currentCourse,
+      cancelledDates,
     ])
+
+  const [
+    cancelledDates,
+    setCancelledDates,
+  ] = useState<Set<string>>(
+    () => new Set(),
+  )
+
+  /*
+   * تحميل جميع تواريخ الإلغاء للدورة
+   * حتى يتم استبعادها من نسبة الحضور.
+   */
+  useEffect(() => {
+    if (!currentCourse) {
+      setCancelledDates(new Set())
+      return
+    }
+
+    let cancelled = false
+
+    const loadCancelledDates =
+      async () => {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('supervision_records')
+          .select(
+            'record_date, type',
+          )
+          .eq(
+            'course_id',
+            currentCourse.id,
+          )
+          .in('type', [
+            'day_cancelled',
+            'lesson_cancelled',
+          ])
+
+        if (cancelled) {
+          return
+        }
+
+        if (error) {
+          setCancelledDates(
+            new Set(),
+          )
+          return
+        }
+
+        const dates = new Set<string>()
+
+        for (const record of
+          data ?? []) {
+          if (
+            record.record_date
+          ) {
+            dates.add(
+              record.record_date,
+            )
+          }
+        }
+
+        setCancelledDates(dates)
+      }
+
+    void loadCancelledDates()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentCourse?.id])
 
   const filteredStudents =
     assignedStudents.filter(
@@ -685,6 +804,45 @@ export function AttendanceView({
     )
 
   /**
+   * فحص إضافي قبل الكتابة.
+   */
+  const checkCancellationBeforeSave =
+    async (
+      date: string,
+    ) => {
+      if (!currentCourse) {
+        return false
+      }
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from('supervision_records')
+        .select('id, type')
+        .eq(
+          'course_id',
+          currentCourse.id,
+        )
+        .eq(
+          'record_date',
+          date,
+        )
+        .in('type', [
+          'day_cancelled',
+          'lesson_cancelled',
+        ])
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        throw error
+      }
+
+      return !!data
+    }
+
+  /**
    * حفظ حالة الحضور.
    */
   const saveAttendance = async (
@@ -697,13 +855,13 @@ export function AttendanceView({
     }
 
     if (
-      isDayCancelled ||
+      isCancelled ||
       !isAttendanceAvailable ||
       date !== activeDate
     ) {
       setStatusMessage(
-        isDayCancelled
-          ? 'هذا اليوم الدراسي ملغي ولا يمكن تسجيل الحضور فيه.'
+        isCancelled
+          ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
           : 'لا يمكن تسجيل الحضور في هذا اليوم.',
       )
       return
@@ -810,43 +968,14 @@ export function AttendanceView({
     )
 
     try {
-      /*
-       * فحص إضافي قبل الكتابة.
-       *
-       * الحماية الأساسية موجودة أيضًا في
-       * PostgreSQL trigger، لكن هذا يمنع
-       * محاولة الحفظ إذا تم إلغاء اليوم
-       * بعد فتح الصفحة.
-       */
-      const {
-        data: cancellation,
-        error:
-          cancellationError,
-      } = await supabase
-        .from('supervision_records')
-        .select('id')
-        .eq(
-          'course_id',
-          currentCourse.id,
-        )
-        .eq(
-          'record_date',
+      const isCancelledNow =
+        await checkCancellationBeforeSave(
           date,
         )
-        .eq(
-          'type',
-          'day_cancelled',
-        )
-        .limit(1)
-        .maybeSingle()
 
-      if (cancellationError) {
-        throw cancellationError
-      }
-
-      if (cancellation) {
+      if (isCancelledNow) {
         throw new Error(
-          'هذا اليوم الدراسي ملغي ولا يمكن تسجيل الحضور فيه.',
+          'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
         )
       }
 
@@ -1015,13 +1144,13 @@ export function AttendanceView({
     }
 
     if (
-      isDayCancelled ||
+      isCancelled ||
       !isAttendanceAvailable ||
       date !== activeDate
     ) {
       setStatusMessage(
-        isDayCancelled
-          ? 'هذا اليوم الدراسي ملغي ولا يمكن تعديل الحضور فيه.'
+        isCancelled
+          ? 'هذا اليوم أو الدرس ملغي ولا يمكن تعديل الحضور فيه.'
           : 'لا يمكن تعديل الحضور في هذا اليوم.',
       )
       return
@@ -1064,9 +1193,6 @@ export function AttendanceView({
 
     setSavingKey(key)
 
-    /*
-     * حذف السجل من الواجهة مباشرة.
-     */
     setAttendanceRecords(
       (records) =>
         records.filter(
@@ -1091,6 +1217,17 @@ export function AttendanceView({
     setEditingStatusKey(null)
 
     try {
+      const isCancelledNow =
+        await checkCancellationBeforeSave(
+          date,
+        )
+
+      if (isCancelledNow) {
+        throw new Error(
+          'هذا اليوم أو الدرس ملغي ولا يمكن تعديل الحضور فيه.',
+        )
+      }
+
       const {
         error,
       } = await supabase
@@ -1106,9 +1243,6 @@ export function AttendanceView({
         `تم إلغاء تسجيل حضور ${student.name}`,
       )
     } catch (error: any) {
-      /*
-       * إذا فشل الحذف نرجع السجل كما كان.
-       */
       setAttendanceRecords(
         previousRecords,
       )
@@ -1141,9 +1275,6 @@ export function AttendanceView({
 
   /**
    * حفظ الملاحظة.
-   *
-   * الكتابة نفسها محلية فقط.
-   * الحفظ في Supabase يحصل عند مغادرة الخانة.
    */
   const saveNote = async (
     student: Student,
@@ -1152,7 +1283,6 @@ export function AttendanceView({
   ) => {
     const key = `${date}:${student.id}`
 
-    // تحديث محلي مباشر بدون أي طلب إلى Supabase
     setAttendanceNotes(
       (current) => ({
         ...current,
@@ -1160,11 +1290,7 @@ export function AttendanceView({
       }),
     )
 
-    /*
-     * اليوم الملغي لا يسمح بتعديل
-     * ملاحظات الحضور.
-     */
-    if (isDayCancelled) {
+    if (isCancelled) {
       return
     }
 
@@ -1174,8 +1300,6 @@ export function AttendanceView({
         date,
       )
 
-    // إذا لم يوجد سجل حضور، تبقى الملاحظة محليًا
-    // وسيتم حفظها عند اختيار حالة الحضور.
     if (!existing) {
       return
     }
@@ -1189,7 +1313,6 @@ export function AttendanceView({
       return
     }
 
-    // إذا لم تتغير الملاحظة فلا نرسل طلبًا جديدًا
     if (
       (existing.note ?? '') ===
       value
@@ -1197,14 +1320,26 @@ export function AttendanceView({
       return
     }
 
-    // إذا كان الحفظ لنفس الطالب جاريًا
-    if (savingNoteKey === key) {
+    if (
+      savingNoteKey === key
+    ) {
       return
     }
 
     setSavingNoteKey(key)
 
     try {
+      const isCancelledNow =
+        await checkCancellationBeforeSave(
+          date,
+        )
+
+      if (isCancelledNow) {
+        throw new Error(
+          'هذا اليوم أو الدرس ملغي ولا يمكن تعديل ملاحظاته.',
+        )
+      }
+
       const {
         data,
         error,
@@ -1322,19 +1457,18 @@ export function AttendanceView({
         />
       </div>
 
-      {/* حالة فحص إلغاء اليوم */}
-      {isCheckingDayCancellation &&
-        dateState === 'valid' && (
-          <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
-            <h3 className="text-lg font-semibold">
-              جارٍ التحقق من حالة اليوم
-            </h3>
+      {/* حالة فحص الإلغاء */}
+      {isCheckingCancellation && (
+        <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+          <h3 className="text-lg font-semibold">
+            جارٍ التحقق من حالة اليوم
+          </h3>
 
-            <p className="mt-2 text-sm text-muted-foreground">
-              يتم التحقق مما إذا كان اليوم الدراسي ملغيًا.
-            </p>
-          </div>
-        )}
+          <p className="mt-2 text-sm text-muted-foreground">
+            يتم التحقق مما إذا كان اليوم أو الحصة ملغاة.
+          </p>
+        </div>
+      )}
 
       {/* الدورة لم تبدأ */}
       {dateState ===
@@ -1405,12 +1539,12 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* اليوم ملغي */}
+      {/* اليوم أو الحصة ملغاة */}
       {dateState ===
         'cancelled' && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-950/20">
           <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">
-            اليوم الدراسي ملغي
+            اليوم أو الحصة ملغاة
           </h3>
 
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">
@@ -1421,7 +1555,7 @@ export function AttendanceView({
           </p>
 
           <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
-            تم إلغاء هذا اليوم من الإشراف، لذلك لا يمكن تسجيل أو تعديل الحضور فيه.
+            تم إلغاء هذا اليوم أو الحصة من الإشراف، لذلك لا يمكن تسجيل أو تعديل الحضور فيه.
           </p>
         </div>
       )}
