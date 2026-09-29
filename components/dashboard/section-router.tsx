@@ -13,6 +13,13 @@ import { SupervisionView } from '@/components/sections/supervision-view'
 import { TripsView } from '@/components/sections/trips-view'
 import { CommunicationView } from '@/components/sections/communication'
 
+import {
+  clearDashboardSections,
+  getDashboardSections,
+  saveDashboardSections,
+  type DashboardSection,
+} from '@/lib/dashboard-sections-cache'
+
 const routes: {
   match: (p: string) => boolean
   view: () => React.ReactNode
@@ -55,21 +62,6 @@ const routes: {
   },
 ]
 
-type DashboardSection = {
-  section_key: string
-  href: string
-  sort_order: number
-}
-
-/*
- * كاش صلاحيات أقسام لوحة التحكم.
- *
- * الهدف:
- * - أول دخول يتحقق من الصلاحيات.
- * - التنقل بين الأقسام لا يظهر Loading.
- * - الرجوع يكون سريع.
- * - تحديث الصلاحيات يتم في الخلفية.
- */
 let sectionsCache: DashboardSection[] | null = null
 let sectionsLoading = false
 
@@ -90,7 +82,9 @@ function getSectionKey(pathname: string) {
 async function refreshSections(
   router: ReturnType<typeof useRouter>,
 ) {
-  if (sectionsLoading) return
+  if (sectionsLoading) {
+    return
+  }
 
   sectionsLoading = true
 
@@ -99,11 +93,14 @@ async function refreshSections(
       '/api/auth/dashboard-sections',
       {
         method: 'GET',
+        credentials: 'include',
         cache: 'no-store',
       },
     )
 
     if (!response.ok) {
+      clearDashboardSections()
+      sectionsCache = null
       router.replace('/login')
       return
     }
@@ -112,16 +109,30 @@ async function refreshSections(
 
     const allowedSections: DashboardSection[] =
       Array.isArray(data.sections)
-        ? [...data.sections].sort(
-            (
-              a: DashboardSection,
-              b: DashboardSection,
-            ) =>
-              a.sort_order - b.sort_order,
-          )
+        ? [...data.sections]
+            .filter(
+              (section) =>
+                section &&
+                typeof section.section_key ===
+                  'string' &&
+                typeof section.href ===
+                  'string',
+            )
+            .sort(
+              (
+                a: DashboardSection,
+                b: DashboardSection,
+              ) =>
+                (a.sort_order ?? 0) -
+                (b.sort_order ?? 0),
+            )
         : []
 
     sectionsCache = allowedSections
+
+    saveDashboardSections(
+      allowedSections,
+    )
   } catch (error) {
     console.error(
       'Section access check error:',
@@ -138,38 +149,83 @@ export function SectionRouter() {
 
   const [sections, setSections] =
     useState<DashboardSection[] | null>(
-      sectionsCache,
+      () => {
+        /*
+         * أول شيء:
+         * حاول استخدام الكاش الموجود في الذاكرة.
+         */
+        if (sectionsCache) {
+          return sectionsCache
+        }
+
+        /*
+         * إذا كانت الصفحة فتحت بعد LoginPage مباشرة،
+         * نقرأ النتيجة التي حفظها LoginPage.
+         */
+        const stored =
+          getDashboardSections()
+
+        if (stored) {
+          sectionsCache = stored
+          return stored
+        }
+
+        return null
+      },
     )
 
   /*
-   * تحميل وتحديث الصلاحيات.
+   * --------------------------------------------------
+   * تحديث الصلاحيات في الخلفية
+   * --------------------------------------------------
+   *
+   * إذا كانت الصلاحيات موجودة:
+   * - لا نعرض Loading.
+   * - لا ننتظر الطلب.
+   * - نحدثها في الخلفية فقط.
+   *
+   * إذا لم تكن موجودة:
+   * - ننتظر أول طلب.
+   * --------------------------------------------------
    */
+
   useEffect(() => {
     let cancelled = false
 
     async function checkAccess() {
       if (sectionsCache) {
-        setSections(sectionsCache)
-
         /*
-         * تحديث صامت في الخلفية.
+         * لدينا صلاحيات جاهزة.
+         *
+         * لا نغير الـ UI.
+         * فقط نحدث البيانات في الخلفية.
          */
         await refreshSections(router)
 
-        if (!cancelled && sectionsCache) {
-          setSections(sectionsCache)
+        if (
+          !cancelled &&
+          sectionsCache
+        ) {
+          setSections(
+            [...sectionsCache],
+          )
         }
 
         return
       }
 
       /*
-       * أول دخول يحتاج انتظار الصلاحيات.
+       * لا يوجد كاش إطلاقًا.
        */
       await refreshSections(router)
 
-      if (!cancelled && sectionsCache) {
-        setSections(sectionsCache)
+      if (
+        !cancelled &&
+        sectionsCache
+      ) {
+        setSections(
+          [...sectionsCache],
+        )
       }
     }
 
@@ -178,18 +234,18 @@ export function SectionRouter() {
     return () => {
       cancelled = true
     }
-  }, [pathname, router])
+  }, [router])
 
   /*
-   * التحويل التلقائي إذا كانت الصفحة الحالية
-   * غير مسموحة للمستخدم.
-   *
-   * مهم:
-   * هذا الـuseEffect موجود دائمًا قبل أي return
-   * حتى لا نخالف قواعد React Hooks.
+   * --------------------------------------------------
+   * التحقق من القسم الحالي
+   * --------------------------------------------------
    */
+
   useEffect(() => {
-    if (!sections) return
+    if (!sections) {
+      return
+    }
 
     const currentSectionKey =
       getSectionKey(pathname)
@@ -202,39 +258,51 @@ export function SectionRouter() {
           currentSectionKey,
       )
 
-    if (hasAccess) return
+    if (hasAccess) {
+      return
+    }
 
     const firstAllowedSection =
       sections[0]
 
     if (
       firstAllowedSection?.href &&
-      firstAllowedSection.href !== pathname
+      firstAllowedSection.href !==
+        pathname
     ) {
       router.replace(
         firstAllowedSection.href,
       )
+
       return
     }
 
-    /*
-     * المستخدم ليس لديه أي قسم مسموح.
-     */
     if (!firstAllowedSection) {
+      clearDashboardSections()
       router.replace('/login')
     }
-  }, [sections, pathname, router])
+  }, [
+    sections,
+    pathname,
+    router,
+  ])
 
   const isSubPage =
-    pathname.split('/').filter(Boolean).length > 1
+    pathname
+      .split('/')
+      .filter(Boolean)
+      .length > 1
 
   if (isSubPage) {
     return null
   }
 
   /*
-   * أول تحميل فقط.
+   * --------------------------------------------------
+   * فقط إذا لم تكن لدينا أي صلاحيات جاهزة
+   * --------------------------------------------------
    */
+
   if (!sections) {
     return (
       <div className="flex min-h-[240px] items-center justify-center">
@@ -256,9 +324,6 @@ export function SectionRouter() {
         currentSectionKey,
     )
 
-  /*
-   * أثناء تنفيذ router.replace().
-   */
   if (!hasAccess) {
     return (
       <div className="flex min-h-[240px] items-center justify-center">
