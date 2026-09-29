@@ -2,7 +2,10 @@
 
 import { useEffect, useRef } from 'react'
 
-const ACTIVITY_THROTTLE_MS = 60 * 1000
+import { clearAllCaches } from '@/lib/clear-all-caches'
+
+const ACTIVITY_THROTTLE_MS =
+  60 * 1000
 
 export function ActivityTracker() {
   const lastSentRef = useRef(0)
@@ -40,14 +43,18 @@ export function ActivityTracker() {
         }
 
         if (response.status === 401) {
+          clearAllCaches()
+
           window.location.replace(
             '/login',
           )
+
           return
         }
 
         if (response.ok) {
-          lastSentRef.current = Date.now()
+          lastSentRef.current =
+            Date.now()
         }
       } catch {
         // لا نسجل خروج بسبب مشكلة شبكة مؤقتة.
