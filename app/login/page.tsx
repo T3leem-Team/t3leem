@@ -51,12 +51,6 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      /*
-       * --------------------------------------------------
-       * 1. تسجيل الدخول
-       * --------------------------------------------------
-       */
-
       const loginResponse = await fetch(
         '/api/auth/login',
         {
@@ -89,12 +83,6 @@ export default function LoginPage() {
         return
       }
 
-      /*
-       * --------------------------------------------------
-       * 2. جلب الأقسام المسموحة
-       * --------------------------------------------------
-       */
-
       const sectionsResponse = await fetch(
         '/api/auth/dashboard-sections',
         {
@@ -120,12 +108,6 @@ export default function LoginPage() {
         return
       }
 
-      /*
-       * --------------------------------------------------
-       * 3. ترتيب الأقسام
-       * --------------------------------------------------
-       */
-
       const sections: DashboardSection[] =
         Array.isArray(
           sectionsData?.sections,
@@ -149,19 +131,7 @@ export default function LoginPage() {
               )
           : []
 
-      /*
-       * --------------------------------------------------
-       * 4. حفظ الصلاحيات
-       * --------------------------------------------------
-       */
-
       saveDashboardSections(sections)
-
-      /*
-       * --------------------------------------------------
-       * 5. تحديد أول صفحة مسموحة
-       * --------------------------------------------------
-       */
 
       const firstSection = sections[0]
 
@@ -171,12 +141,6 @@ export default function LoginPage() {
         firstSection.href.trim()
           ? firstSection.href.trim()
           : '/'
-
-      /*
-       * --------------------------------------------------
-       * 6. Preload بيانات الطلاب بالخلفية
-       * --------------------------------------------------
-       */
 
       const canAccessStudents =
         sections.some(
@@ -203,12 +167,6 @@ export default function LoginPage() {
           })
       }
 
-      /*
-       * --------------------------------------------------
-       * 7. Preload بيانات المعلمين بالخلفية
-       * --------------------------------------------------
-       */
-
       const canAccessTeachers =
         sections.some(
           (section) =>
@@ -234,16 +192,6 @@ export default function LoginPage() {
           })
       }
 
-      /*
-       * --------------------------------------------------
-       * 8. بدء الانتقال
-       *
-       * أولاً يتحول الزر إلى الأخضر،
-       * ثم نعطي المتصفح فرصة لرسم اللون،
-       * وبعدها نبدأ الانتقال.
-       * --------------------------------------------------
-       */
-
       setRedirecting(true)
       setLoading(false)
 
@@ -254,14 +202,6 @@ export default function LoginPage() {
       })
 
       router.replace(destination)
-
-      /*
-       * لا نعيد redirecting إلى false هنا.
-       *
-       * لأن الصفحة الحالية ستختفي بعد اكتمال
-       * الانتقال إلى الصفحة الجديدة.
-       */
-
     } catch (error) {
       console.error(
         'Login request error:',
@@ -283,7 +223,7 @@ export default function LoginPage() {
       className="flex min-h-screen items-center justify-center bg-background px-4 py-8"
     >
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-slate-300 bg-card p-6 shadow-sm sm:p-8">
           <div className="flex flex-col items-center text-center">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
               <GraduationCap className="size-7" />
@@ -320,7 +260,7 @@ export default function LoginPage() {
                 placeholder="أدخل اسم المستخدم"
                 autoComplete="username"
                 disabled={isBusy}
-                className="h-11 w-full rounded-lg border border-input/90 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-11 w-full rounded-lg border border-slate-400 bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
 
@@ -347,7 +287,7 @@ export default function LoginPage() {
                   placeholder="أدخل كلمة المرور"
                   autoComplete="current-password"
                   disabled={isBusy}
-                  className="h-11 w-full rounded-lg border border-input/90 bg-background px-3 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="h-11 w-full rounded-lg border border-slate-400 bg-background px-3 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
                 <button
