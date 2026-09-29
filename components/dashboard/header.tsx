@@ -334,7 +334,6 @@ export function Header({
               ascending: false,
             },
           )
-          .limit()
 
         if (logsError) {
           console.error(
@@ -933,7 +932,7 @@ export function Header({
             {notifications.length > 0 && (
               <div className="border-t border-border px-4 py-2.5">
                 <p className="text-center text-xs text-muted-foreground">
-                  يتم عرض عمليات دخول اليوم
+                  يتم عرض جميع عمليات الدخول اليوم
                 </p>
               </div>
             )}
