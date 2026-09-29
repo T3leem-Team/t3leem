@@ -17,6 +17,54 @@ const supabaseAdmin = createClient(
   },
 )
 
+function clearSessionCookie(response: NextResponse) {
+  response.cookies.set(
+    SESSION_COOKIE,
+    '',
+    {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    },
+  )
+
+  return response
+}
+
+async function closeSession(
+  sessionId: string,
+  userId: string,
+) {
+  const now =
+    new Date().toISOString()
+
+  const { error } =
+    await supabaseAdmin
+      .from('active_sessions')
+      .update({
+        is_active: false,
+        logout_at: now,
+        last_activity_at: now,
+      })
+      .eq('id', sessionId)
+      .eq('auth_user_id', userId)
+      .eq('is_active', true)
+
+  if (error) {
+    console.error(
+      'Activity close session error:',
+      error,
+    )
+
+    return false
+  }
+
+  return true
+}
+
 export async function POST() {
   try {
     const supabase =
@@ -25,7 +73,8 @@ export async function POST() {
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } =
+      await supabase.auth.getUser()
 
     const cookieStore = await cookies()
 
@@ -33,59 +82,38 @@ export async function POST() {
       cookieStore.get(SESSION_COOKIE)?.value
 
     /*
-     * إذا لم تعد جلسة Supabase موجودة،
-     * ننظف Cookie الخاصة بجلسة T3LEEM أيضًا.
+     * Supabase Auth غير موجودة.
      */
     if (authError || !user) {
       const response = NextResponse.json(
         {
           authenticated: false,
+          reason: 'not_authenticated',
         },
         { status: 401 },
       )
 
-      response.cookies.set(
-        SESSION_COOKIE,
-        '',
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: 0,
-        },
-      )
-
-      return response
+      return clearSessionCookie(response)
     }
 
+    /*
+     * لا توجد جلسة T3LEEM.
+     */
     if (!sessionId) {
       const response = NextResponse.json(
         {
           authenticated: false,
+          reason: 'missing_session',
         },
         { status: 401 },
       )
 
-      response.cookies.set(
-        SESSION_COOKIE,
-        '',
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: 0,
-        },
-      )
-
-      return response
+      return clearSessionCookie(response)
     }
 
+    /*
+     * جلب جلسة T3LEEM.
+     */
     const {
       data: session,
       error: sessionError,
@@ -96,40 +124,41 @@ export async function POST() {
           id,
           auth_user_id,
           is_active,
-          last_activity_at
+          last_activity_at,
+          expires_at
         `)
         .eq('id', sessionId)
         .eq('auth_user_id', user.id)
         .maybeSingle()
 
     /*
-     * الجلسة غير موجودة أو تم إغلاقها مسبقًا.
+     * خطأ قاعدة البيانات ليس انتهاء جلسة.
      */
-    if (
-      sessionError ||
-      !session ||
-      !session.is_active
-    ) {
+    if (sessionError) {
+      console.error(
+        'Activity session lookup error:',
+        sessionError,
+      )
+
+      return NextResponse.json(
+        {
+          authenticated: false,
+          reason: 'temporary_error',
+        },
+        { status: 503 },
+      )
+    }
+
+    /*
+     * الجلسة غير موجودة أو مغلقة.
+     */
+    if (!session || !session.is_active) {
       const response = NextResponse.json(
         {
           authenticated: false,
           reason: 'session_inactive',
         },
         { status: 401 },
-      )
-
-      response.cookies.set(
-        SESSION_COOKIE,
-        '',
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: 0,
-        },
       )
 
       try {
@@ -141,11 +170,49 @@ export async function POST() {
         )
       }
 
-      return response
+      return clearSessionCookie(response)
     }
 
     const now = Date.now()
 
+    /*
+     * انتهاء مدة الجلسة القصوى.
+     */
+    const expiresAt =
+      new Date(session.expires_at).getTime()
+
+    if (
+      Number.isNaN(expiresAt) ||
+      now >= expiresAt
+    ) {
+      await closeSession(
+        session.id,
+        user.id,
+      )
+
+      try {
+        await supabase.auth.signOut()
+      } catch (error) {
+        console.error(
+          'Supabase sign out after session expiry error:',
+          error,
+        )
+      }
+
+      const response = NextResponse.json(
+        {
+          authenticated: false,
+          reason: 'session_expired',
+        },
+        { status: 401 },
+      )
+
+      return clearSessionCookie(response)
+    }
+
+    /*
+     * انتهاء الخمول.
+     */
     const lastActivity =
       new Date(
         session.last_activity_at,
@@ -156,30 +223,15 @@ export async function POST() {
       60 *
       1000
 
-    /*
-     * انتهاء مهلة الخمول: 20 دقيقة.
-     */
     if (
       Number.isNaN(lastActivity) ||
       now - lastActivity >= idleTimeout
     ) {
-      const closedAt =
-        new Date().toISOString()
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
-      await supabaseAdmin
-        .from('active_sessions')
-        .update({
-          is_active: false,
-          logout_at: closedAt,
-          last_activity_at: closedAt,
-        })
-        .eq('id', session.id)
-        .eq('auth_user_id', user.id)
-        .eq('is_active', true)
-
-      /*
-       * إنهاء جلسة Supabase.
-       */
       try {
         await supabase.auth.signOut()
       } catch (error) {
@@ -189,11 +241,6 @@ export async function POST() {
         )
       }
 
-      /*
-       * تنظيف Cookie الخاصة بالجلسة.
-       * Device Token يبقى كما هو حتى لا نطلب
-       * اعتماد الجهاز مرة أخرى.
-       */
       const response = NextResponse.json(
         {
           authenticated: false,
@@ -202,26 +249,11 @@ export async function POST() {
         { status: 401 },
       )
 
-      response.cookies.set(
-        SESSION_COOKIE,
-        '',
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV ===
-            'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: 0,
-        },
-      )
-
-      return response
+      return clearSessionCookie(response)
     }
 
     /*
-     * الجلسة ما زالت فعالة،
-     * لذلك نحدّث وقت آخر نشاط.
+     * تحديث آخر نشاط.
      */
     const updatedAt =
       new Date().toISOString()
@@ -236,6 +268,9 @@ export async function POST() {
         .eq('auth_user_id', user.id)
         .eq('is_active', true)
 
+    /*
+     * فشل تحديث النشاط لا يعني أن المستخدم خرج.
+     */
     if (updateError) {
       console.error(
         'Session activity update error:',
@@ -244,9 +279,11 @@ export async function POST() {
 
       return NextResponse.json(
         {
-          authenticated: false,
+          authenticated: true,
+          updated: false,
+          reason: 'temporary_error',
         },
-        { status: 500 },
+        { status: 503 },
       )
     }
 
@@ -263,8 +300,9 @@ export async function POST() {
     return NextResponse.json(
       {
         authenticated: false,
+        reason: 'temporary_error',
       },
-      { status: 500 },
+      { status: 503 },
     )
   }
 }
