@@ -238,23 +238,28 @@ export default function LoginPage() {
        * --------------------------------------------------
        * 8. بدء الانتقال
        *
-       * مهم:
-       * redirecting يبقى true حتى أثناء انتقال
-       * Next.js، لذلك الزر لا يرجع لحالة "دخول".
+       * أولاً يتحول الزر إلى الأخضر،
+       * ثم نعطي المتصفح فرصة لرسم اللون،
+       * وبعدها نبدأ الانتقال.
        * --------------------------------------------------
        */
 
       setRedirecting(true)
       setLoading(false)
 
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          resolve()
+        })
+      })
+
       router.replace(destination)
 
       /*
        * لا نعيد redirecting إلى false هنا.
        *
-       * لأن router.replace() لا ينتظر اكتمال
-       * الانتقال. الصفحة الحالية ستختفي بمجرد
-       * اكتمال الانتقال إلى الصفحة الجديدة.
+       * لأن الصفحة الحالية ستختفي بعد اكتمال
+       * الانتقال إلى الصفحة الجديدة.
        */
 
     } catch (error) {
@@ -381,10 +386,12 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isBusy}
-              className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-90 ${
+              className={`flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-all duration-300 disabled:cursor-not-allowed ${
                 redirecting
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 hover:bg-emerald-700'
-                  : 'bg-primary text-primary-foreground hover:opacity-90'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 hover:bg-emerald-700'
+                  : loading
+                    ? 'bg-red-600 text-white shadow-md shadow-red-600/30 hover:bg-red-700'
+                    : 'bg-primary text-primary-foreground hover:opacity-90'
               }`}
             >
               {isBusy && (
