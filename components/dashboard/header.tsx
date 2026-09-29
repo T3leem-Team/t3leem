@@ -11,8 +11,10 @@ import {
   Moon,
   LogOut,
 } from 'lucide-react'
+
 import { navItems } from '@/lib/nav'
 import { supabase } from '@/lib/supabase'
+import { clearAllCaches } from '@/lib/clear-all-caches'
 
 function currentTitle(pathname: string) {
   const match = navItems.find((item) =>
@@ -441,12 +443,6 @@ export function Header({
               return
             }
 
-            /*
-             * إعادة تحميل آخر 10 عمليات دخول.
-             *
-             * هذا أفضل من محاولة بناء الإشعار
-             * يدويًا لأن الاسم موجود في user_profiles.
-             */
             await loadNotifications()
           },
         )
@@ -619,6 +615,8 @@ export function Header({
 
   async function handleLogout() {
     try {
+      clearAllCaches()
+
       await fetch('/api/auth/logout', {
         method: 'POST',
       })
