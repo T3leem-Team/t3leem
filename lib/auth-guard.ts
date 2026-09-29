@@ -32,9 +32,6 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const supabase =
       await createSupabaseServerClient()
 
-    /*
-     * 1. Supabase Auth
-     */
     const {
       data: { user },
       error: authError,
@@ -47,9 +44,6 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 2. Cookies
-     */
     const cookieStore = await cookies()
 
     const sessionId =
@@ -65,22 +59,21 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 3. Active Session
-     */
     const {
       data: session,
       error: sessionError,
     } = await supabaseAdmin
       .from('active_sessions')
-      .select(`
-        id,
-        auth_user_id,
-        trusted_device_id,
-        is_active,
-        last_activity_at,
-        expires_at
-      `)
+      .select(
+        `
+          id,
+          auth_user_id,
+          trusted_device_id,
+          is_active,
+          last_activity_at,
+          expires_at
+        `,
+      )
       .eq('id', sessionId)
       .eq('auth_user_id', user.id)
       .maybeSingle()
@@ -104,19 +97,19 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 4. Session expiry
-     */
     const now = Date.now()
 
     const expiresAt =
       new Date(session.expires_at).getTime()
 
     if (
-      Number.isNaN(expiresAt) ||
+      !Number.isFinite(expiresAt) ||
       now >= expiresAt
     ) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -124,22 +117,24 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 5. Idle timeout
-     */
     const lastActivity =
       new Date(
         session.last_activity_at,
       ).getTime()
 
     const idleTimeout =
-      IDLE_TIMEOUT_MINUTES * 60 * 1000
+      IDLE_TIMEOUT_MINUTES *
+      60 *
+      1000
 
     if (
-      Number.isNaN(lastActivity) ||
+      !Number.isFinite(lastActivity) ||
       now - lastActivity >= idleTimeout
     ) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -147,9 +142,6 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 6. User profile
-     */
     const {
       data: profile,
       error: profileError,
@@ -172,7 +164,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!profile || !profile.is_active) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -180,9 +175,6 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 7. Trusted device
-     */
     const deviceTokenHash =
       await sha256(deviceToken)
 
@@ -192,9 +184,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     } = await supabaseAdmin
       .from('trusted_devices')
       .select('id')
-      .eq('id', session.trusted_device_id)
+      .eq(
+        'id',
+        session.trusted_device_id,
+      )
       .eq('auth_user_id', user.id)
-      .eq('device_token_hash', deviceTokenHash)
+      .eq(
+        'device_token_hash',
+        deviceTokenHash,
+      )
       .eq('status', 'approved')
       .maybeSingle()
 
@@ -211,7 +209,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!device) {
-      await closeSession(session.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -219,9 +220,6 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    /*
-     * 8. Access granted
-     */
     return {
       allowed: true,
       userId: user.id,
@@ -244,6 +242,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
 async function closeSession(
   sessionId: string,
+  authUserId: string,
 ) {
   const now =
     new Date().toISOString()
@@ -257,6 +256,10 @@ async function closeSession(
         last_activity_at: now,
       })
       .eq('id', sessionId)
+      .eq(
+        'auth_user_id',
+        authUserId,
+      )
       .eq('is_active', true)
 
   if (error) {
@@ -283,7 +286,9 @@ async function sha256(
     new Uint8Array(hash),
   )
     .map((byte) =>
-      byte.toString(16).padStart(2, '0'),
+      byte
+        .toString(16)
+        .padStart(2, '0'),
     )
     .join('')
 }
