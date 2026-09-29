@@ -35,29 +35,28 @@ function getCookie(
     return null
   }
 
-  const cookies = cookieHeader
+  const cookie = cookieHeader
     .split(';')
-    .map((cookie) => {
-      const index = cookie.indexOf('=')
-
-      if (index === -1) {
-        return {
-          name: cookie.trim(),
-          value: '',
-        }
-      }
+    .map((item) => {
+      const index = item.indexOf('=')
 
       return {
-        name: cookie.slice(0, index).trim(),
-        value: cookie.slice(index + 1).trim(),
+        name:
+          index === -1
+            ? item.trim()
+            : item.slice(0, index).trim(),
+        value:
+          index === -1
+            ? ''
+            : item.slice(index + 1).trim(),
       }
     })
+    .find(
+      (item) =>
+        item.name === cookieName,
+    )
 
-  return (
-    cookies.find(
-      (cookie) => cookie.name === cookieName,
-    )?.value ?? null
-  )
+  return cookie?.value ?? null
 }
 
 function getIpAddress(request: Request) {
@@ -75,34 +74,45 @@ function getIpAddress(request: Request) {
   )
 }
 
+function clearSessionCookie(
+  response: NextResponse,
+) {
+  response.cookies.set(
+    SESSION_COOKIE,
+    '',
+    {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    },
+  )
+
+  return response
+}
+
 export async function POST(
   request: Request,
 ) {
+  const response = NextResponse.json({
+    success: true,
+  })
+
   try {
     const sessionId = getCookie(
       request,
       SESSION_COOKIE,
     )
 
-    const ipAddress = getIpAddress(request)
+    const ipAddress =
+      getIpAddress(request)
 
     const userAgent =
-      request.headers.get('user-agent') ?? null
+      request.headers.get('user-agent') ??
+      null
 
-    /*
-     * --------------------------------------------------
-     * إنشاء Response من البداية
-     * --------------------------------------------------
-     */
-    const response = NextResponse.json({
-      success: true,
-    })
-
-    /*
-     * --------------------------------------------------
-     * Supabase SSR Client
-     * --------------------------------------------------
-     */
     const supabase =
       createServerClient(
         supabaseUrl,
@@ -120,30 +130,27 @@ export async function POST(
               return cookieHeader
                 .split(';')
                 .filter(Boolean)
-                .map((cookie) => {
+                .map((item) => {
                   const index =
-                    cookie.indexOf('=')
-
-                  if (index === -1) {
-                    return {
-                      name: cookie.trim(),
-                      value: '',
-                    }
-                  }
+                    item.indexOf('=')
 
                   return {
-                    name: cookie
-                      .slice(0, index)
-                      .trim(),
-                    value: cookie
-                      .slice(index + 1)
-                      .trim(),
+                    name:
+                      index === -1
+                        ? item.trim()
+                        : item
+                            .slice(0, index)
+                            .trim(),
+                    value:
+                      index === -1
+                        ? ''
+                        : item
+                            .slice(
+                              index + 1,
+                            )
+                            .trim(),
                   }
                 })
-                .filter(
-                  (cookie) =>
-                    cookie.name.length > 0,
-                )
             },
 
             setAll(cookiesToSet) {
@@ -156,21 +163,7 @@ export async function POST(
                   response.cookies.set(
                     name,
                     value,
-                    {
-                      ...options,
-                      httpOnly:
-                        options?.httpOnly ??
-                        true,
-                      secure:
-                        options?.secure ??
-                        process.env.NODE_ENV ===
-                          'production',
-                      sameSite:
-                        options?.sameSite ??
-                        'lax',
-                      path:
-                        options?.path ?? '/',
-                    },
+                    options,
                   )
                 },
               )
@@ -180,11 +173,7 @@ export async function POST(
       )
 
     /*
-     * --------------------------------------------------
-     * التحقق من المستخدم الحالي
-     *
-     * هذا الجزء أمني ولا يتم حذفه.
-     * --------------------------------------------------
+     * المستخدم الحالي
      */
     const {
       data: { user },
@@ -199,56 +188,39 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * إغلاق active session
-     *
-     * نتحقق من ملكية الجلسة قبل تحديثها.
-     * --------------------------------------------------
+     * إغلاق جلسة T3LEEM الخاصة
+     * بالمستخدم الحالي فقط.
      */
     if (sessionId && user) {
       const {
         data: activeSession,
-        error: sessionLookupError,
+        error: lookupError,
       } = await supabaseAdmin
         .from('active_sessions')
-        .select(
-          `
+        .select(`
           id,
           auth_user_id,
           trusted_device_id,
           is_active
-          `,
-        )
+        `)
         .eq('id', sessionId)
+        .eq('auth_user_id', user.id)
         .maybeSingle()
 
-      if (sessionLookupError) {
+      if (lookupError) {
         console.error(
           'Active session lookup error:',
-          sessionLookupError,
+          lookupError,
         )
-      }
-
-      /*
-       * لا يمكن للمستخدم إغلاق جلسة مستخدم آخر.
-       */
-      if (
+      } else if (
         activeSession &&
-        activeSession.is_active &&
-        activeSession.auth_user_id === user.id
+        activeSession.is_active
       ) {
         const now =
           new Date().toISOString()
 
-        /*
-         * --------------------------------------------------
-         * إغلاق الجلسة
-         *
-         * هذه العملية أساسية، لذلك ننتظرها.
-         * --------------------------------------------------
-         */
         const {
-          error: sessionUpdateError,
+          error: updateError,
         } = await supabaseAdmin
           .from('active_sessions')
           .update({
@@ -260,53 +232,41 @@ export async function POST(
           .eq('auth_user_id', user.id)
           .eq('is_active', true)
 
-        if (sessionUpdateError) {
+        if (updateError) {
           console.error(
             'Active session update error:',
-            sessionUpdateError,
+            updateError,
           )
+        } else {
+          void supabaseAdmin
+            .from('auth_audit_logs')
+            .insert({
+              auth_user_id: user.id,
+              trusted_device_id:
+                activeSession.trusted_device_id,
+              event_type: 'logout',
+              success: true,
+              ip_address: ipAddress,
+              user_agent: userAgent,
+              metadata: {
+                active_session_id:
+                  activeSession.id,
+              },
+            })
+            .then(({ error }) => {
+              if (error) {
+                console.error(
+                  'Logout audit error:',
+                  error,
+                )
+              }
+            })
         }
-
-        /*
-         * --------------------------------------------------
-         * Audit Log
-         *
-         * لا نسمح بتعطيل تسجيل الخروج بسبب فشل الـ audit.
-         * --------------------------------------------------
-         */
-        void supabaseAdmin
-          .from('auth_audit_logs')
-          .insert({
-            auth_user_id:
-              activeSession.auth_user_id,
-            trusted_device_id:
-              activeSession.trusted_device_id,
-            event_type: 'logout',
-            success: true,
-            ip_address: ipAddress,
-            user_agent: userAgent,
-            metadata: {
-              active_session_id:
-                activeSession.id,
-            },
-          })
-          .then(({ error }) => {
-            if (error) {
-              console.error(
-                'Logout audit error:',
-                error,
-              )
-            }
-          })
       }
     }
 
     /*
-     * --------------------------------------------------
      * Supabase Auth Logout
-     *
-     * مهم أمنيًا ولا يتم حذفه.
-     * --------------------------------------------------
      */
     const {
       error: signOutError,
@@ -320,60 +280,23 @@ export async function POST(
     }
 
     /*
-     * --------------------------------------------------
-     * حذف Session Cookie فقط
-     *
-     * Device Cookie يبقى كما هو.
-     * --------------------------------------------------
+     * Device Token يبقى.
      */
-    response.cookies.set(
-      SESSION_COOKIE,
-      '',
-      {
-        httpOnly: true,
-        secure:
-          process.env.NODE_ENV ===
-          'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 0,
-      },
-    )
-
-    return response
+    return clearSessionCookie(response)
   } catch (error) {
     console.error(
       'Logout error:',
       error,
     )
 
-    /*
-     * حتى في حالة الخطأ:
-     * Session Cookie يتم حذفه.
-     */
-    const response =
+    return clearSessionCookie(
       NextResponse.json(
         {
           error:
             'حدث خطأ أثناء تسجيل الخروج.',
         },
         { status: 500 },
-      )
-
-    response.cookies.set(
-      SESSION_COOKIE,
-      '',
-      {
-        httpOnly: true,
-        secure:
-          process.env.NODE_ENV ===
-          'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 0,
-      },
+      ),
     )
-
-    return response
   }
 }
