@@ -23,6 +23,10 @@ import {
 import { supabase } from '@/lib/supabase'
 
 import {
+  getDashboardSections,
+} from '@/lib/dashboard-sections-cache'
+
+import {
   Card,
   CardContent,
   CardHeader,
@@ -149,7 +153,6 @@ type DashboardCache = {
 let dashboardCache: DashboardCache | null = null
 
 let dashboardDataLoading = false
-let dashboardAccessChecked = false
 
 function getLocalDateString() {
   const now = new Date()
@@ -407,13 +410,19 @@ export function DashboardView() {
   const hasDashboardCache =
     dashboardCache !== null
 
+  /*
+   * هذا الفحص محلي فقط.
+   *
+   * LoginPage سبق أن فحص الصلاحيات من السيرفر
+   * وحفظ الأقسام في sessionStorage.
+   *
+   * لا يوجد هنا أي طلب إلى:
+   * /api/auth/dashboard-sections
+   */
   const [
     checkingAccess,
     setCheckingAccess,
-  ] = useState(
-    !dashboardAccessChecked &&
-      !hasDashboardCache,
-  )
+  ] = useState(true)
 
   const [loading, setLoading] =
     useState(!hasDashboardCache)
@@ -584,92 +593,58 @@ export function DashboardView() {
   )
 
   /*
-   * صلاحية Dashboard.
+   * --------------------------------------------------
+   * فحص الصلاحية محليًا فقط
+   * --------------------------------------------------
    *
-   * إذا كانت الصلاحية مفحوصة سابقًا لا نعيد الطلب.
+   * LoginPage قام مسبقًا بفحص الصلاحيات من السيرفر
+   * وحفظ النتيجة في sessionStorage.
+   *
+   * لذلك Dashboard لا يعيد طلب API.
    */
   useEffect(() => {
-    let cancelled = false
+    const sections =
+      getDashboardSections()
 
-    async function checkDashboardAccess() {
-      try {
-        const response = await fetch(
-          '/api/auth/dashboard-sections',
-          {
-            method: 'GET',
-            cache: 'no-store',
-          },
-        )
-
-        if (!response.ok) {
-          router.replace('/login')
-          return
-        }
-
-        const data =
-          await response.json()
-
-        const sections =
-          Array.isArray(data.sections)
-            ? data.sections
-            : []
-
-        const hasDashboard =
-          sections.some(
-            (section: {
-              section_key?: string
-            }) =>
-              section.section_key ===
-              'dashboard',
-          )
-
-        if (hasDashboard) {
-          dashboardAccessChecked = true
-
-          if (!cancelled) {
-            setCheckingAccess(false)
-          }
-
-          return
-        }
-
-        const firstAllowedSection =
-          sections[0]
-
-        if (
-          firstAllowedSection?.href
-        ) {
-          router.replace(
-            firstAllowedSection.href,
-          )
-          return
-        }
-
-        router.replace('/login')
-      } catch (error) {
-        console.error(
-          'Dashboard access check error:',
-          error,
-        )
-
-        router.replace('/login')
-      }
+    if (!sections) {
+      router.replace('/login')
+      return
     }
 
-    if (dashboardAccessChecked) {
+    const hasDashboard =
+      sections.some(
+        (section) =>
+          section.section_key ===
+          'dashboard',
+      )
+
+    if (hasDashboard) {
       setCheckingAccess(false)
       return
     }
 
-    void checkDashboardAccess()
+    const firstAllowedSection =
+      sections.find(
+        (section) =>
+          typeof section.href ===
+            'string' &&
+          section.href.trim(),
+      )
 
-    return () => {
-      cancelled = true
+    if (firstAllowedSection?.href) {
+      router.replace(
+        firstAllowedSection.href,
+      )
+      return
     }
+
+    router.replace('/login')
   }, [router])
 
   /*
-   * تحميل حالات الحضور مرة واحدة فقط.
+   * --------------------------------------------------
+   * تحميل حالات الحضور مرة واحدة فقط
+   * --------------------------------------------------
    */
   const loadAttendanceStatuses =
     useCallback(
@@ -741,7 +716,9 @@ export function DashboardView() {
     )
 
   /*
-   * تحميل حضور الدورة المحددة فقط.
+   * --------------------------------------------------
+   * تحميل حضور الدورة المحددة فقط
+   * --------------------------------------------------
    */
   const loadAttendance =
     useCallback(
@@ -856,17 +833,20 @@ export function DashboardView() {
     )
 
   /*
-   * تحميل البيانات الثقيلة في الخلفية.
+   * --------------------------------------------------
+   * تحميل البيانات الثقيلة في الخلفية
+   * --------------------------------------------------
    *
-   * هذه الدالة لا تمنع ظهور Dashboard.
+   * المرحلة الأولى:
+   * assignments
+   * courseTeachers
+   * students
+   * registrations
+   * attendance statuses
    *
-   * تشمل:
-   * - الإسنادات
-   * - معلمي الدورات
-   * - المعلمين
-   * - الطلاب
-   * - حالات الحضور
-   * - التسجيلات
+   * وبعدها يتم تحميل المعلمين بشكل مستقل.
+   *
+   * بهذا الشكل المعلمين لا يؤخرون بقية البيانات.
    */
   const loadBackgroundData =
     useCallback(
@@ -1114,76 +1094,23 @@ export function DashboardView() {
               }),
             )
 
-          /*
-           * المعلمين يعتمدون فقط على course_teachers،
-           * لذلك نطلب IDs بعد وصول البيانات.
-           */
-          const teacherIds =
-            Array.from(
-              new Set(
-                mappedCourseTeachers.map(
-                  (item) =>
-                    item.teacherId,
-                ),
-              ),
-            ).filter(Boolean)
-
-          let mappedTeachers: Teacher[] =
-            []
-
-          if (
-            teacherIds.length > 0
-          ) {
-            const {
-              data,
-              error,
-            } = await supabase
-              .from('teachers')
-              .select(
-                'id, name',
-              )
-              .in(
-                'id',
-                teacherIds,
-              )
-
-            if (error) {
-              console.error(
-                'Teachers background load error:',
-                error,
-              )
-            } else {
-              mappedTeachers =
-                (
-                  data ?? []
-                ).map(
-                  (teacher) => ({
-                    id: normalizeId(
-                      teacher.id,
-                    ),
-                    name:
-                      teacher.name,
-                  }),
-                )
-            }
-          }
-
           const pendingCount =
             (
               registrationsResult.data ??
               []
             ).length
 
+          /*
+           * ------------------------------------------
+           * نعرض البيانات التي وصلت فورًا
+           * ------------------------------------------
+           */
           setAssignments(
             mappedAssignments,
           )
 
           setCourseTeachers(
             mappedCourseTeachers,
-          )
-
-          setTeachers(
-            mappedTeachers,
           )
 
           setStudents(
@@ -1203,8 +1130,6 @@ export function DashboardView() {
               mappedAssignments,
             courseTeachers:
               mappedCourseTeachers,
-            teachers:
-              mappedTeachers,
             students:
               mappedStudents,
             attendanceStatuses:
@@ -1214,8 +1139,82 @@ export function DashboardView() {
           })
 
           /*
-           * currentYearId مستخدم هنا حتى يبقى
-           * واضح أن البيانات تخص السنة الحالية.
+           * ------------------------------------------
+           * تحميل المعلمين بشكل مستقل
+           * ------------------------------------------
+           *
+           * لا ننتظر هذا الطلب قبل تحديث بقية
+           * بيانات Dashboard.
+           */
+          const teacherIds =
+            Array.from(
+              new Set(
+                mappedCourseTeachers.map(
+                  (item) =>
+                    item.teacherId,
+                ),
+              ),
+            ).filter(Boolean)
+
+          if (
+            teacherIds.length === 0
+          ) {
+            setTeachers([])
+
+            updateDashboardCache({
+              teachers: [],
+            })
+
+            return
+          }
+
+          const {
+            data,
+            error,
+          } = await supabase
+            .from('teachers')
+            .select(
+              'id, name',
+            )
+            .in(
+              'id',
+              teacherIds,
+            )
+
+          if (error) {
+            console.error(
+              'Teachers background load error:',
+              error,
+            )
+
+            return
+          }
+
+          const mappedTeachers: Teacher[] =
+            (
+              data ?? []
+            ).map(
+              (teacher) => ({
+                id: normalizeId(
+                  teacher.id,
+                ),
+                name:
+                  teacher.name,
+              }),
+            )
+
+          setTeachers(
+            mappedTeachers,
+          )
+
+          updateDashboardCache({
+            teachers:
+              mappedTeachers,
+          })
+
+          /*
+           * يبقى واضح أن عملية التحميل
+           * مرتبطة بالسنة الحالية.
            */
           void currentYearId
         } catch (error) {
@@ -1229,17 +1228,15 @@ export function DashboardView() {
     )
 
   /*
-   * التحميل الخفيف أولًا:
+   * --------------------------------------------------
+   * التحميل الأساسي
+   * --------------------------------------------------
    *
-   * السنة + الدورات + التسجيلات النشطة.
+   * مهم:
+   * هذه العملية لا تنتظر فحص الصلاحية.
    *
-   * هذه هي البيانات المطلوبة لعرض:
-   * - اسم السنة
-   * - الدورة
-   * - تاريخ الدورة
-   * - عدد المسجلين
-   *
-   * بعدها يبدأ التحميل الثقيل بالخلفية.
+   * الصلاحية تُفحص محليًا من sessionStorage
+   * في effect مستقل.
    */
   const loadData =
     useCallback(
@@ -1257,8 +1254,10 @@ export function DashboardView() {
         try {
           /*
            * ============================
-           * المرحلة الأولى: خفيفة وسريعة
+           * المرحلة الأولى
            * ============================
+           *
+           * السنة + الدورات + التسجيلات
            */
           const [
             yearResult,
@@ -1288,14 +1287,6 @@ export function DashboardView() {
               )
               .maybeSingle(),
 
-            /*
-             * الدورات نحتاجها مباشرة حتى
-             * تظهر أسماء الدورات والتواريخ.
-             *
-             * نحدد السنة من النتيجة بعد ذلك،
-             * لذلك هذا الطلب يستخدم السنة الحالية
-             * من قاعدة البيانات بشكل مستقل.
-             */
             supabase
               .from('courses')
               .select(
@@ -1316,10 +1307,6 @@ export function DashboardView() {
                 },
               ),
 
-            /*
-             * هذا هو مصدر عدد المسجلين.
-             * لا نحتاج بقية بيانات الطالب الآن.
-             */
             supabase
               .from(
                 'enrollments',
@@ -1481,7 +1468,9 @@ export function DashboardView() {
               )
 
           /*
-           * نحدد الدورة قبل إظهار الواجهة.
+           * ------------------------------------------
+           * تحديد الدورة
+           * ------------------------------------------
            */
           let nextSelectedCourseId =
             selectedCourseId
@@ -1527,7 +1516,9 @@ export function DashboardView() {
           }
 
           /*
-           * نضع البيانات الخفيفة في الواجهة فورًا.
+           * ------------------------------------------
+           * وضع البيانات الخفيفة مباشرة
+           * ------------------------------------------
            */
           setAcademicYear(
             currentYear,
@@ -1557,14 +1548,14 @@ export function DashboardView() {
           })
 
           /*
-           * انتهى الجزء الذي يمنع ظهور اللوحة.
+           * Dashboard أصبح جاهزًا للعرض.
            */
           setLoading(false)
 
           /*
-           * ============================
+           * ------------------------------------------
            * المرحلة الثانية: الخلفية
-           * ============================
+           * ------------------------------------------
            */
           const courseIds =
             mappedCourses.map(
@@ -1584,11 +1575,6 @@ export function DashboardView() {
               ),
             )
 
-          /*
-           * لا ننتظر هذه العملية.
-           *
-           * الواجهة ظهرت بالفعل.
-           */
           void loadBackgroundData(
             currentYear.id,
             courseIds,
@@ -1615,14 +1601,17 @@ export function DashboardView() {
     )
 
   /*
-   * أول فتح:
-   * لا نعيد التحميل إذا كان عندنا cache.
+   * --------------------------------------------------
+   * أول فتح
+   * --------------------------------------------------
+   *
+   * مهم جدًا:
+   * لا يوجد checkingAccess هنا.
+   *
+   * لذلك يبدأ تحميل Dashboard فورًا
+   * بالتوازي مع فحص sessionStorage.
    */
   useEffect(() => {
-    if (checkingAccess) {
-      return
-    }
-
     if (dashboardCache !== null) {
       return
     }
@@ -1636,15 +1625,10 @@ export function DashboardView() {
     void loadData().finally(() => {
       dashboardDataLoading = false
     })
-  }, [
-    checkingAccess,
-    loadData,
-  ])
+  }, [loadData])
 
   /*
    * حفظ الاختيارات في الكاش.
-   *
-   * تغيير التاريخ لا يسبب أي طلب إلى Supabase.
    */
   useEffect(() => {
     updateDashboardCache({
@@ -1658,7 +1642,7 @@ export function DashboardView() {
   ])
 
   /*
-   * عند تغيير الدورة فقط:
+   * عند تغيير الدورة:
    * نحمل حضور الدورة الجديدة.
    */
   useEffect(() => {
@@ -1675,8 +1659,8 @@ export function DashboardView() {
   ])
 
   /*
-   * إذا حالات الحضور غير موجودة،
-   * نحملها مرة واحدة في الخلفية.
+   * إذا حالات الحضور غير موجودة:
+   * نحملها مرة واحدة.
    */
   useEffect(() => {
     if (
@@ -1692,7 +1676,9 @@ export function DashboardView() {
   ])
 
   /*
-   * تحديث الحضور للدورة المحددة فقط.
+   * --------------------------------------------------
+   * تحديث الحضور للدورة المحددة
+   * --------------------------------------------------
    */
   useEffect(() => {
     if (!selectedCourseId) {
@@ -2458,6 +2444,12 @@ export function DashboardView() {
       teachers,
     ])
 
+  /*
+   * ننتظر فقط فحص sessionStorage المحلي
+   * أو تحميل البيانات الأساسية.
+   *
+   * لا يوجد أي API للصلاحيات هنا.
+   */
   if (checkingAccess || loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
