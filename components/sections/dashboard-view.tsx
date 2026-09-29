@@ -584,11 +584,9 @@ export function DashboardView() {
   )
 
   /*
-   * صلاحية Dashboard:
-   * إذا كانت الصلاحية مفحوصة سابقًا لا نعيد الطلب.
+   * صلاحية Dashboard.
    *
-   * وإذا كانت البيانات موجودة في الكاش، نسمح للواجهة
-   * بالظهور فورًا ونفحص الصلاحية في الخلفية.
+   * إذا كانت الصلاحية مفحوصة سابقًا لا نعيد الطلب.
    */
   useEffect(() => {
     let cancelled = false
@@ -672,9 +670,6 @@ export function DashboardView() {
 
   /*
    * تحميل حالات الحضور مرة واحدة فقط.
-   *
-   * هذه البيانات ثابتة نسبيًا ولا داعي لسحبها
-   * كل 5 ثواني مع سجلات الحضور.
    */
   const loadAttendanceStatuses =
     useCallback(
@@ -747,10 +742,6 @@ export function DashboardView() {
 
   /*
    * تحميل حضور الدورة المحددة فقط.
-   *
-   * مهم:
-   * لا نرسل courseIds لكل الدورات.
-   * Excel يحتاج حضور الدورة الحالية فقط.
    */
   const loadAttendance =
     useCallback(
@@ -864,6 +855,392 @@ export function DashboardView() {
       [updateDashboardCache],
     )
 
+  /*
+   * تحميل البيانات الثقيلة في الخلفية.
+   *
+   * هذه الدالة لا تمنع ظهور Dashboard.
+   *
+   * تشمل:
+   * - الإسنادات
+   * - معلمي الدورات
+   * - المعلمين
+   * - الطلاب
+   * - حالات الحضور
+   * - التسجيلات
+   */
+  const loadBackgroundData =
+    useCallback(
+      async (
+        currentYearId: string,
+        courseIds: string[],
+        enrolledStudentIds: string[],
+      ) => {
+        try {
+          const [
+            assignmentsResult,
+            courseTeachersResult,
+            studentsResult,
+            registrationsResult,
+            statusesResult,
+          ] = await Promise.all([
+            courseIds.length > 0
+              ? supabase
+                  .from(
+                    'teacher_student_assignments',
+                  )
+                  .select(
+                    `
+                      id,
+                      course_id,
+                      teacher_id,
+                      student_id
+                    `,
+                  )
+                  .in(
+                    'course_id',
+                    courseIds,
+                  )
+              : Promise.resolve({
+                  data: [],
+                  error: null,
+                }),
+
+            courseIds.length > 0
+              ? supabase
+                  .from(
+                    'course_teachers',
+                  )
+                  .select(
+                    `
+                      id,
+                      course_id,
+                      teacher_id
+                    `,
+                  )
+                  .in(
+                    'course_id',
+                    courseIds,
+                  )
+              : Promise.resolve({
+                  data: [],
+                  error: null,
+                }),
+
+            enrolledStudentIds.length > 0
+              ? supabase
+                  .from('students')
+                  .select(
+                    `
+                      id,
+                      student_id,
+                      name,
+                      personal_id,
+                      phone,
+                      whatsapp,
+                      status
+                    `,
+                  )
+                  .in(
+                    'id',
+                    enrolledStudentIds,
+                  )
+              : Promise.resolve({
+                  data: [],
+                  error: null,
+                }),
+
+            supabase
+              .from(
+                'registration_requests',
+              )
+              .select(
+                'id, status',
+              )
+              .eq(
+                'status',
+                'pending',
+              ),
+
+            supabase
+              .from(
+                'attendance_statuses',
+              )
+              .select(
+                'id, name',
+              )
+              .eq(
+                'is_active',
+                true,
+              )
+              .order(
+                'sort_order',
+                {
+                  ascending: true,
+                },
+              ),
+          ])
+
+          if (
+            assignmentsResult.error
+          ) {
+            console.error(
+              'Assignments background load error:',
+              assignmentsResult.error,
+            )
+          }
+
+          if (
+            courseTeachersResult.error
+          ) {
+            console.error(
+              'Course teachers background load error:',
+              courseTeachersResult.error,
+            )
+          }
+
+          if (
+            studentsResult.error
+          ) {
+            console.error(
+              'Students background load error:',
+              studentsResult.error,
+            )
+          }
+
+          if (
+            registrationsResult.error
+          ) {
+            console.error(
+              'Registration background load error:',
+              registrationsResult.error,
+            )
+          }
+
+          if (
+            statusesResult.error
+          ) {
+            console.error(
+              'Attendance statuses background load error:',
+              statusesResult.error,
+            )
+          }
+
+          const mappedAssignments: Assignment[] =
+            (
+              assignmentsResult.data ??
+              []
+            ).map(
+              (assignment) => ({
+                id: normalizeId(
+                  assignment.id,
+                ),
+                courseId:
+                  normalizeId(
+                    assignment.course_id,
+                  ),
+                teacherId:
+                  normalizeId(
+                    assignment.teacher_id,
+                  ),
+                studentId:
+                  normalizeId(
+                    assignment.student_id,
+                  ),
+              }),
+            )
+
+          const mappedCourseTeachers: CourseTeacher[] =
+            (
+              courseTeachersResult.data ??
+              []
+            ).map(
+              (item) => ({
+                id: normalizeId(
+                  item.id,
+                ),
+                courseId:
+                  normalizeId(
+                    item.course_id,
+                  ),
+                teacherId:
+                  normalizeId(
+                    item.teacher_id,
+                  ),
+              }),
+            )
+
+          const mappedStudents: Student[] =
+            (
+              studentsResult.data ??
+              []
+            ).map(
+              (student) => ({
+                id: normalizeId(
+                  student.id,
+                ),
+                studentId:
+                  student.student_id ??
+                  null,
+                name:
+                  student.name,
+                personalId:
+                  student.personal_id ??
+                  null,
+                phone:
+                  student.phone ??
+                  null,
+                whatsapp:
+                  student.whatsapp ??
+                  null,
+                status:
+                  student.status ??
+                  null,
+              }),
+            )
+
+          const mappedStatuses: AttendanceStatus[] =
+            (
+              statusesResult.data ??
+              []
+            ).map(
+              (status) => ({
+                id: normalizeId(
+                  status.id,
+                ),
+                name: String(
+                  status.name ??
+                    '',
+                ),
+              }),
+            )
+
+          /*
+           * المعلمين يعتمدون فقط على course_teachers،
+           * لذلك نطلب IDs بعد وصول البيانات.
+           */
+          const teacherIds =
+            Array.from(
+              new Set(
+                mappedCourseTeachers.map(
+                  (item) =>
+                    item.teacherId,
+                ),
+              ),
+            ).filter(Boolean)
+
+          let mappedTeachers: Teacher[] =
+            []
+
+          if (
+            teacherIds.length > 0
+          ) {
+            const {
+              data,
+              error,
+            } = await supabase
+              .from('teachers')
+              .select(
+                'id, name',
+              )
+              .in(
+                'id',
+                teacherIds,
+              )
+
+            if (error) {
+              console.error(
+                'Teachers background load error:',
+                error,
+              )
+            } else {
+              mappedTeachers =
+                (
+                  data ?? []
+                ).map(
+                  (teacher) => ({
+                    id: normalizeId(
+                      teacher.id,
+                    ),
+                    name:
+                      teacher.name,
+                  }),
+                )
+            }
+          }
+
+          const pendingCount =
+            (
+              registrationsResult.data ??
+              []
+            ).length
+
+          setAssignments(
+            mappedAssignments,
+          )
+
+          setCourseTeachers(
+            mappedCourseTeachers,
+          )
+
+          setTeachers(
+            mappedTeachers,
+          )
+
+          setStudents(
+            mappedStudents,
+          )
+
+          setAttendanceStatuses(
+            mappedStatuses,
+          )
+
+          setPendingRegistrationCount(
+            pendingCount,
+          )
+
+          updateDashboardCache({
+            assignments:
+              mappedAssignments,
+            courseTeachers:
+              mappedCourseTeachers,
+            teachers:
+              mappedTeachers,
+            students:
+              mappedStudents,
+            attendanceStatuses:
+              mappedStatuses,
+            pendingRegistrationCount:
+              pendingCount,
+          })
+
+          /*
+           * currentYearId مستخدم هنا حتى يبقى
+           * واضح أن البيانات تخص السنة الحالية.
+           */
+          void currentYearId
+        } catch (error) {
+          console.error(
+            'Dashboard background load error:',
+            error,
+          )
+        }
+      },
+      [updateDashboardCache],
+    )
+
+  /*
+   * التحميل الخفيف أولًا:
+   *
+   * السنة + الدورات + التسجيلات النشطة.
+   *
+   * هذه هي البيانات المطلوبة لعرض:
+   * - اسم السنة
+   * - الدورة
+   * - تاريخ الدورة
+   * - عدد المسجلين
+   *
+   * بعدها يبدأ التحميل الثقيل بالخلفية.
+   */
   const loadData =
     useCallback(
       async (
@@ -879,12 +1256,14 @@ export function DashboardView() {
 
         try {
           /*
-           * أول استعلام:
-           * السنة الحالية + حالات الحضور بالتوازي.
+           * ============================
+           * المرحلة الأولى: خفيفة وسريعة
+           * ============================
            */
           const [
             yearResult,
-            statusesResult,
+            coursesResult,
+            enrollmentsResult,
           ] = await Promise.all([
             supabase
               .from(
@@ -909,136 +1288,14 @@ export function DashboardView() {
               )
               .maybeSingle(),
 
-            supabase
-              .from(
-                'attendance_statuses',
-              )
-              .select(
-                'id, name',
-              )
-              .eq(
-                'is_active',
-                true,
-              )
-              .order(
-                'sort_order',
-                {
-                  ascending: true,
-                },
-              ),
-          ])
-
-          const {
-            data: yearData,
-            error: yearError,
-          } = yearResult
-
-          if (yearError) {
-            throw yearError
-          }
-
-          if (
-            statusesResult.error
-          ) {
-            console.error(
-              'Attendance statuses load error:',
-              statusesResult.error,
-            )
-          }
-
-          if (
-            !statusesResult.error
-          ) {
-            const mappedStatuses =
-              (
-                statusesResult.data ??
-                []
-              ).map(
-                (status) => ({
-                  id: normalizeId(
-                    status.id,
-                  ),
-                  name: String(
-                    status.name ??
-                      '',
-                  ),
-                }),
-              )
-
-            setAttendanceStatuses(
-              mappedStatuses,
-            )
-
-            updateDashboardCache({
-              attendanceStatuses:
-                mappedStatuses,
-            })
-          }
-
-          if (!yearData) {
-            setAcademicYear(null)
-            setCourses([])
-            setEnrollments([])
-            setAssignments([])
-            setCourseTeachers([])
-            setTeachers([])
-            setStudents([])
-            setAttendanceRecords([])
-            setAttendanceStatuses([])
-            setPendingRegistrationCount(0)
-
-            updateDashboardCache({
-              academicYear: null,
-              courses: [],
-              enrollments: [],
-              assignments: [],
-              courseTeachers: [],
-              teachers: [],
-              students: [],
-              attendanceRecords: [],
-              attendanceStatuses: [],
-              pendingRegistrationCount: 0,
-            })
-
-            return
-          }
-
-          const currentYear: AcademicYear = {
-            id: String(
-              yearData.id,
-            ),
-            name:
-              yearData.name,
-            annualFee:
-              Number(
-                yearData.annual_fee,
-              ) || 0,
-            startDate:
-              yearData.start_date ??
-              null,
-            endDate:
-              yearData.end_date ??
-              null,
-          }
-
-          setAcademicYear(
-            currentYear,
-          )
-
-          updateDashboardCache({
-            academicYear:
-              currentYear,
-          })
-
-          /*
-           * هذه الثلاثة مستقلة عن بعضها،
-           * لذلك نسحبها معًا.
-           */
-          const [
-            coursesResult,
-            enrollmentsResult,
-            registrationsResult,
-          ] = await Promise.all([
+            /*
+             * الدورات نحتاجها مباشرة حتى
+             * تظهر أسماء الدورات والتواريخ.
+             *
+             * نحدد السنة من النتيجة بعد ذلك،
+             * لذلك هذا الطلب يستخدم السنة الحالية
+             * من قاعدة البيانات بشكل مستقل.
+             */
             supabase
               .from('courses')
               .select(
@@ -1048,12 +1305,9 @@ export function DashboardView() {
                   start_date,
                   end_date,
                   days,
-                  created_at
+                  created_at,
+                  academic_year_id
                 `,
-              )
-              .eq(
-                'academic_year_id',
-                currentYear.id,
               )
               .order(
                 'created_at',
@@ -1062,6 +1316,10 @@ export function DashboardView() {
                 },
               ),
 
+            /*
+             * هذا هو مصدر عدد المسجلين.
+             * لا نحتاج بقية بيانات الطالب الآن.
+             */
             supabase
               .from(
                 'enrollments',
@@ -1076,26 +1334,16 @@ export function DashboardView() {
                 `,
               )
               .eq(
-                'academic_year_id',
-                currentYear.id,
-              )
-              .eq(
                 'status',
                 'نشط',
               ),
-
-            supabase
-              .from(
-                'registration_requests',
-              )
-              .select(
-                'id, status',
-              )
-              .eq(
-                'status',
-                'pending',
-              ),
           ])
+
+          if (
+            yearResult.error
+          ) {
+            throw yearResult.error
+          }
 
           if (
             coursesResult.error
@@ -1109,302 +1357,181 @@ export function DashboardView() {
             throw enrollmentsResult.error
           }
 
-          if (
-            registrationsResult.error
-          ) {
-            throw registrationsResult.error
+          if (!yearResult.data) {
+            setAcademicYear(null)
+            setCourses([])
+            setEnrollments([])
+            setAssignments([])
+            setCourseTeachers([])
+            setTeachers([])
+            setStudents([])
+            setAttendanceRecords([])
+            setAttendanceStatuses([])
+            setPendingRegistrationCount(0)
+            setSelectedCourseId('')
+
+            updateDashboardCache({
+              academicYear: null,
+              courses: [],
+              enrollments: [],
+              assignments: [],
+              courseTeachers: [],
+              teachers: [],
+              students: [],
+              attendanceRecords: [],
+              attendanceStatuses: [],
+              pendingRegistrationCount: 0,
+              selectedCourseId: '',
+            })
+
+            return
+          }
+
+          const currentYear: AcademicYear = {
+            id: String(
+              yearResult.data.id,
+            ),
+            name:
+              yearResult.data.name,
+            annualFee:
+              Number(
+                yearResult.data.annual_fee,
+              ) || 0,
+            startDate:
+              yearResult.data.start_date ??
+              null,
+            endDate:
+              yearResult.data.end_date ??
+              null,
           }
 
           const mappedCourses: Course[] =
             (
               coursesResult.data ??
               []
-            ).map(
-              (course) => ({
-                id: normalizeId(
-                  course.id,
-                ),
-                name:
-                  course.name,
-                startDate:
-                  course.start_date ??
-                  null,
-                endDate:
-                  course.end_date ??
-                  null,
-                days:
-                  getCourseDays(
-                    course.days,
-                  ),
-                createdAt:
-                  course.created_at ??
-                  null,
-              }),
             )
+              .filter(
+                (course) =>
+                  normalizeId(
+                    course.academic_year_id,
+                  ) ===
+                  normalizeId(
+                    currentYear.id,
+                  ),
+              )
+              .map(
+                (course) => ({
+                  id: normalizeId(
+                    course.id,
+                  ),
+                  name:
+                    course.name,
+                  startDate:
+                    course.start_date ??
+                    null,
+                  endDate:
+                    course.end_date ??
+                    null,
+                  days:
+                    getCourseDays(
+                      course.days,
+                    ),
+                  createdAt:
+                    course.created_at ??
+                    null,
+                }),
+              )
 
           const mappedEnrollments: Enrollment[] =
             (
               enrollmentsResult.data ??
               []
-            ).map(
-              (enrollment) => ({
-                id: normalizeId(
-                  enrollment.id,
-                ),
-                studentId:
-                  normalizeId(
-                    enrollment.student_id,
-                  ),
-                academicYearId:
+            )
+              .filter(
+                (enrollment) =>
                   normalizeId(
                     enrollment.academic_year_id,
+                  ) ===
+                  normalizeId(
+                    currentYear.id,
                   ),
-                levelId:
-                  enrollment.level_id
-                    ? normalizeId(
-                        enrollment.level_id,
-                      )
-                    : null,
-                status:
-                  enrollment.status,
-              }),
-            )
-
-          const courseIds =
-            mappedCourses.map(
-              (course) =>
-                course.id,
-            )
-
-          let mappedAssignments: Assignment[] =
-            []
-
-          let mappedCourseTeachers: CourseTeacher[] =
-            []
-
-          let mappedTeachers: Teacher[] =
-            []
-
-          if (
-            courseIds.length > 0
-          ) {
-            /*
-             * نحتاج التوزيعات والمعلمين لكل دورات السنة
-             * لأن البحث السريع والإحصاءات تعتمد عليها.
-             */
-            const [
-              assignmentsResult,
-              courseTeachersResult,
-            ] = await Promise.all([
-              supabase
-                .from(
-                  'teacher_student_assignments',
-                )
-                .select(
-                  `
-                    id,
-                    course_id,
-                    teacher_id,
-                    student_id
-                  `,
-                )
-                .in(
-                  'course_id',
-                  courseIds,
-                ),
-
-              supabase
-                .from(
-                  'course_teachers',
-                )
-                .select(
-                  `
-                    id,
-                    course_id,
-                    teacher_id
-                  `,
-                )
-                .in(
-                  'course_id',
-                  courseIds,
-                ),
-            ])
-
-            if (
-              assignmentsResult.error
-            ) {
-              throw assignmentsResult.error
-            }
-
-            if (
-              courseTeachersResult.error
-            ) {
-              throw courseTeachersResult.error
-            }
-
-            mappedAssignments =
-              (
-                assignmentsResult.data ??
-                []
-              ).map(
-                (assignment) => ({
+              )
+              .map(
+                (enrollment) => ({
                   id: normalizeId(
-                    assignment.id,
+                    enrollment.id,
                   ),
-                  courseId:
-                    normalizeId(
-                      assignment.course_id,
-                    ),
-                  teacherId:
-                    normalizeId(
-                      assignment.teacher_id,
-                    ),
                   studentId:
                     normalizeId(
-                      assignment.student_id,
+                      enrollment.student_id,
                     ),
-                }),
-              )
-
-            mappedCourseTeachers =
-              (
-                courseTeachersResult.data ??
-                []
-              ).map(
-                (item) => ({
-                  id: normalizeId(
-                    item.id,
-                  ),
-                  courseId:
+                  academicYearId:
                     normalizeId(
-                      item.course_id,
+                      enrollment.academic_year_id,
                     ),
-                  teacherId:
-                    normalizeId(
-                      item.teacher_id,
-                    ),
-                }),
-              )
-
-            const teacherIds =
-              Array.from(
-                new Set(
-                  mappedCourseTeachers.map(
-                    (item) =>
-                      item.teacherId,
-                  ),
-                ),
-              )
-
-            if (
-              teacherIds.length > 0
-            ) {
-              const {
-                data: teachersData,
-                error: teachersError,
-              } = await supabase
-                .from('teachers')
-                .select(
-                  'id, name',
-                )
-                .in(
-                  'id',
-                  teacherIds,
-                )
-
-              if (
-                teachersError
-              ) {
-                throw teachersError
-              }
-
-              mappedTeachers =
-                (
-                  teachersData ??
-                  []
-                ).map(
-                  (teacher) => ({
-                    id: normalizeId(
-                      teacher.id,
-                    ),
-                    name:
-                      teacher.name,
-                  }),
-                )
-            }
-          }
-
-          const enrolledStudentIds =
-            Array.from(
-              new Set(
-                mappedEnrollments.map(
-                  (item) =>
-                    item.studentId,
-                ),
-              ),
-            )
-
-          let mappedStudents: Student[] =
-            []
-
-          if (
-            enrolledStudentIds.length >
-            0
-          ) {
-            const {
-              data: studentsData,
-              error: studentsError,
-            } = await supabase
-              .from('students')
-              .select(
-                `
-                  id,
-                  student_id,
-                  name,
-                  personal_id,
-                  phone,
-                  whatsapp,
-                  status
-                `,
-              )
-              .in(
-                'id',
-                enrolledStudentIds,
-              )
-
-            if (studentsError) {
-              throw studentsError
-            }
-
-            mappedStudents =
-              (
-                studentsData ??
-                []
-              ).map(
-                (student) => ({
-                  id: normalizeId(
-                    student.id,
-                  ),
-                  studentId:
-                    student.student_id ??
-                    null,
-                  name:
-                    student.name,
-                  personalId:
-                    student.personal_id ??
-                    null,
-                  phone:
-                    student.phone ??
-                    null,
-                  whatsapp:
-                    student.whatsapp ??
-                    null,
+                  levelId:
+                    enrollment.level_id
+                      ? normalizeId(
+                          enrollment.level_id,
+                        )
+                      : null,
                   status:
-                    student.status ??
-                    null,
+                    enrollment.status,
                 }),
               )
+
+          /*
+           * نحدد الدورة قبل إظهار الواجهة.
+           */
+          let nextSelectedCourseId =
+            selectedCourseId
+
+          if (
+            !nextSelectedCourseId ||
+            !mappedCourses.some(
+              (course) =>
+                course.id ===
+                nextSelectedCourseId,
+            )
+          ) {
+            const today =
+              getLocalDateString()
+
+            const currentCourse =
+              mappedCourses.find(
+                (course) => {
+                  const starts =
+                    !course.startDate ||
+                    course.startDate <=
+                      today
+
+                  const ends =
+                    !course.endDate ||
+                    course.endDate >=
+                      today
+
+                  return (
+                    starts &&
+                    ends
+                  )
+                },
+              )
+
+            nextSelectedCourseId =
+              currentCourse?.id ??
+              mappedCourses[
+                mappedCourses.length -
+                  1
+              ]?.id ??
+              ''
           }
+
+          /*
+           * نضع البيانات الخفيفة في الواجهة فورًا.
+           */
+          setAcademicYear(
+            currentYear,
+          )
 
           setCourses(
             mappedCourses,
@@ -1414,144 +1541,82 @@ export function DashboardView() {
             mappedEnrollments,
           )
 
-          setAssignments(
-            mappedAssignments,
-          )
-
-          setCourseTeachers(
-            mappedCourseTeachers,
-          )
-
-          setTeachers(
-            mappedTeachers,
-          )
-
-          setStudents(
-            mappedStudents,
-          )
-
-          const pendingCount =
-            (
-              registrationsResult.data ??
-              []
-            ).length
-
-          setPendingRegistrationCount(
-            pendingCount,
+          setSelectedCourseId(
+            nextSelectedCourseId,
           )
 
           updateDashboardCache({
+            academicYear:
+              currentYear,
             courses:
               mappedCourses,
             enrollments:
               mappedEnrollments,
-            assignments:
-              mappedAssignments,
-            courseTeachers:
-              mappedCourseTeachers,
-            teachers:
-              mappedTeachers,
-            students:
-              mappedStudents,
-            pendingRegistrationCount:
-              pendingCount,
+            selectedCourseId:
+              nextSelectedCourseId,
           })
 
           /*
-           * تحديد الدورة فقط.
-           *
-           * مهم:
-           * لا نحمل attendance هنا.
-           * الـ effect الخاص بالدورة المحددة
-           * سيحمل حضورها فقط بعد تحديث selectedCourseId.
+           * انتهى الجزء الذي يمنع ظهور اللوحة.
            */
-          setSelectedCourseId(
-            (current) => {
-              if (
-                current &&
-                mappedCourses.some(
-                  (course) =>
-                    course.id ===
-                    current,
-                )
-              ) {
-                updateDashboardCache({
-                  selectedCourseId:
-                    current,
-                })
+          setLoading(false)
 
-                return current
-              }
+          /*
+           * ============================
+           * المرحلة الثانية: الخلفية
+           * ============================
+           */
+          const courseIds =
+            mappedCourses.map(
+              (course) =>
+                course.id,
+            )
 
-              if (
-                mappedCourses.length ===
-                0
-              ) {
-                updateDashboardCache({
-                  selectedCourseId:
-                    '',
-                })
+          const enrolledStudentIds =
+            Array.from(
+              new Set(
+                mappedEnrollments
+                  .map(
+                    (item) =>
+                      item.studentId,
+                  )
+                  .filter(Boolean),
+              ),
+            )
 
-                return ''
-              }
-
-              const today =
-                getLocalDateString()
-
-              const currentCourse =
-                mappedCourses.find(
-                  (course) => {
-                    const starts =
-                      !course.startDate ||
-                      course.startDate <=
-                        today
-
-                    const ends =
-                      !course.endDate ||
-                      course.endDate >=
-                        today
-
-                    return (
-                      starts &&
-                      ends
-                    )
-                  },
-                )
-
-              const nextCourseId =
-                currentCourse?.id ??
-                mappedCourses[
-                  mappedCourses.length -
-                    1
-                ]?.id ??
-                ''
-
-              updateDashboardCache({
-                selectedCourseId:
-                  nextCourseId,
-              })
-
-              return nextCourseId
-            },
+          /*
+           * لا ننتظر هذه العملية.
+           *
+           * الواجهة ظهرت بالفعل.
+           */
+          void loadBackgroundData(
+            currentYear.id,
+            courseIds,
+            enrolledStudentIds,
           )
         } catch (error) {
           console.error(
-            'Dashboard load error:',
+            'Dashboard light load error:',
             error,
           )
-        } finally {
+
           setLoading(false)
-          setRefreshing(false)
+        } finally {
+          if (showRefresh) {
+            setRefreshing(false)
+          }
         }
       },
-      [updateDashboardCache],
+      [
+        selectedCourseId,
+        updateDashboardCache,
+        loadBackgroundData,
+      ],
     )
 
   /*
-   * التحميل الأساسي:
-   *
-   * إذا عندنا cache، لا نعيد كل بيانات Dashboard.
-   * هذا يخلي الرجوع للصفحة شبه فوري.
+   * أول فتح:
+   * لا نعيد التحميل إذا كان عندنا cache.
    */
   useEffect(() => {
     if (checkingAccess) {
@@ -1577,21 +1642,29 @@ export function DashboardView() {
   ])
 
   /*
+   * حفظ الاختيارات في الكاش.
+   *
+   * تغيير التاريخ لا يسبب أي طلب إلى Supabase.
+   */
+  useEffect(() => {
+    updateDashboardCache({
+      selectedCourseId,
+      selectedDate,
+    })
+  }, [
+    selectedCourseId,
+    selectedDate,
+    updateDashboardCache,
+  ])
+
+  /*
    * عند تغيير الدورة فقط:
    * نحمل حضور الدورة الجديدة.
-   *
-   * تغيير التاريخ لا يحتاج إعادة تحميل؛
-   * لأننا أصلًا نحمل جميع سجلات الدورة.
    */
   useEffect(() => {
     if (!selectedCourseId) {
       return
     }
-
-    updateDashboardCache({
-      selectedCourseId,
-      selectedDate,
-    })
 
     void loadAttendance([
       selectedCourseId,
@@ -1599,12 +1672,11 @@ export function DashboardView() {
   }, [
     selectedCourseId,
     loadAttendance,
-    updateDashboardCache,
   ])
 
   /*
-   * إذا حالات الحضور غير موجودة في الكاش،
-   * نحملها مرة واحدة.
+   * إذا حالات الحضور غير موجودة،
+   * نحملها مرة واحدة في الخلفية.
    */
   useEffect(() => {
     if (
@@ -2299,7 +2371,8 @@ export function DashboardView() {
         selectedDate,
         statusMap,
         lessonDateStatus,
-      ])
+      ],
+    )
 
   const selectedStudentCourses =
     useMemo(() => {
