@@ -1,6 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { usePathname } from 'next/navigation'
 import {
   Check,
@@ -262,12 +267,15 @@ export function Header({
     loadProfile()
   }, [])
 
-  async function loadNotifications() {
-    try {
-      setLoadingNotifications(true)
+  const loadNotifications =
+    useCallback(async () => {
+      try {
+        setLoadingNotifications(true)
 
-      const { data: logs, error: logsError } =
-        await supabase
+        const {
+          data: logs,
+          error: logsError,
+        } = await supabase
           .from('auth_audit_logs')
           .select(
             `
@@ -294,113 +302,124 @@ export function Header({
           )
           .limit(10)
 
-      if (logsError) {
-        console.error(
-          'Notifications load error:',
-          logsError,
-        )
-
-        setNotifications([])
-        return
-      }
-
-      if (!logs || logs.length === 0) {
-        setNotifications([])
-        return
-      }
-
-      const userIds = [
-        ...new Set(
-          logs.map(
-            (log: AuditLog) =>
-              log.auth_user_id,
-          ),
-        ),
-      ]
-
-      const {
-        data: profiles,
-        error: profilesError,
-      } =
-        await supabase
-          .from('user_profiles')
-          .select(
-            `
-            auth_user_id,
-            username,
-            full_name
-            `,
-          )
-          .in(
-            'auth_user_id',
-            userIds,
+        if (logsError) {
+          console.error(
+            'Notifications load error:',
+            logsError,
           )
 
-      if (profilesError) {
-        console.error(
-          'Notification profiles load error:',
-          profilesError,
-        )
-      }
+          setNotifications([])
+          return
+        }
 
-      const profileMap =
-        new Map<
-          string,
-          {
-            username: string
-            full_name: string
-          }
-        >()
+        if (!logs || logs.length === 0) {
+          setNotifications([])
+          return
+        }
 
-      ;(profiles ?? []).forEach(
-        (item) => {
-          profileMap.set(
-            item.auth_user_id,
-            {
-              username:
-                item.username,
-              full_name:
-                item.full_name,
-            },
-          )
-        },
-      )
-
-      const items: NotificationItem[] =
-        logs.map(
-          (log: AuditLog) => {
-            const userProfile =
-              profileMap.get(
+        const userIds = [
+          ...new Set(
+            logs.map(
+              (log: AuditLog) =>
                 log.auth_user_id,
-              )
+            ),
+          ),
+        ]
 
-            return {
-              id: log.id,
-              userName:
-                userProfile?.full_name ||
-                userProfile?.username ||
-                'مستخدم',
-              username:
-                userProfile?.username ||
-                '',
-              createdAt:
-                log.created_at,
+        const {
+          data: profiles,
+          error: profilesError,
+        } =
+          await supabase
+            .from('user_profiles')
+            .select(
+              `
+              auth_user_id,
+              username,
+              full_name
+              `,
+            )
+            .in(
+              'auth_user_id',
+              userIds,
+            )
+
+        if (profilesError) {
+          console.error(
+            'Notification profiles load error:',
+            profilesError,
+          )
+        }
+
+        const profileMap =
+          new Map<
+            string,
+            {
+              username: string
+              full_name: string
             }
+          >()
+
+        ;(profiles ?? []).forEach(
+          (item) => {
+            profileMap.set(
+              item.auth_user_id,
+              {
+                username:
+                  item.username,
+                full_name:
+                  item.full_name,
+              },
+            )
           },
         )
 
-      setNotifications(items)
-    } catch (error) {
-      console.error(
-        'Notifications request error:',
-        error,
-      )
+        const items: NotificationItem[] =
+          logs.map(
+            (log: AuditLog) => {
+              const userProfile =
+                profileMap.get(
+                  log.auth_user_id,
+                )
 
-      setNotifications([])
-    } finally {
-      setLoadingNotifications(false)
-    }
-  }
+              return {
+                id: log.id,
+                userName:
+                  userProfile?.full_name ||
+                  userProfile?.username ||
+                  'مستخدم',
+                username:
+                  userProfile?.username ||
+                  '',
+                createdAt:
+                  log.created_at,
+              }
+            },
+          )
+
+        setNotifications(items)
+      } catch (error) {
+        console.error(
+          'Notifications request error:',
+          error,
+        )
+
+        setNotifications([])
+      } finally {
+        setLoadingNotifications(false)
+      }
+    }, [])
+
+  /*
+   * تحميل آخر عمليات الدخول مباشرة
+   * عند فتح الـDashboard، وليس فقط عند فتح الجرس.
+   *
+   * هذا يضمن ظهور login_success الحالي
+   * إذا كان موجوداً في قاعدة البيانات.
+   */
+  useEffect(() => {
+    void loadNotifications()
+  }, [loadNotifications])
 
   /*
    * -------------------------------------------------------
@@ -469,7 +488,7 @@ export function Header({
 
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [loadNotifications])
 
   useEffect(() => {
     function handleClickOutside(
@@ -787,7 +806,7 @@ export function Header({
             setNotificationsOpen(next)
 
             if (next) {
-              loadNotifications()
+              void loadNotifications()
             }
           }}
           className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
