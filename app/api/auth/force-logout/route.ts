@@ -1,35 +1,66 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 const SESSION_COOKIE = 't3leem_session_id'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  },
+)
 
 export async function POST() {
   try {
     const supabase =
       await createSupabaseServerClient()
 
+    const {
+      data: { user },
+      error: authError,
+    } =
+      await supabase.auth.getUser()
+
     const cookieStore = await cookies()
 
     const sessionId =
       cookieStore.get(SESSION_COOKIE)?.value
 
-    // إغلاق جلسة النظام الخاصة بنا
-    if (sessionId) {
-      const { createClient } =
-        await import('@supabase/supabase-js')
+    /*
+     * لا توجد جلسة Supabase أو T3LEEM.
+     * ننظف Cookie فقط.
+     */
+    if (authError || !user || !sessionId) {
+      const response = NextResponse.json({
+        success: true,
+      })
 
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      response.cookies.set(
+        SESSION_COOKIE,
+        '',
         {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 0,
         },
       )
 
+      return response
+    }
+
+    /*
+     * إغلاق جلسة T3LEEM الخاصة بالمستخدم الحالي فقط.
+     */
+    const { error: sessionError } =
       await supabaseAdmin
         .from('active_sessions')
         .update({
@@ -40,25 +71,58 @@ export async function POST() {
             new Date().toISOString(),
         })
         .eq('id', sessionId)
+        .eq('auth_user_id', user.id)
         .eq('is_active', true)
+
+    if (sessionError) {
+      console.error(
+        'Force logout session update error:',
+        sessionError,
+      )
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'تعذر إنهاء جلسة النظام.',
+        },
+        { status: 500 },
+      )
     }
 
-    // إغلاق Supabase Auth session
-    await supabase.auth.signOut()
+    /*
+     * إغلاق Supabase Auth session.
+     */
+    const { error: signOutError } =
+      await supabase.auth.signOut()
+
+    if (signOutError) {
+      console.error(
+        'Force logout Supabase sign out error:',
+        signOutError,
+      )
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'تعذر إنهاء جلسة المصادقة.',
+        },
+        { status: 500 },
+      )
+    }
 
     const response = NextResponse.json({
       success: true,
     })
 
-    // حذف Session Cookie
     response.cookies.set(
       SESSION_COOKIE,
       '',
       {
         httpOnly: true,
         secure:
-          process.env.NODE_ENV ===
-          'production',
+          process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
         maxAge: 0,
@@ -72,12 +136,13 @@ export async function POST() {
       error,
     )
 
-    // حتى لو حصل خطأ، نحاول حذف Cookie
     const response = NextResponse.json(
       {
         success: false,
+        error:
+          'تعذر إنهاء الجلسة.',
       },
-      { status: 200 },
+      { status: 500 },
     )
 
     response.cookies.set(
@@ -86,8 +151,7 @@ export async function POST() {
       {
         httpOnly: true,
         secure:
-          process.env.NODE_ENV ===
-          'production',
+          process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
         maxAge: 0,
