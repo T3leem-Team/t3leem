@@ -23,6 +23,10 @@ export default function LoginPage() {
   ) {
     event.preventDefault()
 
+    if (loading) {
+      return
+    }
+
     setError('')
 
     const cleanUsername = username.trim()
@@ -35,53 +39,90 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      /*
+       * --------------------------------------------------
+       * 1. تسجيل الدخول
+       * --------------------------------------------------
+       */
+
+      const loginResponse = await fetch(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({
+            username: cleanUsername,
+            password,
+          }),
         },
-        body: JSON.stringify({
-          username: cleanUsername,
-          password,
-        }),
-      })
+      )
 
-      const data = await response.json()
+      const loginData =
+        await loginResponse.json().catch(() => null)
 
-      if (!response.ok) {
+      /*
+       * الجهاز الجديد / المرفوض / pending
+       * أو أي خطأ من API
+       */
+      if (!loginResponse.ok) {
         setError(
-          typeof data.error === 'string'
-            ? data.error
+          typeof loginData?.error === 'string'
+            ? loginData.error
             : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
         )
+
         return
       }
 
       /*
-       * بعد نجاح تسجيل الدخول:
-       * نحدد أول قسم مسموح للمستخدم
-       * بدل إرسال الجميع إلى الصفحة الرئيسية.
+       * --------------------------------------------------
+       * 2. بعد نجاح تسجيل الدخول
+       *
+       * لا نعمل router.refresh() هنا.
+       *
+       * الـ API قام بالفعل بإنشاء:
+       * - Supabase Auth session
+       * - active session
+       * - session cookie
+       *
+       * نحتاج فقط معرفة أول صفحة مسموحة.
+       * --------------------------------------------------
        */
+
       const sectionsResponse = await fetch(
         '/api/auth/dashboard-sections',
         {
           method: 'GET',
+          credentials: 'include',
           cache: 'no-store',
         },
       )
 
+      const sectionsData =
+        await sectionsResponse.json().catch(() => null)
+
       if (!sectionsResponse.ok) {
         setError(
-          'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
+          typeof sectionsData?.error === 'string'
+            ? sectionsData.error
+            : 'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
         )
+
         return
       }
 
-      const sectionsData =
-        await sectionsResponse.json()
+      /*
+       * --------------------------------------------------
+       * 3. ترتيب الأقسام حسب sort_order
+       * --------------------------------------------------
+       */
 
       const sections = Array.isArray(
-        sectionsData.sections,
+        sectionsData?.sections,
       )
         ? [...sectionsData.sections].sort(
             (
@@ -97,16 +138,33 @@ export default function LoginPage() {
           )
         : []
 
+      /*
+       * --------------------------------------------------
+       * 4. تحديد أول صفحة مسموحة
+       * --------------------------------------------------
+       */
+
       const firstSection = sections[0]
 
       const destination =
         typeof firstSection?.href === 'string' &&
         firstSection.href.trim()
-          ? firstSection.href
+          ? firstSection.href.trim()
           : '/'
 
+      /*
+       * --------------------------------------------------
+       * 5. الانتقال
+       *
+       * لا نستخدم router.refresh() بعد replace.
+       *
+       * هذا يمنع حصول طلبات متزامنة مباشرة بعد
+       * إنشاء الجلسة، والتي كانت ممكن تسبب أن أول
+       * محاولة تدخل ثم يرجع النظام وكأنه غير مسجل.
+       * --------------------------------------------------
+       */
+
       router.replace(destination)
-      router.refresh()
     } catch (error) {
       console.error(
         'Login request error:',
@@ -247,7 +305,8 @@ export default function LoginPage() {
                 onClick={() =>
                   router.push('/forgot-password')
                 }
-                className="text-sm font-medium text-primary hover:underline"
+                disabled={loading}
+                className="text-sm font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-60"
               >
                 نسيت كلمة المرور؟
               </button>
