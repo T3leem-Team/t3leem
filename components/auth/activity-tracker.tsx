@@ -24,8 +24,6 @@ export function ActivityTracker() {
         return
       }
 
-      lastSentRef.current = now
-
       try {
         const response =
           await fetch(
@@ -37,14 +35,23 @@ export function ActivityTracker() {
             },
           )
 
-        if (
-          response.status === 401 &&
-          !stopped
-        ) {
-          window.location.replace('/login')
+        if (stopped) {
+          return
+        }
+
+        if (response.status === 401) {
+          window.location.replace(
+            '/login',
+          )
+          return
+        }
+
+        if (response.ok) {
+          lastSentRef.current = Date.now()
         }
       } catch {
         // لا نسجل خروج بسبب مشكلة شبكة مؤقتة.
+        // لن يتم تحديث آخر إرسال إلا بعد نجاح الطلب.
       }
     }
 
