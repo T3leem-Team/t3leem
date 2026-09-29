@@ -1,88 +1,40 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL!
+import { requirePermission } from '@/lib/require-permission'
 
-const supabasePublishableKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-
-const supabaseServiceRoleKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-async function getAuthenticatedUser() {
-  const cookieStore = await cookies()
-
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabasePublishableKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll() {
-          // لا نحتاج تعديل الكوكيز هنا
-        },
-      },
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
-  )
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
-
-  if (error || !user) {
-    return null
-  }
-
-  return user
-}
-
-function getAdminClient() {
-  return createClient(
-    supabaseUrl,
-    supabaseServiceRoleKey,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    },
-  )
-}
+  },
+)
 
 export async function GET() {
+  const auth =
+    await requirePermission(
+      'settings.manage',
+    )
+
+  if (!auth.ok) {
+    return auth.response
+  }
+
   try {
-    const user =
-      await getAuthenticatedUser()
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            'غير مصرح بالوصول',
-        },
-        {
-          status: 401,
-        },
+    const {
+      data,
+      error,
+    } = await supabaseAdmin
+      .from('school_settings')
+      .select(
+        'id, school_name, school_subtitle, updated_at',
       )
-    }
-
-    const supabase =
-      getAdminClient()
-
-    const { data, error } =
-      await supabase
-        .from('school_settings')
-        .select(
-          'id, school_name, school_subtitle, updated_at',
-        )
-        .eq('id', 1)
-        .maybeSingle()
+      .eq('id', 1)
+      .maybeSingle()
 
     if (error) {
       console.error(
@@ -92,14 +44,10 @@ export async function GET() {
 
       return NextResponse.json(
         {
-          error: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
+          error:
+            'تعذر تحميل إعدادات المدرسة.',
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
@@ -107,18 +55,19 @@ export async function GET() {
       const {
         data: created,
         error: insertError,
-      } = await supabase
-        .from('school_settings')
-        .insert({
-          id: 1,
-          school_name: 'تعليم',
-          school_subtitle:
-            'نظام إدارة المدارس',
-        })
-        .select(
-          'id, school_name, school_subtitle, updated_at',
-        )
-        .single()
+      } =
+        await supabaseAdmin
+          .from('school_settings')
+          .insert({
+            id: 1,
+            school_name: 'تعليم',
+            school_subtitle:
+              'نظام إدارة المدارس',
+          })
+          .select(
+            'id, school_name, school_subtitle, updated_at',
+          )
+          .single()
 
       if (insertError) {
         console.error(
@@ -129,17 +78,9 @@ export async function GET() {
         return NextResponse.json(
           {
             error:
-              insertError.message,
-            code:
-              insertError.code,
-            details:
-              insertError.details,
-            hint:
-              insertError.hint,
+              'تعذر إنشاء إعدادات المدرسة.',
           },
-          {
-            status: 500,
-          },
+          { status: 500 },
         )
       }
 
@@ -160,13 +101,9 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'حدث خطأ غير متوقع',
+          'حدث خطأ غير متوقع.',
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     )
   }
 }
@@ -174,22 +111,16 @@ export async function GET() {
 export async function PUT(
   request: Request,
 ) {
+  const auth =
+    await requirePermission(
+      'settings.manage',
+    )
+
+  if (!auth.ok) {
+    return auth.response
+  }
+
   try {
-    const user =
-      await getAuthenticatedUser()
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            'غير مصرح بالوصول',
-        },
-        {
-          status: 401,
-        },
-      )
-    }
-
     const body =
       await request.json()
 
@@ -211,9 +142,7 @@ export async function PUT(
           error:
             'اسم المدرسة مطلوب.',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
@@ -223,9 +152,7 @@ export async function PUT(
           error:
             'اسم النظام مطلوب.',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
@@ -235,46 +162,38 @@ export async function PUT(
           error:
             'اسم المدرسة طويل جداً.',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
-    if (
-      schoolSubtitle.length >
-      150
-    ) {
+    if (schoolSubtitle.length > 150) {
       return NextResponse.json(
         {
           error:
             'اسم النظام طويل جداً.',
         },
-        {
-          status: 400,
-        },
+        { status: 400 },
       )
     }
 
-    const supabase =
-      getAdminClient()
-
-    const { data, error } =
-      await supabase
-        .from('school_settings')
-        .update({
-          school_name:
-            schoolName,
-          school_subtitle:
-            schoolSubtitle,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq('id', 1)
-        .select(
-          'id, school_name, school_subtitle, updated_at',
-        )
-        .single()
+    const {
+      data,
+      error,
+    } = await supabaseAdmin
+      .from('school_settings')
+      .update({
+        school_name:
+          schoolName,
+        school_subtitle:
+          schoolSubtitle,
+        updated_at:
+          new Date().toISOString(),
+      })
+      .eq('id', 1)
+      .select(
+        'id, school_name, school_subtitle, updated_at',
+      )
+      .single()
 
     if (error) {
       console.error(
@@ -285,17 +204,9 @@ export async function PUT(
       return NextResponse.json(
         {
           error:
-            error.message,
-          code:
-            error.code,
-          details:
-            error.details,
-          hint:
-            error.hint,
+            'تعذر تحديث إعدادات المدرسة.',
         },
-        {
-          status: 500,
-        },
+        { status: 500 },
       )
     }
 
@@ -312,13 +223,9 @@ export async function PUT(
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'حدث خطأ غير متوقع',
+          'حدث خطأ غير متوقع.',
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     )
   }
 }
