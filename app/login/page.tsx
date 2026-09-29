@@ -22,14 +22,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] =
     useState(false)
   const [loading, setLoading] = useState(false)
+  const [redirecting, setRedirecting] =
+    useState(false)
   const [error, setError] = useState('')
+
+  const isBusy = loading || redirecting
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault()
 
-    if (loading) {
+    if (isBusy) {
       return
     }
 
@@ -81,16 +85,13 @@ export default function LoginPage() {
             : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
         )
 
+        setLoading(false)
         return
       }
 
       /*
        * --------------------------------------------------
        * 2. جلب الأقسام المسموحة
-       *
-       * هذا الطلب يتم مرة واحدة أثناء تسجيل الدخول.
-       * بعدها نخزن النتيجة مؤقتًا حتى لا يعيد
-       * SectionRouter الطلب مرة ثانية.
        * --------------------------------------------------
        */
 
@@ -115,6 +116,7 @@ export default function LoginPage() {
             : 'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
         )
 
+        setLoading(false)
         return
       }
 
@@ -173,9 +175,6 @@ export default function LoginPage() {
       /*
        * --------------------------------------------------
        * 6. Preload بيانات الطلاب بالخلفية
-       *
-       * لا نستخدم await.
-       * يبدأ التحميل مباشرة بعد نجاح تسجيل الدخول.
        * --------------------------------------------------
        */
 
@@ -207,11 +206,6 @@ export default function LoginPage() {
       /*
        * --------------------------------------------------
        * 7. Preload بيانات المعلمين بالخلفية
-       *
-       * مثل الطلاب تمامًا.
-       *
-       * إذا المستخدم لا يملك صلاحية المعلمين،
-       * لن يتم تحميل بيانات المعلمين.
        * --------------------------------------------------
        */
 
@@ -242,13 +236,26 @@ export default function LoginPage() {
 
       /*
        * --------------------------------------------------
-       * 8. الانتقال مباشرة
+       * 8. بدء الانتقال
        *
-       * لا ننتظر preload.
+       * مهم:
+       * redirecting يبقى true حتى أثناء انتقال
+       * Next.js، لذلك الزر لا يرجع لحالة "دخول".
        * --------------------------------------------------
        */
 
+      setRedirecting(true)
+      setLoading(false)
+
       router.replace(destination)
+
+      /*
+       * لا نعيد redirecting إلى false هنا.
+       *
+       * لأن router.replace() لا ينتظر اكتمال
+       * الانتقال. الصفحة الحالية ستختفي بمجرد
+       * اكتمال الانتقال إلى الصفحة الجديدة.
+       */
     } catch (error) {
       console.error(
         'Login request error:',
@@ -258,8 +265,9 @@ export default function LoginPage() {
       setError(
         'تعذر الاتصال بالخادم. حاول مرة أخرى.',
       )
-    } finally {
+
       setLoading(false)
+      setRedirecting(false)
     }
   }
 
@@ -305,7 +313,7 @@ export default function LoginPage() {
                 }
                 placeholder="أدخل اسم المستخدم"
                 autoComplete="username"
-                disabled={loading}
+                disabled={isBusy}
                 className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
@@ -332,7 +340,7 @@ export default function LoginPage() {
                   }
                   placeholder="أدخل كلمة المرور"
                   autoComplete="current-password"
-                  disabled={loading}
+                  disabled={isBusy}
                   className="h-11 w-full rounded-lg border border-input bg-background px-3 pl-11 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
@@ -343,7 +351,7 @@ export default function LoginPage() {
                       (value) => !value,
                     )
                   }
-                  disabled={loading}
+                  disabled={isBusy}
                   className="absolute left-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none"
                   aria-label={
                     showPassword
@@ -371,16 +379,18 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={isBusy}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading && (
+              {isBusy && (
                 <Loader2 className="size-4 animate-spin" />
               )}
 
-              {loading
-                ? 'جارٍ تسجيل الدخول...'
-                : 'دخول'}
+              {redirecting
+                ? 'جارٍ فتح النظام...'
+                : loading
+                  ? 'جارٍ تسجيل الدخول...'
+                  : 'دخول'}
             </button>
 
             <div className="text-center">
@@ -389,7 +399,7 @@ export default function LoginPage() {
                 onClick={() =>
                   router.push('/forgot-password')
                 }
-                disabled={loading}
+                disabled={isBusy}
                 className="text-sm font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-60"
               >
                 نسيت كلمة المرور؟
