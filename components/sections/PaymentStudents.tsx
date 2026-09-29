@@ -1,14 +1,25 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Eye } from 'lucide-react'
+import {
+  Plus,
+  X,
+  Eye,
+} from 'lucide-react'
 
-import { PageHeader } from '@/components/dashboard/page-header'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
 
 import {
   Table,
@@ -21,6 +32,13 @@ import {
 
 import { students as fallbackStudents } from '@/lib/data'
 
+import {
+  getPaymentsCache,
+  loadPaymentsCache,
+  type PaymentStatus,
+  type StudentRow,
+} from '@/lib/payments-cache'
+
 type Filters = {
   name: string
   personalId: string
@@ -31,24 +49,10 @@ type Filters = {
   paymentStatus: string
 }
 
-type PaymentMethod = 'نقدي' | 'تحويل' | 'بطاقة'
-
-type PaymentStatus =
-  | 'مدفوع بالكامل'
-  | 'مدفوع جزئياً'
-  | 'غير مدفوع'
-  | 'معفي'
-
-type StudentRow = {
-  id: string
-  name: string
-  personalId: string
-  grade: string
-  amountDue: number
-  amountPaid: number
-  feeExempt: boolean
-  paymentStatus: PaymentStatus
-}
+type PaymentMethod =
+  | 'نقدي'
+  | 'تحويل'
+  | 'بطاقة'
 
 type PaymentRecord = {
   id: string
@@ -59,25 +63,6 @@ type PaymentRecord = {
   notes: string | null
   created_at: string
 }
-
-type AcademicYear = {
-  id: string
-  name: string
-  annual_fee: number | null
-}
-
-type PaymentStudentsCache = {
-  studentList: StudentRow[]
-  currentAcademicYearId: string | null
-  currentAcademicYearName: string
-  currentAnnualFee: number
-}
-
-let paymentStudentsCache:
-  | PaymentStudentsCache
-  | null = null
-
-let paymentStudentsLoading = false
 
 const emptyFilters: Filters = {
   name: '',
@@ -92,63 +77,91 @@ const emptyFilters: Filters = {
 export function PaymentStudents() {
   const router = useRouter()
 
-  const [returnPath, setReturnPath] = useState('')
-  const [studentIdFromUrl, setStudentIdFromUrl] =
-    useState<string | null>(null)
+  const initialCache =
+    getPaymentsCache()
+
+  const [returnPath, setReturnPath] =
+    useState('')
+
+  const [
+    studentIdFromUrl,
+    setStudentIdFromUrl,
+  ] = useState<string | null>(null)
 
   const autoOpenedStudentRef =
     useRef<string | null>(null)
 
   const [filters, setFilters] =
-    useState<Filters>(emptyFilters)
+    useState<Filters>(
+      emptyFilters,
+    )
 
   const [studentList, setStudentList] =
     useState<StudentRow[]>(
-      paymentStudentsCache?.studentList ?? [],
+      initialCache?.studentList ?? [],
     )
 
   const [loading, setLoading] =
     useState(
-      paymentStudentsCache === null,
+      initialCache === null,
     )
 
-  const [currentAcademicYearId, setCurrentAcademicYearId] =
-    useState<string | null>(
-      paymentStudentsCache?.currentAcademicYearId ??
-        null,
-    )
+  const [
+    currentAcademicYearId,
+    setCurrentAcademicYearId,
+  ] = useState<string | null>(
+    initialCache?.currentAcademicYearId ??
+      null,
+  )
 
-  const [currentAcademicYearName, setCurrentAcademicYearName] =
-    useState(
-      paymentStudentsCache?.currentAcademicYearName ??
-        '',
-    )
+  const [
+    currentAcademicYearName,
+    setCurrentAcademicYearName,
+  ] = useState(
+    initialCache?.currentAcademicYearName ??
+      '',
+  )
 
-  const [currentAnnualFee, setCurrentAnnualFee] =
-    useState(
-      paymentStudentsCache?.currentAnnualFee ??
-        0,
-    )
+  const [
+    currentAnnualFee,
+    setCurrentAnnualFee,
+  ] = useState(
+    initialCache?.currentAnnualFee ??
+      0,
+  )
 
-  const [detailsDialogOpen, setDetailsDialogOpen] =
-    useState(false)
+  const [
+    detailsDialogOpen,
+    setDetailsDialogOpen,
+  ] = useState(false)
 
-  const [detailsStudent, setDetailsStudent] =
-    useState<StudentRow | null>(null)
+  const [
+    detailsStudent,
+    setDetailsStudent,
+  ] = useState<StudentRow | null>(
+    null,
+  )
 
-  const [paymentHistory, setPaymentHistory] =
-    useState<PaymentRecord[]>([])
+  const [
+    paymentHistory,
+    setPaymentHistory,
+  ] = useState<PaymentRecord[]>([])
 
-  const [loadingHistory, setLoadingHistory] =
-    useState(false)
+  const [
+    loadingHistory,
+    setLoadingHistory,
+  ] = useState(false)
 
-  const [savingPayment, setSavingPayment] =
-    useState(false)
+  const [
+    savingPayment,
+    setSavingPayment,
+  ] = useState(false)
 
   useEffect(() => {
-    const params = new URLSearchParams(
-      window.location.search,
-    )
+    const params =
+      new URLSearchParams(
+        window.location.search,
+      )
 
     setReturnPath(
       params.get('return') || '',
@@ -159,235 +172,72 @@ export function PaymentStudents() {
     )
   }, [])
 
-  const loadPayments = async (): Promise<StudentRow[]> => {
-    const hasCache =
-      paymentStudentsCache !== null
+  const applyPaymentsCache = (
+    cache: Awaited<
+      ReturnType<typeof loadPaymentsCache>
+    >,
+  ) => {
+    setStudentList(
+      cache.studentList,
+    )
 
-    if (!hasCache) {
-      setLoading(true)
+    setCurrentAcademicYearId(
+      cache.currentAcademicYearId,
+    )
+
+    setCurrentAcademicYearName(
+      cache.currentAcademicYearName,
+    )
+
+    setCurrentAnnualFee(
+      cache.currentAnnualFee,
+    )
+
+    setLoading(false)
+
+    if (detailsStudent) {
+      const updatedStudent =
+        cache.studentList.find(
+          (student) =>
+            student.id ===
+            detailsStudent.id,
+        )
+
+      if (updatedStudent) {
+        setDetailsStudent(
+          updatedStudent,
+        )
+      }
     }
+  }
 
+  const loadPayments = async (
+    force = false,
+  ): Promise<StudentRow[]> => {
     try {
-      const response = await fetch(
-        '/api/payments',
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
+      const cache =
+        await loadPaymentsCache({
+          force,
+        })
 
-      if (!response.ok) {
-        const data = await response
-          .json()
-          .catch(() => null)
+      applyPaymentsCache(cache)
 
-        throw new Error(
-          data?.error ||
-            'تعذر تحميل بيانات المدفوعات.',
-        )
-      }
-
-      const data = await response.json()
-
-      const currentYear:
-        | AcademicYear
-        | null =
-        data.academicYear ?? null
-
-      if (!currentYear) {
-        const emptyList: StudentRow[] = []
-
-        setStudentList(emptyList)
-        setCurrentAcademicYearId(null)
-        setCurrentAcademicYearName('')
-        setCurrentAnnualFee(0)
-
-        paymentStudentsCache = {
-          studentList: emptyList,
-          currentAcademicYearId: null,
-          currentAcademicYearName: '',
-          currentAnnualFee: 0,
-        }
-
-        return emptyList
-      }
-
-      const annualFee = Number(
-        currentYear.annual_fee ?? 0,
-      )
-
-      setCurrentAcademicYearId(
-        currentYear.id,
-      )
-
-      setCurrentAcademicYearName(
-        currentYear.name,
-      )
-
-      setCurrentAnnualFee(
-        annualFee,
-      )
-
-      const students =
-        data.students ?? []
-
-      const enrollments =
-        data.enrollments ?? []
-
-      const payments =
-        data.payments ?? []
-
-      const levels =
-        data.levels ?? []
-
-      const levelMap =
-        new Map<string, string>(
-          levels.map(
-            (level: any) => [
-              level.id,
-              level.name,
-            ],
-          ),
-        )
-
-      const enrollmentMap =
-        new Map<string, string>(
-          enrollments.map(
-            (enrollment: any) => [
-              enrollment.student_id,
-              levelMap.get(
-                enrollment.level_id,
-              ) ?? 'غير محدد',
-            ],
-          ),
-        )
-
-      const paidByStudent =
-        new Map<string, number>()
-
-      payments.forEach(
-        (payment: any) => {
-          const current =
-            paidByStudent.get(
-              payment.student_id,
-            ) ?? 0
-
-          paidByStudent.set(
-            payment.student_id,
-            current +
-              Number(
-                payment.amount ?? 0,
-              ),
-          )
-        },
-      )
-
-      const mappedStudents:
-        StudentRow[] =
-        students
-          .filter((student: any) =>
-            enrollmentMap.has(
-              student.id,
-            ),
-          )
-          .map((student: any) => {
-            const amountPaid =
-              paidByStudent.get(
-                student.id,
-              ) ?? 0
-
-            const feeExempt =
-              Boolean(
-                student.fee_exempt,
-              )
-
-            let paymentStatus:
-              PaymentStatus
-
-            if (feeExempt) {
-              paymentStatus =
-                'معفي'
-            } else if (
-              annualFee > 0 &&
-              amountPaid >=
-                annualFee
-            ) {
-              paymentStatus =
-                'مدفوع بالكامل'
-            } else if (
-              amountPaid > 0
-            ) {
-              paymentStatus =
-                'مدفوع جزئياً'
-            } else {
-              paymentStatus =
-                'غير مدفوع'
-            }
-
-            return {
-              id: student.id,
-              name: student.name,
-              personalId:
-                student.personal_id ??
-                '',
-              grade:
-                enrollmentMap.get(
-                  student.id,
-                ) ?? 'غير محدد',
-              amountDue:
-                annualFee,
-              amountPaid,
-              feeExempt,
-              paymentStatus,
-            }
-          })
-
-      setStudentList(
-        mappedStudents,
-      )
-
-      setLoading(false)
-
-      paymentStudentsCache = {
-        studentList: mappedStudents,
-        currentAcademicYearId:
-          currentYear.id,
-        currentAcademicYearName:
-          currentYear.name,
-        currentAnnualFee:
-          annualFee,
-      }
-
-      if (detailsStudent) {
-        const updatedStudent =
-          mappedStudents.find(
-            (student) =>
-              student.id ===
-              detailsStudent.id,
-          )
-
-        if (updatedStudent) {
-          setDetailsStudent(
-            updatedStudent,
-          )
-        }
-      }
-
-      return mappedStudents
+      return cache.studentList
     } catch (error) {
       console.error(
         'Failed to load payments:',
         error,
       )
 
-      /*
-       * إذا عندنا cache، نخليه ظاهر
-       * ولا نستبدله بالـ fallback.
-       */
-      if (paymentStudentsCache) {
-        setLoading(false)
+      const existingCache =
+        getPaymentsCache()
 
-        return paymentStudentsCache.studentList
+      if (existingCache) {
+        applyPaymentsCache(
+          existingCache,
+        )
+
+        return existingCache.studentList
       }
 
       const fallback:
@@ -446,26 +296,22 @@ export function PaymentStudents() {
 
       return fallback
     } finally {
-      paymentStudentsLoading = false
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (paymentStudentsLoading) {
+    const cache =
+      getPaymentsCache()
+
+    if (cache) {
+      applyPaymentsCache(cache)
       return
     }
 
-    paymentStudentsLoading = true
-
     void loadPayments()
 
-    return () => {
-      /*
-       * لا نلغي الطلب.
-       * التحديث يستمر بالخلفية ويحدث الـ cache.
-       */
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -965,8 +811,12 @@ export function PaymentStudents() {
           )
         }
 
+        /*
+         * إجبار تحديث الكاش بعد إضافة الدفعة
+         * حتى تتحدث المبالغ والحالة مباشرة.
+         */
         const refreshedStudents =
-          await loadPayments()
+          await loadPayments(true)
 
         const refreshedStudent =
           refreshedStudents.find(
@@ -1120,9 +970,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'name',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         placeholder="بحث"
@@ -1147,9 +995,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'personalId',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         placeholder="بحث"
@@ -1173,9 +1019,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'grade',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
@@ -1223,9 +1067,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'amountPaid',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         placeholder="بحث"
@@ -1251,9 +1093,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'amountRemaining',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         placeholder="بحث"
@@ -1277,9 +1117,7 @@ export function PaymentStudents() {
                         ) =>
                           updateFilter(
                             'paymentStatus',
-                            event
-                              .target
-                              .value,
+                            event.target.value,
                           )
                         }
                         className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
