@@ -15,10 +15,27 @@ export async function requireAuth() {
   }
 
   /*
-   * عند انتهاء الجلسة أو عدم صلاحيتها:
+   * أخطاء النظام المؤقتة لا تعني أن الجلسة انتهت.
+   */
+  if (access.reason === 'guard_error') {
+    return {
+      access: null,
+      response: NextResponse.json(
+        {
+          authenticated: false,
+          error: 'تعذر التحقق من الجلسة حالياً.',
+          reason: 'guard_error',
+        },
+        { status: 503 },
+      ),
+    }
+  }
+
+  /*
+   * حالات انتهاء/فقدان الصلاحية الفعلية:
    * - ننهي Supabase Auth
    * - نمسح جلسة T3LEEM
-   * - نبقي Device Token كما هو
+   * - نبقي Device Token
    */
   try {
     const supabase =
@@ -47,8 +64,7 @@ export async function requireAuth() {
     {
       httpOnly: true,
       secure:
-        process.env.NODE_ENV ===
-        'production',
+        process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: 0,
