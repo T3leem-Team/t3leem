@@ -11,7 +11,7 @@ import {
   Check,
   Menu,
   Bell,
-  Palette,
+  Paintbrush,
   Sun,
   Moon,
   LogOut,
@@ -687,6 +687,16 @@ export function Header({
   const initials =
     getInitials(displayName)
 
+  const currentTheme =
+    themes.find(
+      (item) => item.value === theme,
+    )
+
+  const currentThemeColor =
+    mode === 'dark'
+      ? currentTheme?.dark
+      : currentTheme?.light
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md md:px-6">
       <button
@@ -713,11 +723,19 @@ export function Header({
               (value) => !value,
             )
           }
-          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="group relative flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
           aria-label="تخصيص المظهر"
           aria-expanded={open}
         >
-          <Palette className="size-5" />
+          <Paintbrush className="size-5 transition-transform duration-200 group-hover:rotate-[-8deg] group-hover:scale-110" />
+
+          <span
+            className="absolute bottom-1 right-1 size-2.5 rounded-full border-2 border-background"
+            style={{
+              backgroundColor:
+                currentThemeColor,
+            }}
+          />
         </button>
 
         {open && (
