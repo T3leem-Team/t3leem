@@ -9,12 +9,18 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
+import {
+  saveDashboardSections,
+  type DashboardSection,
+} from '@/lib/dashboard-sections-cache'
+
 export default function LoginPage() {
   const router = useRouter()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [showPassword, setShowPassword] =
+    useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,7 +38,9 @@ export default function LoginPage() {
     const cleanUsername = username.trim()
 
     if (!cleanUsername || !password) {
-      setError('أدخل اسم المستخدم وكلمة المرور.')
+      setError(
+        'أدخل اسم المستخدم وكلمة المرور.',
+      )
       return
     }
 
@@ -62,12 +70,10 @@ export default function LoginPage() {
       )
 
       const loginData =
-        await loginResponse.json().catch(() => null)
+        await loginResponse
+          .json()
+          .catch(() => null)
 
-      /*
-       * الجهاز الجديد / المرفوض / pending
-       * أو أي خطأ من API
-       */
       if (!loginResponse.ok) {
         setError(
           typeof loginData?.error === 'string'
@@ -80,16 +86,11 @@ export default function LoginPage() {
 
       /*
        * --------------------------------------------------
-       * 2. بعد نجاح تسجيل الدخول
+       * 2. جلب الأقسام المسموحة
        *
-       * لا نعمل router.refresh() هنا.
-       *
-       * الـ API قام بالفعل بإنشاء:
-       * - Supabase Auth session
-       * - active session
-       * - session cookie
-       *
-       * نحتاج فقط معرفة أول صفحة مسموحة.
+       * هذا الطلب يتم مرة واحدة فقط أثناء تسجيل الدخول.
+       * بعدها نخزن النتيجة مؤقتًا حتى لا يعيد
+       * SectionRouter الطلب مرة ثانية.
        * --------------------------------------------------
        */
 
@@ -103,7 +104,9 @@ export default function LoginPage() {
       )
 
       const sectionsData =
-        await sectionsResponse.json().catch(() => null)
+        await sectionsResponse
+          .json()
+          .catch(() => null)
 
       if (!sectionsResponse.ok) {
         setError(
@@ -117,50 +120,64 @@ export default function LoginPage() {
 
       /*
        * --------------------------------------------------
-       * 3. ترتيب الأقسام حسب sort_order
+       * 3. ترتيب الأقسام
        * --------------------------------------------------
        */
 
-      const sections = Array.isArray(
-        sectionsData?.sections,
-      )
-        ? [...sectionsData.sections].sort(
-            (
-              a: {
-                sort_order?: number
-              },
-              b: {
-                sort_order?: number
-              },
-            ) =>
-              (a.sort_order ?? 0) -
-              (b.sort_order ?? 0),
-          )
-        : []
+      const sections: DashboardSection[] =
+        Array.isArray(
+          sectionsData?.sections,
+        )
+          ? [...sectionsData.sections]
+              .filter(
+                (section) =>
+                  section &&
+                  typeof section.section_key ===
+                    'string' &&
+                  typeof section.href ===
+                    'string',
+              )
+              .sort(
+                (
+                  a: DashboardSection,
+                  b: DashboardSection,
+                ) =>
+                  (a.sort_order ?? 0) -
+                  (b.sort_order ?? 0),
+              )
+          : []
 
       /*
        * --------------------------------------------------
-       * 4. تحديد أول صفحة مسموحة
+       * 4. حفظ الصلاحيات
+       *
+       * SectionRouter سيقرأها مباشرة عند فتح
+       * الصفحة ولن يعرض Loading.
+       * --------------------------------------------------
+       */
+
+      saveDashboardSections(sections)
+
+      /*
+       * --------------------------------------------------
+       * 5. تحديد أول صفحة مسموحة
        * --------------------------------------------------
        */
 
       const firstSection = sections[0]
 
       const destination =
-        typeof firstSection?.href === 'string' &&
+        typeof firstSection?.href ===
+          'string' &&
         firstSection.href.trim()
           ? firstSection.href.trim()
           : '/'
 
       /*
        * --------------------------------------------------
-       * 5. الانتقال
+       * 6. الانتقال
        *
-       * لا نستخدم router.refresh() بعد replace.
-       *
-       * هذا يمنع حصول طلبات متزامنة مباشرة بعد
-       * إنشاء الجلسة، والتي كانت ممكن تسبب أن أول
-       * محاولة تدخل ثم يرجع النظام وكأنه غير مسجل.
+       * لا يوجد router.refresh().
        * --------------------------------------------------
        */
 
