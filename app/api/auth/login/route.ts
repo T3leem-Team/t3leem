@@ -6,8 +6,6 @@ import {
   randomBytes,
 } from 'crypto'
 
-// T3LEEM authentication route
-
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL!
 
@@ -24,6 +22,7 @@ const SESSION_COOKIE =
   't3leem_session_id'
 
 const SESSION_COOKIE_MAX_DAYS = 30
+const DEVICE_COOKIE_MAX_DAYS = 365
 
 const supabaseAdmin = createClient(
   supabaseUrl,
@@ -35,12 +34,6 @@ const supabaseAdmin = createClient(
     },
   },
 )
-
-/*
- * =========================================================
- * Helpers
- * =========================================================
- */
 
 function hashDeviceToken(token: string) {
   return createHash('sha256')
@@ -66,34 +59,25 @@ function getCookie(
         const index =
           cookie.indexOf('=')
 
-        if (index === -1) {
-          return {
-            name: cookie.trim(),
-            value: '',
-          }
-        }
-
         return {
-          name: cookie
-            .slice(0, index)
-            .trim(),
-          value: cookie
-            .slice(index + 1)
-            .trim(),
+          name:
+            index === -1
+              ? cookie.trim()
+              : cookie
+                  .slice(0, index)
+                  .trim(),
+          value:
+            index === -1
+              ? ''
+              : cookie
+                  .slice(index + 1)
+                  .trim(),
         }
       })
       .find(
         (cookie) =>
           cookie.name === cookieName,
       )?.value ?? null
-  )
-}
-
-function getUserAgent(request: Request) {
-  return (
-    request.headers.get(
-      'user-agent',
-    ) ?? null
   )
 }
 
@@ -116,17 +100,39 @@ function getIpAddress(request: Request) {
   )
 }
 
-/*
- * =========================================================
- * POST
- * =========================================================
- */
+function getUserAgent(request: Request) {
+  return (
+    request.headers.get(
+      'user-agent',
+    ) ?? null
+  )
+}
+
+function clearSessionCookie(
+  response: NextResponse,
+) {
+  response.cookies.set(
+    SESSION_COOKIE,
+    '',
+    {
+      httpOnly: true,
+      secure:
+        process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    },
+  )
+
+  return response
+}
 
 export async function POST(
   request: Request,
 ) {
   try {
-    const body = await request.json()
+    const body =
+      await request.json()
 
     const username =
       typeof body.username === 'string'
@@ -155,26 +161,22 @@ export async function POST(
       getUserAgent(request)
 
     /*
-     * ------------------------------------------------------
-     * 1. البحث عن المستخدم
-     * ------------------------------------------------------
+     * 1. البحث عن Profile
      */
-
     const {
       data: profile,
       error: profileError,
     } =
       await supabaseAdmin
         .from('user_profiles')
-        .select(
-          `
+        .select(`
+          id,
           auth_user_id,
           username,
           full_name,
           role,
           is_active
-          `,
-        )
+        `)
         .eq(
           'username',
           username,
@@ -196,7 +198,10 @@ export async function POST(
       )
     }
 
-    if (!profile || !profile.is_active) {
+    if (
+      !profile ||
+      !profile.is_active
+    ) {
       return NextResponse.json(
         {
           error:
@@ -207,26 +212,32 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 2. الحصول على حساب Supabase Auth
-     * ------------------------------------------------------
+     * 2. التحقق من وجود حساب Auth
+     *
+     * نحتاجه فقط للحصول على البريد.
      */
-
     const {
       data: authUser,
       error: authUserError,
     } =
-      await supabaseAdmin.auth.admin.getUserById(
-        profile.auth_user_id,
-      )
+      await supabaseAdmin.auth.admin
+        .getUserById(
+          profile.auth_user_id,
+        )
 
     if (
       authUserError ||
-      !authUser.user?.email
+      !authUser.user
     ) {
       console.error(
         'Auth user lookup error:',
         authUserError,
+        {
+          authUserId:
+            profile.auth_user_id,
+          username:
+            profile.username,
+        },
       )
 
       return NextResponse.json(
@@ -241,12 +252,24 @@ export async function POST(
     const email =
       authUser.user.email
 
-    /*
-     * ------------------------------------------------------
-     * 3. التحقق من كلمة المرور
-     * ------------------------------------------------------
-     */
+    if (!email) {
+      console.error(
+        'Auth user has no email:',
+        profile.auth_user_id,
+      )
 
+      return NextResponse.json(
+        {
+          error:
+            'حساب المستخدم غير مكتمل.',
+        },
+        { status: 500 },
+      )
+    }
+
+    /*
+     * 3. التحقق من كلمة المرور
+     */
     const passwordClient =
       createClient(
         supabaseUrl,
@@ -263,12 +286,11 @@ export async function POST(
       data: passwordAuthData,
       error: passwordError,
     } =
-      await passwordClient.auth.signInWithPassword(
-        {
+      await passwordClient.auth
+        .signInWithPassword({
           email,
           password,
-        },
-      )
+        })
 
     if (
       passwordError ||
@@ -280,7 +302,7 @@ export async function POST(
         passwordError,
       )
 
-      await supabaseAdmin
+      void supabaseAdmin
         .from('auth_audit_logs')
         .insert({
           auth_user_id:
@@ -310,11 +332,8 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 4. فحص الجهاز
-     * ------------------------------------------------------
+     * 4. فحص الجهاز الحالي
      */
-
     const existingDeviceToken =
       getCookie(
         request,
@@ -343,13 +362,11 @@ export async function POST(
       } =
         await supabaseAdmin
           .from('trusted_devices')
-          .select(
-            `
+          .select(`
             id,
             status,
             device_name
-            `,
-          )
+          `)
           .eq(
             'device_token_hash',
             tokenHash,
@@ -381,19 +398,18 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 5. جهاز مرفوض أو مسحوب
-     * ------------------------------------------------------
+     * 5. الجهاز مرفوض / مسحوب
      */
-
     if (
       device &&
       (
-        device.status === 'rejected' ||
-        device.status === 'revoked'
+        device.status ===
+          'rejected' ||
+        device.status ===
+          'revoked'
       )
     ) {
-      await supabaseAdmin
+      void supabaseAdmin
         .from('auth_audit_logs')
         .insert({
           auth_user_id:
@@ -430,14 +446,12 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 6. جهاز Pending
-     * ------------------------------------------------------
+     * 6. الجهاز بانتظار الموافقة
      */
-
     if (
       device &&
-      device.status === 'pending'
+      device.status ===
+        'pending'
     ) {
       return NextResponse.json(
         {
@@ -453,11 +467,8 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
      * 7. جهاز جديد
-     * ------------------------------------------------------
      */
-
     if (!device) {
       const deviceToken =
         randomBytes(32).toString(
@@ -482,15 +493,14 @@ export async function POST(
               'جهاز جديد',
             device_token_hash:
               tokenHash,
-            status: 'pending',
+            status:
+              'pending',
           })
-          .select(
-            `
+          .select(`
             id,
             status,
             device_name
-            `,
-          )
+          `)
           .single()
 
       if (
@@ -511,7 +521,7 @@ export async function POST(
         )
       }
 
-      await supabaseAdmin
+      void supabaseAdmin
         .from('auth_audit_logs')
         .insert({
           auth_user_id:
@@ -557,7 +567,10 @@ export async function POST(
           sameSite: 'lax',
           path: '/',
           maxAge:
-            60 * 60 * 24 * 365,
+            DEVICE_COOKIE_MAX_DAYS *
+            24 *
+            60 *
+            60,
         },
       )
 
@@ -565,11 +578,8 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 8. من هنا الجهاز Approved
-     * ------------------------------------------------------
+     * 8. يجب أن يكون الجهاز Approved
      */
-
     if (
       device.status !==
       'approved'
@@ -584,12 +594,11 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
-     * 9. تحديث آخر استخدام للجهاز
-     * ------------------------------------------------------
+     * 9. تحديث آخر استخدام
      */
-
-    const { error: deviceUpdateError } =
+    const {
+      error: deviceUpdateError,
+    } =
       await supabaseAdmin
         .from('trusted_devices')
         .update({
@@ -600,6 +609,10 @@ export async function POST(
           'id',
           device.id,
         )
+        .eq(
+          'auth_user_id',
+          profile.auth_user_id,
+        )
 
     if (deviceUpdateError) {
       console.error(
@@ -609,14 +622,8 @@ export async function POST(
     }
 
     /*
-     * ======================================================
-     * 10. إنشاء Response واحد
-     *
-     * مهم جدًا:
-     * كل Cookies الخاصة بالجلسة ستُضاف إلى هذا Response.
-     * ======================================================
+     * 10. Response واحد لكل Cookies
      */
-
     const response =
       NextResponse.json({
         user: {
@@ -634,11 +641,8 @@ export async function POST(
       })
 
     /*
-     * ------------------------------------------------------
-     * 11. إنشاء Supabase Server Client
-     * ------------------------------------------------------
+     * 11. Supabase SSR Client
      */
-
     const supabase =
       createServerClient(
         supabaseUrl,
@@ -657,94 +661,79 @@ export async function POST(
 
               return cookieHeader
                 .split(';')
-                .map(
-                  (cookie) => {
-                    const index =
-                      cookie.indexOf(
-                        '=',
-                      )
+                .filter(Boolean)
+                .map((cookie) => {
+                  const index =
+                    cookie.indexOf('=')
 
-                    if (
+                  return {
+                    name:
                       index === -1
-                    ) {
-                      return {
-                        name:
-                          cookie.trim(),
-                        value:
-                          '',
-                      }
-                    }
-
-                    return {
-                      name:
-                        cookie
-                          .slice(
-                            0,
-                            index,
-                          )
-                          .trim(),
-                      value:
-                        cookie
-                          .slice(
-                            index + 1,
-                          )
-                          .trim(),
-                    }
-                  },
-                )
+                        ? cookie.trim()
+                        : cookie
+                            .slice(
+                              0,
+                              index,
+                            )
+                            .trim(),
+                    value:
+                      index === -1
+                        ? ''
+                        : cookie
+                            .slice(
+                              index + 1,
+                            )
+                            .trim(),
+                  }
+                })
                 .filter(
                   (cookie) =>
-                    cookie.name
-                      .length > 0,
+                    cookie.name.length >
+                    0,
                 )
             },
 
             setAll(
               cookiesToSet,
             ) {
-              for (
-                const {
+              cookiesToSet.forEach(
+                ({
                   name,
                   value,
                   options,
-                } of cookiesToSet
-              ) {
-                response.cookies.set(
-                  name,
-                  value,
-                  {
-                    ...options,
-                    path:
-                      options?.path ??
-                      '/',
-                  },
-                )
-              }
+                }) => {
+                  response.cookies.set(
+                    name,
+                    value,
+                    {
+                      ...options,
+                      path:
+                        options?.path ??
+                        '/',
+                    },
+                  )
+                },
+              )
             },
           },
         },
       )
 
     /*
-     * ------------------------------------------------------
      * 12. تثبيت Supabase Auth Session
-     * ------------------------------------------------------
      */
-
     const session =
       passwordAuthData.session
 
     const {
       error: setSessionError,
     } =
-      await supabase.auth.setSession(
-        {
-          access_token:
-            session.access_token,
-          refresh_token:
-            session.refresh_token,
-        },
-      )
+      await supabase.auth.setSession({
+        access_token:
+          session.access_token,
+        refresh_token:
+          session.refresh_token,
+      })
 
     if (setSessionError) {
       console.error(
@@ -752,21 +741,30 @@ export async function POST(
         setSessionError,
       )
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر إنشاء جلسة تسجيل الدخول.',
-        },
-        { status: 500 },
+      try {
+        await passwordClient.auth
+          .signOut()
+      } catch (error) {
+        console.error(
+          'Password client cleanup error:',
+          error,
+        )
+      }
+
+      return clearSessionCookie(
+        NextResponse.json(
+          {
+            error:
+              'تعذر إنشاء جلسة تسجيل الدخول.',
+          },
+          { status: 500 },
+        ),
       )
     }
 
     /*
-     * ------------------------------------------------------
      * 13. إنشاء Active Session
-     * ------------------------------------------------------
      */
-
     const loginAt =
       new Date()
 
@@ -805,11 +803,6 @@ export async function POST(
         .select('id')
         .single()
 
-    /*
-     * إذا فشل إنشاء Active Session:
-     * لا نغلق الجلسات القديمة.
-     */
-
     if (
       sessionError ||
       !activeSession?.id
@@ -821,28 +814,27 @@ export async function POST(
 
       try {
         await supabase.auth.signOut()
-      } catch (signOutError) {
+      } catch (error) {
         console.error(
           'Supabase cleanup error:',
-          signOutError,
+          error,
         )
       }
 
-      return NextResponse.json(
-        {
-          error:
-            'تعذر إنشاء جلسة تسجيل الدخول.',
-        },
-        { status: 500 },
+      return clearSessionCookie(
+        NextResponse.json(
+          {
+            error:
+              'تعذر إنشاء جلسة تسجيل الدخول.',
+          },
+          { status: 500 },
+        ),
       )
     }
 
     /*
-     * ------------------------------------------------------
-     * 14. إغلاق الجلسات السابقة
-     * ------------------------------------------------------
+     * 14. إغلاق أي جلسات قديمة
      */
-
     const previousLogoutAt =
       new Date().toISOString()
 
@@ -853,8 +845,7 @@ export async function POST(
       await supabaseAdmin
         .from('active_sessions')
         .update({
-          is_active:
-            false,
+          is_active: false,
           logout_at:
             previousLogoutAt,
         })
@@ -881,11 +872,8 @@ export async function POST(
     }
 
     /*
-     * ------------------------------------------------------
      * 15. T3LEEM Session Cookie
-     * ------------------------------------------------------
      */
-
     response.cookies.set(
       SESSION_COOKIE,
       activeSession.id,
@@ -905,50 +893,41 @@ export async function POST(
     )
 
     /*
-     * ------------------------------------------------------
      * 16. Audit
-     * ------------------------------------------------------
      */
-
-    const { error: auditError } =
-      await supabaseAdmin
-        .from('auth_audit_logs')
-        .insert({
-          auth_user_id:
-            profile.auth_user_id,
-          trusted_device_id:
-            device.id,
-          event_type:
-            'login_success',
-          success: true,
-          ip_address:
-            ipAddress,
-          user_agent:
-            userAgent,
-          metadata: {
-            username:
-              profile.username,
-            active_session_id:
-              activeSession.id,
-            session_expires_at:
-              expiresAt.toISOString(),
-            single_session:
-              true,
-          },
-        })
-
-    if (auditError) {
-      console.error(
-        'Login success audit error:',
-        auditError,
-      )
-    }
-
-    /*
-     * ------------------------------------------------------
-     * 17. نجاح كامل
-     * ------------------------------------------------------
-     */
+    void supabaseAdmin
+      .from('auth_audit_logs')
+      .insert({
+        auth_user_id:
+          profile.auth_user_id,
+        trusted_device_id:
+          device.id,
+        event_type:
+          'login_success',
+        success: true,
+        ip_address:
+          ipAddress,
+        user_agent:
+          userAgent,
+        metadata: {
+          username:
+            profile.username,
+          active_session_id:
+            activeSession.id,
+          session_expires_at:
+            expiresAt.toISOString(),
+          single_session:
+            true,
+        },
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error(
+            'Login success audit error:',
+            error,
+          )
+        }
+      })
 
     return response
   } catch (error) {
