@@ -404,13 +404,19 @@ function getLessonDateStatus(
 export function DashboardView() {
   const router = useRouter()
 
+  const hasDashboardCache =
+    dashboardCache !== null
+
   const [
     checkingAccess,
     setCheckingAccess,
-  ] = useState(!dashboardAccessChecked)
+  ] = useState(
+    !dashboardAccessChecked &&
+      !hasDashboardCache,
+  )
 
   const [loading, setLoading] =
-    useState(dashboardCache === null)
+    useState(!hasDashboardCache)
 
   const [refreshing, setRefreshing] =
     useState(false)
@@ -577,6 +583,13 @@ export function DashboardView() {
     [],
   )
 
+  /*
+   * صلاحية Dashboard:
+   * إذا كانت الصلاحية مفحوصة سابقًا لا نعيد الطلب.
+   *
+   * وإذا كانت البيانات موجودة في الكاش، نسمح للواجهة
+   * بالظهور فورًا ونفحص الصلاحية في الخلفية.
+   */
   useEffect(() => {
     let cancelled = false
 
@@ -647,6 +660,7 @@ export function DashboardView() {
 
     if (dashboardAccessChecked) {
       setCheckingAccess(false)
+      return
     }
 
     void checkDashboardAccess()
@@ -656,6 +670,88 @@ export function DashboardView() {
     }
   }, [router])
 
+  /*
+   * تحميل حالات الحضور مرة واحدة فقط.
+   *
+   * هذه البيانات ثابتة نسبيًا ولا داعي لسحبها
+   * كل 5 ثواني مع سجلات الحضور.
+   */
+  const loadAttendanceStatuses =
+    useCallback(
+      async () => {
+        if (
+          attendanceStatuses.length > 0
+        ) {
+          return
+        }
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            'attendance_statuses',
+          )
+          .select(
+            'id, name',
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+          .order(
+            'sort_order',
+            {
+              ascending: true,
+            },
+          )
+
+        if (error) {
+          console.error(
+            'Attendance statuses load error:',
+            error,
+          )
+
+          return
+        }
+
+        const mappedStatuses =
+          (
+            data ?? []
+          ).map(
+            (status) => ({
+              id: normalizeId(
+                status.id,
+              ),
+              name: String(
+                status.name ??
+                  '',
+              ),
+            }),
+          )
+
+        setAttendanceStatuses(
+          mappedStatuses,
+        )
+
+        updateDashboardCache({
+          attendanceStatuses:
+            mappedStatuses,
+        })
+      },
+      [
+        attendanceStatuses.length,
+        updateDashboardCache,
+      ],
+    )
+
+  /*
+   * تحميل حضور الدورة المحددة فقط.
+   *
+   * مهم:
+   * لا نرسل courseIds لكل الدورات.
+   * Excel يحتاج حضور الدورة الحالية فقط.
+   */
   const loadAttendance =
     useCallback(
       async (courseIds: string[]) => {
@@ -681,83 +777,51 @@ export function DashboardView() {
           return
         }
 
-        const [
-          attendanceResult,
-          statusesResult,
-        ] = await Promise.all([
-          supabase
-            .from('attendance')
-            .select(
-              `
-                id,
-                student_id,
-                enrollment_id,
-                attendance_date,
-                status_id,
-                note,
-                course_id
-              `,
-            )
-            .in(
-              'course_id',
-              normalizedCourseIds,
-            )
-            .order(
-              'attendance_date',
-              {
-                ascending: false,
-              },
-            )
-            .order(
-              'created_at',
-              {
-                ascending: false,
-              },
-            ),
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('attendance')
+          .select(
+            `
+              id,
+              student_id,
+              enrollment_id,
+              attendance_date,
+              status_id,
+              note,
+              course_id
+            `,
+          )
+          .in(
+            'course_id',
+            normalizedCourseIds,
+          )
+          .order(
+            'attendance_date',
+            {
+              ascending: false,
+            },
+          )
+          .order(
+            'created_at',
+            {
+              ascending: false,
+            },
+          )
 
-          supabase
-            .from(
-              'attendance_statuses',
-            )
-            .select(
-              'id, name',
-            )
-            .eq(
-              'is_active',
-              true,
-            )
-            .order(
-              'sort_order',
-              {
-                ascending: true,
-              },
-            ),
-        ])
-
-        if (
-          attendanceResult.error
-        ) {
+        if (error) {
           console.error(
             'Attendance load error:',
-            attendanceResult.error,
+            error,
           )
 
           return
         }
 
-        if (
-          statusesResult.error
-        ) {
-          console.error(
-            'Attendance statuses load error:',
-            statusesResult.error,
-          )
-        }
-
         const records =
           (
-            attendanceResult.data ??
-            []
+            data ?? []
           ).map(
             (record) => ({
               id: String(
@@ -796,35 +860,6 @@ export function DashboardView() {
           attendanceRecords:
             records,
         })
-
-        if (
-          !statusesResult.error
-        ) {
-          const mappedStatuses =
-            (
-              statusesResult.data ??
-              []
-            ).map(
-              (status) => ({
-                id: normalizeId(
-                  status.id,
-                ),
-                name: String(
-                  status.name ??
-                    '',
-                ),
-              }),
-            )
-
-          setAttendanceStatuses(
-            mappedStatuses,
-          )
-
-          updateDashboardCache({
-            attendanceStatuses:
-              mappedStatuses,
-          })
-        }
       },
       [updateDashboardCache],
     )
@@ -843,11 +878,15 @@ export function DashboardView() {
         }
 
         try {
-          const {
-            data: yearData,
-            error: yearError,
-          } =
-            await supabase
+          /*
+           * أول استعلام:
+           * السنة الحالية + حالات الحضور بالتوازي.
+           */
+          const [
+            yearResult,
+            statusesResult,
+          ] = await Promise.all([
+            supabase
               .from(
                 'academic_years',
               )
@@ -868,10 +907,72 @@ export function DashboardView() {
                 'is_active',
                 true,
               )
-              .maybeSingle()
+              .maybeSingle(),
+
+            supabase
+              .from(
+                'attendance_statuses',
+              )
+              .select(
+                'id, name',
+              )
+              .eq(
+                'is_active',
+                true,
+              )
+              .order(
+                'sort_order',
+                {
+                  ascending: true,
+                },
+              ),
+          ])
+
+          const {
+            data: yearData,
+            error: yearError,
+          } = yearResult
 
           if (yearError) {
             throw yearError
+          }
+
+          if (
+            statusesResult.error
+          ) {
+            console.error(
+              'Attendance statuses load error:',
+              statusesResult.error,
+            )
+          }
+
+          if (
+            !statusesResult.error
+          ) {
+            const mappedStatuses =
+              (
+                statusesResult.data ??
+                []
+              ).map(
+                (status) => ({
+                  id: normalizeId(
+                    status.id,
+                  ),
+                  name: String(
+                    status.name ??
+                      '',
+                  ),
+                }),
+              )
+
+            setAttendanceStatuses(
+              mappedStatuses,
+            )
+
+            updateDashboardCache({
+              attendanceStatuses:
+                mappedStatuses,
+            })
           }
 
           if (!yearData) {
@@ -929,6 +1030,10 @@ export function DashboardView() {
               currentYear,
           })
 
+          /*
+           * هذه الثلاثة مستقلة عن بعضها،
+           * لذلك نسحبها معًا.
+           */
           const [
             coursesResult,
             enrollmentsResult,
@@ -1083,6 +1188,10 @@ export function DashboardView() {
           if (
             courseIds.length > 0
           ) {
+            /*
+             * نحتاج التوزيعات والمعلمين لكل دورات السنة
+             * لأن البحث السريع والإحصاءات تعتمد عليها.
+             */
             const [
               assignmentsResult,
               courseTeachersResult,
@@ -1321,11 +1430,14 @@ export function DashboardView() {
             mappedStudents,
           )
 
-          setPendingRegistrationCount(
+          const pendingCount =
             (
               registrationsResult.data ??
               []
-            ).length,
+            ).length
+
+          setPendingRegistrationCount(
+            pendingCount,
           )
 
           updateDashboardCache({
@@ -1342,12 +1454,17 @@ export function DashboardView() {
             students:
               mappedStudents,
             pendingRegistrationCount:
-              (
-                registrationsResult.data ??
-                []
-              ).length,
+              pendingCount,
           })
 
+          /*
+           * تحديد الدورة فقط.
+           *
+           * مهم:
+           * لا نحمل attendance هنا.
+           * الـ effect الخاص بالدورة المحددة
+           * سيحمل حضورها فقط بعد تحديث selectedCourseId.
+           */
           setSelectedCourseId(
             (current) => {
               if (
@@ -1417,10 +1534,6 @@ export function DashboardView() {
               return nextCourseId
             },
           )
-
-          await loadAttendance(
-            courseIds,
-          )
         } catch (error) {
           console.error(
             'Dashboard load error:',
@@ -1431,14 +1544,21 @@ export function DashboardView() {
           setRefreshing(false)
         }
       },
-      [
-        loadAttendance,
-        updateDashboardCache,
-      ],
+      [updateDashboardCache],
     )
 
+  /*
+   * التحميل الأساسي:
+   *
+   * إذا عندنا cache، لا نعيد كل بيانات Dashboard.
+   * هذا يخلي الرجوع للصفحة شبه فوري.
+   */
   useEffect(() => {
     if (checkingAccess) {
+      return
+    }
+
+    if (dashboardCache !== null) {
       return
     }
 
@@ -1456,6 +1576,13 @@ export function DashboardView() {
     loadData,
   ])
 
+  /*
+   * عند تغيير الدورة فقط:
+   * نحمل حضور الدورة الجديدة.
+   *
+   * تغيير التاريخ لا يحتاج إعادة تحميل؛
+   * لأننا أصلًا نحمل جميع سجلات الدورة.
+   */
   useEffect(() => {
     if (!selectedCourseId) {
       return
@@ -1471,11 +1598,30 @@ export function DashboardView() {
     ])
   }, [
     selectedCourseId,
-    selectedDate,
     loadAttendance,
     updateDashboardCache,
   ])
 
+  /*
+   * إذا حالات الحضور غير موجودة في الكاش،
+   * نحملها مرة واحدة.
+   */
+  useEffect(() => {
+    if (
+      attendanceStatuses.length > 0
+    ) {
+      return
+    }
+
+    void loadAttendanceStatuses()
+  }, [
+    attendanceStatuses.length,
+    loadAttendanceStatuses,
+  ])
+
+  /*
+   * تحديث الحضور للدورة المحددة فقط.
+   */
   useEffect(() => {
     if (!selectedCourseId) {
       return
@@ -2153,8 +2299,7 @@ export function DashboardView() {
         selectedDate,
         statusMap,
         lessonDateStatus,
-      ],
-    )
+      ])
 
   const selectedStudentCourses =
     useMemo(() => {
@@ -2485,7 +2630,7 @@ export function DashboardView() {
                         .value,
                     )
                   }}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200"
                 />
               </div>
             </div>
@@ -2571,7 +2716,6 @@ export function DashboardView() {
               </CardTitle>
 
               <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                {/* تفاصيل الحضور */}
                 <Button
                   type="button"
                   onClick={() =>
@@ -2591,7 +2735,6 @@ export function DashboardView() {
                   تفاصيل الحضور
                 </Button>
 
-                {/* Excel */}
                 <DashboardAttendanceExport
                   course={selectedCourse}
                   academicYear={
