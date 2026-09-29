@@ -334,7 +334,7 @@ export function Header({
               ascending: false,
             },
           )
-          .limit(10)
+          .limit(100)
 
         if (logsError) {
           console.error(
