@@ -24,6 +24,7 @@ export type Student = {
   name: string
   personalId: string
   phone: string
+  whatsapp: string
   levelId: string
   levelName: string
   enrollmentId: string
