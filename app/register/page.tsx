@@ -1329,8 +1329,7 @@ export default function RegisterPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    الحقول الظاهرة هنا يتم التحكم فيها من إعدادات التسجيل.
-                  </p>
+                            
                 </div>
 
                 {settings.show_name && (
