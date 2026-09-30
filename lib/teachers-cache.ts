@@ -20,13 +20,20 @@ export type Teacher = {
   isActive: boolean
 }
 
-export type Assignment = PreviousCourseAssignment
+export type Assignment =
+  PreviousCourseAssignment
 
 export type TeacherCourseSubject =
   PreviousCourseSubject
 
 export type ManagedCourse =
   PreviousManagedCourse
+
+export type AcademicLevel = {
+  id: string
+  name: string
+  sort_order: number
+}
 
 export type TeachersCache = {
   teachers: Teacher[]
@@ -39,9 +46,11 @@ export type TeachersCache = {
   allowTeacherRemove: boolean
   courseTeacherIds: Record<string, string[]>
   teacherCourseSubjects: TeacherCourseSubject[]
+  academicLevels: AcademicLevel[]
 }
 
-let teachersCache: TeachersCache | null = null
+let teachersCache: TeachersCache | null =
+  null
 
 let teachersCacheLoading:
   | Promise<TeachersCache>
@@ -84,6 +93,8 @@ export function updateTeachersCache(
     teacherCourseSubjects:
       teachersCache?.teacherCourseSubjects ??
       [],
+    academicLevels:
+      teachersCache?.academicLevels ?? [],
     ...patch,
   }
 }
@@ -542,6 +553,67 @@ export async function loadTeachersCache(
         )
       }
 
+      /*
+       * =====================================================
+       * المستويات الأكاديمية
+       * =====================================================
+       *
+       * نأخذها من نفس بيانات التسجيلات
+       * ونرتبها حسب sort_order الموجود في levels.
+       *
+       * هذا يمنع ظهور المستويات بالترتيب الأبجدي
+       * في شاشة إضافة الطلاب للمعلم.
+       */
+
+      const academicLevels: AcademicLevel[] =
+        Array.from(
+          new Map(
+            (enrollmentRows ?? [])
+              .map((row) => {
+                const levelData =
+                  Array.isArray(
+                    row.levels,
+                  )
+                    ? row.levels[0]
+                    : row.levels
+
+                if (
+                  !levelData?.id ||
+                  !levelData?.name
+                ) {
+                  return null
+                }
+
+                return [
+                  levelData.id,
+                  {
+                    id: levelData.id,
+                    name: String(
+                      levelData.name,
+                    ),
+                    sort_order:
+                      Number(
+                        levelData.sort_order ??
+                          0,
+                      ),
+                  },
+                ] as const
+              })
+              .filter(
+                (
+                  item,
+                ): item is readonly [
+                  string,
+                  AcademicLevel,
+                ] => item !== null,
+              ),
+          ).values(),
+        ).sort(
+          (a, b) =>
+            a.sort_order -
+            b.sort_order,
+        )
+
       const enrolledStudentIds =
         Array.from(
           new Set(
@@ -974,6 +1046,7 @@ export async function loadTeachersCache(
         allowTeacherRemove: false,
         courseTeacherIds,
         teacherCourseSubjects,
+        academicLevels,
       }
 
       teachersCache = data
