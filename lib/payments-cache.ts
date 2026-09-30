@@ -10,7 +10,14 @@ export type StudentRow = {
   id: string
   name: string
   personalId: string
+
+  // المستوى المرتبط بالطالب في السنة الحالية
+  levelId: string | null
   grade: string
+
+  // ترتيب المستوى من قاعدة البيانات
+  levelSortOrder: number | null
+
   amountDue: number
   amountPaid: number
   feeExempt: boolean
@@ -19,12 +26,24 @@ export type StudentRow = {
 
 export type PaymentStudentsCache = {
   studentList: StudentRow[]
+
   currentAcademicYearId: string | null
   currentAcademicYearName: string
   currentAnnualFee: number
+
+  // مستويات السنة الحالية مرتبة حسب levels.sort_order
+  levels: PaymentLevel[]
 }
 
-let paymentsCache: PaymentStudentsCache | null = null
+export type PaymentLevel = {
+  id: string
+  name: string
+  sortOrder: number | null
+}
+
+let paymentsCache:
+  | PaymentStudentsCache
+  | null = null
 
 let paymentsLoadingPromise:
   | Promise<PaymentStudentsCache>
@@ -46,14 +65,21 @@ export function updatePaymentsCache(
   paymentsCache = {
     studentList:
       paymentsCache?.studentList ?? [],
+
     currentAcademicYearId:
       paymentsCache?.currentAcademicYearId ??
       null,
+
     currentAcademicYearName:
       paymentsCache?.currentAcademicYearName ??
       '',
+
     currentAnnualFee:
       paymentsCache?.currentAnnualFee ?? 0,
+
+    levels:
+      paymentsCache?.levels ?? [],
+
     ...patch,
   }
 
@@ -70,25 +96,30 @@ export async function loadPaymentsCache(
     force?: boolean
   },
 ): Promise<PaymentStudentsCache> {
-  const force = options?.force ?? false
+  const force =
+    options?.force ?? false
 
   if (!force && paymentsCache) {
     return paymentsCache
   }
 
-  if (!force && paymentsLoadingPromise) {
+  if (
+    !force &&
+    paymentsLoadingPromise
+  ) {
     return paymentsLoadingPromise
   }
 
   const loadPromise =
     (async () => {
-      const response = await fetch(
-        '/api/payments',
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
+      const response =
+        await fetch(
+          '/api/payments',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
 
       if (!response.ok) {
         const data =
@@ -112,11 +143,16 @@ export async function loadPaymentsCache(
         const emptyCache:
           PaymentStudentsCache = {
             studentList: [],
+
             currentAcademicYearId:
               null,
+
             currentAcademicYearName:
               '',
+
             currentAnnualFee: 0,
+
+            levels: [],
           }
 
         paymentsCache =
@@ -143,30 +179,147 @@ export async function loadPaymentsCache(
       const levels =
         data.levels ?? []
 
+      /*
+       * المستويات:
+       *
+       * المصدر الرسمي للترتيب هو
+       * levels.sort_order
+       */
+      const normalizedLevels:
+        PaymentLevel[] =
+        levels
+          .map(
+            (level: any) => ({
+              id:
+                String(
+                  level.id,
+                ),
+
+              name:
+                String(
+                  level.name ??
+                    'غير محدد',
+                ),
+
+              sortOrder:
+                level.sort_order ==
+                null
+                  ? null
+                  : Number(
+                      level.sort_order,
+                    ),
+            }),
+          )
+          .sort(
+            (
+              a,
+              b,
+            ) => {
+              const aOrder =
+                a.sortOrder ??
+                Number.MAX_SAFE_INTEGER
+
+              const bOrder =
+                b.sortOrder ??
+                Number.MAX_SAFE_INTEGER
+
+              if (
+                aOrder !==
+                bOrder
+              ) {
+                return (
+                  aOrder -
+                  bOrder
+                )
+              }
+
+              return a.name.localeCompare(
+                b.name,
+                'ar',
+              )
+            },
+          )
+
       const levelMap =
-        new Map<string, string>(
-          levels.map(
-            (level: any) => [
+        new Map<
+          string,
+          PaymentLevel
+        >(
+          normalizedLevels.map(
+            (level) => [
               level.id,
-              level.name,
+              level,
             ],
           ),
         )
 
+      /*
+       * نربط الطالب بالمستوى الحالي
+       * عن طريق enrollment.
+       */
       const enrollmentMap =
-        new Map<string, string>(
-          enrollments.map(
-            (enrollment: any) => [
-              enrollment.student_id,
-              levelMap.get(
-                enrollment.level_id,
-              ) ?? 'غير محدد',
-            ],
-          ),
-        )
+        new Map<
+          string,
+          {
+            levelId: string | null
+            grade: string
+            levelSortOrder:
+              | number
+              | null
+          }
+        >()
 
+      enrollments.forEach(
+        (enrollment: any) => {
+          const levelId =
+            enrollment.level_id
+              ? String(
+                  enrollment.level_id,
+                )
+              : null
+
+          const level =
+            levelId
+              ? levelMap.get(
+                  levelId,
+                )
+              : undefined
+
+          /*
+           * إذا كان للطالب أكثر من enrollment
+           * نستخدم أول واحد كما كان النظام السابق.
+           */
+          if (
+            !enrollmentMap.has(
+              enrollment.student_id,
+            )
+          ) {
+            enrollmentMap.set(
+              enrollment.student_id,
+              {
+                levelId,
+
+                grade:
+                  level?.name ??
+                  'غير محدد',
+
+                levelSortOrder:
+                  level?.sortOrder ??
+                  null,
+              },
+            )
+          }
+        },
+      )
+
+      /*
+       * إجمالي المدفوع لكل طالب.
+       */
       const paidByStudent =
-        new Map<string, number>()
+        new Map<
+          string,
+          number
+        >()
 
       payments.forEach(
         (payment: any) => {
@@ -179,12 +332,16 @@ export async function loadPaymentsCache(
             payment.student_id,
             current +
               Number(
-                payment.amount ?? 0,
+                payment.amount ??
+                  0,
               ),
           )
         },
       )
 
+      /*
+       * بناء قائمة الطلاب.
+       */
       const studentList:
         StudentRow[] =
         students
@@ -196,6 +353,11 @@ export async function loadPaymentsCache(
           )
           .map(
             (student: any) => {
+              const enrollment =
+                enrollmentMap.get(
+                  student.id,
+                )
+
               const amountPaid =
                 paidByStudent.get(
                   student.id,
@@ -209,7 +371,9 @@ export async function loadPaymentsCache(
               let paymentStatus:
                 PaymentStatus
 
-              if (feeExempt) {
+              if (
+                feeExempt
+              ) {
                 paymentStatus =
                   'معفي'
               } else if (
@@ -231,33 +395,91 @@ export async function loadPaymentsCache(
 
               return {
                 id: student.id,
-                name: student.name,
+
+                name:
+                  student.name,
+
                 personalId:
                   student.personal_id ??
                   '',
+
+                levelId:
+                  enrollment
+                    ?.levelId ??
+                  null,
+
                 grade:
-                  enrollmentMap.get(
-                    student.id,
-                  ) ??
+                  enrollment
+                    ?.grade ??
                   'غير محدد',
+
+                levelSortOrder:
+                  enrollment
+                    ?.levelSortOrder ??
+                  null,
+
                 amountDue:
                   annualFee,
+
                 amountPaid,
+
                 feeExempt,
+
                 paymentStatus,
               }
             },
           )
 
+      /*
+       * ترتيب الطلاب حسب ترتيب المستويات
+       * الموجود في قاعدة البيانات.
+       *
+       * هذا يجعل الكاش نفسه يعرف ترتيب
+       * المستوى ولا تحتاج الصفحات إلى
+       * تخمين الترتيب.
+       */
+      studentList.sort(
+        (a, b) => {
+          const aOrder =
+            a.levelSortOrder ??
+            Number.MAX_SAFE_INTEGER
+
+          const bOrder =
+            b.levelSortOrder ??
+            Number.MAX_SAFE_INTEGER
+
+          if (
+            aOrder !==
+            bOrder
+          ) {
+            return (
+              aOrder -
+              bOrder
+            )
+          }
+
+          return a.name.localeCompare(
+            b.name,
+            'ar',
+          )
+        },
+      )
+
       const nextCache:
         PaymentStudentsCache = {
           studentList,
+
           currentAcademicYearId:
             currentYear.id,
+
           currentAcademicYearName:
             currentYear.name,
+
           currentAnnualFee:
             annualFee,
+
+          levels:
+            normalizedLevels,
         }
 
       paymentsCache =
