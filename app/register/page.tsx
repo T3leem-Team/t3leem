@@ -76,6 +76,14 @@ type RegistrationSettings = {
   education_group_link: string | null
   education_group_description: string | null
   post_registration_notes: string | null
+
+  /*
+   * دورة التسجيل يتم تحديدها من لوحة التحكم.
+   *
+   * الصفحة العامة لا تستخدم هذه القيمة لإرسال الطلب،
+   * لأن الـ RPC هو المسؤول عن تحديد الدورة بشكل آمن.
+   */
+  course_id: string | null
 }
 
 type Level = {
@@ -503,6 +511,17 @@ export default function RegisterPage() {
       return 'التسجيل مغلق حاليًا.'
     }
 
+    /*
+     * دورة التسجيل لا يتم إرسالها من المتصفح.
+     * لكن وجودها في الإعدادات مهم للتأكد أن التحكم
+     * قام بتحديد دورة قبل فتح التسجيل.
+     *
+     * التحقق النهائي يتم داخل الـ RPC أيضًا.
+     */
+    if (!settings.course_id) {
+      return 'لم يتم تحديد دورة التسجيل الحالية. يرجى التواصل مع إدارة التعليم.'
+    }
+
     if (
       settings.show_name &&
       settings.required_name &&
@@ -818,6 +837,15 @@ export default function RegisterPage() {
           ? getGuardianRelationValue() || null
           : null
 
+      /*
+       * لا نرسل academic_year_id ولا course_id.
+       *
+       * الـ RPC يحدد:
+       * - السنة الحالية من academic_years
+       * - دورة التسجيل من registration_settings.course_id
+       *
+       * ثم يحفظهما داخل registration_requests.
+       */
       const rpcResult =
         await supabase.rpc(
           'create_registration_request',
