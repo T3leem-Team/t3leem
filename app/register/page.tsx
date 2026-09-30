@@ -38,8 +38,14 @@ type RegistrationSettings = {
   show_phone: boolean
   required_phone: boolean
 
+  show_guardian_relation: boolean
+  required_guardian_relation: boolean
+
   show_whatsapp: boolean
   required_whatsapp: boolean
+
+  show_student_phone: boolean
+  required_student_phone: boolean
 
   show_level: boolean
   required_level: boolean
@@ -170,8 +176,13 @@ export default function RegisterPage() {
   const [personalId, setPersonalId] = useState('')
   const [gender, setGender] = useState('')
   const [age, setAge] = useState('')
+
   const [phone, setPhone] = useState('')
+  const [guardianRelation, setGuardianRelation] = useState('')
+
   const [whatsapp, setWhatsapp] = useState('')
+  const [studentPhone, setStudentPhone] = useState('')
+
   const [levelId, setLevelId] = useState('')
   const [notes, setNotes] = useState('')
   const [healthNotes, setHealthNotes] = useState('')
@@ -530,7 +541,15 @@ export default function RegisterPage() {
       settings.required_phone &&
       !phone.trim()
     ) {
-      return 'يرجى إدخال رقم الاتصال.'
+      return 'يرجى إدخال رقم الاتصال الأساسي.'
+    }
+
+    if (
+      settings.show_guardian_relation &&
+      settings.required_guardian_relation &&
+      !guardianRelation
+    ) {
+      return 'يرجى اختيار صلة القرابة.'
     }
 
     if (
@@ -539,6 +558,14 @@ export default function RegisterPage() {
       !whatsapp.trim()
     ) {
       return 'يرجى إدخال رقم الواتساب.'
+    }
+
+    if (
+      settings.show_student_phone &&
+      settings.required_student_phone &&
+      !studentPhone.trim()
+    ) {
+      return 'يرجى إدخال رقم الطالب.'
     }
 
     if (
@@ -562,7 +589,7 @@ export default function RegisterPage() {
       settings.required_health_notes &&
       !healthNotes.trim()
     ) {
-      return 'يرجى تعبئة حقل الأمراض المزمنة.'
+      return 'يرجى تعبئة حقل الحالة الصحية.'
     }
 
     const customFieldError =
@@ -799,9 +826,20 @@ export default function RegisterPage() {
                 ? phone.trim() || null
                 : null,
 
+            p_guardian_relation:
+              settings.show_guardian_relation
+                ? guardianRelation || null
+                : null,
+
             p_whatsapp:
               settings.show_whatsapp
                 ? whatsapp.trim() ||
+                  null
+                : null,
+
+            p_student_phone:
+              settings.show_student_phone
+                ? studentPhone.trim() ||
                   null
                 : null,
 
@@ -922,7 +960,9 @@ export default function RegisterPage() {
       setGender('')
       setAge('')
       setPhone('')
+      setGuardianRelation('')
       setWhatsapp('')
+      setStudentPhone('')
       setLevelId('')
       setNotes('')
       setHealthNotes('')
@@ -1407,7 +1447,7 @@ export default function RegisterPage() {
                 {settings.show_phone && (
                   <div>
                     <FieldLabel
-                      label="رقم الاتصال"
+                      label="رقم الاتصال الأساسي"
                       required={
                         settings.required_phone
                       }
@@ -1421,11 +1461,71 @@ export default function RegisterPage() {
                           event.target.value,
                         )
                       }
-                      placeholder="أدخل رقم الاتصال"
+                      placeholder="أدخل رقم الاتصال الأساسي"
                       required={
                         settings.required_phone
                       }
                     />
+                  </div>
+                )}
+
+                {settings.show_guardian_relation && (
+                  <div>
+                    <FieldLabel
+                      label="صلة القرابة"
+                      required={
+                        settings.required_guardian_relation
+                      }
+                    />
+
+                    <select
+                      value={guardianRelation}
+                      onChange={(event) =>
+                        setGuardianRelation(
+                          event.target.value,
+                        )
+                      }
+                      required={
+                        settings.required_guardian_relation
+                      }
+                      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="">
+                        اختر صلة القرابة
+                      </option>
+
+                      <option value="الأب">
+                        الأب
+                      </option>
+
+                      <option value="الأم">
+                        الأم
+                      </option>
+
+                      <option value="الأخ">
+                        الأخ
+                      </option>
+
+                      <option value="الأخت">
+                        الأخت
+                      </option>
+
+                      <option value="الجد">
+                        الجد
+                      </option>
+
+                      <option value="الجدة">
+                        الجدة
+                      </option>
+
+                      <option value="ولي أمر">
+                        ولي أمر
+                      </option>
+
+                      <option value="أخرى">
+                        أخرى
+                      </option>
+                    </select>
                   </div>
                 )}
 
@@ -1449,6 +1549,31 @@ export default function RegisterPage() {
                       placeholder="أدخل رقم الواتساب"
                       required={
                         settings.required_whatsapp
+                      }
+                    />
+                  </div>
+                )}
+
+                {settings.show_student_phone && (
+                  <div>
+                    <FieldLabel
+                      label="رقم الطالب"
+                      required={
+                        settings.required_student_phone
+                      }
+                    />
+
+                    <Input
+                      type="tel"
+                      value={studentPhone}
+                      onChange={(event) =>
+                        setStudentPhone(
+                          event.target.value,
+                        )
+                      }
+                      placeholder="أدخل رقم الطالب"
+                      required={
+                        settings.required_student_phone
                       }
                     />
                   </div>
@@ -1520,7 +1645,7 @@ export default function RegisterPage() {
                 {settings.show_health_notes && (
                   <div>
                     <FieldLabel
-                      label="الأمراض المزمنة"
+                      label="الحالة الصحية"
                       required={
                         settings.required_health_notes
                       }
@@ -1533,7 +1658,7 @@ export default function RegisterPage() {
                           event.target.value,
                         )
                       }
-                      placeholder="اذكر أي أمراض مزمنة أو ملاحظات صحية..."
+                      placeholder="اذكر الحالة الصحية أو أي ملاحظات صحية..."
                       required={
                         settings.required_health_notes
                       }
