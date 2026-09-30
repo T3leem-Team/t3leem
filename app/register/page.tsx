@@ -3,6 +3,7 @@
 import {
   type FormEvent,
   type InputHTMLAttributes,
+  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   useEffect,
   useMemo,
@@ -149,9 +150,7 @@ function FieldLabel({
   )
 }
 
-function Input(
-  props: InputHTMLAttributes<HTMLInputElement>,
-) {
+function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const {
     className = '',
     ...rest
@@ -185,7 +184,7 @@ function Select({
   children,
   className = '',
   ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+}: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
@@ -706,12 +705,12 @@ export default function RegisterPage() {
       settings.show_age &&
       age.trim()
     ) {
-      const numericAge =
-        Number(age)
+      const numericAge = Number(age)
 
       if (
         !Number.isFinite(numericAge) ||
-        numericAge < 0
+        numericAge < 0 ||
+        numericAge > 120
       ) {
         return 'يرجى إدخال عمر صحيح.'
       }
@@ -1514,42 +1513,41 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            {academicYear &&
-              registrationCourse && (
-                <div className="mt-5 rounded-2xl border bg-muted/30 p-4 sm:mt-6 sm:p-5">
-                  <div className="mb-4">
-                    <p className="text-sm font-bold">
-                      بيانات التسجيل الحالي
+            {academicYear && registrationCourse && (
+              <div className="mt-5 rounded-2xl border bg-muted/30 p-4 sm:mt-6 sm:p-5">
+                <div className="mb-4">
+                  <p className="text-sm font-bold">
+                    بيانات التسجيل الحالي
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    هذه البيانات محددة من إدارة التعليم ولا يمكن تعديلها من هنا.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-background p-3.5 sm:p-4">
+                    <p className="text-xs text-muted-foreground">
+                      السنة الدراسية
                     </p>
 
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      هذه البيانات محددة من إدارة التعليم ولا يمكن تعديلها من هنا.
+                    <p className="mt-1.5 font-semibold">
+                      {academicYear.name}
                     </p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border bg-background p-3.5 sm:p-4">
-                      <p className="text-xs text-muted-foreground">
-                        السنة الدراسية
-                      </p>
+                  <div className="rounded-xl border bg-background p-3.5 sm:p-4">
+                    <p className="text-xs text-muted-foreground">
+                      دورة التسجيل
+                    </p>
 
-                      <p className="mt-1.5 font-semibold">
-                        {academicYear.name}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border bg-background p-3.5 sm:p-4">
-                      <p className="text-xs text-muted-foreground">
-                        دورة التسجيل
-                      </p>
-
-                      <p className="mt-1.5 font-semibold">
-                        {registrationCourse.name}
-                      </p>
-                    </div>
+                    <p className="mt-1.5 font-semibold">
+                      {registrationCourse.name}
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
             {successMessage && (
               <div className="mt-5 rounded-2xl border bg-background p-4 shadow-sm sm:mt-6 sm:p-5">
@@ -1578,30 +1576,29 @@ export default function RegisterPage() {
                       </div>
                     )}
 
-                    {academicYear &&
-                      registrationCourse && (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-xl border bg-muted/20 p-3">
-                            <p className="text-xs text-muted-foreground">
-                              السنة الدراسية
-                            </p>
+                    {academicYear && registrationCourse && (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">
+                            السنة الدراسية
+                          </p>
 
-                            <p className="mt-1 text-sm font-semibold">
-                              {academicYear.name}
-                            </p>
-                          </div>
-
-                          <div className="rounded-xl border bg-muted/20 p-3">
-                            <p className="text-xs text-muted-foreground">
-                              دورة التسجيل
-                            </p>
-
-                            <p className="mt-1 text-sm font-semibold">
-                              {registrationCourse.name}
-                            </p>
-                          </div>
+                          <p className="mt-1 text-sm font-semibold">
+                            {academicYear.name}
+                          </p>
                         </div>
-                      )}
+
+                        <div className="rounded-xl border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">
+                            دورة التسجيل
+                          </p>
+
+                          <p className="mt-1 text-sm font-semibold">
+                            {registrationCourse.name}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <p className="mt-3 text-sm leading-7 text-muted-foreground">
                       استعمل الرقم الشخصي لمتابعة الطالب بعد القبول في التعليم.
@@ -1627,9 +1624,7 @@ export default function RegisterPage() {
 
                               {settings.education_group_description && (
                                 <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                                  {
-                                    settings.education_group_description
-                                  }
+                                  {settings.education_group_description}
                                 </p>
                               )}
 
@@ -1653,9 +1648,7 @@ export default function RegisterPage() {
                             </p>
 
                             <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                              {
-                                settings.post_registration_notes
-                              }
+                              {settings.post_registration_notes}
                             </p>
                           </div>
                         )}
@@ -1663,7 +1656,8 @@ export default function RegisterPage() {
                     ) : null}
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
             {errorMessage && (
               <div className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm leading-6 text-destructive">
@@ -1895,8 +1889,7 @@ export default function RegisterPage() {
                           </option>
                         </Select>
 
-                        {guardianRelation ===
-                          'أخرى' && (
+                        {guardianRelation === 'أخرى' && (
                           <div className="mt-3">
                             <Input
                               value={
@@ -2069,11 +2062,8 @@ export default function RegisterPage() {
                     />
 
                     <div className="grid gap-5 md:grid-cols-2">
-                      {customFields.map(
-                        (field) =>
-                          renderCustomField(
-                            field,
-                          ),
+                      {customFields.map((field) =>
+                        renderCustomField(field),
                       )}
                     </div>
                   </section>
@@ -2083,18 +2073,14 @@ export default function RegisterPage() {
                   <section className="space-y-5 border-t pt-7">
                     <SectionHeader title="الدفع" />
 
-                    {settings.payment_amount >
-                      0 && (
+                    {settings.payment_amount > 0 && (
                       <div className="rounded-xl border bg-muted/30 p-4">
                         <p className="text-sm text-muted-foreground">
                           مبلغ التسجيل
                         </p>
 
                         <p className="mt-1 text-xl font-bold">
-                          {
-                            settings.payment_amount
-                          }{' '}
-                          د.ب
+                          {settings.payment_amount} د.ب
                         </p>
                       </div>
                     )}
@@ -2172,9 +2158,7 @@ export default function RegisterPage() {
                             rel="noreferrer"
                             className="mt-2 block break-all text-sm font-medium leading-6 text-primary underline"
                           >
-                            {
-                              settings.payment_link
-                            }
+                            {settings.payment_link}
                           </a>
                         </div>
                       )}
