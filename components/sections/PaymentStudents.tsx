@@ -37,6 +37,7 @@ import {
   loadPaymentsCache,
   type PaymentStatus,
   type StudentRow,
+  type PaymentLevel,
 } from '@/lib/payments-cache'
 
 type Filters = {
@@ -99,6 +100,19 @@ export function PaymentStudents() {
   const [studentList, setStudentList] =
     useState<StudentRow[]>(
       initialCache?.studentList ?? [],
+    )
+
+  /*
+   * مستويات السنة الحالية.
+   *
+   * الترتيب يأتي من:
+   * levels.sort_order
+   *
+   * الموجود داخل payments-cache.
+   */
+  const [levels, setLevels] =
+    useState<PaymentLevel[]>(
+      initialCache?.levels ?? [],
     )
 
   const [loading, setLoading] =
@@ -181,6 +195,10 @@ export function PaymentStudents() {
       cache.studentList,
     )
 
+    setLevels(
+      cache.levels ?? [],
+    )
+
     setCurrentAcademicYearId(
       cache.currentAcademicYearId,
     )
@@ -261,32 +279,60 @@ export function PaymentStudents() {
               id: String(
                 student.id,
               ),
+
               name: String(
                 student.name ?? '',
               ),
+
               personalId: String(
                 student.personalId ??
                   '',
               ),
+
+              levelId:
+                student.levelId
+                  ? String(
+                      student.levelId,
+                    )
+                  : null,
+
               grade: String(
                 student.grade ??
                   'غير محدد',
               ),
+
+              levelSortOrder:
+                student.levelSortOrder ==
+                null
+                  ? null
+                  : Number(
+                      student.levelSortOrder,
+                    ),
+
               amountDue: Number(
                 student.amountDue ??
                   0,
               ),
+
               amountPaid: Number(
                 student.amountPaid ??
                   0,
               ),
+
               feeExempt:
                 paymentStatus ===
                 'معفي',
+
               paymentStatus,
             }
           },
         )
+
+      /*
+       * لا توجد مستويات من الـ API
+       * في حالة الـ fallback.
+       */
+      setLevels([])
 
       setStudentList(
         fallback,
@@ -359,18 +405,78 @@ export function PaymentStudents() {
     }))
   }
 
-  const grades = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          studentList.map(
-            (student) =>
-              student.grade,
-          ),
+  /*
+   * ترتيب المستويات من قاعدة البيانات.
+   *
+   * لا نستخدم sort() على أسماء المستويات.
+   *
+   * levels هنا مرتبة مسبقاً من
+   * payments-cache حسب levels.sort_order.
+   *
+   * نعرض فقط المستويات الموجودة فعلياً
+   * عند الطلاب.
+   */
+  const grades = useMemo(() => {
+    const availableGrades =
+      new Set(
+        studentList.map(
+          (student) =>
+            student.grade,
         ),
-      ).sort(),
-    [studentList],
-  )
+      )
+
+    const orderedGrades =
+      levels
+        .filter(
+          (level) =>
+            availableGrades.has(
+              level.name,
+            ),
+        )
+        .map(
+          (level) =>
+            level.name,
+        )
+
+    /*
+     * احتياطياً:
+     * إذا كان هناك مستوى موجود عند طالب
+     * ولكنه غير موجود في جدول levels
+     * أو غير نشط، لا نخفيه من الفلتر.
+     *
+     * نضعه في النهاية.
+     */
+    const matchedGrades =
+      new Set(
+        orderedGrades,
+      )
+
+    const unmatchedGrades =
+      Array.from(
+        availableGrades,
+      )
+        .filter(
+          (grade) =>
+            !matchedGrades.has(
+              grade,
+            ),
+        )
+        .sort(
+          (a, b) =>
+            a.localeCompare(
+              b,
+              'ar',
+            ),
+        )
+
+    return [
+      ...orderedGrades,
+      ...unmatchedGrades,
+    ]
+  }, [
+    studentList,
+    levels,
+  ])
 
   const paymentStatuses =
     useMemo(
@@ -814,6 +920,9 @@ export function PaymentStudents() {
         /*
          * إجبار تحديث الكاش بعد إضافة الدفعة
          * حتى تتحدث المبالغ والحالة مباشرة.
+         *
+         * مستويات قاعدة البيانات ستعود
+         * أيضاً من نفس الـ API والكاش.
          */
         const refreshedStudents =
           await loadPayments(true)
