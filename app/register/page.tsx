@@ -71,6 +71,10 @@ type RegistrationSettings = {
 
   show_payment_qr: boolean
   payment_qr_url: string | null
+
+  show_education_group: boolean
+  education_group_link: string | null
+  post_registration_notes: string | null
 }
 
 type Level = {
@@ -179,6 +183,8 @@ export default function RegisterPage() {
 
   const [phone, setPhone] = useState('')
   const [guardianRelation, setGuardianRelation] = useState('')
+  const [customGuardianRelation, setCustomGuardianRelation] =
+    useState('')
 
   const [whatsapp, setWhatsapp] = useState('')
   const [studentPhone, setStudentPhone] = useState('')
@@ -463,6 +469,14 @@ export default function RegisterPage() {
     return customFieldValues[field.id] ?? ''
   }
 
+  function getGuardianRelationValue() {
+    if (guardianRelation === 'أخرى') {
+      return customGuardianRelation.trim()
+    }
+
+    return guardianRelation.trim()
+  }
+
   function validateCustomFields() {
     for (const field of customFields) {
       if (!field.is_required) {
@@ -547,7 +561,7 @@ export default function RegisterPage() {
     if (
       settings.show_guardian_relation &&
       settings.required_guardian_relation &&
-      !guardianRelation
+      !getGuardianRelationValue()
     ) {
       return 'يرجى اختيار صلة القرابة.'
     }
@@ -789,6 +803,11 @@ export default function RegisterPage() {
       const trackingToken =
         crypto.randomUUID()
 
+      const guardianRelationValue =
+        settings.show_guardian_relation
+          ? getGuardianRelationValue() || null
+          : null
+
       const rpcResult =
         await supabase.rpc(
           'create_registration_request',
@@ -827,9 +846,7 @@ export default function RegisterPage() {
                 : null,
 
             p_guardian_relation:
-              settings.show_guardian_relation
-                ? guardianRelation || null
-                : null,
+              guardianRelationValue,
 
             p_whatsapp:
               settings.show_whatsapp
@@ -961,6 +978,7 @@ export default function RegisterPage() {
       setAge('')
       setPhone('')
       setGuardianRelation('')
+      setCustomGuardianRelation('')
       setWhatsapp('')
       setStudentPhone('')
       setLevelId('')
@@ -1281,7 +1299,7 @@ export default function RegisterPage() {
               <div className="flex items-start gap-3 text-green-700 dark:text-green-400">
                 <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
 
-                <div>
+                <div className="w-full">
                   <p className="font-semibold">
                     {successMessage}
                   </p>
@@ -1305,6 +1323,50 @@ export default function RegisterPage() {
                   >
                     متابعة حالة الطلب
                   </Link>
+
+                  {(settings.show_education_group &&
+                    settings.education_group_link) ||
+                  settings.post_registration_notes ? (
+                    <div className="mt-5 space-y-4 border-t border-green-500/20 pt-5">
+                      {settings.show_education_group &&
+                        settings.education_group_link && (
+                          <div className="rounded-xl border border-green-500/20 bg-background/60 p-4">
+                            <p className="text-sm font-semibold">
+                              مجموعة التعليم
+                            </p>
+
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                              يمكنكم الانضمام إلى مجموعة التعليم من خلال الرابط التالي:
+                            </p>
+
+                            <a
+                              href={
+                                settings.education_group_link
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 block break-all rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-3 text-sm font-medium text-primary underline underline-offset-2"
+                            >
+                              {settings.education_group_link}
+                            </a>
+                          </div>
+                        )}
+
+                      {settings.post_registration_notes && (
+                        <div className="rounded-xl border border-green-500/20 bg-background/60 p-4">
+                          <p className="text-sm font-semibold">
+                            ملاحظات عامة
+                          </p>
+
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                            {
+                              settings.post_registration_notes
+                            }
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1329,7 +1391,8 @@ export default function RegisterPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                            
+                    يرجى إدخال البيانات الأساسية للطالب.
+                  </p>
                 </div>
 
                 {settings.show_name && (
@@ -1479,13 +1542,23 @@ export default function RegisterPage() {
 
                     <select
                       value={guardianRelation}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value =
+                          event.target.value
+
                         setGuardianRelation(
-                          event.target.value,
+                          value,
                         )
-                      }
+
+                        if (value !== 'أخرى') {
+                          setCustomGuardianRelation(
+                            '',
+                          )
+                        }
+                      }}
                       required={
-                        settings.required_guardian_relation
+                        settings.required_guardian_relation &&
+                        guardianRelation !== 'أخرى'
                       }
                       className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                     >
@@ -1517,14 +1590,30 @@ export default function RegisterPage() {
                         الجدة
                       </option>
 
-                      <option value="ولي أمر">
-                        ولي أمر
-                      </option>
-
                       <option value="أخرى">
                         أخرى
                       </option>
                     </select>
+
+                    {guardianRelation ===
+                      'أخرى' && (
+                      <div className="mt-3">
+                        <Input
+                          value={
+                            customGuardianRelation
+                          }
+                          onChange={(event) =>
+                            setCustomGuardianRelation(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="اكتب صلة القرابة"
+                          required={
+                            settings.required_guardian_relation
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
