@@ -74,6 +74,7 @@ type RegistrationSettings = {
 
   show_education_group: boolean
   education_group_link: string | null
+  education_group_description: string | null
   post_registration_notes: string | null
 }
 
@@ -174,7 +175,6 @@ export default function RegisterPage() {
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [requestNumber, setRequestNumber] = useState('')
 
   const [name, setName] = useState('')
   const [personalId, setPersonalId] = useState('')
@@ -722,7 +722,6 @@ export default function RegisterPage() {
 
     setErrorMessage('')
     setSuccessMessage('')
-    setRequestNumber('')
 
     const validationError =
       validateForm()
@@ -795,7 +794,18 @@ export default function RegisterPage() {
         }
       }
 
-      const generatedRequestNumber =
+      /*
+       * الرقم الشخصي هو المرجع الذي يعرف به الطالب.
+       *
+       * إذا كان الرقم الشخصي موجودًا نستخدمه كرقم الطلب
+       * داخل النظام أيضًا.
+       *
+       * إذا كان الرقم الشخصي غير موجود، نستخدم قيمة داخلية
+       * فقط لأن RPC يحتاج p_request_number لإنشاء السجل.
+       * هذه القيمة الداخلية لا يتم عرضها للطالب.
+       */
+      const internalRequestNumber =
+        personalId.trim() ||
         `REG-${new Date().getFullYear()}-${Date.now()
           .toString()
           .slice(-8)}`
@@ -813,7 +823,7 @@ export default function RegisterPage() {
           'create_registration_request',
           {
             p_request_number:
-              generatedRequestNumber,
+              internalRequestNumber,
 
             p_tracking_token:
               trackingToken,
@@ -920,7 +930,7 @@ export default function RegisterPage() {
         !createdRequest.id
       ) {
         throw new Error(
-          'تم إنشاء الطلب ولكن لم يتم استلام رقم الطلب من النظام.',
+          'تم إنشاء الطلب ولكن لم يتم استلام سجل التسجيل من النظام.',
         )
       }
 
@@ -962,11 +972,6 @@ export default function RegisterPage() {
           )
         }
       }
-
-      setRequestNumber(
-        createdRequest.request_number ||
-          generatedRequestNumber,
-      )
 
       setSuccessMessage(
         'تم إرسال طلب التسجيل بنجاح.',
@@ -1246,7 +1251,7 @@ export default function RegisterPage() {
               href="/student-status"
               className="mt-6 inline-flex rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted"
             >
-              متابعة طلب سابق
+              متابعة حالة الطالب
             </Link>
           </div>
         </div>
@@ -1295,49 +1300,58 @@ export default function RegisterPage() {
           </div>
 
           {successMessage && (
-            <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/10 p-5">
-              <div className="flex items-start gap-3 text-green-700 dark:text-green-400">
-                <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
+            <div className="mt-6 rounded-2xl border bg-background p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <CheckCircle2 className="size-5" />
+                </div>
 
-                <div className="w-full">
-                  <p className="font-semibold">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground">
                     {successMessage}
                   </p>
 
-                  {requestNumber && (
-                    <p className="mt-2 text-sm">
-                      رقم طلبك:
-                      <strong className="mr-1">
-                        {requestNumber}
-                      </strong>
-                    </p>
+                  {personalId.trim() && (
+                    <div className="mt-3 rounded-xl border bg-muted/30 p-3">
+                      <p className="text-sm text-muted-foreground">
+                        الرقم الشخصي
+                      </p>
+
+                      <p className="mt-1 break-all text-lg font-bold text-foreground">
+                        {personalId.trim()}
+                      </p>
+                    </div>
                   )}
 
-                  <p className="mt-2 text-sm">
-                    احتفظ برقم الطلب لمتابعة حالة التسجيل.
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                    استعمل الرقم الشخصي لمتابعة الطالب بعد القبول في التعليم.
                   </p>
 
                   <Link
                     href="/student-status"
-                    className="mt-4 inline-flex rounded-lg border border-green-500/30 px-4 py-2 text-sm font-medium transition hover:bg-green-500/10"
+                    className="mt-4 inline-flex rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted"
                   >
-                    متابعة حالة الطلب
+                    متابعة حالة الطالب
                   </Link>
 
                   {(settings.show_education_group &&
                     settings.education_group_link) ||
                   settings.post_registration_notes ? (
-                    <div className="mt-5 space-y-4 border-t border-green-500/20 pt-5">
+                    <div className="mt-5 space-y-4 border-t pt-5">
                       {settings.show_education_group &&
                         settings.education_group_link && (
-                          <div className="rounded-xl border border-green-500/20 bg-background/60 p-4">
-                            <p className="text-sm font-semibold">
+                          <div className="rounded-xl border bg-muted/20 p-4">
+                            <p className="text-sm font-semibold text-foreground">
                               مجموعة التعليم
                             </p>
 
-                            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                              يمكنكم الانضمام إلى مجموعة التعليم من خلال الرابط التالي:
-                            </p>
+                            {settings.education_group_description && (
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                                {
+                                  settings.education_group_description
+                                }
+                              </p>
+                            )}
 
                             <a
                               href={
@@ -1345,16 +1359,16 @@ export default function RegisterPage() {
                               }
                               target="_blank"
                               rel="noreferrer"
-                              className="mt-3 block break-all rounded-lg border border-green-500/20 bg-green-500/5 px-3 py-3 text-sm font-medium text-primary underline underline-offset-2"
+                              className="mt-4 inline-flex max-w-full break-all rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2.5 text-sm font-medium text-green-700 transition hover:bg-green-500/15 dark:text-green-400"
                             >
-                              {settings.education_group_link}
+                              الانضمام إلى مجموعة التعليم
                             </a>
                           </div>
                         )}
 
                       {settings.post_registration_notes && (
-                        <div className="rounded-xl border border-green-500/20 bg-background/60 p-4">
-                          <p className="text-sm font-semibold">
+                        <div className="rounded-xl border bg-muted/20 p-4">
+                          <p className="text-sm font-semibold text-foreground">
                             ملاحظات عامة
                           </p>
 
