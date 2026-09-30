@@ -1509,7 +1509,7 @@ export default function RegisterPage() {
                 {settings.show_phone && (
                   <div>
                     <FieldLabel
-                      label="رقم الاتصال الأساسي"
+                      label="رقم الاتصال الأساسي-وتساب/"
                       required={
                         settings.required_phone
                       }
@@ -1620,7 +1620,7 @@ export default function RegisterPage() {
                 {settings.show_whatsapp && (
                   <div>
                     <FieldLabel
-                      label="رقم الواتساب"
+                      label="رقم التواصل الثاني"
                       required={
                         settings.required_whatsapp
                       }
