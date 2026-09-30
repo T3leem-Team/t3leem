@@ -77,12 +77,6 @@ type RegistrationSettings = {
   education_group_description: string | null
   post_registration_notes: string | null
 
-  /**
-   * الدورة التي حددتها الإدارة للتسجيل الخارجي.
-   *
-   * لا يتم إرسالها إلى RPC من المتصفح.
-   * الـ RPC يقرأها مباشرة من registration_settings.
-   */
   course_id: string | null
 }
 
@@ -146,7 +140,7 @@ function FieldLabel({
   required?: boolean
 }) {
   return (
-    <label className="mb-2 block text-sm font-medium">
+    <label className="mb-2 block text-sm font-medium leading-6">
       {label}
       {required && (
         <span className="mr-1 text-destructive">*</span>
@@ -158,10 +152,15 @@ function FieldLabel({
 function Input(
   props: InputHTMLAttributes<HTMLInputElement>,
 ) {
+  const {
+    className = '',
+    ...rest
+  } = props
+
   return (
     <input
-      {...props}
-      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+      {...rest}
+      className={`flex h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-base outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm ${className}`}
     />
   )
 }
@@ -169,11 +168,53 @@ function Input(
 function Textarea(
   props: TextareaHTMLAttributes<HTMLTextAreaElement>,
 ) {
+  const {
+    className = '',
+    ...rest
+  } = props
+
   return (
     <textarea
-      {...props}
-      className="min-h-28 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+      {...rest}
+      className={`min-h-32 w-full resize-y rounded-xl border bg-background px-3.5 py-3 text-base outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm ${className}`}
     />
+  )
+}
+
+function Select({
+  children,
+  className = '',
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`flex h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-base outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 sm:text-sm ${className}`}
+    >
+      {children}
+    </select>
+  )
+}
+
+function SectionHeader({
+  title,
+  description,
+}: {
+  title: string
+  description?: string
+}) {
+  return (
+    <div>
+      <h2 className="text-lg font-bold tracking-tight">
+        {title}
+      </h2>
+
+      {description && (
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -204,10 +245,6 @@ export default function RegisterPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
-  /**
-   * نحتفظ بالرقم الشخصي بعد الإرسال حتى يظهر
-   * في رسالة النجاح، بدل أن يختفي بعد setPersonalId('').
-   */
   const [submittedPersonalId, setSubmittedPersonalId] =
     useState('')
 
@@ -217,7 +254,8 @@ export default function RegisterPage() {
   const [age, setAge] = useState('')
 
   const [phone, setPhone] = useState('')
-  const [guardianRelation, setGuardianRelation] = useState('')
+  const [guardianRelation, setGuardianRelation] =
+    useState('')
   const [customGuardianRelation, setCustomGuardianRelation] =
     useState('')
 
@@ -246,11 +284,6 @@ export default function RegisterPage() {
     setErrorMessage('')
 
     try {
-      /*
-       * -------------------------------------------------------
-       * 1) تحميل إعدادات التسجيل
-       * -------------------------------------------------------
-       */
       const settingsResult = await supabase
         .from('registration_settings')
         .select('*')
@@ -280,14 +313,6 @@ export default function RegisterPage() {
 
       setSettings(loadedSettings)
 
-      /*
-       * -------------------------------------------------------
-       * 2) تحميل السنة الدراسية الحالية
-       *
-       * السنة لا يختارها المستخدم.
-       * النظام يستخدم السنة التي عليها is_current = true.
-       * -------------------------------------------------------
-       */
       const academicYearResult = await supabase
         .from('academic_years')
         .select('id, name')
@@ -322,14 +347,6 @@ export default function RegisterPage() {
 
       setAcademicYear(loadedAcademicYear)
 
-      /*
-       * -------------------------------------------------------
-       * 3) تحميل دورة التسجيل المحددة من لوحة التحكم
-       *
-       * لا نختار الدورة حسب التاريخ.
-       * نستخدم registration_settings.course_id مباشرة.
-       * -------------------------------------------------------
-       */
       if (!loadedSettings.course_id) {
         setRegistrationCourse(null)
 
@@ -376,10 +393,6 @@ export default function RegisterPage() {
       const loadedCourse =
         courseResult.data as RegistrationCourse
 
-      /*
-       * حماية إضافية في واجهة المستخدم.
-       * الـ RPC لديه نفس التحقق من جهة قاعدة البيانات.
-       */
       if (loadedCourse.is_closed) {
         setErrorMessage(
           'دورة التسجيل الحالية مغلقة. يرجى التواصل مع إدارة التعليم.',
@@ -390,11 +403,6 @@ export default function RegisterPage() {
 
       setRegistrationCourse(loadedCourse)
 
-      /*
-       * -------------------------------------------------------
-       * 4) تحميل المستويات
-       * -------------------------------------------------------
-       */
       const levelsResult = await supabase
         .from('levels')
         .select('id, name, sort_order')
@@ -416,11 +424,6 @@ export default function RegisterPage() {
 
       setLevels(levelsResult.data ?? [])
 
-      /*
-       * -------------------------------------------------------
-       * 5) تحميل الحقول الإضافية
-       * -------------------------------------------------------
-       */
       const customFieldsResult = await supabase
         .from('custom_fields')
         .select(
@@ -660,10 +663,6 @@ export default function RegisterPage() {
       return 'التسجيل مغلق حاليًا.'
     }
 
-    /*
-     * التأكد من وجود السنة والدورة في الواجهة.
-     * الحماية الحقيقية تبقى داخل الـ RPC.
-     */
     if (!academicYear) {
       return 'لا توجد سنة دراسية حالية ومفعلة.'
     }
@@ -963,9 +962,6 @@ export default function RegisterPage() {
         }
       }
 
-      /*
-       * نحفظ نسخة من الرقم الشخصي للعرض بعد نجاح التسجيل.
-       */
       const submittedId =
         personalId.trim()
 
@@ -973,15 +969,6 @@ export default function RegisterPage() {
         submittedId,
       )
 
-      /*
-       * الرقم الشخصي هو المرجع الذي يعرف به الطالب.
-       *
-       * إذا كان الرقم الشخصي موجودًا نستخدمه كرقم الطلب
-       * داخل النظام أيضًا.
-       *
-       * إذا لم يكن موجودًا، نستخدم قيمة داخلية فقط لأن
-       * RPC يحتاج p_request_number لإنشاء السجل.
-       */
       const internalRequestNumber =
         submittedId ||
         `REG-${new Date().getFullYear()}-${Date.now()
@@ -996,18 +983,6 @@ export default function RegisterPage() {
           ? getGuardianRelationValue() || null
           : null
 
-      /*
-       * مهم:
-       *
-       * لا نرسل academic_year_id ولا course_id.
-       *
-       * الـ RPC يحدد من قاعدة البيانات:
-       *
-       * 1. السنة الحالية من academic_years
-       * 2. دورة التسجيل من registration_settings.course_id
-       *
-       * ثم يحفظهما داخل registration_requests.
-       */
       const rpcResult =
         await supabase.rpc(
           'create_registration_request',
@@ -1257,7 +1232,7 @@ export default function RegisterPage() {
             required={commonRequired}
           />
 
-          <select
+          <Select
             value={value}
             onChange={(event) =>
               updateCustomFieldValue(
@@ -1266,7 +1241,6 @@ export default function RegisterPage() {
               )
             }
             required={commonRequired}
-            className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">
               اختر {field.name}
@@ -1282,7 +1256,7 @@ export default function RegisterPage() {
                 </option>
               ),
             )}
-          </select>
+          </Select>
         </div>
       )
     }
@@ -1355,6 +1329,11 @@ export default function RegisterPage() {
 
         <Input
           type={inputType}
+          inputMode={
+            inputType === 'number'
+              ? 'numeric'
+              : undefined
+          }
           value={value}
           onChange={(event) =>
             updateCustomFieldValue(
@@ -1375,9 +1354,12 @@ export default function RegisterPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto max-w-2xl">
-          <div className="flex items-center justify-center rounded-2xl border bg-background p-12 shadow-sm">
+      <main
+        dir="rtl"
+        className="min-h-screen bg-muted/30 px-3 py-5 sm:px-6 sm:py-10"
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="flex items-center justify-center rounded-2xl border bg-background p-10 shadow-sm sm:p-12">
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <Loader2 className="size-5 animate-spin" />
               جاري تحميل نموذج التسجيل...
@@ -1393,9 +1375,12 @@ export default function RegisterPage() {
     !settings
   ) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto max-w-2xl">
-          <div className="rounded-2xl border bg-background p-6 shadow-sm">
+      <main
+        dir="rtl"
+        className="min-h-screen bg-muted/30 px-3 py-5 sm:px-6 sm:py-10"
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="rounded-2xl border bg-background p-4 shadow-sm sm:p-6">
             <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
               <AlertCircle className="mt-0.5 size-5 shrink-0" />
 
@@ -1404,7 +1389,7 @@ export default function RegisterPage() {
                   تعذر تحميل التسجيل
                 </p>
 
-                <p className="mt-1 text-sm">
+                <p className="mt-1 text-sm leading-6">
                   {errorMessage}
                 </p>
               </div>
@@ -1425,9 +1410,12 @@ export default function RegisterPage() {
       !registrationCourse)
   ) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto max-w-2xl">
-          <div className="rounded-2xl border bg-background p-6 shadow-sm">
+      <main
+        dir="rtl"
+        className="min-h-screen bg-muted/30 px-3 py-5 sm:px-6 sm:py-10"
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="rounded-2xl border bg-background p-4 shadow-sm sm:p-6">
             <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
               <AlertCircle className="mt-0.5 size-5 shrink-0" />
 
@@ -1436,7 +1424,7 @@ export default function RegisterPage() {
                   تعذر تحميل بيانات التسجيل
                 </p>
 
-                <p className="mt-1 text-sm">
+                <p className="mt-1 text-sm leading-6">
                   {errorMessage}
                 </p>
               </div>
@@ -1449,9 +1437,12 @@ export default function RegisterPage() {
 
   if (!settings.registration_open) {
     return (
-      <main className="min-h-screen bg-muted/30 px-4 py-10">
-        <div className="mx-auto max-w-2xl">
-          <div className="rounded-2xl border bg-background p-8 text-center shadow-sm">
+      <main
+        dir="rtl"
+        className="min-h-screen bg-muted/30 px-3 py-5 sm:px-6 sm:py-10"
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="rounded-2xl border bg-background p-6 text-center shadow-sm sm:p-10">
             <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-muted">
               <AlertCircle className="size-7 text-muted-foreground" />
             </div>
@@ -1460,13 +1451,13 @@ export default function RegisterPage() {
               التسجيل مغلق حاليًا
             </h1>
 
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
               لا يمكن تقديم طلبات تسجيل جديدة في الوقت الحالي.
             </p>
 
             <Link
               href="/student-status"
-              className="mt-6 inline-flex rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted"
+              className="mt-6 inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-medium transition hover:bg-muted"
             >
               متابعة حالة الطالب
             </Link>
@@ -1477,13 +1468,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-muted/30 px-4 py-10">
+    <main
+      dir="rtl"
+      className="min-h-screen bg-muted/30 px-3 py-5 sm:px-6 sm:py-8 lg:py-10"
+    >
       {checkingPersonalId && (
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 px-4 backdrop-blur-[2px]"
           dir="rtl"
         >
-          <div className="w-full max-w-sm rounded-2xl border bg-background p-7 text-center shadow-2xl">
+          <div className="w-full max-w-sm rounded-2xl border bg-background p-6 text-center shadow-2xl sm:p-7">
             <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-primary/10">
               <Loader2 className="size-8 animate-spin text-primary" />
             </div>
@@ -1492,7 +1486,7 @@ export default function RegisterPage() {
               جاري التحقق
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            <p className="mt-2 text-sm leading-7 text-muted-foreground">
               جاري التحقق من الرقم الشخصي والتأكد من أن
               الطالب غير مسجل لهذه السنة الدراسية.
             </p>
@@ -1504,752 +1498,767 @@ export default function RegisterPage() {
         </div>
       )}
 
-      <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl border bg-background p-6 shadow-sm sm:p-8">
-          <div>
-            <h1 className="text-2xl font-bold">
-              طلب التسجيل
-            </h1>
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="overflow-hidden rounded-2xl border bg-background shadow-sm sm:rounded-3xl">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                طلب التسجيل
+              </h1>
 
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              يرجى تعبئة البيانات التالية لتقديم طلب التسجيل.
-            </p>
-          </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                يرجى تعبئة البيانات التالية لتقديم طلب التسجيل.
+              </p>
+            </div>
 
-          {/*
-           * ---------------------------------------------------
-           * السنة والدورة الحالية
-           * ---------------------------------------------------
-           *
-           * للعرض فقط.
-           * المستخدم لا يستطيع تغييرهما.
-           */}
-          {academicYear &&
-            registrationCourse && (
-              <div className="mt-6 rounded-2xl border bg-muted/30 p-4">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold">
-                    بيانات التسجيل الحالي
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    هذه البيانات محددة من إدارة التعليم.
-                  </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border bg-background p-4">
-                    <p className="text-xs text-muted-foreground">
-                      السنة الدراسية
+            {academicYear &&
+              registrationCourse && (
+                <div className="mt-5 rounded-2xl border bg-muted/30 p-4 sm:mt-6 sm:p-5">
+                  <div className="mb-4">
+                    <p className="text-sm font-bold">
+                      بيانات التسجيل الحالي
                     </p>
 
-                    <p className="mt-1 font-semibold">
-                      {academicYear.name}
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      هذه البيانات محددة من إدارة التعليم ولا يمكن تعديلها من هنا.
                     </p>
                   </div>
 
-                  <div className="rounded-xl border bg-background p-4">
-                    <p className="text-xs text-muted-foreground">
-                      دورة التسجيل
-                    </p>
-
-                    <p className="mt-1 font-semibold">
-                      {registrationCourse.name}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          {successMessage && (
-            <div className="mt-6 rounded-2xl border bg-background p-5 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <CheckCircle2 className="size-5" />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-foreground">
-                    {successMessage}
-                  </p>
-
-                  {submittedPersonalId && (
-                    <div className="mt-3 rounded-xl border bg-muted/30 p-3">
-                      <p className="text-sm text-muted-foreground">
-                        الرقم الشخصي
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border bg-background p-3.5 sm:p-4">
+                      <p className="text-xs text-muted-foreground">
+                        السنة الدراسية
                       </p>
 
-                      <p className="mt-1 break-all text-lg font-bold text-foreground">
-                        {submittedPersonalId}
+                      <p className="mt-1.5 font-semibold">
+                        {academicYear.name}
                       </p>
                     </div>
-                  )}
 
-                  {academicYear &&
-                    registrationCourse && (
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            السنة الدراسية
-                          </p>
+                    <div className="rounded-xl border bg-background p-3.5 sm:p-4">
+                      <p className="text-xs text-muted-foreground">
+                        دورة التسجيل
+                      </p>
 
-                          <p className="mt-1 text-sm font-semibold">
-                            {academicYear.name}
-                          </p>
-                        </div>
+                      <p className="mt-1.5 font-semibold">
+                        {registrationCourse.name}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                        <div className="rounded-xl border bg-muted/20 p-3">
-                          <p className="text-xs text-muted-foreground">
-                            دورة التسجيل
-                          </p>
+            {successMessage && (
+              <div className="mt-5 rounded-2xl border bg-background p-4 shadow-sm sm:mt-6 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <CheckCircle2 className="size-5" />
+                  </div>
 
-                          <p className="mt-1 text-sm font-semibold">
-                            {registrationCourse.name}
-                          </p>
-                        </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">
+                      {successMessage}
+                    </p>
+
+                    {submittedPersonalId && (
+                      <div className="mt-3 rounded-xl border bg-muted/30 p-3.5">
+                        <p className="text-sm text-muted-foreground">
+                          الرقم الشخصي
+                        </p>
+
+                        <p
+                          dir="ltr"
+                          className="mt-1 break-all text-lg font-bold text-foreground"
+                        >
+                          {submittedPersonalId}
+                        </p>
                       </div>
                     )}
 
-                  <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                    استعمل الرقم الشخصي لمتابعة الطالب بعد القبول في التعليم.
-                  </p>
-
-                  <Link
-                    href="/student-status"
-                    className="mt-4 inline-flex rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted"
-                  >
-                    متابعة حالة الطالب
-                  </Link>
-
-                  {(settings.show_education_group &&
-                    settings.education_group_link) ||
-                  settings.post_registration_notes ? (
-                    <div className="mt-5 space-y-4 border-t pt-5">
-                      {settings.show_education_group &&
-                        settings.education_group_link && (
-                          <div className="rounded-xl border bg-muted/20 p-4">
-                            <p className="text-sm font-semibold text-foreground">
-                              مجموعة التعليم
+                    {academicYear &&
+                      registrationCourse && (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border bg-muted/20 p-3">
+                            <p className="text-xs text-muted-foreground">
+                              السنة الدراسية
                             </p>
 
-                            {settings.education_group_description && (
-                              <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                                {
-                                  settings.education_group_description
-                                }
-                              </p>
-                            )}
-
-                            <a
-                              href={
-                                settings.education_group_link
-                              }
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-4 inline-flex max-w-full break-all rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2.5 text-sm font-medium text-green-700 transition hover:bg-green-500/15 dark:text-green-400"
-                            >
-                              الانضمام إلى مجموعة التعليم
-                            </a>
+                            <p className="mt-1 text-sm font-semibold">
+                              {academicYear.name}
+                            </p>
                           </div>
-                        )}
 
-                      {settings.post_registration_notes && (
-                        <div className="rounded-xl border bg-muted/20 p-4">
-                          <p className="text-sm font-semibold text-foreground">
-                            ملاحظات عامة
-                          </p>
+                          <div className="rounded-xl border bg-muted/20 p-3">
+                            <p className="text-xs text-muted-foreground">
+                              دورة التسجيل
+                            </p>
 
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                            {
-                              settings.post_registration_notes
-                            }
-                          </p>
+                            <p className="mt-1 text-sm font-semibold">
+                              {registrationCourse.name}
+                            </p>
+                          </div>
                         </div>
                       )}
-                    </div>
-                  ) : null}
+
+                    <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                      استعمل الرقم الشخصي لمتابعة الطالب بعد القبول في التعليم.
+                    </p>
+
+                    <Link
+                      href="/student-status"
+                      className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                    >
+                      متابعة حالة الطالب
+                    </Link>
+
+                    {(settings.show_education_group &&
+                      settings.education_group_link) ||
+                    settings.post_registration_notes ? (
+                      <div className="mt-5 space-y-4 border-t pt-5">
+                        {settings.show_education_group &&
+                          settings.education_group_link && (
+                            <div className="rounded-xl border bg-muted/20 p-4">
+                              <p className="text-sm font-semibold">
+                                مجموعة التعليم
+                              </p>
+
+                              {settings.education_group_description && (
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                                  {
+                                    settings.education_group_description
+                                  }
+                                </p>
+                              )}
+
+                              <a
+                                href={
+                                  settings.education_group_link
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-4 inline-flex min-h-11 max-w-full items-center justify-center break-all rounded-xl border border-green-500/20 bg-green-500/10 px-4 py-2.5 text-sm font-medium text-green-700 transition hover:bg-green-500/15 dark:text-green-400"
+                              >
+                                الانضمام إلى مجموعة التعليم
+                              </a>
+                            </div>
+                          )}
+
+                        {settings.post_registration_notes && (
+                          <div className="rounded-xl border bg-muted/20 p-4">
+                            <p className="text-sm font-semibold">
+                              ملاحظات عامة
+                            </p>
+
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                              {
+                                settings.post_registration_notes
+                              }
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
+              )}
+
+            {errorMessage && (
+              <div className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm leading-6 text-destructive">
+                <AlertCircle className="mt-0.5 size-5 shrink-0" />
+                <span>{errorMessage}</span>
               </div>
-            </div>
-          )}
+            )}
 
-          {errorMessage && (
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 size-5 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+            {!successMessage && (
+              <form
+                onSubmit={handleSubmit}
+                className="mt-7 space-y-8 sm:mt-8"
+              >
+                {/* بيانات الطالب */}
+                <section className="space-y-5">
+                  <SectionHeader
+                    title="بيانات الطالب"
+                    description="يرجى إدخال البيانات الأساسية للطالب."
+                  />
 
-          {!successMessage && (
-            <form
-              onSubmit={handleSubmit}
-              className="mt-8 space-y-6"
-            >
-              <div className="space-y-5">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    بيانات الطالب
-                  </h2>
-
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    يرجى إدخال البيانات الأساسية للطالب.
-                  </p>
-                </div>
-
-                {settings.show_name && (
-                  <div>
-                    <FieldLabel
-                      label="الاسم"
-                      required={
-                        settings.required_name
-                      }
-                    />
-
-                    <Input
-                      value={name}
-                      onChange={(event) =>
-                        setName(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل اسم الطالب"
-                      required={
-                        settings.required_name
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_personal_id && (
-                  <div>
-                    <FieldLabel
-                      label="الرقم الشخصي"
-                      required={
-                        settings.required_personal_id
-                      }
-                    />
-
-                    <Input
-                      value={personalId}
-                      onChange={(event) =>
-                        setPersonalId(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل الرقم الشخصي"
-                      required={
-                        settings.required_personal_id
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_gender && (
-                  <div>
-                    <FieldLabel
-                      label="الجنس"
-                      required={
-                        settings.required_gender
-                      }
-                    />
-
-                    <select
-                      value={gender}
-                      onChange={(event) =>
-                        setGender(
-                          event.target.value,
-                        )
-                      }
-                      required={
-                        settings.required_gender
-                      }
-                      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="">
-                        اختر الجنس
-                      </option>
-
-                      <option value="ذكر">
-                        ذكر
-                      </option>
-
-                      <option value="أنثى">
-                        أنثى
-                      </option>
-                    </select>
-                  </div>
-                )}
-
-                {settings.show_age && (
-                  <div>
-                    <FieldLabel
-                      label="العمر"
-                      required={
-                        settings.required_age
-                      }
-                    />
-
-                    <Input
-                      type="number"
-                      min="0"
-                      max="120"
-                      value={age}
-                      onChange={(event) =>
-                        setAge(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل العمر"
-                      required={
-                        settings.required_age
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_phone && (
-                  <div>
-                    <FieldLabel
-                      label="رقم الاتصال الأساسي -الواتسب"
-                      required={
-                        settings.required_phone
-                      }
-                    />
-
-                    <Input
-                      type="tel"
-                      value={phone}
-                      onChange={(event) =>
-                        setPhone(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل رقم الاتصال الأساسي"
-                      required={
-                        settings.required_phone
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_guardian_relation && (
-                  <div>
-                    <FieldLabel
-                      label="صلة القرابة"
-                      required={
-                        settings.required_guardian_relation
-                      }
-                    />
-
-                    <select
-                      value={guardianRelation}
-                      onChange={(event) => {
-                        const value =
-                          event.target.value
-
-                        setGuardianRelation(
-                          value,
-                        )
-
-                        if (value !== 'أخرى') {
-                          setCustomGuardianRelation(
-                            '',
-                          )
-                        }
-                      }}
-                      required={
-                        settings.required_guardian_relation &&
-                        guardianRelation !== 'أخرى'
-                      }
-                      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="">
-                        اختر صلة القرابة
-                      </option>
-
-                      <option value="الأب">
-                        الأب
-                      </option>
-
-                      <option value="الأم">
-                        الأم
-                      </option>
-
-                      <option value="الأخ">
-                        الأخ
-                      </option>
-
-                      <option value="الأخت">
-                        الأخت
-                      </option>
-
-                      <option value="الجد">
-                        الجد
-                      </option>
-
-                      <option value="الجدة">
-                        الجدة
-                      </option>
-
-                      <option value="أخرى">
-                        أخرى
-                      </option>
-                    </select>
-
-                    {guardianRelation ===
-                      'أخرى' && (
-                      <div className="mt-3">
-                        <Input
-                          value={
-                            customGuardianRelation
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    {settings.show_name && (
+                      <div className="sm:col-span-2">
+                        <FieldLabel
+                          label="الاسم"
+                          required={
+                            settings.required_name
                           }
+                        />
+
+                        <Input
+                          value={name}
                           onChange={(event) =>
-                            setCustomGuardianRelation(
+                            setName(
                               event.target.value,
                             )
                           }
-                          placeholder="اكتب صلة القرابة"
+                          placeholder="أدخل اسم الطالب"
+                          autoComplete="name"
+                          required={
+                            settings.required_name
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_personal_id && (
+                      <div>
+                        <FieldLabel
+                          label="الرقم الشخصي"
+                          required={
+                            settings.required_personal_id
+                          }
+                        />
+
+                        <Input
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={personalId}
+                          onChange={(event) =>
+                            setPersonalId(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="أدخل الرقم الشخصي"
+                          autoComplete="off"
+                          dir="ltr"
+                          required={
+                            settings.required_personal_id
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_gender && (
+                      <div>
+                        <FieldLabel
+                          label="الجنس"
+                          required={
+                            settings.required_gender
+                          }
+                        />
+
+                        <Select
+                          value={gender}
+                          onChange={(event) =>
+                            setGender(
+                              event.target.value,
+                            )
+                          }
+                          required={
+                            settings.required_gender
+                          }
+                        >
+                          <option value="">
+                            اختر الجنس
+                          </option>
+
+                          <option value="ذكر">
+                            ذكر
+                          </option>
+
+                          <option value="أنثى">
+                            أنثى
+                          </option>
+                        </Select>
+                      </div>
+                    )}
+
+                    {settings.show_age && (
+                      <div>
+                        <FieldLabel
+                          label="العمر"
+                          required={
+                            settings.required_age
+                          }
+                        />
+
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min="0"
+                          max="120"
+                          value={age}
+                          onChange={(event) =>
+                            setAge(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="أدخل العمر"
+                          required={
+                            settings.required_age
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_phone && (
+                      <div>
+                        <FieldLabel
+                          label="رقم الاتصال الأساسي - الواتساب"
+                          required={
+                            settings.required_phone
+                          }
+                        />
+
+                        <Input
+                          type="tel"
+                          inputMode="tel"
+                          value={phone}
+                          onChange={(event) =>
+                            setPhone(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="مثال: 3XXXXXXX"
+                          autoComplete="tel"
+                          dir="ltr"
+                          required={
+                            settings.required_phone
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_guardian_relation && (
+                      <div>
+                        <FieldLabel
+                          label="صلة القرابة"
                           required={
                             settings.required_guardian_relation
+                          }
+                        />
+
+                        <Select
+                          value={guardianRelation}
+                          onChange={(event) => {
+                            const value =
+                              event.target.value
+
+                            setGuardianRelation(
+                              value,
+                            )
+
+                            if (
+                              value !== 'أخرى'
+                            ) {
+                              setCustomGuardianRelation(
+                                '',
+                              )
+                            }
+                          }}
+                          required={
+                            settings.required_guardian_relation &&
+                            guardianRelation !==
+                              'أخرى'
+                          }
+                        >
+                          <option value="">
+                            اختر صلة القرابة
+                          </option>
+
+                          <option value="الأب">
+                            الأب
+                          </option>
+
+                          <option value="الأم">
+                            الأم
+                          </option>
+
+                          <option value="الأخ">
+                            الأخ
+                          </option>
+
+                          <option value="الأخت">
+                            الأخت
+                          </option>
+
+                          <option value="الجد">
+                            الجد
+                          </option>
+
+                          <option value="الجدة">
+                            الجدة
+                          </option>
+
+                          <option value="أخرى">
+                            أخرى
+                          </option>
+                        </Select>
+
+                        {guardianRelation ===
+                          'أخرى' && (
+                          <div className="mt-3">
+                            <Input
+                              value={
+                                customGuardianRelation
+                              }
+                              onChange={(event) =>
+                                setCustomGuardianRelation(
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="اكتب صلة القرابة"
+                              required={
+                                settings.required_guardian_relation
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {settings.show_whatsapp && (
+                      <div>
+                        <FieldLabel
+                          label="رقم التواصل الثاني"
+                          required={
+                            settings.required_whatsapp
+                          }
+                        />
+
+                        <Input
+                          type="tel"
+                          inputMode="tel"
+                          value={whatsapp}
+                          onChange={(event) =>
+                            setWhatsapp(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="مثال: 3XXXXXXX"
+                          autoComplete="tel"
+                          dir="ltr"
+                          required={
+                            settings.required_whatsapp
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_student_phone && (
+                      <div>
+                        <FieldLabel
+                          label="رقم الطالب"
+                          required={
+                            settings.required_student_phone
+                          }
+                        />
+
+                        <Input
+                          type="tel"
+                          inputMode="tel"
+                          value={studentPhone}
+                          onChange={(event) =>
+                            setStudentPhone(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="أدخل رقم الطالب"
+                          autoComplete="tel"
+                          dir="ltr"
+                          required={
+                            settings.required_student_phone
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_level && (
+                      <div>
+                        <FieldLabel
+                          label="الصف / المستوى"
+                          required={
+                            settings.required_level
+                          }
+                        />
+
+                        <Select
+                          value={levelId}
+                          onChange={(event) =>
+                            setLevelId(
+                              event.target.value,
+                            )
+                          }
+                          required={
+                            settings.required_level
+                          }
+                        >
+                          <option value="">
+                            اختر المستوى
+                          </option>
+
+                          {levels.map(
+                            (level) => (
+                              <option
+                                key={level.id}
+                                value={level.id}
+                              >
+                                {level.name}
+                              </option>
+                            ),
+                          )}
+                        </Select>
+                      </div>
+                    )}
+
+                    {settings.show_notes && (
+                      <div className="sm:col-span-2">
+                        <FieldLabel
+                          label="الملاحظات"
+                          required={
+                            settings.required_notes
+                          }
+                        />
+
+                        <Textarea
+                          value={notes}
+                          onChange={(event) =>
+                            setNotes(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="أضف أي ملاحظات..."
+                          required={
+                            settings.required_notes
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {settings.show_health_notes && (
+                      <div className="sm:col-span-2">
+                        <FieldLabel
+                          label="الحالة الصحية"
+                          required={
+                            settings.required_health_notes
+                          }
+                        />
+
+                        <Textarea
+                          value={healthNotes}
+                          onChange={(event) =>
+                            setHealthNotes(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="اذكر الحالة الصحية أو أي ملاحظات صحية..."
+                          required={
+                            settings.required_health_notes
                           }
                         />
                       </div>
                     )}
                   </div>
-                )}
+                </section>
 
-                {settings.show_whatsapp && (
-                  <div>
-                    <FieldLabel
-                      label="رقم التواصل الثاني"
-                      required={
-                        settings.required_whatsapp
-                      }
-                    />
-
-                    <Input
-                      type="tel"
-                      value={whatsapp}
-                      onChange={(event) =>
-                        setWhatsapp(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل رقم التواصل الثاني"
-                      required={
-                        settings.required_whatsapp
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_student_phone && (
-                  <div>
-                    <FieldLabel
-                      label="رقم الطالب"
-                      required={
-                        settings.required_student_phone
-                      }
-                    />
-
-                    <Input
-                      type="tel"
-                      value={studentPhone}
-                      onChange={(event) =>
-                        setStudentPhone(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أدخل رقم الطالب"
-                      required={
-                        settings.required_student_phone
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_level && (
-                  <div>
-                    <FieldLabel
-                      label="الصف / المستوى"
-                      required={
-                        settings.required_level
-                      }
-                    />
-
-                    <select
-                      value={levelId}
-                      onChange={(event) =>
-                        setLevelId(
-                          event.target.value,
-                        )
-                      }
-                      required={
-                        settings.required_level
-                      }
-                      className="flex h-11 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="">
-                        اختر المستوى
-                      </option>
-
-                      {levels.map(
-                        (level) => (
-                          <option
-                            key={level.id}
-                            value={level.id}
-                          >
-                            {level.name}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </div>
-                )}
-
-                {settings.show_notes && (
-                  <div>
-                    <FieldLabel
-                      label="الملاحظات"
-                      required={
-                        settings.required_notes
-                      }
-                    />
-
-                    <Textarea
-                      value={notes}
-                      onChange={(event) =>
-                        setNotes(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="أضف أي ملاحظات..."
-                      required={
-                        settings.required_notes
-                      }
-                    />
-                  </div>
-                )}
-
-                {settings.show_health_notes && (
-                  <div>
-                    <FieldLabel
-                      label="الحالة الصحية"
-                      required={
-                        settings.required_health_notes
-                      }
-                    />
-
-                    <Textarea
-                      value={healthNotes}
-                      onChange={(event) =>
-                        setHealthNotes(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="اذكر الحالة الصحية أو أي ملاحظات صحية..."
-                      required={
-                        settings.required_health_notes
-                      }
-                    />
-                  </div>
-                )}
-
+                {/* الحقول الإضافية */}
                 {customFields.length > 0 && (
-                  <div className="space-y-5 border-t pt-6">
-                    <div>
-                      <h2 className="text-lg font-semibold">
-                        بيانات إضافية
-                      </h2>
+                  <section className="space-y-5 border-t pt-7">
+                    <SectionHeader
+                      title="بيانات إضافية"
+                      description="يرجى تعبئة البيانات الإضافية المطلوبة."
+                    />
 
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        يرجى تعبئة البيانات الإضافية المطلوبة.
-                      </p>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      {customFields.map(
+                        (field) =>
+                          renderCustomField(
+                            field,
+                          ),
+                      )}
                     </div>
-
-                    {customFields.map(
-                      (field) =>
-                        renderCustomField(
-                          field,
-                        ),
-                    )}
-                  </div>
+                  </section>
                 )}
-              </div>
 
-              {settings.payment_enabled && (
-                <div className="space-y-5 border-t pt-6">
-                  <div>
-                    <h2 className="text-lg font-semibold">
-                      الدفع
-                    </h2>
+                {/* الدفع */}
+                {settings.payment_enabled && (
+                  <section className="space-y-5 border-t pt-7">
+                    <SectionHeader title="الدفع" />
 
                     {settings.payment_amount >
                       0 && (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        مبلغ التسجيل:{' '}
-                        <strong>
+                      <div className="rounded-xl border bg-muted/30 p-4">
+                        <p className="text-sm text-muted-foreground">
+                          مبلغ التسجيل
+                        </p>
+
+                        <p className="mt-1 text-xl font-bold">
                           {
                             settings.payment_amount
                           }{' '}
                           د.ب
-                        </strong>
-                      </p>
-                    )}
-                  </div>
-
-                  {settings.show_payment_qr &&
-                    settings.payment_qr_url && (
-                      <div className="rounded-xl border p-4">
-                        <div className="flex items-center gap-2">
-                          <FileImage className="size-5 text-primary" />
-
-                          <p className="font-medium">
-                            QR / باركود الدفع
-                          </p>
-                        </div>
-
-                        <div className="mt-4 flex justify-center">
-                          <img
-                            src={
-                              settings.payment_qr_url
-                            }
-                            alt="QR الدفع"
-                            className="max-h-64 rounded-lg border object-contain"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                  <div>
-                    <FieldLabel
-                      label="طريقة الدفع"
-                      required
-                    />
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {paymentMethods.map(
-                        (method) => (
-                          <button
-                            key={method.id}
-                            type="button"
-                            onClick={() =>
-                              setPaymentMethod(
-                                method.id,
-                              )
-                            }
-                            className={`rounded-xl border p-4 text-right transition ${
-                              paymentMethod ===
-                              method.id
-                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                                : 'hover:bg-muted/50'
-                            }`}
-                          >
-                            <p className="font-medium">
-                              {method.label}
-                            </p>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  </div>
-
-                  {settings.payment_link_enabled &&
-                    paymentMethod ===
-                      'payment_link' &&
-                    settings.payment_link && (
-                      <div className="rounded-xl border bg-muted/30 p-4">
-                        <p className="text-sm text-muted-foreground">
-                          استخدم الرابط التالي لإتمام الدفع:
                         </p>
-
-                        <a
-                          href={
-                            settings.payment_link
-                          }
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-2 block break-all text-sm font-medium text-primary underline"
-                        >
-                          {
-                            settings.payment_link
-                          }
-                        </a>
                       </div>
                     )}
 
-                  <div>
-                    <FieldLabel label="رقم المرجع" />
+                    {settings.show_payment_qr &&
+                      settings.payment_qr_url && (
+                        <div className="rounded-xl border p-4">
+                          <div className="flex items-center gap-2">
+                            <FileImage className="size-5 text-primary" />
 
-                    <Input
-                      value={paymentReference}
-                      onChange={(event) =>
-                        setPaymentReference(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="رقم عملية الدفع إن وجد"
-                    />
-                  </div>
+                            <p className="font-medium">
+                              QR / باركود الدفع
+                            </p>
+                          </div>
 
-                  {settings.payment_proof_enabled && (
+                          <div className="mt-4 flex justify-center overflow-hidden rounded-xl">
+                            <img
+                              src={
+                                settings.payment_qr_url
+                              }
+                              alt="QR الدفع"
+                              className="max-h-64 max-w-full rounded-lg border object-contain"
+                            />
+                          </div>
+                        </div>
+                      )}
+
                     <div>
                       <FieldLabel
-                        label="إثبات الدفع"
-                        required={
-                          settings.payment_proof_required
-                        }
+                        label="طريقة الدفع"
+                        required
                       />
 
-                      <Input
-                        id="paymentProof"
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={(event) =>
-                          setPaymentProof(
-                            event.target.files?.[0] ??
-                              null,
-                          )
-                        }
-                        required={
-                          settings.payment_proof_required
-                        }
-                      />
-
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        يمكنك إرفاق صورة أو ملف PDF لإثبات الدفع.
-                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {paymentMethods.map(
+                          (method) => (
+                            <button
+                              key={method.id}
+                              type="button"
+                              onClick={() =>
+                                setPaymentMethod(
+                                  method.id,
+                                )
+                              }
+                              className={`min-h-14 rounded-xl border p-3.5 text-right transition active:scale-[0.99] ${
+                                paymentMethod ===
+                                method.id
+                                  ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                  : 'hover:bg-muted/50'
+                              }`}
+                            >
+                              <p className="font-medium">
+                                {method.label}
+                              </p>
+                            </button>
+                          ),
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
 
-              <div className="border-t pt-6">
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="ml-2 size-4 animate-spin" />
-                      جاري إرسال الطلب...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="ml-2 size-4" />
-                      إرسال طلب التسجيل
-                    </>
-                  )}
-                </Button>
+                    {settings.payment_link_enabled &&
+                      paymentMethod ===
+                        'payment_link' &&
+                      settings.payment_link && (
+                        <div className="rounded-xl border bg-muted/30 p-4">
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            استخدم الرابط التالي لإتمام الدفع:
+                          </p>
 
-                <p className="mt-3 text-center text-xs text-muted-foreground">
-                  سيتم إرسال الطلب إلى قسم طلبات التسجيل للمراجعة.
-                </p>
-              </div>
-            </form>
-          )}
+                          <a
+                            href={
+                              settings.payment_link
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 block break-all text-sm font-medium leading-6 text-primary underline"
+                          >
+                            {
+                              settings.payment_link
+                            }
+                          </a>
+                        </div>
+                      )}
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <div>
+                        <FieldLabel label="رقم المرجع" />
+
+                        <Input
+                          type="tel"
+                          inputMode="numeric"
+                          value={paymentReference}
+                          onChange={(event) =>
+                            setPaymentReference(
+                              event.target.value,
+                            )
+                          }
+                          placeholder="رقم عملية الدفع إن وجد"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      {settings.payment_proof_enabled && (
+                        <div>
+                          <FieldLabel
+                            label="إثبات الدفع"
+                            required={
+                              settings.payment_proof_required
+                            }
+                          />
+
+                          <Input
+                            id="paymentProof"
+                            type="file"
+                            accept="image/*,.pdf"
+                            onChange={(event) =>
+                              setPaymentProof(
+                                event.target.files?.[0] ??
+                                  null,
+                              )
+                            }
+                            required={
+                              settings.payment_proof_required
+                            }
+                            className="h-auto min-h-12 cursor-pointer py-3 file:mr-0 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                          />
+
+                          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                            يمكنك إرفاق صورة أو ملف PDF لإثبات الدفع.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* الإرسال */}
+                <section className="border-t pt-7">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="h-13 w-full rounded-xl text-base font-semibold sm:h-12"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="ml-2 size-4 animate-spin" />
+                        جاري إرسال الطلب...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="ml-2 size-4" />
+                        إرسال طلب التسجيل
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+                    سيتم إرسال الطلب إلى قسم طلبات التسجيل للمراجعة.
+                  </p>
+                </section>
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </main>
