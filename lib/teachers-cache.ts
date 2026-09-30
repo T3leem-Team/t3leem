@@ -568,6 +568,7 @@ export async function loadTeachersCache(
           | string
           | null
         phone: string | null
+        whatsapp: string | null
         status: string
       }[] = []
 
@@ -581,7 +582,7 @@ export async function loadTeachersCache(
         } = await supabase
           .from('students')
           .select(
-            'id, student_id, name, personal_id, phone, status',
+            'id, student_id, name, personal_id, phone, whatsapp, status',
           )
           .in(
             'id',
@@ -680,7 +681,7 @@ export async function loadTeachersCache(
         } = await supabase
           .from('students')
           .select(
-            'id, student_id, name, personal_id, phone, status',
+            'id, student_id, name, personal_id, phone, whatsapp, status',
           )
           .in(
             'id',
@@ -738,6 +739,9 @@ export async function loadTeachersCache(
                 phone:
                   student.phone ??
                   '',
+                whatsapp:
+                  student.whatsapp ??
+                  '',
                 levelId:
                   enrollment.level_id,
                 levelName:
@@ -790,6 +794,9 @@ export async function loadTeachersCache(
             '',
           phone:
             student.phone ??
+            '',
+          whatsapp:
+            student.whatsapp ??
             '',
           levelId: '',
           levelName: '—',
