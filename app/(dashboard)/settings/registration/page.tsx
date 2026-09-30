@@ -14,6 +14,7 @@ import {
   Settings2,
   Trash2,
   UserRound,
+  UsersRound,
   X,
 } from 'lucide-react'
 
@@ -285,6 +286,23 @@ export default function RegistrationSettingsPage() {
   const [showHealthNotes, setShowHealthNotes] = useState(false)
   const [requiredHealthNotes, setRequiredHealthNotes] = useState(false)
 
+  // ============================================================
+  // دعوة مجموعة التعليم بعد التسجيل
+  // ============================================================
+
+  const [showEducationGroup, setShowEducationGroup] =
+    useState(false)
+
+  const [educationGroupLink, setEducationGroupLink] =
+    useState('')
+
+  const [postRegistrationNotes, setPostRegistrationNotes] =
+    useState('')
+
+  // ============================================================
+  // الدفع
+  // ============================================================
+
   const [paymentEnabled, setPaymentEnabled] = useState(false)
 
   const [benefitEnabled, setBenefitEnabled] = useState(true)
@@ -359,7 +377,10 @@ export default function RegistrationSettingsPage() {
       .maybeSingle()
 
     if (error) {
-      console.error('Error loading registration settings:', error)
+      console.error(
+        'Error loading registration settings:',
+        error,
+      )
 
       setErrorMessage(
         `تعذر تحميل إعدادات التسجيل من قاعدة البيانات: ${error.message}`,
@@ -400,6 +421,7 @@ export default function RegistrationSettingsPage() {
     setShowGuardianRelation(
       data.show_guardian_relation ?? true,
     )
+
     setRequiredGuardianRelation(
       data.required_guardian_relation ?? false,
     )
@@ -408,6 +430,7 @@ export default function RegistrationSettingsPage() {
     setRequiredWhatsapp(data.required_whatsapp ?? false)
 
     setShowStudentPhone(data.show_student_phone ?? true)
+
     setRequiredStudentPhone(
       data.required_student_phone ?? false,
     )
@@ -421,15 +444,44 @@ export default function RegistrationSettingsPage() {
     setShowHealthNotes(data.show_health_notes ?? false)
     setRequiredHealthNotes(data.required_health_notes ?? false)
 
+    // ==========================================================
+    // دعوة مجموعة التعليم
+    // ==========================================================
+
+    setShowEducationGroup(
+      data.show_education_group ?? false,
+    )
+
+    setEducationGroupLink(
+      data.education_group_link ?? '',
+    )
+
+    setPostRegistrationNotes(
+      data.post_registration_notes ?? '',
+    )
+
+    // ==========================================================
+    // الدفع
+    // ==========================================================
+
     setPaymentEnabled(data.payment_enabled ?? false)
 
     setBenefitEnabled(data.benefit_enabled ?? false)
-    setBankTransferEnabled(data.bank_transfer_enabled ?? false)
+    setBankTransferEnabled(
+      data.bank_transfer_enabled ?? false,
+    )
     setCashEnabled(data.cash_enabled ?? false)
-    setPaymentLinkEnabled(data.payment_link_enabled ?? false)
+    setPaymentLinkEnabled(
+      data.payment_link_enabled ?? false,
+    )
 
-    setPaymentProofEnabled(data.payment_proof_enabled ?? false)
-    setPaymentProofRequired(data.payment_proof_required ?? false)
+    setPaymentProofEnabled(
+      data.payment_proof_enabled ?? false,
+    )
+
+    setPaymentProofRequired(
+      data.payment_proof_required ?? false,
+    )
 
     setPaymentAmount(
       data.payment_amount !== null &&
@@ -720,6 +772,39 @@ export default function RegistrationSettingsPage() {
     setErrorMessage('')
     setSuccessMessage('')
 
+    const cleanEducationGroupLink =
+      educationGroupLink.trim()
+
+    const cleanPostRegistrationNotes =
+      postRegistrationNotes.trim()
+
+    // إذا كانت الدعوة مفعلة، يجب أن يكون الرابط صحيحاً
+    if (showEducationGroup && cleanEducationGroupLink) {
+      try {
+        new URL(cleanEducationGroupLink)
+      } catch {
+        setErrorMessage(
+          'رابط مجموعة التعليم غير صحيح. يرجى إدخال رابط كامل مثل https://example.com',
+        )
+
+        setSaving(false)
+        return
+      }
+    }
+
+    // الدعوة مفعلة بدون رابط
+    if (
+      showEducationGroup &&
+      !cleanEducationGroupLink
+    ) {
+      setErrorMessage(
+        'عند تفعيل دعوة مجموعة التعليم يجب إضافة رابط المجموعة.',
+      )
+
+      setSaving(false)
+      return
+    }
+
     const payload = {
       registration_open: registrationOpen,
 
@@ -760,6 +845,26 @@ export default function RegistrationSettingsPage() {
       show_health_notes: showHealthNotes,
       required_health_notes:
         showHealthNotes && requiredHealthNotes,
+
+      // ==========================================================
+      // دعوة مجموعة التعليم بعد التسجيل
+      // ==========================================================
+
+      show_education_group: showEducationGroup,
+
+      education_group_link:
+        cleanEducationGroupLink === ''
+          ? null
+          : cleanEducationGroupLink,
+
+      post_registration_notes:
+        cleanPostRegistrationNotes === ''
+          ? null
+          : cleanPostRegistrationNotes,
+
+      // ==========================================================
+      // الدفع
+      // ==========================================================
 
       payment_enabled: paymentEnabled,
 
@@ -1379,6 +1484,120 @@ export default function RegistrationSettingsPage() {
         </CardContent>
       </Card>
 
+      {/* ==========================================================
+          دعوة مجموعة التعليم بعد التسجيل
+          ========================================================== */}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UsersRound className="size-5" />
+            مجموعة التعليم بعد التسجيل
+          </CardTitle>
+
+          <p className="text-sm leading-6 text-muted-foreground">
+            التحكم في الدعوة التي تظهر للطالب بعد نجاح إرسال طلب التسجيل.
+            هذه المعلومات لا تظهر داخل نموذج التسجيل.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <SettingRow
+            title="تفعيل دعوة مجموعة التعليم"
+            description="عند التفعيل، تظهر دعوة الانضمام إلى مجموعة التعليم في صفحة نجاح التسجيل."
+            checked={showEducationGroup}
+            onChange={setShowEducationGroup}
+            disabled={loading}
+          />
+
+          {showEducationGroup && (
+            <div className="space-y-4 rounded-2xl border bg-muted/20 p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Link2 className="size-4 text-primary" />
+
+                  <label
+                    htmlFor="educationGroupLink"
+                    className="text-sm font-semibold"
+                  >
+                    رابط مجموعة التعليم
+                  </label>
+                </div>
+
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  هذا الرابط يظهر كزر للانضمام بعد نجاح التسجيل.
+                </p>
+
+                <input
+                  id="educationGroupLink"
+                  type="url"
+                  value={educationGroupLink}
+                  onChange={(event) =>
+                    setEducationGroupLink(event.target.value)
+                  }
+                  placeholder="https://..."
+                  disabled={loading || saving}
+                  className="mt-3 flex h-11 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="postRegistrationNotes"
+                  className="text-sm font-semibold"
+                >
+                  ملاحظات بعد التسجيل
+                </label>
+
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  ملاحظة عامة تظهر للمستخدم بعد نجاح التسجيل، ويمكن تركها فارغة.
+                </p>
+
+                <textarea
+                  id="postRegistrationNotes"
+                  value={postRegistrationNotes}
+                  onChange={(event) =>
+                    setPostRegistrationNotes(event.target.value)
+                  }
+                  placeholder="مثال: يرجى الانضمام إلى المجموعة لمتابعة الإعلانات والتنبيهات المهمة."
+                  disabled={loading || saving}
+                  rows={4}
+                  className="mt-3 flex w-full resize-y rounded-xl border bg-background px-3 py-3 text-sm leading-7 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="rounded-xl border bg-background p-3 text-sm leading-6 text-muted-foreground">
+                <strong className="text-foreground">
+                  معاينة:
+                </strong>
+
+                <p className="mt-2 font-semibold text-foreground">
+                  انضم إلى مجموعة التعليم
+                </p>
+
+                {postRegistrationNotes.trim() && (
+                  <p className="mt-1 whitespace-pre-wrap">
+                    {postRegistrationNotes}
+                  </p>
+                )}
+
+                {educationGroupLink.trim() && (
+                  <div className="mt-3 inline-flex rounded-lg border px-4 py-2 font-medium text-primary">
+                    الانضمام إلى مجموعة التعليم
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!showEducationGroup && (
+            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              دعوة مجموعة التعليم متوقفة حالياً، ولن تظهر للمستخدم بعد نجاح التسجيل.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1447,7 +1666,7 @@ export default function RegistrationSettingsPage() {
 
           <FieldControl
             title="رقم الاتصال الأساسي"
-            description="رقم الهاتف الأساسي لولي الأمر أو جهة التواصل."
+            description="رقم الهاتف الأساسي لجهة التواصل."
             visible={showPhone}
             required={requiredPhone}
             onVisibleChange={(value) => {
@@ -1473,7 +1692,7 @@ export default function RegistrationSettingsPage() {
 
           <FieldControl
             title="الواتساب"
-            description="رقم الواتساب للتواصل مع ولي الأمر أو جهة الاتصال."
+            description="رقم الواتساب للتواصل."
             visible={showWhatsapp}
             required={requiredWhatsapp}
             onVisibleChange={(value) => {
@@ -2080,7 +2299,7 @@ export default function RegistrationSettingsPage() {
         </CardHeader>
 
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground">
                 التسجيل
@@ -2098,6 +2317,20 @@ export default function RegistrationSettingsPage() {
 
               <p className="mt-1 font-semibold">
                 {paymentEnabled ? 'مفعل' : 'غير مفعل'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                مجموعة التعليم
+              </p>
+
+              <p className="mt-1 font-semibold">
+                {showEducationGroup
+                  ? educationGroupLink.trim()
+                    ? 'مفعلة'
+                    : 'مفعلة بدون رابط'
+                  : 'غير مفعلة'}
               </p>
             </div>
 
@@ -2131,6 +2364,25 @@ export default function RegistrationSettingsPage() {
                       : 'اختياري'}
                 </strong>
               </p>
+            </div>
+          )}
+
+          {showEducationGroup && (
+            <div className="mt-4 rounded-xl bg-muted/50 p-4 text-sm leading-7">
+              <p>
+                دعوة مجموعة التعليم:{' '}
+                <strong>
+                  {educationGroupLink.trim()
+                    ? 'مفعلة'
+                    : 'بدون رابط'}
+                </strong>
+              </p>
+
+              {postRegistrationNotes.trim() && (
+                <p className="mt-1">
+                  توجد ملاحظات ستظهر بعد نجاح التسجيل.
+                </p>
+              )}
             </div>
           )}
         </CardContent>
