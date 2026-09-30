@@ -207,6 +207,15 @@ type RegistrationLevel = {
   sort_order: number | null
 }
 
+type RegistrationCourse = {
+  id: string
+  name: string
+  academic_year_id: string
+  start_date: string | null
+  end_date: string | null
+  is_closed: boolean
+}
+
 type FieldType =
   | 'text'
   | 'number'
@@ -248,6 +257,25 @@ export default function RegistrationSettingsPage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   const [registrationOpen, setRegistrationOpen] = useState(true)
+
+  // ============================================================
+  // السنة الحالية + دورة التسجيل الحالية
+  // ============================================================
+
+  const [currentAcademicYearId, setCurrentAcademicYearId] =
+    useState<string | null>(null)
+
+  const [currentAcademicYearName, setCurrentAcademicYearName] =
+    useState('')
+
+  const [registrationCourseId, setRegistrationCourseId] =
+    useState<string | null>(null)
+
+  const [registrationCourses, setRegistrationCourses] =
+    useState<RegistrationCourse[]>([])
+
+  const [registrationCoursesLoading, setRegistrationCoursesLoading] =
+    useState(false)
 
   const [showName, setShowName] = useState(true)
   const [requiredName, setRequiredName] = useState(true)
@@ -366,9 +394,95 @@ export default function RegistrationSettingsPage() {
 
   useEffect(() => {
     loadSettings()
+    loadRegistrationCourses()
     loadCustomFields()
     loadRegistrationLevels()
   }, [])
+
+  // ============================================================
+  // تحميل السنة الحالية والدورات المفتوحة
+  // ============================================================
+
+  async function loadRegistrationCourses() {
+    setRegistrationCoursesLoading(true)
+
+    const { data: currentYear, error: yearError } =
+      await supabase
+        .from('academic_years')
+        .select('id, name')
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .maybeSingle()
+
+    if (yearError) {
+      console.error(
+        'Error loading current academic year:',
+        yearError,
+      )
+
+      setErrorMessage(
+        `تعذر تحميل السنة الدراسية الحالية: ${yearError.message}`,
+      )
+
+      setRegistrationCoursesLoading(false)
+      return
+    }
+
+    if (!currentYear) {
+      setCurrentAcademicYearId(null)
+      setCurrentAcademicYearName('')
+      setRegistrationCourses([])
+
+      setErrorMessage(
+        'لا توجد سنة دراسية حالية مفعلة. يرجى تحديد السنة الحالية أولاً.',
+      )
+
+      setRegistrationCoursesLoading(false)
+      return
+    }
+
+    setCurrentAcademicYearId(currentYear.id)
+    setCurrentAcademicYearName(currentYear.name)
+
+    const { data: courses, error: coursesError } =
+      await supabase
+        .from('courses')
+        .select(
+          `
+          id,
+          name,
+          academic_year_id,
+          start_date,
+          end_date,
+          is_closed
+        `,
+        )
+        .eq('academic_year_id', currentYear.id)
+        .eq('is_closed', false)
+        .order('start_date', { ascending: true })
+
+    if (coursesError) {
+      console.error(
+        'Error loading registration courses:',
+        coursesError,
+      )
+
+      setRegistrationCourses([])
+
+      setErrorMessage(
+        `تعذر تحميل دورات التسجيل: ${coursesError.message}`,
+      )
+
+      setRegistrationCoursesLoading(false)
+      return
+    }
+
+    setRegistrationCourses(
+      (courses ?? []) as RegistrationCourse[],
+    )
+
+    setRegistrationCoursesLoading(false)
+  }
 
   async function loadSettings() {
     setLoading(true)
@@ -405,6 +519,14 @@ export default function RegistrationSettingsPage() {
     }
 
     setSettingsId(data.id)
+
+    // ==========================================================
+    // دورة التسجيل المحددة من لوحة التحكم
+    // ==========================================================
+
+    setRegistrationCourseId(
+      data.course_id ?? null,
+    )
 
     setRegistrationOpen(data.registration_open ?? true)
 
@@ -793,6 +915,42 @@ export default function RegistrationSettingsPage() {
     const cleanPostRegistrationNotes =
       postRegistrationNotes.trim()
 
+    // ==========================================================
+    // التحقق من دورة التسجيل
+    // ==========================================================
+
+    if (registrationOpen && !currentAcademicYearId) {
+      setErrorMessage(
+        'لا توجد سنة دراسية حالية مفعلة. لا يمكن فتح التسجيل بدون سنة حالية.',
+      )
+
+      setSaving(false)
+      return
+    }
+
+    if (registrationOpen && !registrationCourseId) {
+      setErrorMessage(
+        'اختر دورة التسجيل الحالية أولاً.',
+      )
+
+      setSaving(false)
+      return
+    }
+
+    if (
+      registrationCourseId &&
+      !registrationCourses.some(
+        (course) => course.id === registrationCourseId,
+      )
+    ) {
+      setErrorMessage(
+        'الدورة المحددة غير متاحة ضمن الدورات المفتوحة للسنة الحالية. اختر دورة أخرى.',
+      )
+
+      setSaving(false)
+      return
+    }
+
     // إذا كانت الدعوة مفعلة، يجب أن يكون الرابط موجوداً
     if (
       showEducationGroup &&
@@ -831,6 +989,16 @@ export default function RegistrationSettingsPage() {
     }
 
     const payload = {
+      // ==========================================================
+      // سياق التسجيل
+      // ==========================================================
+
+      // السنة لا يتم تخزينها هنا لأنها دائماً السنة
+      // التي عليها is_current = true.
+      //
+      // الدورة المختارة من لوحة التحكم يتم تخزينها هنا.
+      course_id: registrationCourseId,
+
       registration_open: registrationOpen,
 
       show_name: showName,
@@ -1372,6 +1540,129 @@ export default function RegistrationSettingsPage() {
             )}
           </div>
 
+          {/* ======================================================
+              سياق التسجيل الحالي
+              ====================================================== */}
+
+          <div className="mt-5 border-t pt-5">
+            <div>
+              <p className="font-semibold">
+                دورة التسجيل الحالية
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                السنة الدراسية تؤخذ تلقائياً من السنة الحالية في النظام،
+                أما الدورة فيحددها المسؤول من الدورات المفتوحة التابعة
+                للسنة الحالية.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {/* السنة الحالية */}
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <p className="text-xs text-muted-foreground">
+                  السنة الدراسية الحالية
+                </p>
+
+                <p className="mt-1 font-semibold">
+                  {registrationCoursesLoading
+                    ? 'جاري التحميل...'
+                    : currentAcademicYearName || 'لا توجد سنة حالية'}
+                </p>
+
+                {!currentAcademicYearId &&
+                  !registrationCoursesLoading && (
+                    <p className="mt-2 text-xs text-destructive">
+                      يجب تحديد سنة دراسية حالية من إعدادات السنوات الدراسية.
+                    </p>
+                  )}
+              </div>
+
+              {/* الدورة الحالية */}
+              <div>
+                <label
+                  htmlFor="registrationCourse"
+                  className="text-sm font-medium"
+                >
+                  الدورة المستخدمة في التسجيل الخارجي
+                </label>
+
+                <div className="relative mt-2">
+                  <select
+                    id="registrationCourse"
+                    value={registrationCourseId ?? ''}
+                    onChange={(event) =>
+                      setRegistrationCourseId(
+                        event.target.value || null,
+                      )
+                    }
+                    disabled={
+                      loading ||
+                      saving ||
+                      registrationCoursesLoading ||
+                      registrationCourses.length === 0
+                    }
+                    className="flex h-11 w-full appearance-none rounded-xl border bg-background px-3 py-2 pl-10 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">
+                      اختر الدورة
+                    </option>
+
+                    {registrationCourses.map((course) => (
+                      <option
+                        key={course.id}
+                        value={course.id}
+                      >
+                        {course.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ChevronDown className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
+                </div>
+
+                {registrationCourses.length === 0 &&
+                  !registrationCoursesLoading && (
+                    <p className="mt-2 text-sm text-destructive">
+                      لا توجد دورة مفتوحة في السنة الدراسية الحالية.
+                    </p>
+                  )}
+
+                {registrationCourseId &&
+                  registrationCourses.some(
+                    (course) =>
+                      course.id === registrationCourseId,
+                  ) && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      هذه هي الدورة التي سيتم ربط طلبات التسجيل الجديدة بها.
+                    </p>
+                  )}
+              </div>
+            </div>
+
+            {registrationCourses.length > 0 && (
+              <div className="mt-4 rounded-xl border bg-muted/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Check className="size-4" />
+                  </div>
+
+                  <div>
+                    <p className="font-medium">
+                      طريقة الربط
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      عند إرسال طلب جديد، النظام سيحفظ السنة الدراسية الحالية
+                      والدورة المحددة هنا داخل الطلب نفسه. إذا غيرت الدورة
+                      لاحقاً، الطلبات القديمة لن تتغير.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {registrationOpen && (
             <div className="mt-5 border-t pt-5">
               <div>
@@ -1542,7 +1833,6 @@ export default function RegistrationSettingsPage() {
 
           {showEducationGroup && (
             <div className="space-y-5 rounded-2xl border bg-muted/20 p-4">
-              {/* رابط المجموعة */}
               <div>
                 <div className="flex items-center gap-2">
                   <Link2 className="size-4 text-primary" />
@@ -1572,7 +1862,6 @@ export default function RegistrationSettingsPage() {
                 />
               </div>
 
-              {/* التعليق المصاحب للرابط */}
               <div>
                 <label
                   htmlFor="educationGroupDescription"
@@ -1601,7 +1890,6 @@ export default function RegistrationSettingsPage() {
                 />
               </div>
 
-              {/* الملاحظات العامة */}
               <div>
                 <label
                   htmlFor="postRegistrationNotes"
@@ -1627,7 +1915,6 @@ export default function RegistrationSettingsPage() {
                 />
               </div>
 
-              {/* المعاينة */}
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-sm font-semibold">
                   معاينة ما بعد التسجيل
@@ -2390,6 +2677,29 @@ export default function RegistrationSettingsPage() {
 
             <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground">
+                السنة الدراسية
+              </p>
+
+              <p className="mt-1 font-semibold">
+                {currentAcademicYearName || 'غير محددة'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
+                دورة التسجيل
+              </p>
+
+              <p className="mt-1 font-semibold">
+                {registrationCourses.find(
+                  (course) =>
+                    course.id === registrationCourseId,
+                )?.name ?? 'غير محددة'}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-muted/50 p-4">
+              <p className="text-sm text-muted-foreground">
                 الدفع
               </p>
 
@@ -2397,7 +2707,9 @@ export default function RegistrationSettingsPage() {
                 {paymentEnabled ? 'مفعل' : 'غير مفعل'}
               </p>
             </div>
+          </div>
 
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground">
                 مجموعة التعليم
