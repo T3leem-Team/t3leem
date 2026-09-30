@@ -77,13 +77,27 @@ type RegistrationSettings = {
   education_group_description: string | null
   post_registration_notes: string | null
 
-  /*
-   * دورة التسجيل يتم تحديدها من لوحة التحكم.
+  /**
+   * الدورة التي حددتها الإدارة للتسجيل الخارجي.
    *
-   * الصفحة العامة لا تستخدم هذه القيمة لإرسال الطلب،
-   * لأن الـ RPC هو المسؤول عن تحديد الدورة بشكل آمن.
+   * لا يتم إرسالها إلى RPC من المتصفح.
+   * الـ RPC يقرأها مباشرة من registration_settings.
    */
   course_id: string | null
+}
+
+type AcademicYear = {
+  id: string
+  name: string
+}
+
+type RegistrationCourse = {
+  id: string
+  name: string
+  academic_year_id: string
+  start_date: string | null
+  end_date: string | null
+  is_closed: boolean
 }
 
 type Level = {
@@ -167,6 +181,12 @@ export default function RegisterPage() {
   const [settings, setSettings] =
     useState<RegistrationSettings | null>(null)
 
+  const [academicYear, setAcademicYear] =
+    useState<AcademicYear | null>(null)
+
+  const [registrationCourse, setRegistrationCourse] =
+    useState<RegistrationCourse | null>(null)
+
   const [levels, setLevels] = useState<Level[]>([])
 
   const [customFields, setCustomFields] =
@@ -183,6 +203,13 @@ export default function RegisterPage() {
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+
+  /**
+   * نحتفظ بالرقم الشخصي بعد الإرسال حتى يظهر
+   * في رسالة النجاح، بدل أن يختفي بعد setPersonalId('').
+   */
+  const [submittedPersonalId, setSubmittedPersonalId] =
+    useState('')
 
   const [name, setName] = useState('')
   const [personalId, setPersonalId] = useState('')
@@ -219,6 +246,11 @@ export default function RegisterPage() {
     setErrorMessage('')
 
     try {
+      /*
+       * -------------------------------------------------------
+       * 1) تحميل إعدادات التسجيل
+       * -------------------------------------------------------
+       */
       const settingsResult = await supabase
         .from('registration_settings')
         .select('*')
@@ -248,6 +280,121 @@ export default function RegisterPage() {
 
       setSettings(loadedSettings)
 
+      /*
+       * -------------------------------------------------------
+       * 2) تحميل السنة الدراسية الحالية
+       *
+       * السنة لا يختارها المستخدم.
+       * النظام يستخدم السنة التي عليها is_current = true.
+       * -------------------------------------------------------
+       */
+      const academicYearResult = await supabase
+        .from('academic_years')
+        .select('id, name')
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+
+      if (academicYearResult.error) {
+        console.error(
+          'academic_years error:',
+          academicYearResult.error,
+        )
+
+        setErrorMessage(
+          `تعذر تحميل السنة الدراسية الحالية: ${academicYearResult.error.message}`,
+        )
+
+        return
+      }
+
+      if (!academicYearResult.data) {
+        setErrorMessage(
+          'لا توجد سنة دراسية حالية ومفعلة.',
+        )
+
+        return
+      }
+
+      const loadedAcademicYear =
+        academicYearResult.data as AcademicYear
+
+      setAcademicYear(loadedAcademicYear)
+
+      /*
+       * -------------------------------------------------------
+       * 3) تحميل دورة التسجيل المحددة من لوحة التحكم
+       *
+       * لا نختار الدورة حسب التاريخ.
+       * نستخدم registration_settings.course_id مباشرة.
+       * -------------------------------------------------------
+       */
+      if (!loadedSettings.course_id) {
+        setRegistrationCourse(null)
+
+        setErrorMessage(
+          'لم يتم تحديد دورة التسجيل الحالية من لوحة التحكم. يرجى التواصل مع إدارة التعليم.',
+        )
+
+        return
+      }
+
+      const courseResult = await supabase
+        .from('courses')
+        .select(
+          'id, name, academic_year_id, start_date, end_date, is_closed',
+        )
+        .eq('id', loadedSettings.course_id)
+        .eq(
+          'academic_year_id',
+          loadedAcademicYear.id,
+        )
+        .maybeSingle()
+
+      if (courseResult.error) {
+        console.error(
+          'courses error:',
+          courseResult.error,
+        )
+
+        setErrorMessage(
+          `تعذر تحميل دورة التسجيل الحالية: ${courseResult.error.message}`,
+        )
+
+        return
+      }
+
+      if (!courseResult.data) {
+        setErrorMessage(
+          'دورة التسجيل المحددة غير موجودة أو لا تتبع السنة الدراسية الحالية.',
+        )
+
+        return
+      }
+
+      const loadedCourse =
+        courseResult.data as RegistrationCourse
+
+      /*
+       * حماية إضافية في واجهة المستخدم.
+       * الـ RPC لديه نفس التحقق من جهة قاعدة البيانات.
+       */
+      if (loadedCourse.is_closed) {
+        setErrorMessage(
+          'دورة التسجيل الحالية مغلقة. يرجى التواصل مع إدارة التعليم.',
+        )
+
+        return
+      }
+
+      setRegistrationCourse(loadedCourse)
+
+      /*
+       * -------------------------------------------------------
+       * 4) تحميل المستويات
+       * -------------------------------------------------------
+       */
       const levelsResult = await supabase
         .from('levels')
         .select('id, name, sort_order')
@@ -270,7 +417,9 @@ export default function RegisterPage() {
       setLevels(levelsResult.data ?? [])
 
       /*
-       * تحميل الحقول الإضافية المتاحة للتسجيل.
+       * -------------------------------------------------------
+       * 5) تحميل الحقول الإضافية
+       * -------------------------------------------------------
        */
       const customFieldsResult = await supabase
         .from('custom_fields')
@@ -512,13 +661,14 @@ export default function RegisterPage() {
     }
 
     /*
-     * دورة التسجيل لا يتم إرسالها من المتصفح.
-     * لكن وجودها في الإعدادات مهم للتأكد أن التحكم
-     * قام بتحديد دورة قبل فتح التسجيل.
-     *
-     * التحقق النهائي يتم داخل الـ RPC أيضًا.
+     * التأكد من وجود السنة والدورة في الواجهة.
+     * الحماية الحقيقية تبقى داخل الـ RPC.
      */
-    if (!settings.course_id) {
+    if (!academicYear) {
+      return 'لا توجد سنة دراسية حالية ومفعلة.'
+    }
+
+    if (!registrationCourse) {
       return 'لم يتم تحديد دورة التسجيل الحالية. يرجى التواصل مع إدارة التعليم.'
     }
 
@@ -814,17 +964,26 @@ export default function RegisterPage() {
       }
 
       /*
+       * نحفظ نسخة من الرقم الشخصي للعرض بعد نجاح التسجيل.
+       */
+      const submittedId =
+        personalId.trim()
+
+      setSubmittedPersonalId(
+        submittedId,
+      )
+
+      /*
        * الرقم الشخصي هو المرجع الذي يعرف به الطالب.
        *
        * إذا كان الرقم الشخصي موجودًا نستخدمه كرقم الطلب
        * داخل النظام أيضًا.
        *
-       * إذا كان الرقم الشخصي غير موجود، نستخدم قيمة داخلية
-       * فقط لأن RPC يحتاج p_request_number لإنشاء السجل.
-       * هذه القيمة الداخلية لا يتم عرضها للطالب.
+       * إذا لم يكن موجودًا، نستخدم قيمة داخلية فقط لأن
+       * RPC يحتاج p_request_number لإنشاء السجل.
        */
       const internalRequestNumber =
-        personalId.trim() ||
+        submittedId ||
         `REG-${new Date().getFullYear()}-${Date.now()
           .toString()
           .slice(-8)}`
@@ -838,11 +997,14 @@ export default function RegisterPage() {
           : null
 
       /*
+       * مهم:
+       *
        * لا نرسل academic_year_id ولا course_id.
        *
-       * الـ RPC يحدد:
-       * - السنة الحالية من academic_years
-       * - دورة التسجيل من registration_settings.course_id
+       * الـ RPC يحدد من قاعدة البيانات:
+       *
+       * 1. السنة الحالية من academic_years
+       * 2. دورة التسجيل من registration_settings.course_id
        *
        * ثم يحفظهما داخل registration_requests.
        */
@@ -863,8 +1025,7 @@ export default function RegisterPage() {
 
             p_personal_id:
               settings.show_personal_id
-                ? personalId.trim() ||
-                  null
+                ? submittedId || null
                 : null,
 
             p_gender:
@@ -1258,6 +1419,34 @@ export default function RegisterPage() {
     return null
   }
 
+  if (
+    errorMessage &&
+    (!academicYear ||
+      !registrationCourse)
+  ) {
+    return (
+      <main className="min-h-screen bg-muted/30 px-4 py-10">
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-2xl border bg-background p-6 shadow-sm">
+            <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+              <AlertCircle className="mt-0.5 size-5 shrink-0" />
+
+              <div>
+                <p className="font-medium">
+                  تعذر تحميل بيانات التسجيل
+                </p>
+
+                <p className="mt-1 text-sm">
+                  {errorMessage}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   if (!settings.registration_open) {
     return (
       <main className="min-h-screen bg-muted/30 px-4 py-10">
@@ -1327,6 +1516,51 @@ export default function RegisterPage() {
             </p>
           </div>
 
+          {/*
+           * ---------------------------------------------------
+           * السنة والدورة الحالية
+           * ---------------------------------------------------
+           *
+           * للعرض فقط.
+           * المستخدم لا يستطيع تغييرهما.
+           */}
+          {academicYear &&
+            registrationCourse && (
+              <div className="mt-6 rounded-2xl border bg-muted/30 p-4">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold">
+                    بيانات التسجيل الحالي
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    هذه البيانات محددة من إدارة التعليم.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs text-muted-foreground">
+                      السنة الدراسية
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {academicYear.name}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-background p-4">
+                    <p className="text-xs text-muted-foreground">
+                      دورة التسجيل
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {registrationCourse.name}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
           {successMessage && (
             <div className="mt-6 rounded-2xl border bg-background p-5 shadow-sm">
               <div className="flex items-start gap-3">
@@ -1339,17 +1573,42 @@ export default function RegisterPage() {
                     {successMessage}
                   </p>
 
-                  {personalId.trim() && (
+                  {submittedPersonalId && (
                     <div className="mt-3 rounded-xl border bg-muted/30 p-3">
                       <p className="text-sm text-muted-foreground">
                         الرقم الشخصي
                       </p>
 
                       <p className="mt-1 break-all text-lg font-bold text-foreground">
-                        {personalId.trim()}
+                        {submittedPersonalId}
                       </p>
                     </div>
                   )}
+
+                  {academicYear &&
+                    registrationCourse && (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">
+                            السنة الدراسية
+                          </p>
+
+                          <p className="mt-1 text-sm font-semibold">
+                            {academicYear.name}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">
+                            دورة التسجيل
+                          </p>
+
+                          <p className="mt-1 text-sm font-semibold">
+                            {registrationCourse.name}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                   <p className="mt-3 text-sm leading-7 text-muted-foreground">
                     استعمل الرقم الشخصي لمتابعة الطالب بعد القبول في التعليم.
