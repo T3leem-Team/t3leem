@@ -266,6 +266,7 @@ export default function RegistrationSettingsPage() {
 
   const [showGuardianRelation, setShowGuardianRelation] =
     useState(true)
+
   const [requiredGuardianRelation, setRequiredGuardianRelation] =
     useState(false)
 
@@ -274,6 +275,7 @@ export default function RegistrationSettingsPage() {
 
   const [showStudentPhone, setShowStudentPhone] =
     useState(true)
+
   const [requiredStudentPhone, setRequiredStudentPhone] =
     useState(false)
 
@@ -294,6 +296,9 @@ export default function RegistrationSettingsPage() {
     useState(false)
 
   const [educationGroupLink, setEducationGroupLink] =
+    useState('')
+
+  const [educationGroupDescription, setEducationGroupDescription] =
     useState('')
 
   const [postRegistrationNotes, setPostRegistrationNotes] =
@@ -456,6 +461,10 @@ export default function RegistrationSettingsPage() {
       data.education_group_link ?? '',
     )
 
+    setEducationGroupDescription(
+      data.education_group_description ?? '',
+    )
+
     setPostRegistrationNotes(
       data.post_registration_notes ?? '',
     )
@@ -467,10 +476,13 @@ export default function RegistrationSettingsPage() {
     setPaymentEnabled(data.payment_enabled ?? false)
 
     setBenefitEnabled(data.benefit_enabled ?? false)
+
     setBankTransferEnabled(
       data.bank_transfer_enabled ?? false,
     )
+
     setCashEnabled(data.cash_enabled ?? false)
+
     setPaymentLinkEnabled(
       data.payment_link_enabled ?? false,
     )
@@ -775,24 +787,13 @@ export default function RegistrationSettingsPage() {
     const cleanEducationGroupLink =
       educationGroupLink.trim()
 
+    const cleanEducationGroupDescription =
+      educationGroupDescription.trim()
+
     const cleanPostRegistrationNotes =
       postRegistrationNotes.trim()
 
-    // إذا كانت الدعوة مفعلة، يجب أن يكون الرابط صحيحاً
-    if (showEducationGroup && cleanEducationGroupLink) {
-      try {
-        new URL(cleanEducationGroupLink)
-      } catch {
-        setErrorMessage(
-          'رابط مجموعة التعليم غير صحيح. يرجى إدخال رابط كامل مثل https://example.com',
-        )
-
-        setSaving(false)
-        return
-      }
-    }
-
-    // الدعوة مفعلة بدون رابط
+    // إذا كانت الدعوة مفعلة، يجب أن يكون الرابط موجوداً
     if (
       showEducationGroup &&
       !cleanEducationGroupLink
@@ -803,6 +804,30 @@ export default function RegistrationSettingsPage() {
 
       setSaving(false)
       return
+    }
+
+    // التحقق من الرابط
+    if (
+      showEducationGroup &&
+      cleanEducationGroupLink
+    ) {
+      try {
+        const url = new URL(cleanEducationGroupLink)
+
+        if (
+          url.protocol !== 'http:' &&
+          url.protocol !== 'https:'
+        ) {
+          throw new Error('Invalid protocol')
+        }
+      } catch {
+        setErrorMessage(
+          'رابط مجموعة التعليم غير صحيح. يرجى إدخال رابط كامل يبدأ بـ https://',
+        )
+
+        setSaving(false)
+        return
+      }
     }
 
     const payload = {
@@ -856,6 +881,11 @@ export default function RegistrationSettingsPage() {
         cleanEducationGroupLink === ''
           ? null
           : cleanEducationGroupLink,
+
+      education_group_description:
+        cleanEducationGroupDescription === ''
+          ? null
+          : cleanEducationGroupDescription,
 
       post_registration_notes:
         cleanPostRegistrationNotes === ''
@@ -1496,7 +1526,7 @@ export default function RegistrationSettingsPage() {
           </CardTitle>
 
           <p className="text-sm leading-6 text-muted-foreground">
-            التحكم في الدعوة التي تظهر للطالب بعد نجاح إرسال طلب التسجيل.
+            التحكم في المعلومات التي تظهر للطالب بعد نجاح إرسال طلب التسجيل.
             هذه المعلومات لا تظهر داخل نموذج التسجيل.
           </p>
         </CardHeader>
@@ -1504,14 +1534,15 @@ export default function RegistrationSettingsPage() {
         <CardContent className="space-y-4">
           <SettingRow
             title="تفعيل دعوة مجموعة التعليم"
-            description="عند التفعيل، تظهر دعوة الانضمام إلى مجموعة التعليم في صفحة نجاح التسجيل."
+            description="عند التفعيل، تظهر مجموعة التعليم ورابطها في صفحة نجاح التسجيل."
             checked={showEducationGroup}
             onChange={setShowEducationGroup}
             disabled={loading}
           />
 
           {showEducationGroup && (
-            <div className="space-y-4 rounded-2xl border bg-muted/20 p-4">
+            <div className="space-y-5 rounded-2xl border bg-muted/20 p-4">
+              {/* رابط المجموعة */}
               <div>
                 <div className="flex items-center gap-2">
                   <Link2 className="size-4 text-primary" />
@@ -1525,7 +1556,7 @@ export default function RegistrationSettingsPage() {
                 </div>
 
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  هذا الرابط يظهر كزر للانضمام بعد نجاح التسجيل.
+                  رابط المجموعة الذي سيظهر للطالب بعد نجاح التسجيل.
                 </p>
 
                 <input
@@ -1535,22 +1566,52 @@ export default function RegistrationSettingsPage() {
                   onChange={(event) =>
                     setEducationGroupLink(event.target.value)
                   }
-                  placeholder="https://..."
+                  placeholder="https://chat.whatsapp.com/..."
                   disabled={loading || saving}
                   className="mt-3 flex h-11 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
+              {/* التعليق المصاحب للرابط */}
+              <div>
+                <label
+                  htmlFor="educationGroupDescription"
+                  className="text-sm font-semibold"
+                >
+                  النص المصاحب لرابط المجموعة
+                </label>
+
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  هذا النص يظهر قبل رابط مجموعة التعليم، ويمكنك تغييره
+                  حسب التعليمات التي تريد إيصالها للطالب.
+                </p>
+
+                <textarea
+                  id="educationGroupDescription"
+                  value={educationGroupDescription}
+                  onChange={(event) =>
+                    setEducationGroupDescription(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="مثال: يمكنكم الانضمام إلى مجموعة التعليم من خلال الرابط التالي:"
+                  disabled={loading || saving}
+                  rows={3}
+                  className="mt-3 flex w-full resize-y rounded-xl border bg-background px-3 py-3 text-sm leading-7 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              {/* الملاحظات العامة */}
               <div>
                 <label
                   htmlFor="postRegistrationNotes"
                   className="text-sm font-semibold"
                 >
-                  ملاحظات بعد التسجيل
+                  ملاحظات عامة بعد التسجيل
                 </label>
 
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  ملاحظة عامة تظهر للمستخدم بعد نجاح التسجيل، ويمكن تركها فارغة.
+                  ملاحظات مستقلة تظهر بعد قسم مجموعة التعليم، ويمكن تركها فارغة.
                 </p>
 
                 <textarea
@@ -1559,33 +1620,50 @@ export default function RegistrationSettingsPage() {
                   onChange={(event) =>
                     setPostRegistrationNotes(event.target.value)
                   }
-                  placeholder="مثال: يرجى الانضمام إلى المجموعة لمتابعة الإعلانات والتنبيهات المهمة."
+                  placeholder="مثال: يرجى الانضمام إلى مجتمع التعليم في الواتساب حتى تصلكم جميع إعلانات التعليم."
                   disabled={loading || saving}
                   rows={4}
                   className="mt-3 flex w-full resize-y rounded-xl border bg-background px-3 py-3 text-sm leading-7 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
 
-              <div className="rounded-xl border bg-background p-3 text-sm leading-6 text-muted-foreground">
-                <strong className="text-foreground">
-                  معاينة:
-                </strong>
-
-                <p className="mt-2 font-semibold text-foreground">
-                  انضم إلى مجموعة التعليم
+              {/* المعاينة */}
+              <div className="rounded-xl border bg-background p-4">
+                <p className="text-sm font-semibold">
+                  معاينة ما بعد التسجيل
                 </p>
 
-                {postRegistrationNotes.trim() && (
-                  <p className="mt-1 whitespace-pre-wrap">
-                    {postRegistrationNotes}
-                  </p>
-                )}
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-xl border p-4">
+                    <p className="font-semibold">
+                      مجموعة التعليم
+                    </p>
 
-                {educationGroupLink.trim() && (
-                  <div className="mt-3 inline-flex rounded-lg border px-4 py-2 font-medium text-primary">
-                    الانضمام إلى مجموعة التعليم
+                    {educationGroupDescription.trim() && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                        {educationGroupDescription}
+                      </p>
+                    )}
+
+                    {educationGroupLink.trim() && (
+                      <div className="mt-3 inline-flex rounded-lg border px-4 py-2 text-sm font-medium text-primary">
+                        الانضمام إلى مجموعة التعليم
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {postRegistrationNotes.trim() && (
+                    <div className="rounded-xl border p-4">
+                      <p className="font-semibold">
+                        ملاحظات عامة
+                      </p>
+
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+                        {postRegistrationNotes}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2377,6 +2455,12 @@ export default function RegistrationSettingsPage() {
                     : 'بدون رابط'}
                 </strong>
               </p>
+
+              {educationGroupDescription.trim() && (
+                <p className="mt-1">
+                  يوجد نص مصاحب لرابط المجموعة.
+                </p>
+              )}
 
               {postRegistrationNotes.trim() && (
                 <p className="mt-1">
