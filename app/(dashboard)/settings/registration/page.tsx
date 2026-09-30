@@ -263,8 +263,18 @@ export default function RegistrationSettingsPage() {
   const [showPhone, setShowPhone] = useState(true)
   const [requiredPhone, setRequiredPhone] = useState(true)
 
+  const [showGuardianRelation, setShowGuardianRelation] =
+    useState(true)
+  const [requiredGuardianRelation, setRequiredGuardianRelation] =
+    useState(false)
+
   const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [requiredWhatsapp, setRequiredWhatsapp] = useState(false)
+
+  const [showStudentPhone, setShowStudentPhone] =
+    useState(true)
+  const [requiredStudentPhone, setRequiredStudentPhone] =
+    useState(false)
 
   const [showLevel, setShowLevel] = useState(true)
   const [requiredLevel, setRequiredLevel] = useState(true)
@@ -387,8 +397,20 @@ export default function RegistrationSettingsPage() {
     setShowPhone(data.show_phone ?? true)
     setRequiredPhone(data.required_phone ?? true)
 
+    setShowGuardianRelation(
+      data.show_guardian_relation ?? true,
+    )
+    setRequiredGuardianRelation(
+      data.required_guardian_relation ?? false,
+    )
+
     setShowWhatsapp(data.show_whatsapp ?? false)
     setRequiredWhatsapp(data.required_whatsapp ?? false)
+
+    setShowStudentPhone(data.show_student_phone ?? true)
+    setRequiredStudentPhone(
+      data.required_student_phone ?? false,
+    )
 
     setShowLevel(data.show_level ?? true)
     setRequiredLevel(data.required_level ?? true)
@@ -717,9 +739,17 @@ export default function RegistrationSettingsPage() {
       show_phone: showPhone,
       required_phone: showPhone && requiredPhone,
 
+      show_guardian_relation: showGuardianRelation,
+      required_guardian_relation:
+        showGuardianRelation && requiredGuardianRelation,
+
       show_whatsapp: showWhatsapp,
       required_whatsapp:
         showWhatsapp && requiredWhatsapp,
+
+      show_student_phone: showStudentPhone,
+      required_student_phone:
+        showStudentPhone && requiredStudentPhone,
 
       show_level: showLevel,
       required_level: showLevel && requiredLevel,
@@ -1416,8 +1446,8 @@ export default function RegistrationSettingsPage() {
           />
 
           <FieldControl
-            title="رقم الاتصال"
-            description="رقم الهاتف الأساسي."
+            title="رقم الاتصال الأساسي"
+            description="رقم الهاتف الأساسي لولي الأمر أو جهة التواصل."
             visible={showPhone}
             required={requiredPhone}
             onVisibleChange={(value) => {
@@ -1429,8 +1459,21 @@ export default function RegistrationSettingsPage() {
           />
 
           <FieldControl
+            title="صلة القرابة"
+            description="صلة قرابة صاحب رقم الاتصال الأساسي بالطالب."
+            visible={showGuardianRelation}
+            required={requiredGuardianRelation}
+            onVisibleChange={(value) => {
+              setShowGuardianRelation(value)
+              if (!value) setRequiredGuardianRelation(false)
+            }}
+            onRequiredChange={setRequiredGuardianRelation}
+            disabled={loading}
+          />
+
+          <FieldControl
             title="الواتساب"
-            description="رقم الواتساب."
+            description="رقم الواتساب للتواصل مع ولي الأمر أو جهة الاتصال."
             visible={showWhatsapp}
             required={requiredWhatsapp}
             onVisibleChange={(value) => {
@@ -1438,6 +1481,19 @@ export default function RegistrationSettingsPage() {
               if (!value) setRequiredWhatsapp(false)
             }}
             onRequiredChange={setRequiredWhatsapp}
+            disabled={loading}
+          />
+
+          <FieldControl
+            title="رقم الطالب"
+            description="رقم الهاتف الخاص بالطالب نفسه."
+            visible={showStudentPhone}
+            required={requiredStudentPhone}
+            onVisibleChange={(value) => {
+              setShowStudentPhone(value)
+              if (!value) setRequiredStudentPhone(false)
+            }}
+            onRequiredChange={setRequiredStudentPhone}
             disabled={loading}
           />
 
@@ -1468,8 +1524,8 @@ export default function RegistrationSettingsPage() {
           />
 
           <FieldControl
-            title="الأمراض المزمنة / المعلومات الصحية"
-            description="المعلومات الصحية التي يضيفها مقدم الطلب."
+            title="الحالة الصحية"
+            description="الحالة الصحية والمعلومات الصحية التي يضيفها مقدم الطلب."
             visible={showHealthNotes}
             required={requiredHealthNotes}
             onVisibleChange={(value) => {
