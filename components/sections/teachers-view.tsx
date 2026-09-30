@@ -2102,7 +2102,7 @@ export function TeachersView() {
                             </th>
 
                             <th className="px-4 py-3 text-right font-medium">
-                              الرقم الشخصي
+                              الاتصال
                             </th>
 
                             <th className="px-4 py-3 text-right font-medium">
@@ -2154,8 +2154,17 @@ export function TeachersView() {
                                   </td>
 
                                   <td className="px-4 py-3">
-                                    {student.personalId ||
-                                      '—'}
+                                    <div className="flex flex-col gap-1">
+                                      <span>
+                                        {student.phone ||
+                                          '—'}
+                                      </span>
+
+                                      <span>
+                                        {student.whatsapp ||
+                                          '—'}
+                                      </span>
+                                    </div>
                                   </td>
 
                                   <td className="px-4 py-3">
