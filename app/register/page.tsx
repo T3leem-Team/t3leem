@@ -571,7 +571,7 @@ export default function RegisterPage() {
       settings.required_whatsapp &&
       !whatsapp.trim()
     ) {
-      return 'يرجى إدخال رقم الواتساب.'
+      return 'يرجى إدخال الرقم الثاني.'
     }
 
     if (
@@ -1509,7 +1509,7 @@ export default function RegisterPage() {
                 {settings.show_phone && (
                   <div>
                     <FieldLabel
-                      label="رقم الاتصال الأساسي-وتساب/"
+                      label="رقم الاتصال الأساسي -الواتسب"
                       required={
                         settings.required_phone
                       }
@@ -1634,7 +1634,7 @@ export default function RegisterPage() {
                           event.target.value,
                         )
                       }
-                      placeholder="أدخل رقم الواتساب"
+                      placeholder="أدخل رقم التواصل الثاني"
                       required={
                         settings.required_whatsapp
                       }
