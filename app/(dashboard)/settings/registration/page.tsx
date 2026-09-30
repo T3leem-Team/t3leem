@@ -630,6 +630,12 @@ export default function RegistrationSettingsPage() {
     setLoading(false)
   }
 
+  // ============================================================
+  // المستويات
+  // الترتيب هنا يأتي مباشرة من Supabase بواسطة sort_order.
+  // لا يوجد أي ترتيب محلي حسب الاسم أو غيره.
+  // ============================================================
+
   async function loadRegistrationLevels() {
     setRegistrationLevelsLoading(true)
 
@@ -638,7 +644,11 @@ export default function RegistrationSettingsPage() {
       .select(
         'id, name, is_active, registration_enabled, sort_order',
       )
-      .order('sort_order', { ascending: true })
+      .eq('is_active', true)
+      .order('sort_order', {
+        ascending: true,
+        nullsFirst: false,
+      })
 
     if (error) {
       console.error(
@@ -654,11 +664,13 @@ export default function RegistrationSettingsPage() {
       return
     }
 
-    const activeLevels = (data ?? []).filter(
-      (level) => level.is_active === true,
+    // مهم:
+    // لا نستخدم filter أو sort هنا.
+    // Supabase هو المسؤول عن تحديد ترتيب النتائج.
+    setRegistrationLevels(
+      (data ?? []) as RegistrationLevel[],
     )
 
-    setRegistrationLevels(activeLevels)
     setRegistrationLevelsLoading(false)
   }
 
@@ -951,7 +963,6 @@ export default function RegistrationSettingsPage() {
       return
     }
 
-    // إذا كانت الدعوة مفعلة، يجب أن يكون الرابط موجوداً
     if (
       showEducationGroup &&
       !cleanEducationGroupLink
@@ -964,7 +975,6 @@ export default function RegistrationSettingsPage() {
       return
     }
 
-    // التحقق من الرابط
     if (
       showEducationGroup &&
       cleanEducationGroupLink
@@ -989,14 +999,6 @@ export default function RegistrationSettingsPage() {
     }
 
     const payload = {
-      // ==========================================================
-      // سياق التسجيل
-      // ==========================================================
-
-      // السنة لا يتم تخزينها هنا لأنها دائماً السنة
-      // التي عليها is_current = true.
-      //
-      // الدورة المختارة من لوحة التحكم يتم تخزينها هنا.
       course_id: registrationCourseId,
 
       registration_open: registrationOpen,
@@ -1039,10 +1041,6 @@ export default function RegistrationSettingsPage() {
       required_health_notes:
         showHealthNotes && requiredHealthNotes,
 
-      // ==========================================================
-      // دعوة مجموعة التعليم بعد التسجيل
-      // ==========================================================
-
       show_education_group: showEducationGroup,
 
       education_group_link:
@@ -1059,10 +1057,6 @@ export default function RegistrationSettingsPage() {
         cleanPostRegistrationNotes === ''
           ? null
           : cleanPostRegistrationNotes,
-
-      // ==========================================================
-      // الدفع
-      // ==========================================================
 
       payment_enabled: paymentEnabled,
 
@@ -1540,10 +1534,6 @@ export default function RegistrationSettingsPage() {
             )}
           </div>
 
-          {/* ======================================================
-              سياق التسجيل الحالي
-              ====================================================== */}
-
           <div className="mt-5 border-t pt-5">
             <div>
               <p className="font-semibold">
@@ -1558,7 +1548,6 @@ export default function RegistrationSettingsPage() {
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {/* السنة الحالية */}
               <div className="rounded-xl border bg-muted/20 p-4">
                 <p className="text-xs text-muted-foreground">
                   السنة الدراسية الحالية
@@ -1578,7 +1567,6 @@ export default function RegistrationSettingsPage() {
                   )}
               </div>
 
-              {/* الدورة الحالية */}
               <div>
                 <label
                   htmlFor="registrationCourse"
