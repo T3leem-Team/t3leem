@@ -123,6 +123,23 @@ export function TeachersView() {
 
   /*
    * =========================================================
+   * ترتيب المستويات الأكاديمية
+   * =========================================================
+   */
+
+  const [
+    academicLevels,
+    setAcademicLevels,
+  ] = useState<
+    {
+      id: string
+      name: string
+      sort_order: number
+    }[]
+  >([])
+
+  /*
+   * =========================================================
    * صلاحيات المستخدم الحالي
    * =========================================================
    */
@@ -412,12 +429,59 @@ export function TeachersView() {
 
   /*
    * =========================================================
-   * تحميل بيانات المعلمين من الكاش
+   * تحميل بيانات المعلمين + ترتيب المستويات
    * =========================================================
    */
 
   useEffect(() => {
     void loadAccessSettings()
+
+    const loadAcademicLevels =
+      async () => {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('levels')
+          .select(
+            'id, name, sort_order',
+          )
+          .eq(
+            'is_active',
+            true,
+          )
+          .order(
+            'sort_order',
+            {
+              ascending: true,
+            },
+          )
+
+        if (error) {
+          console.error(
+            'Academic levels load error:',
+            error,
+          )
+
+          return
+        }
+
+        setAcademicLevels(
+          (data ?? []).map(
+            (level) => ({
+              id: level.id,
+              name: level.name,
+              sort_order:
+                Number(
+                  level.sort_order ??
+                    0,
+                ),
+            }),
+          ),
+        )
+      }
+
+    void loadAcademicLevels()
 
     const cached =
       getTeachersCache()
@@ -679,25 +743,82 @@ export function TeachersView() {
       ),
     )
 
+  /*
+   * =========================================================
+   * المستويات المتاحة لإضافة الطلاب
+   *
+   * الترتيب يعتمد على levels.sort_order
+   * وليس الترتيب الأبجدي.
+   * =========================================================
+   */
+
   const availableGrades =
-    Array.from(
-      new Set(
-        students
-          .filter((student) =>
-            Boolean(
-              student.levelName &&
-                student.levelName !==
-                  '—',
+    useMemo(() => {
+      const existingGrades =
+        new Set<string>()
+
+      students.forEach(
+        (student) => {
+          const grade =
+            String(
+              student.levelName ??
+                '',
+            ).trim()
+
+          if (
+            grade &&
+            grade !== '—'
+          ) {
+            existingGrades.add(
+              grade,
+            )
+          }
+        },
+      )
+
+      const orderedGrades =
+        academicLevels
+          .filter((level) =>
+            existingGrades.has(
+              level.name,
             ),
           )
+          .sort(
+            (a, b) =>
+              Number(
+                a.sort_order ?? 0,
+              ) -
+              Number(
+                b.sort_order ?? 0,
+              ),
+          )
           .map(
-            (student) =>
-              student.levelName,
-          ),
-      ),
-    ).sort((a, b) =>
-      a.localeCompare(b, 'ar'),
-    )
+            (level) =>
+              level.name,
+          )
+
+      /*
+       * أي مستوى موجود عند الطلاب لكنه غير موجود
+       * في جدول levels يظهر في النهاية بدل أن يختفي.
+       */
+      const remainingGrades =
+        Array.from(
+          existingGrades,
+        ).filter(
+          (grade) =>
+            !orderedGrades.includes(
+              grade,
+            ),
+        )
+
+      return [
+        ...orderedGrades,
+        ...remainingGrades,
+      ]
+    }, [
+      students,
+      academicLevels,
+    ])
 
   const availableStudents =
     useMemo(() => {
@@ -1704,6 +1825,10 @@ export function TeachersView() {
                               assignment.studentId,
                           )
 
+                      /*
+                       * ترتيب مستويات الطلاب للمعلم
+                       * حسب levels.sort_order
+                       */
                       const teacherGrades =
                         Array.from(
                           new Set(
@@ -1714,6 +1839,11 @@ export function TeachersView() {
                                 ) =>
                                   teacherStudentIds.includes(
                                     student.id,
+                                  ) &&
+                                  Boolean(
+                                    student.levelName &&
+                                      student.levelName !==
+                                        '—',
                                   ),
                               )
                               .map(
@@ -1723,6 +1853,59 @@ export function TeachersView() {
                                   student.levelName,
                               ),
                           ),
+                        ).sort(
+                          (a, b) => {
+                            const levelA =
+                              academicLevels.find(
+                                (
+                                  level,
+                                ) =>
+                                  level.name ===
+                                  a,
+                              )
+
+                            const levelB =
+                              academicLevels.find(
+                                (
+                                  level,
+                                ) =>
+                                  level.name ===
+                                  b,
+                              )
+
+                            if (
+                              levelA &&
+                              levelB
+                            ) {
+                              return (
+                                Number(
+                                  levelA.sort_order ??
+                                    0,
+                                ) -
+                                Number(
+                                  levelB.sort_order ??
+                                    0,
+                                )
+                              )
+                            }
+
+                            if (
+                              levelA
+                            ) {
+                              return -1
+                            }
+
+                            if (
+                              levelB
+                            ) {
+                              return 1
+                            }
+
+                            return a.localeCompare(
+                              b,
+                              'ar',
+                            )
+                          },
                         )
 
                       const teacherSubjects =
