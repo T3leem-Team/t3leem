@@ -14,6 +14,7 @@ import {
 
 import { StatusBadge } from '@/components/dashboard/status-badge'
 
+import type { AcademicLevel } from '@/lib/students-cache'
 import type { StudentCourseStatus } from './student-details'
 
 export type StudentTableFilters = {
@@ -80,7 +81,7 @@ type Props = {
   students: StudentTableStudent[]
   courses: StudentTableCourse[]
   dynamicFields: StudentDynamicField[]
-  academicLevels: string[]
+  academicLevels: AcademicLevel[]
   filters: StudentTableFilters
   visibleColumns: Record<string, boolean>
   selectedStudentId: string | null
@@ -314,7 +315,7 @@ export function StudentsTable({
     useState('')
 
   const gradeOptions = useMemo(() => {
-    const values = new Set<string>()
+    const existingValues = new Set<string>()
 
     students.forEach((student) => {
       const value = String(
@@ -322,23 +323,32 @@ export function StudentsTable({
       ).trim()
 
       if (value) {
-        values.add(value)
+        existingValues.add(value)
       }
     })
 
-    const existingValues = Array.from(values)
+    const ordered = academicLevels
+      .filter((level) =>
+        existingValues.has(level.name)
+      )
+      .sort(
+        (a, b) =>
+          Number(a.sort_order ?? 0) -
+          Number(b.sort_order ?? 0)
+      )
+      .map((level) => level.name)
 
-    const ordered = academicLevels.filter(
-      (level) =>
-        existingValues.includes(level)
-    )
-
-    const remaining = existingValues.filter(
+    const remaining = Array.from(
+      existingValues
+    ).filter(
       (value) =>
         !ordered.includes(value)
     )
 
-    return [...ordered, ...remaining]
+    return [
+      ...ordered,
+      ...remaining,
+    ]
   }, [students, academicLevels])
 
   const paymentStatusOptions = useMemo(() => {
@@ -947,13 +957,6 @@ export function StudentsTable({
           </div>
         )}
 
-        {/* =========================================
-            الجدول
-            - السكرول العمودي في اليمين
-            - السكرول الأفقي أسفل الجدول
-            - الجدول RTL
-            ========================================= */}
-
         <div
           dir="ltr"
           className="relative max-h-[590px] overflow-auto rounded-lg border [&>div]:overflow-visible"
@@ -962,7 +965,6 @@ export function StudentsTable({
             dir="rtl"
             className="min-w-[1200px]"
           >
-
             <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow>
 
@@ -1085,10 +1087,8 @@ export function StudentsTable({
             </TableHeader>
 
             <TableBody>
-
               {students.map(
                 (student, index) => {
-
                   const remaining =
                     student.feeExempt
                       ? 0
@@ -1137,7 +1137,6 @@ export function StudentsTable({
                         )
                       }}
                     >
-
                       <TableCell className="text-center text-muted-foreground">
                         {index + 1}
                       </TableCell>
@@ -1409,7 +1408,6 @@ export function StudentsTable({
 
                       {visibleCourses.map(
                         (course) => {
-
                           const status =
                             student.courseStatuses?.find(
                               (item) =>
@@ -1427,7 +1425,6 @@ export function StudentsTable({
                           )
                         }
                       )}
-
                     </TableRow>
                   )
                 }
@@ -1446,7 +1443,6 @@ export function StudentsTable({
                   </TableCell>
                 </TableRow>
               )}
-
             </TableBody>
           </Table>
         </div>
