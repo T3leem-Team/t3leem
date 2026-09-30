@@ -238,7 +238,6 @@ export default function RegisterPage() {
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-
   const [checkingPersonalId, setCheckingPersonalId] =
     useState(false)
 
@@ -1203,7 +1202,10 @@ export default function RegisterPage() {
 
     if (field.field_type === 'textarea') {
       return (
-        <div key={field.id}>
+        <div
+          key={field.id}
+          className="md:col-span-2"
+        >
           <FieldLabel
             label={field.name}
             required={commonRequired}
@@ -1267,12 +1269,13 @@ export default function RegisterPage() {
       return (
         <div
           key={field.id}
-          className="rounded-xl border p-4"
+          className="rounded-xl border p-4 md:col-span-2"
         >
           <label className="flex cursor-pointer items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium">
                 {field.name}
+
                 {commonRequired && (
                   <span className="mr-1 text-destructive">
                     *
@@ -1498,7 +1501,7 @@ export default function RegisterPage() {
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-4xl">
+      <div className="mx-auto w-full max-w-5xl">
         <div className="overflow-hidden rounded-2xl border bg-background shadow-sm sm:rounded-3xl">
           <div className="p-4 sm:p-6 lg:p-8">
             <div>
@@ -1674,16 +1677,15 @@ export default function RegisterPage() {
                 onSubmit={handleSubmit}
                 className="mt-7 space-y-8 sm:mt-8"
               >
-                {/* بيانات الطالب */}
                 <section className="space-y-5">
                   <SectionHeader
                     title="بيانات الطالب"
                     description="يرجى إدخال البيانات الأساسية للطالب."
                   />
 
-                  <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="grid gap-5 md:grid-cols-2">
                     {settings.show_name && (
-                      <div className="sm:col-span-2">
+                      <div className="md:col-span-2">
                         <FieldLabel
                           label="الاسم"
                           required={
@@ -2010,7 +2012,7 @@ export default function RegisterPage() {
                     )}
 
                     {settings.show_notes && (
-                      <div className="sm:col-span-2">
+                      <div className="md:col-span-2">
                         <FieldLabel
                           label="الملاحظات"
                           required={
@@ -2034,7 +2036,7 @@ export default function RegisterPage() {
                     )}
 
                     {settings.show_health_notes && (
-                      <div className="sm:col-span-2">
+                      <div className="md:col-span-2">
                         <FieldLabel
                           label="الحالة الصحية"
                           required={
@@ -2059,7 +2061,6 @@ export default function RegisterPage() {
                   </div>
                 </section>
 
-                {/* الحقول الإضافية */}
                 {customFields.length > 0 && (
                   <section className="space-y-5 border-t pt-7">
                     <SectionHeader
@@ -2067,7 +2068,7 @@ export default function RegisterPage() {
                       description="يرجى تعبئة البيانات الإضافية المطلوبة."
                     />
 
-                    <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="grid gap-5 md:grid-cols-2">
                       {customFields.map(
                         (field) =>
                           renderCustomField(
@@ -2078,7 +2079,6 @@ export default function RegisterPage() {
                   </section>
                 )}
 
-                {/* الدفع */}
                 {settings.payment_enabled && (
                   <section className="space-y-5 border-t pt-7">
                     <SectionHeader title="الدفع" />
@@ -2128,7 +2128,7 @@ export default function RegisterPage() {
                         required
                       />
 
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {paymentMethods.map(
                           (method) => (
                             <button
@@ -2139,7 +2139,7 @@ export default function RegisterPage() {
                                   method.id,
                                 )
                               }
-                              className={`min-h-14 rounded-xl border p-3.5 text-right transition active:scale-[0.99] ${
+                              className={`min-h-14 touch-manipulation rounded-xl border p-3.5 text-right transition active:scale-[0.99] ${
                                 paymentMethod ===
                                 method.id
                                   ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
@@ -2179,7 +2179,7 @@ export default function RegisterPage() {
                         </div>
                       )}
 
-                    <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="grid gap-5 md:grid-cols-2">
                       <div>
                         <FieldLabel label="رقم المرجع" />
 
@@ -2231,12 +2231,11 @@ export default function RegisterPage() {
                   </section>
                 )}
 
-                {/* الإرسال */}
                 <section className="border-t pt-7">
                   <Button
                     type="submit"
                     size="lg"
-                    className="h-13 w-full rounded-xl text-base font-semibold sm:h-12"
+                    className="h-13 w-full touch-manipulation rounded-xl text-base font-semibold sm:h-12"
                     disabled={submitting}
                   >
                     {submitting ? (
