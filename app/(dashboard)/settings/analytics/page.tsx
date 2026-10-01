@@ -29,6 +29,7 @@ type AnalyticsOption = {
   icon: typeof BarChart3
   href: string
   badge?: string
+  elementKey: string
 }
 
 const analyticsOptions: AnalyticsOption[] = [
@@ -39,6 +40,7 @@ const analyticsOptions: AnalyticsOption[] = [
     icon: Eye,
     href: '/settings/analytics/student-tracking',
     badge: 'متاح',
+    elementKey: 'analytics.student_tracking.view',
   },
 ]
 
@@ -46,12 +48,13 @@ export default function AnalyticsPage() {
   const router = useRouter()
 
   const [checkingPermission, setCheckingPermission] = useState(true)
-  const [hasPermission, setHasPermission] = useState(false)
+  const [hasPageAccess, setHasPageAccess] = useState(false)
+  const [systemElementKeys, setSystemElementKeys] = useState<string[]>([])
 
   useEffect(() => {
     let mounted = true
 
-    const checkPermission = async () => {
+    const checkPermissions = async () => {
       try {
         const {
           data: { session },
@@ -65,13 +68,21 @@ export default function AnalyticsPage() {
           return
         }
 
-        const { data, error } = await supabase.rpc('has_permission', {
-          required_permission: 'analytics.view',
-        })
+        /*
+         * صلاحية دخول صفحة التحليلات نفسها
+         *
+         * هذه تبقى منفصلة عن صلاحيات عناصر الصفحة.
+         */
+        const { data, error } = await supabase.rpc(
+          'has_permission',
+          {
+            required_permission: 'analytics.view',
+          },
+        )
 
         if (error) {
           console.error(
-            'Failed to check analytics permission:',
+            'Failed to check analytics page permission:',
             error,
           )
 
@@ -90,13 +101,50 @@ export default function AnalyticsPage() {
           return
         }
 
+        /*
+         * جلب صلاحيات عناصر النظام للمستخدم الحالي.
+         *
+         * هذا النظام منفصل عن permissions العادية.
+         */
+        const response = await fetch(
+          '/api/auth/permissions',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
+
+        const permissionsData =
+          await response.json()
+
+        if (!response.ok) {
+          console.error(
+            'Failed to load system element permissions:',
+            permissionsData?.error,
+          )
+
+          if (mounted) {
+            router.replace('/settings')
+          }
+
+          return
+        }
+
+        const elementKeys =
+          Array.isArray(
+            permissionsData?.systemElementKeys,
+          )
+            ? permissionsData.systemElementKeys
+            : []
+
         if (mounted) {
-          setHasPermission(true)
+          setSystemElementKeys(elementKeys)
+          setHasPageAccess(true)
           setCheckingPermission(false)
         }
       } catch (error) {
         console.error(
-          'Unexpected error checking analytics permission:',
+          'Unexpected error checking analytics permissions:',
           error,
         )
 
@@ -106,14 +154,14 @@ export default function AnalyticsPage() {
       }
     }
 
-    checkPermission()
+    checkPermissions()
 
     return () => {
       mounted = false
     }
   }, [router])
 
-  if (checkingPermission || !hasPermission) {
+  if (checkingPermission || !hasPageAccess) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="text-sm text-muted-foreground">
@@ -122,6 +170,13 @@ export default function AnalyticsPage() {
       </div>
     )
   }
+
+  const visibleAnalyticsOptions =
+    analyticsOptions.filter((item) =>
+      systemElementKeys.includes(
+        item.elementKey,
+      ),
+    )
 
   return (
     <div className="space-y-6">
@@ -165,58 +220,62 @@ export default function AnalyticsPage() {
       </Card>
 
       {/* خيارات التحليلات */}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">
-            التحليلات المتاحة
-          </h2>
+      {visibleAnalyticsOptions.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">
+              التحليلات المتاحة
+            </h2>
 
-          <p className="text-sm text-muted-foreground">
-            اختر التحليل الذي تريد استعراض تفاصيله.
-          </p>
-        </div>
+            <p className="text-sm text-muted-foreground">
+              اختر التحليل الذي تريد استعراض تفاصيله.
+            </p>
+          </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {analyticsOptions.map((item) => {
-            const Icon = item.icon
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleAnalyticsOptions.map((item) => {
+              const Icon = item.icon
 
-            return (
-              <Card
-                key={item.href}
-                className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
-                onClick={() => router.push(item.href)}
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="h-6 w-6" />
+              return (
+                <Card
+                  key={item.href}
+                  className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() =>
+                    router.push(item.href)
+                  }
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-6 w-6" />
+                      </div>
+
+                      {item.badge && (
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          {item.badge}
+                        </span>
+                      )}
                     </div>
 
-                    {item.badge && (
-                      <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
+                    <CardTitle className="pt-2 text-base">
+                      {item.title}
+                    </CardTitle>
 
-                  <CardTitle className="pt-2 text-base">
-                    {item.title}
-                  </CardTitle>
+                    <CardDescription className="leading-6">
+                      {item.description}
+                    </CardDescription>
 
-                  <CardDescription className="leading-6">
-                    {item.description}
-                  </CardDescription>
-
-                  <div className="flex items-center gap-1 pt-2 text-sm font-medium text-primary">
-                    عرض التحليل
-                    <ChevronLeft className="h-4 w-4" />
-                  </div>
-                </CardHeader>
-              </Card>
-            )
-          })}
-        </div>
-      </section>
+                    <div className="flex items-center gap-1 pt-2 text-sm font-medium text-primary">
+                      عرض التحليل
+                      <ChevronLeft className="h-4 w-4" />
+                    </div>
+                  </CardHeader>
+                </Card>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {/* التحليلات القادمة */}
       <section className="space-y-3">
