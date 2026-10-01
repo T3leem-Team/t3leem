@@ -478,20 +478,10 @@ export async function loadStudentsCache(options?: {
   const force =
     options?.force ?? false
 
-  /*
-   * إذا عندنا كاش ولا يوجد طلب إجباري:
-   * نرجع الكاش مباشرة.
-   */
   if (!force && studentsCache) {
     return studentsCache
   }
 
-  /*
-   * إذا كان هناك تحميل شغال بالفعل:
-   * نستخدم نفس الـ Promise.
-   *
-   * هذا مهم جداً للـ preload.
-   */
   if (studentsCacheLoading) {
     return studentsCacheLoading
   }
@@ -622,6 +612,18 @@ export async function loadStudentsCache(options?: {
           })
         )
 
+      const courseNameMap =
+        new Map<string, string>()
+
+      loadedCourses.forEach(
+        (course) => {
+          courseNameMap.set(
+            course.id,
+            course.name
+          )
+        }
+      )
+
       const today =
         getTodayString()
 
@@ -741,6 +743,8 @@ export async function loadStudentsCache(options?: {
 
       /*
        * enrollments
+       *
+       * course_id = دورة الالتحاق
        */
       const {
         data: enrollmentRows,
@@ -752,7 +756,7 @@ export async function loadStudentsCache(options?: {
             'enrollments'
           )
           .select(
-            'student_id, level_id, class_id, academic_year_id, status'
+            'student_id, level_id, class_id, academic_year_id, status, course_id'
           )
           .eq(
             'academic_year_id',
@@ -761,7 +765,7 @@ export async function loadStudentsCache(options?: {
 
       if (enrollmentsError) {
         throw new Error(
-          `خطأ في تحميل ربط الطلاب بالصفوف: ${enrollmentsError.message}`
+          `خطأ في تحميل ربط الطلاب بالصفوف والدورات: ${enrollmentsError.message}`
         )
       }
 
@@ -818,6 +822,8 @@ export async function loadStudentsCache(options?: {
           {
             levelName: string
             className: string
+            courseId: string
+            courseName: string
           }
         >()
 
@@ -825,6 +831,10 @@ export async function loadStudentsCache(options?: {
         enrollmentRows ?? []
       ).forEach(
         (enrollment) => {
+          const courseId =
+            enrollment.course_id ??
+            ''
+
           enrollmentMap.set(
             enrollment.student_id,
             {
@@ -832,10 +842,20 @@ export async function loadStudentsCache(options?: {
                 levelMap.get(
                   enrollment.level_id
                 ) ?? '',
+
               className:
                 enrollment.class_id
                   ? classMap.get(
                       enrollment.class_id
+                    ) ?? ''
+                  : '',
+
+              courseId,
+
+              courseName:
+                courseId
+                  ? courseNameMap.get(
+                      courseId
                     ) ?? ''
                   : '',
             }
@@ -857,7 +877,7 @@ export async function loadStudentsCache(options?: {
         await supabase
           .from('students')
           .select(
-            'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, status, fee_exempt, created_at, updated_at, source, academic_year_id'
+            'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
           )
           .order(
             'created_at',
@@ -878,7 +898,7 @@ export async function loadStudentsCache(options?: {
           await supabase
             .from('students')
             .select(
-              'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, created_at'
+              'id, student_id, name, personal_id, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
             )
             .order(
               'created_at',
@@ -1102,11 +1122,6 @@ export async function loadStudentsCache(options?: {
             )
 
         if (attendanceError) {
-          /*
-           * نفس السلوك السابق:
-           * لا نفشل تحميل صفحة الطلاب بالكامل
-           * بسبب تعذر تحميل الحضور.
-           */
           console.warn(
             'تعذر تحميل سجلات الحضور:',
             attendanceError.message
@@ -1347,6 +1362,22 @@ export async function loadStudentsCache(options?: {
 
               whatsapp:
                 student.whatsapp ??
+                '',
+
+              guardianRelation:
+                student.guardian_relation ??
+                '',
+
+              studentPhone:
+                student.student_phone ??
+                '',
+
+              enrollmentCourseId:
+                enrollment?.courseId ??
+                '',
+
+              enrollmentCourseName:
+                enrollment?.courseName ??
                 '',
 
               status:
