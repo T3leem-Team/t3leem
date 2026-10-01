@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -20,6 +21,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase'
 
 type AnalyticsOption = {
   title: string
@@ -42,6 +44,84 @@ const analyticsOptions: AnalyticsOption[] = [
 
 export default function AnalyticsPage() {
   const router = useRouter()
+
+  const [checkingPermission, setCheckingPermission] = useState(true)
+  const [hasPermission, setHasPermission] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    const checkPermission = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          if (mounted) {
+            router.replace('/settings')
+          }
+
+          return
+        }
+
+        const { data, error } = await supabase.rpc('has_permission', {
+          required_permission: 'analytics.view',
+        })
+
+        if (error) {
+          console.error(
+            'Failed to check analytics permission:',
+            error,
+          )
+
+          if (mounted) {
+            router.replace('/settings')
+          }
+
+          return
+        }
+
+        if (data !== true) {
+          if (mounted) {
+            router.replace('/settings')
+          }
+
+          return
+        }
+
+        if (mounted) {
+          setHasPermission(true)
+          setCheckingPermission(false)
+        }
+      } catch (error) {
+        console.error(
+          'Unexpected error checking analytics permission:',
+          error,
+        )
+
+        if (mounted) {
+          router.replace('/settings')
+        }
+      }
+    }
+
+    checkPermission()
+
+    return () => {
+      mounted = false
+    }
+  }, [router])
+
+  if (checkingPermission || !hasPermission) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-sm text-muted-foreground">
+          جاري التحقق من الصلاحيات...
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
