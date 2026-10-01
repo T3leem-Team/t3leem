@@ -1,6 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertCircle,
@@ -355,6 +359,29 @@ function calculateCourseSummary(
 }
 
 export default function StudentStatusPage() {
+  /*
+   * تسجيل زيارة الصفحة مرة واحدة.
+   *
+   * useRef يمنع التسجيل مرتين أثناء React Strict Mode
+   * في بيئة التطوير.
+   */
+  const visitRecordedRef = useRef(false)
+
+  useEffect(() => {
+    if (visitRecordedRef.current) {
+      return
+    }
+
+    visitRecordedRef.current = true
+
+    void supabase.rpc(
+      'record_student_tracking_analytics',
+      {
+        p_type: 'visit',
+      },
+    )
+  }, [])
+
   const [searchValue, setSearchValue] = useState('')
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
@@ -414,18 +441,20 @@ export default function StudentStatusPage() {
     setActivePersonalId('')
 
     try {
-      const { data, error: rpcError } = await supabase.rpc(
-        'get_student_status_by_personal_id',
-        {
-          p_personal_id: personalId,
-        },
-      )
+      const { data, error: rpcError } =
+        await supabase.rpc(
+          'get_student_status_by_personal_id',
+          {
+            p_personal_id: personalId,
+          },
+        )
 
       if (rpcError) {
         throw rpcError
       }
 
-      const payload = data as StudentStatusResponse | null
+      const payload =
+        data as StudentStatusResponse | null
 
       if (!payload) {
         setError(
@@ -435,10 +464,13 @@ export default function StudentStatusPage() {
         return
       }
 
-      const status = payload.registrationStatus ?? null
+      const status =
+        payload.registrationStatus ?? null
 
       setRegistrationStatus(status)
-      setTrackingStarted(payload.trackingStarted === true)
+      setTrackingStarted(
+        payload.trackingStarted === true,
+      )
 
       // طلب التسجيل الخارجي ما زال قيد المراجعة
       if (status === 'under_review') {
@@ -446,7 +478,8 @@ export default function StudentStatusPage() {
         return
       }
 
-      const studentData = payload.student ?? null
+      const studentData =
+        payload.student ?? null
 
       if (!studentData) {
         setError(
@@ -456,14 +489,21 @@ export default function StudentStatusPage() {
         return
       }
 
-      const academicYear = payload.academicYear ?? null
-      const levelData = payload.level ?? null
+      const academicYear =
+        payload.academicYear ?? null
+
+      const levelData =
+        payload.level ?? null
 
       setStudent(studentData)
       setLevel(levelData)
       setActivePersonalId(personalId)
 
-      // الطالب مقبول ولكن لم تبدأ المتابعة بعد
+      /*
+       * فتح متابعة حقيقي:
+       * لا يتم التسجيل إلا بعد التأكد أن الطالب
+       * دخل فعليًا إلى حالة المتابعة.
+       */
       if (
         status !== 'tracking' ||
         payload.trackingStarted !== true
@@ -472,12 +512,23 @@ export default function StudentStatusPage() {
         return
       }
 
-      const courses = Array.isArray(payload.courses)
+      void supabase.rpc(
+        'record_student_tracking_analytics',
+        {
+          p_type: 'real_tracking_open',
+        },
+      )
+
+      const courses = Array.isArray(
+        payload.courses,
+      )
         ? payload.courses
         : []
 
       const attendanceStatuses =
-        Array.isArray(payload.attendanceStatuses)
+        Array.isArray(
+          payload.attendanceStatuses,
+        )
           ? payload.attendanceStatuses
           : []
 
@@ -488,69 +539,79 @@ export default function StudentStatusPage() {
 
       const today = getTodayString()
 
-      const currentCourseList = courses.filter((course) => {
-        if (!academicYear) {
-          return false
-        }
+      const currentCourseList =
+        courses.filter((course) => {
+          if (!academicYear) {
+            return false
+          }
 
-        if (course.academic_year_id !== academicYear.id) {
-          return false
-        }
+          if (
+            course.academic_year_id !==
+            academicYear.id
+          ) {
+            return false
+          }
 
-        if (!course.start_date || !course.end_date) {
-          return false
-        }
+          if (
+            !course.start_date ||
+            !course.end_date
+          ) {
+            return false
+          }
 
-        return (
-          course.start_date <= today &&
-          course.end_date >= today
+          return (
+            course.start_date <= today &&
+            course.end_date >= today
+          )
+        })
+
+      const currentSummaries =
+        currentCourseList.map(
+          (course) =>
+            calculateCourseSummary(
+              studentData.id,
+              course,
+              attendanceRecords,
+              attendanceStatuses,
+            ),
         )
-      })
-
-      const currentSummaries = currentCourseList.map(
-        (course) =>
-          calculateCourseSummary(
-            studentData.id,
-            course,
-            attendanceRecords,
-            attendanceStatuses,
-          ),
-      )
 
       setCurrentCourses(currentSummaries)
 
-      const previousCourseList = courses.filter(
-        (course) => {
+      const previousCourseList =
+        courses.filter((course) => {
           if (!course.end_date) {
             return false
           }
 
           return course.end_date < today
-        },
-      )
+        })
 
-      const previousSummaries = previousCourseList.map(
-        (course) =>
-          calculateCourseSummary(
-            studentData.id,
-            course,
-            attendanceRecords,
-            attendanceStatuses,
-          ),
-      )
+      const previousSummaries =
+        previousCourseList.map(
+          (course) =>
+            calculateCourseSummary(
+              studentData.id,
+              course,
+              attendanceRecords,
+              attendanceStatuses,
+            ),
+        )
 
       setPreviousCourses(previousSummaries)
 
       setTripsLoading(true)
 
       try {
-        const { data: tripsData, error: tripsRpcError } =
-          await supabase.rpc(
-            'get_student_trips_by_personal_id',
-            {
-              p_personal_id: personalId,
-            },
-          )
+        const {
+          data: tripsData,
+          error: tripsRpcError,
+        } = await supabase.rpc(
+          'get_student_trips_by_personal_id',
+          {
+            p_personal_id: personalId,
+          },
+        )
 
         if (tripsRpcError) {
           throw tripsRpcError
@@ -604,16 +665,17 @@ export default function StudentStatusPage() {
     setTripsError('')
 
     try {
-      const { error: responseError } =
-        await supabase.rpc(
-          'respond_to_trip',
-          {
-            p_personal_id: activePersonalId,
-            p_trip_id: tripId,
-            p_response: response,
-            p_response_note: null,
-          },
-        )
+      const {
+        error: responseError,
+      } = await supabase.rpc(
+        'respond_to_trip',
+        {
+          p_personal_id: activePersonalId,
+          p_trip_id: tripId,
+          p_response: response,
+          p_response_note: null,
+        },
+      )
 
       if (responseError) {
         throw responseError
@@ -626,7 +688,8 @@ export default function StudentStatusPage() {
                 ...trip,
                 response,
                 response_note: null,
-                responded_at: new Date().toISOString(),
+                responded_at:
+                  new Date().toISOString(),
               }
             : trip,
         ),
@@ -693,7 +756,9 @@ export default function StudentStatusPage() {
 
             <button
               type="button"
-              onClick={() => void handleSearch()}
+              onClick={() =>
+                void handleSearch()
+              }
               disabled={loading}
               className="flex h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
