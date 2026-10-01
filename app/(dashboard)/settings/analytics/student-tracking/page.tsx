@@ -29,8 +29,22 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-type Period = 'daily' | 'weekly' | 'monthly' | 'yearly'
-type ChartType = 'line' | 'bar' | 'area' | 'donut'
+import {
+  calculateAverage,
+  calculateConversionRate,
+  calculateTotal,
+  buildAnalyticsPoints,
+} from '@/lib/analytics/engine'
+import {
+  getAnalyticsDefinition,
+} from '@/lib/analytics/definitions'
+import type {
+  AnalyticsChartType,
+  AnalyticsPeriod,
+} from '@/lib/analytics/types'
+
+type Period = AnalyticsPeriod
+type ChartType = AnalyticsChartType
 
 type AnalyticsRow = {
   tracking_date: string
@@ -43,6 +57,11 @@ type ChartPoint = {
   visits: number
   realTrackingOpens: number
 }
+
+const analyticsDefinition =
+  getAnalyticsDefinition(
+    'student_tracking',
+  )
 
 const periodOptions: {
   value: Period
@@ -93,19 +112,22 @@ const chartOptions: {
   },
 ]
 
+/**
+ * التقويم المستخدم في التحليلات ميلادي فقط.
+ */
 const monthNames = [
-  'يناير',
-  'فبراير',
-  'مارس',
-  'أبريل',
-  'مايو',
-  'يونيو',
-  'يوليو',
-  'أغسطس',
-  'سبتمبر',
-  'أكتوبر',
-  'نوفمبر',
-  'ديسمبر',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ]
 
 function getBahrainDate() {
@@ -117,8 +139,14 @@ function getBahrainDate() {
   }).format(new Date())
 }
 
-function getDateParts(dateString: string) {
-  const [year, month, day] = dateString
+function getDateParts(
+  dateString: string,
+) {
+  const [
+    year,
+    month,
+    day,
+  ] = dateString
     .split('-')
     .map(Number)
 
@@ -129,12 +157,24 @@ function getDateParts(dateString: string) {
   }
 }
 
-function getDateRange(period: Period) {
-  const today = getBahrainDate()
-  const { year, month, day } = getDateParts(today)
+function getDateRange(
+  period: Period,
+) {
+  const today =
+    getBahrainDate()
+
+  const {
+    year,
+    month,
+    day,
+  } = getDateParts(today)
 
   const current = new Date(
-    Date.UTC(year, month - 1, day),
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
   )
 
   let from = today
@@ -146,44 +186,87 @@ function getDateRange(period: Period) {
   }
 
   if (period === 'weekly') {
-    const dayOfWeek = current.getUTCDay()
+    const dayOfWeek =
+      current.getUTCDay()
 
-    const start = new Date(current)
+    const start =
+      new Date(current)
+
     start.setUTCDate(
-      current.getUTCDate() - dayOfWeek,
+      current.getUTCDate() -
+        dayOfWeek,
     )
 
-    const end = new Date(start)
-    end.setUTCDate(start.getUTCDate() + 6)
+    const end =
+      new Date(start)
 
-    from = start.toISOString().slice(0, 10)
-    to = end.toISOString().slice(0, 10)
+    end.setUTCDate(
+      start.getUTCDate() + 6,
+    )
+
+    from = start
+      .toISOString()
+      .slice(0, 10)
+
+    to = end
+      .toISOString()
+      .slice(0, 10)
   }
 
   if (period === 'monthly') {
-    const start = new Date(
-      Date.UTC(year, month - 1, 1),
-    )
+    const start =
+      new Date(
+        Date.UTC(
+          year,
+          month - 1,
+          1,
+        ),
+      )
 
-    const end = new Date(
-      Date.UTC(year, month, 0),
-    )
+    const end =
+      new Date(
+        Date.UTC(
+          year,
+          month,
+          0,
+        ),
+      )
 
-    from = start.toISOString().slice(0, 10)
-    to = end.toISOString().slice(0, 10)
+    from = start
+      .toISOString()
+      .slice(0, 10)
+
+    to = end
+      .toISOString()
+      .slice(0, 10)
   }
 
   if (period === 'yearly') {
-    const start = new Date(
-      Date.UTC(year, 0, 1),
-    )
+    const start =
+      new Date(
+        Date.UTC(
+          year,
+          0,
+          1,
+        ),
+      )
 
-    const end = new Date(
-      Date.UTC(year, 11, 31),
-    )
+    const end =
+      new Date(
+        Date.UTC(
+          year,
+          11,
+          31,
+        ),
+      )
 
-    from = start.toISOString().slice(0, 10)
-    to = end.toISOString().slice(0, 10)
+    from = start
+      .toISOString()
+      .slice(0, 10)
+
+    to = end
+      .toISOString()
+      .slice(0, 10)
   }
 
   return {
@@ -197,108 +280,48 @@ function formatDateLabel(
   dateString: string,
   period: Period,
 ) {
-  const { year, month, day } =
-    getDateParts(dateString)
+  const {
+    month,
+    day,
+  } = getDateParts(
+    dateString,
+  )
 
-  if (period === 'daily') {
+  if (
+    period === 'daily' ||
+    period === 'monthly' ||
+    period === 'weekly'
+  ) {
     return `${day}/${month}`
   }
 
-  if (period === 'monthly') {
-    return `${day}/${month}`
-  }
-
-  if (period === 'yearly') {
-    return monthNames[month - 1]
-  }
-
-  return `${day}/${month}`
+  return monthNames[
+    month - 1
+  ]
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('ar-BH').format(value)
+function formatNumber(
+  value: number,
+) {
+  return new Intl.NumberFormat(
+    'ar-BH',
+  ).format(value)
 }
 
 function getConversionRate(
   visits: number,
   realTrackingOpens: number,
 ) {
-  if (!visits) return 0
+  if (!visits) {
+    return 0
+  }
 
   return Math.min(
     100,
-    (realTrackingOpens / visits) * 100,
+    (realTrackingOpens /
+      visits) *
+      100,
   )
-}
-
-function buildChartPoints(
-  rows: AnalyticsRow[],
-  period: Period,
-  selectedYear: number,
-): ChartPoint[] {
-  if (period !== 'yearly') {
-    return rows.map((row) => ({
-      label: formatDateLabel(
-        row.tracking_date,
-        period,
-      ),
-      visits: Number(row.visits || 0),
-      realTrackingOpens: Number(
-        row.real_tracking_opens || 0,
-      ),
-    }))
-  }
-
-  /*
-   * السنوي:
-   * البيانات في Supabase مخزنة يوميًا.
-   * لذلك نجمع كل الأيام داخل كل شهر
-   * حتى يظهر الرسم السنوي بالشكل الصحيح.
-   */
-  const monthlyTotals = Array.from(
-    { length: 12 },
-    (_, index) => ({
-      month: index,
-      visits: 0,
-      realTrackingOpens: 0,
-    }),
-  )
-
-  for (const row of rows) {
-    const { year, month } = getDateParts(
-      row.tracking_date,
-    )
-
-    if (year !== selectedYear) {
-      continue
-    }
-
-    const monthIndex = month - 1
-
-    if (
-      monthIndex < 0 ||
-      monthIndex > 11
-    ) {
-      continue
-    }
-
-    monthlyTotals[monthIndex].visits += Number(
-      row.visits || 0,
-    )
-
-    monthlyTotals[
-      monthIndex
-    ].realTrackingOpens += Number(
-      row.real_tracking_opens || 0,
-    )
-  }
-
-  return monthlyTotals.map((item) => ({
-    label: monthNames[item.month],
-    visits: item.visits,
-    realTrackingOpens:
-      item.realTrackingOpens,
-  }))
 }
 
 function LineChartView({
@@ -320,50 +343,89 @@ function LineChartView({
 
   const maxValue = Math.max(
     1,
-    ...points.flatMap((point) => [
-      point.visits,
-      point.realTrackingOpens,
-    ]),
+    ...points.flatMap(
+      (point) => [
+        point.visits,
+        point.realTrackingOpens,
+      ],
+    ),
   )
 
-  const getX = (index: number) => {
+  const getX = (
+    index: number,
+  ) => {
     if (points.length === 1) {
       return width / 2
     }
 
     return (
       padding +
-      (index * (width - padding * 2)) /
+      (index *
+        (width -
+          padding * 2)) /
         (points.length - 1)
     )
   }
 
-  const getY = (value: number) => {
+  const getY = (
+    value: number,
+  ) => {
     return (
       height -
       padding -
       (value / maxValue) *
-        (height - padding * 2)
+        (height -
+          padding * 2)
     )
   }
 
-  const visitsPath = points
-    .map((point, index) => {
-      const x = getX(index)
-      const y = getY(point.visits)
+  const visitsPath =
+    points
+      .map(
+        (
+          point,
+          index,
+        ) => {
+          const x =
+            getX(index)
 
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-    })
-    .join(' ')
+          const y =
+            getY(
+              point.visits,
+            )
 
-  const opensPath = points
-    .map((point, index) => {
-      const x = getX(index)
-      const y = getY(point.realTrackingOpens)
+          return `${
+            index === 0
+              ? 'M'
+              : 'L'
+          } ${x} ${y}`
+        },
+      )
+      .join(' ')
 
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-    })
-    .join(' ')
+  const opensPath =
+    points
+      .map(
+        (
+          point,
+          index,
+        ) => {
+          const x =
+            getX(index)
+
+          const y =
+            getY(
+              point.realTrackingOpens,
+            )
+
+          return `${
+            index === 0
+              ? 'M'
+              : 'L'
+          } ${x} ${y}`
+        },
+      )
+      .join(' ')
 
   return (
     <div className="w-full overflow-x-auto">
@@ -371,22 +433,28 @@ function LineChartView({
         viewBox={`0 0 ${width} ${height}`}
         className="h-[320px] min-w-[700px] w-full"
       >
-        {points.map((_, index) => {
-          const x = getX(index)
+        {points.map(
+          (_, index) => {
+            const x =
+              getX(index)
 
-          return (
-            <line
-              key={`grid-${index}`}
-              x1={x}
-              x2={x}
-              y1={padding}
-              y2={height - padding}
-              className="stroke-muted"
-              strokeWidth="1"
-              strokeDasharray="4 6"
-            />
-          )
-        })}
+            return (
+              <line
+                key={`grid-${index}`}
+                x1={x}
+                x2={x}
+                y1={padding}
+                y2={
+                  height -
+                  padding
+                }
+                className="stroke-muted"
+                strokeWidth="1"
+                strokeDasharray="4 6"
+              />
+            )
+          },
+        )}
 
         <path
           d={visitsPath}
@@ -406,40 +474,56 @@ function LineChartView({
           strokeLinejoin="round"
         />
 
-        {points.map((point, index) => {
-          const x = getX(index)
-          const visitsY = getY(point.visits)
-          const opensY = getY(
-            point.realTrackingOpens,
-          )
+        {points.map(
+          (
+            point,
+            index,
+          ) => {
+            const x =
+              getX(index)
 
-          return (
-            <g key={`${point.label}-${index}`}>
-              <circle
-                cx={x}
-                cy={visitsY}
-                r="4"
-                className="fill-primary"
-              />
+            const visitsY =
+              getY(
+                point.visits,
+              )
 
-              <circle
-                cx={x}
-                cy={opensY}
-                r="4"
-                className="fill-emerald-500"
-              />
+            const opensY =
+              getY(
+                point.realTrackingOpens,
+              )
 
-              <text
-                x={x}
-                y={height - 15}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[12px]"
+            return (
+              <g
+                key={`${point.label}-${index}`}
               >
-                {point.label}
-              </text>
-            </g>
-          )
-        })}
+                <circle
+                  cx={x}
+                  cy={visitsY}
+                  r="4"
+                  className="fill-primary"
+                />
+
+                <circle
+                  cx={x}
+                  cy={opensY}
+                  r="4"
+                  className="fill-emerald-500"
+                />
+
+                <text
+                  x={x}
+                  y={
+                    height - 15
+                  }
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[12px]"
+                >
+                  {point.label}
+                </text>
+              </g>
+            )
+          },
+        )}
       </svg>
     </div>
   )
@@ -464,61 +548,102 @@ function AreaChartView({
 
   const maxValue = Math.max(
     1,
-    ...points.flatMap((point) => [
-      point.visits,
-      point.realTrackingOpens,
-    ]),
+    ...points.flatMap(
+      (point) => [
+        point.visits,
+        point.realTrackingOpens,
+      ],
+    ),
   )
 
-  const getX = (index: number) => {
+  const getX = (
+    index: number,
+  ) => {
     if (points.length === 1) {
       return width / 2
     }
 
     return (
       padding +
-      (index * (width - padding * 2)) /
+      (index *
+        (width -
+          padding * 2)) /
         (points.length - 1)
     )
   }
 
-  const getY = (value: number) => {
+  const getY = (
+    value: number,
+  ) => {
     return (
       height -
       padding -
       (value / maxValue) *
-        (height - padding * 2)
+        (height -
+          padding * 2)
     )
   }
 
-  const visitsLine = points
-    .map((point, index) => {
-      return `${index === 0 ? 'M' : 'L'} ${getX(
-        index,
-      )} ${getY(point.visits)}`
-    })
-    .join(' ')
+  const visitsLine =
+    points
+      .map(
+        (
+          point,
+          index,
+        ) => {
+          return `${
+            index === 0
+              ? 'M'
+              : 'L'
+          } ${getX(
+            index,
+          )} ${getY(
+            point.visits,
+          )}`
+        },
+      )
+      .join(' ')
 
   const visitsArea = `${visitsLine}
-    L ${getX(points.length - 1)} ${
+    L ${getX(
+      points.length - 1,
+    )} ${
       height - padding
     }
-    L ${getX(0)} ${height - padding}
+    L ${getX(0)} ${
+      height - padding
+    }
     Z`
 
-  const opensLine = points
-    .map((point, index) => {
-      return `${index === 0 ? 'M' : 'L'} ${getX(
-        index,
-      )} ${getY(point.realTrackingOpens)}`
-    })
-    .join(' ')
+  const opensLine =
+    points
+      .map(
+        (
+          point,
+          index,
+        ) => {
+          return `${
+            index === 0
+              ? 'M'
+              : 'L'
+          } ${getX(
+            index,
+          )} ${getY(
+            point.realTrackingOpens,
+          )}`
+        },
+      )
+      .join(' ')
 
   const opensArea = `${opensLine}
-    L ${getX(points.length - 1)} ${
+    L ${getX(
+      points.length - 1,
+    )} ${
       height - padding
     }
-    L ${getX(0)} ${height - padding}
+    L ${getX(0)} ${
+      height - padding
+    }
     Z`
 
   return (
@@ -551,17 +676,24 @@ function AreaChartView({
           strokeWidth="3"
         />
 
-        {points.map((point, index) => (
-          <text
-            key={`${point.label}-${index}`}
-            x={getX(index)}
-            y={height - 15}
-            textAnchor="middle"
-            className="fill-muted-foreground text-[12px]"
-          >
-            {point.label}
-          </text>
-        ))}
+        {points.map(
+          (
+            point,
+            index,
+          ) => (
+            <text
+              key={`${point.label}-${index}`}
+              x={getX(index)}
+              y={
+                height - 15
+              }
+              textAnchor="middle"
+              className="fill-muted-foreground text-[12px]"
+            >
+              {point.label}
+            </text>
+          ),
+        )}
       </svg>
     </div>
   )
@@ -586,27 +718,42 @@ function BarChartView({
 
   const maxValue = Math.max(
     1,
-    ...points.flatMap((point) => [
-      point.visits,
-      point.realTrackingOpens,
-    ]),
+    ...points.flatMap(
+      (point) => [
+        point.visits,
+        point.realTrackingOpens,
+      ],
+    ),
   )
 
-  const chartWidth = width - padding * 2
+  const chartWidth =
+    width - padding * 2
+
   const groupWidth =
-    chartWidth / Math.max(points.length, 1)
+    chartWidth /
+    Math.max(
+      points.length,
+      1,
+    )
 
-  const barWidth = Math.max(
-    8,
-    Math.min(28, groupWidth * 0.25),
-  )
+  const barWidth =
+    Math.max(
+      8,
+      Math.min(
+        28,
+        groupWidth * 0.25,
+      ),
+    )
 
-  const getY = (value: number) => {
+  const getY = (
+    value: number,
+  ) => {
     return (
       height -
       padding -
       (value / maxValue) *
-        (height - padding * 2)
+        (height -
+          padding * 2)
     )
   }
 
@@ -616,54 +763,83 @@ function BarChartView({
         viewBox={`0 0 ${width} ${height}`}
         className="h-[320px] min-w-[700px] w-full"
       >
-        {points.map((point, index) => {
-          const center =
-            padding +
-            groupWidth * index +
-            groupWidth / 2
+        {points.map(
+          (
+            point,
+            index,
+          ) => {
+            const center =
+              padding +
+              groupWidth *
+                index +
+              groupWidth / 2
 
-          const visitsY = getY(point.visits)
-          const opensY = getY(
-            point.realTrackingOpens,
-          )
+            const visitsY =
+              getY(
+                point.visits,
+              )
 
-          const visitsHeight =
-            height - padding - visitsY
+            const opensY =
+              getY(
+                point.realTrackingOpens,
+              )
 
-          const opensHeight =
-            height - padding - opensY
+            const visitsHeight =
+              height -
+              padding -
+              visitsY
 
-          return (
-            <g key={`${point.label}-${index}`}>
-              <rect
-                x={center - barWidth - 3}
-                y={visitsY}
-                width={barWidth}
-                height={visitsHeight}
-                rx="5"
-                className="fill-primary"
-              />
+            const opensHeight =
+              height -
+              padding -
+              opensY
 
-              <rect
-                x={center + 3}
-                y={opensY}
-                width={barWidth}
-                height={opensHeight}
-                rx="5"
-                className="fill-emerald-500"
-              />
-
-              <text
-                x={center}
-                y={height - 15}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[12px]"
+            return (
+              <g
+                key={`${point.label}-${index}`}
               >
-                {point.label}
-              </text>
-            </g>
-          )
-        })}
+                <rect
+                  x={
+                    center -
+                    barWidth -
+                    3
+                  }
+                  y={visitsY}
+                  width={barWidth}
+                  height={
+                    visitsHeight
+                  }
+                  rx="5"
+                  className="fill-primary"
+                />
+
+                <rect
+                  x={
+                    center + 3
+                  }
+                  y={opensY}
+                  width={barWidth}
+                  height={
+                    opensHeight
+                  }
+                  rx="5"
+                  className="fill-emerald-500"
+                />
+
+                <text
+                  x={center}
+                  y={
+                    height - 15
+                  }
+                  textAnchor="middle"
+                  className="fill-muted-foreground text-[12px]"
+                >
+                  {point.label}
+                </text>
+              </g>
+            )
+          },
+        )}
       </svg>
     </div>
   )
@@ -676,26 +852,36 @@ function DonutChartView({
   totalVisits: number
   totalRealTrackingOpens: number
 }) {
-  const safeVisits = Math.max(
-    0,
-    totalVisits,
-  )
+  const safeVisits =
+    Math.max(
+      0,
+      totalVisits,
+    )
 
-  const safeOpens = Math.min(
-    safeVisits,
-    Math.max(0, totalRealTrackingOpens),
-  )
+  const safeOpens =
+    Math.min(
+      safeVisits,
+      Math.max(
+        0,
+        totalRealTrackingOpens,
+      ),
+    )
 
-  const percentage = safeVisits
-    ? (safeOpens / safeVisits) * 100
-    : 0
+  const percentage =
+    safeVisits
+      ? (safeOpens /
+          safeVisits) *
+        100
+      : 0
 
   const radius = 78
+
   const circumference =
     2 * Math.PI * radius
 
   const dash =
-    (percentage / 100) * circumference
+    (percentage / 100) *
+    circumference
 
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center gap-6 md:flex-row">
@@ -727,7 +913,10 @@ function DonutChartView({
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-3xl font-bold">
-            {percentage.toFixed(1)}%
+            {percentage.toFixed(
+              1,
+            )}
+            %
           </span>
 
           <span className="text-xs text-muted-foreground">
@@ -740,19 +929,23 @@ function DonutChartView({
         <div>
           <div className="mb-1 flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-primary" />
+
             <span className="text-sm">
               فتح التتبع الفعلي
             </span>
           </div>
 
           <p className="text-2xl font-bold">
-            {formatNumber(safeOpens)}
+            {formatNumber(
+              safeOpens,
+            )}
           </p>
         </div>
 
         <div>
           <div className="mb-1 flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-muted-foreground/40" />
+
             <span className="text-sm">
               الزيارات الأخرى
             </span>
@@ -760,7 +953,11 @@ function DonutChartView({
 
           <p className="text-2xl font-bold">
             {formatNumber(
-              Math.max(0, safeVisits - safeOpens),
+              Math.max(
+                0,
+                safeVisits -
+                  safeOpens,
+              ),
             )}
           </p>
         </div>
@@ -770,146 +967,254 @@ function DonutChartView({
 }
 
 export default function StudentTrackingAnalyticsPage() {
-  const router = useRouter()
+  const router =
+    useRouter()
 
   const [period, setPeriod] =
-    useState<Period>('weekly')
+    useState<Period>(
+      'weekly',
+    )
 
-  const [chartType, setChartType] =
-    useState<ChartType>('line')
+  const [
+    chartType,
+    setChartType,
+  ] = useState<ChartType>(
+    'line',
+  )
 
-  const [rows, setRows] = useState<
-    AnalyticsRow[]
-  >([])
+  const [rows, setRows] =
+    useState<
+      AnalyticsRow[]
+    >([])
 
   const [loading, setLoading] =
     useState(true)
 
   const [error, setError] =
-    useState<string | null>(null)
+    useState<
+      string | null
+    >(null)
 
-  const [lastUpdated, setLastUpdated] =
-    useState<Date | null>(null)
+  const [
+    lastUpdated,
+    setLastUpdated,
+  ] =
+    useState<Date | null>(
+      null,
+    )
 
   const range = useMemo(
-    () => getDateRange(period),
+    () =>
+      getDateRange(
+        period,
+      ),
     [period],
   )
 
-  const loadAnalytics = useCallback(
-    async () => {
-      setLoading(true)
-      setError(null)
+  const loadAnalytics =
+    useCallback(
+      async () => {
+        setLoading(true)
+        setError(null)
 
-      const { data, error: supabaseError } =
-        await supabase
-          .from('student_tracking_analytics')
-          .select(
-            'tracking_date, visits, real_tracking_opens',
+        if (!analyticsDefinition) {
+          setRows([])
+          setError(
+            'تعريف التحليل غير موجود.',
           )
-          .gte(
-            'tracking_date',
-            range.from,
+          setLastUpdated(
+            new Date(),
           )
-          .lte(
-            'tracking_date',
-            range.to,
-          )
-          .order('tracking_date', {
-            ascending: true,
-          })
+          setLoading(false)
+          return
+        }
 
-      if (supabaseError) {
-        console.error(
-          'Student tracking analytics error:',
-          supabaseError,
-        )
+        const {
+          data,
+          error:
+            supabaseError,
+        } =
+          await supabase
+            .from(
+              analyticsDefinition.source,
+            )
+            .select(
+              `${analyticsDefinition.dateColumn}, ${analyticsDefinition.metrics
+                .map(
+                  (metric) =>
+                    metric.key,
+                )
+                .join(', ')}`,
+            )
+            .gte(
+              analyticsDefinition.dateColumn,
+              range.from,
+            )
+            .lte(
+              analyticsDefinition.dateColumn,
+              range.to,
+            )
+            .order(
+              analyticsDefinition.dateColumn,
+              {
+                ascending: true,
+              },
+            )
 
-        setRows([])
-        setError(
-          'تعذر تحميل بيانات التحليلات.',
-        )
-      } else {
-        setRows(
-          (data || []).map((row) => ({
-            tracking_date:
-              row.tracking_date,
-            visits: Number(
-              row.visits || 0,
+        if (supabaseError) {
+          console.error(
+            'Student tracking analytics error:',
+            supabaseError,
+          )
+
+          setRows([])
+
+          setError(
+            'تعذر تحميل بيانات التحليلات.',
+          )
+        } else {
+          setRows(
+            (
+              data || []
+            ).map(
+              (row) => ({
+                tracking_date:
+                  String(
+                    row[
+                      analyticsDefinition.dateColumn
+                    ] ?? '',
+                  ),
+
+                visits: Number(
+                  row.visits ??
+                    0,
+                ),
+
+                real_tracking_opens:
+                  Number(
+                    row.real_tracking_opens ??
+                      0,
+                  ),
+              }),
             ),
-            real_tracking_opens: Number(
-              row.real_tracking_opens || 0,
-            ),
-          })),
-        )
-      }
+          )
+        }
 
-      setLastUpdated(new Date())
-      setLoading(false)
-    },
-    [range.from, range.to],
-  )
+        setLastUpdated(
+          new Date(),
+        )
+
+        setLoading(false)
+      },
+      [
+        range.from,
+        range.to,
+      ],
+    )
 
   useEffect(() => {
     loadAnalytics()
   }, [loadAnalytics])
 
-  const chartPoints = useMemo(
-    () =>
-      buildChartPoints(
-        rows,
-        period,
-        range.year,
-      ),
-    [rows, period, range.year],
-  )
+  const chartPoints =
+    useMemo(() => {
+      if (!analyticsDefinition) {
+        return []
+      }
 
-  const totals = useMemo(() => {
-    return chartPoints.reduce(
-      (result, point) => {
-        result.visits += point.visits
-        result.realTrackingOpens +=
-          point.realTrackingOpens
+      const points =
+        buildAnalyticsPoints(
+          rows,
+          period,
+          analyticsDefinition,
+          formatDateLabel,
+          monthNames,
+          range.year,
+        )
 
-        return result
-      },
-      {
-        visits: 0,
-        realTrackingOpens: 0,
-      },
+      return points.map(
+        (point) => ({
+          label:
+            point.label,
+
+          visits:
+            point.values[
+              'visits'
+            ] ?? 0,
+
+          realTrackingOpens:
+            point.values[
+              'real_tracking_opens'
+            ] ?? 0,
+        }),
+      )
+    }, [
+      rows,
+      period,
+      range.year,
+    ])
+
+  const totals =
+    useMemo(() => {
+      return {
+        visits:
+          calculateTotal(
+            rows,
+            'visits',
+          ),
+
+        realTrackingOpens:
+          calculateTotal(
+            rows,
+            'real_tracking_opens',
+          ),
+      }
+    }, [rows])
+
+  const conversionRate =
+    useMemo(
+      () =>
+        calculateConversionRate(
+          rows,
+          'real_tracking_opens',
+          'visits',
+        ),
+      [rows],
     )
-  }, [chartPoints])
 
-  const conversionRate = useMemo(
-    () =>
-      getConversionRate(
-        totals.visits,
-        totals.realTrackingOpens,
-      ),
-    [totals],
-  )
+  const averageVisits =
+    useMemo(
+      () =>
+        calculateAverage(
+          rows,
+          'visits',
+        ),
+      [rows],
+    )
 
-  const averageVisits = useMemo(() => {
-    if (!chartPoints.length) return 0
+  const periodLabel =
+    useMemo(() => {
+      if (period === 'daily') {
+        return 'اليوم'
+      }
 
-    return totals.visits / chartPoints.length
-  }, [chartPoints.length, totals.visits])
+      if (
+        period === 'weekly'
+      ) {
+        return 'هذا الأسبوع'
+      }
 
-  const periodLabel = useMemo(() => {
-    if (period === 'daily') {
-      return 'اليوم'
-    }
+      if (
+        period === 'monthly'
+      ) {
+        return 'هذا الشهر'
+      }
 
-    if (period === 'weekly') {
-      return 'هذا الأسبوع'
-    }
-
-    if (period === 'monthly') {
-      return 'هذا الشهر'
-    }
-
-    return `عام ${range.year}`
-  }, [period, range.year])
+      return `عام ${range.year}`
+    }, [
+      period,
+      range.year,
+    ])
 
   return (
     <div
@@ -936,14 +1241,19 @@ export default function StudentTrackingAnalyticsPage() {
 
         <Button
           variant="outline"
-          onClick={loadAnalytics}
+          onClick={
+            loadAnalytics
+          }
           disabled={loading}
         >
           <RefreshCw
             className={`ml-2 h-4 w-4 ${
-              loading ? 'animate-spin' : ''
+              loading
+                ? 'animate-spin'
+                : ''
             }`}
           />
+
           تحديث البيانات
         </Button>
       </div>
@@ -965,7 +1275,9 @@ export default function StudentTrackingAnalyticsPage() {
               {periodOptions.map(
                 (option) => (
                   <Button
-                    key={option.value}
+                    key={
+                      option.value
+                    }
                     variant={
                       period ===
                       option.value
@@ -979,6 +1291,7 @@ export default function StudentTrackingAnalyticsPage() {
                     }
                   >
                     <CalendarDays className="ml-2 h-4 w-4" />
+
                     {option.label}
                   </Button>
                 ),
@@ -1113,7 +1426,8 @@ export default function StudentTrackingAnalyticsPage() {
               </CardTitle>
 
               <CardDescription>
-                {period === 'yearly'
+                {period ===
+                'yearly'
                   ? `تجميع البيانات اليومية حسب أشهر عام ${range.year}`
                   : `عرض بيانات ${periodLabel}`}
               </CardDescription>
@@ -1122,11 +1436,14 @@ export default function StudentTrackingAnalyticsPage() {
             <div className="flex flex-wrap gap-2">
               {chartOptions.map(
                 (option) => {
-                  const Icon = option.icon
+                  const Icon =
+                    option.icon
 
                   return (
                     <Button
-                      key={option.value}
+                      key={
+                        option.value
+                      }
                       variant={
                         chartType ===
                         option.value
@@ -1140,6 +1457,7 @@ export default function StudentTrackingAnalyticsPage() {
                       }
                     >
                       <Icon className="ml-2 h-4 w-4" />
+
                       {option.label}
                     </Button>
                   )
@@ -1153,12 +1471,18 @@ export default function StudentTrackingAnalyticsPage() {
           <div className="mb-5 flex flex-wrap items-center gap-5 text-sm">
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-primary" />
-              <span>الزيارات</span>
+
+              <span>
+                الزيارات
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-emerald-500" />
-              <span>فتح التتبع الفعلي</span>
+
+              <span>
+                فتح التتبع الفعلي
+              </span>
             </div>
           </div>
 
@@ -1166,21 +1490,32 @@ export default function StudentTrackingAnalyticsPage() {
             <div className="flex h-[320px] items-center justify-center text-sm text-muted-foreground">
               جاري تحميل البيانات...
             </div>
-          ) : chartType === 'line' ? (
+          ) : chartType ===
+            'line' ? (
             <LineChartView
-              points={chartPoints}
+              points={
+                chartPoints
+              }
             />
-          ) : chartType === 'area' ? (
+          ) : chartType ===
+            'area' ? (
             <AreaChartView
-              points={chartPoints}
+              points={
+                chartPoints
+              }
             />
-          ) : chartType === 'bar' ? (
+          ) : chartType ===
+            'bar' ? (
             <BarChartView
-              points={chartPoints}
+              points={
+                chartPoints
+              }
             />
           ) : (
             <DonutChartView
-              totalVisits={totals.visits}
+              totalVisits={
+                totals.visits
+              }
               totalRealTrackingOpens={
                 totals.realTrackingOpens
               }
@@ -1205,7 +1540,8 @@ export default function StudentTrackingAnalyticsPage() {
             <div className="py-10 text-center text-sm text-muted-foreground">
               جاري تحميل البيانات...
             </div>
-          ) : chartPoints.length === 0 ? (
+          ) : chartPoints.length ===
+            0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">
               لا توجد بيانات للفترة المحددة.
             </div>
@@ -1234,7 +1570,10 @@ export default function StudentTrackingAnalyticsPage() {
 
                 <tbody>
                   {chartPoints.map(
-                    (point, index) => (
+                    (
+                      point,
+                      index,
+                    ) => (
                       <tr
                         key={`${point.label}-${index}`}
                         className="border-b last:border-0"
@@ -1259,7 +1598,9 @@ export default function StudentTrackingAnalyticsPage() {
                           {getConversionRate(
                             point.visits,
                             point.realTrackingOpens,
-                          ).toFixed(1)}
+                          ).toFixed(
+                            1,
+                          )}
                           %
                         </td>
                       </tr>
