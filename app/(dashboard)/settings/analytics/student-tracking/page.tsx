@@ -29,15 +29,18 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
+import { AnalyticsChart } from '@/components/analytics/analytics-chart'
+
 import {
-  calculateAverage,
   calculateConversionRate,
   calculateTotal,
   buildAnalyticsPoints,
 } from '@/lib/analytics/engine'
+
 import {
   getAnalyticsDefinition,
 } from '@/lib/analytics/definitions'
+
 import type {
   AnalyticsChartType,
   AnalyticsPeriod,
@@ -50,12 +53,6 @@ type AnalyticsRow = {
   tracking_date: string
   visits: number
   real_tracking_opens: number
-}
-
-type ChartPoint = {
-  label: string
-  visits: number
-  realTrackingOpens: number
 }
 
 const analyticsDefinition =
@@ -324,648 +321,6 @@ function getConversionRate(
   )
 }
 
-function LineChartView({
-  points,
-}: {
-  points: ChartPoint[]
-}) {
-  if (!points.length) {
-    return (
-      <div className="flex h-[320px] items-center justify-center text-sm text-muted-foreground">
-        لا توجد بيانات للفترة المحددة
-      </div>
-    )
-  }
-
-  const width = 900
-  const height = 320
-  const padding = 45
-
-  const maxValue = Math.max(
-    1,
-    ...points.flatMap(
-      (point) => [
-        point.visits,
-        point.realTrackingOpens,
-      ],
-    ),
-  )
-
-  const getX = (
-    index: number,
-  ) => {
-    if (points.length === 1) {
-      return width / 2
-    }
-
-    return (
-      padding +
-      (index *
-        (width -
-          padding * 2)) /
-        (points.length - 1)
-    )
-  }
-
-  const getY = (
-    value: number,
-  ) => {
-    return (
-      height -
-      padding -
-      (value / maxValue) *
-        (height -
-          padding * 2)
-    )
-  }
-
-  const visitsPath =
-    points
-      .map(
-        (
-          point,
-          index,
-        ) => {
-          const x =
-            getX(index)
-
-          const y =
-            getY(
-              point.visits,
-            )
-
-          return `${
-            index === 0
-              ? 'M'
-              : 'L'
-          } ${x} ${y}`
-        },
-      )
-      .join(' ')
-
-  const opensPath =
-    points
-      .map(
-        (
-          point,
-          index,
-        ) => {
-          const x =
-            getX(index)
-
-          const y =
-            getY(
-              point.realTrackingOpens,
-            )
-
-          return `${
-            index === 0
-              ? 'M'
-              : 'L'
-          } ${x} ${y}`
-        },
-      )
-      .join(' ')
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[320px] min-w-[700px] w-full"
-      >
-        {points.map(
-          (_, index) => {
-            const x =
-              getX(index)
-
-            return (
-              <line
-                key={`grid-${index}`}
-                x1={x}
-                x2={x}
-                y1={padding}
-                y2={
-                  height -
-                  padding
-                }
-                className="stroke-muted"
-                strokeWidth="1"
-                strokeDasharray="4 6"
-              />
-            )
-          },
-        )}
-
-        <path
-          d={visitsPath}
-          fill="none"
-          className="stroke-primary"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        <path
-          d={opensPath}
-          fill="none"
-          className="stroke-emerald-500"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {points.map(
-          (
-            point,
-            index,
-          ) => {
-            const x =
-              getX(index)
-
-            const visitsY =
-              getY(
-                point.visits,
-              )
-
-            const opensY =
-              getY(
-                point.realTrackingOpens,
-              )
-
-            return (
-              <g
-                key={`${point.label}-${index}`}
-              >
-                <circle
-                  cx={x}
-                  cy={visitsY}
-                  r="4"
-                  className="fill-primary"
-                />
-
-                <circle
-                  cx={x}
-                  cy={opensY}
-                  r="4"
-                  className="fill-emerald-500"
-                />
-
-                <text
-                  x={x}
-                  y={
-                    height - 15
-                  }
-                  textAnchor="middle"
-                  className="fill-muted-foreground text-[12px]"
-                >
-                  {point.label}
-                </text>
-              </g>
-            )
-          },
-        )}
-      </svg>
-    </div>
-  )
-}
-
-function AreaChartView({
-  points,
-}: {
-  points: ChartPoint[]
-}) {
-  if (!points.length) {
-    return (
-      <div className="flex h-[320px] items-center justify-center text-sm text-muted-foreground">
-        لا توجد بيانات للفترة المحددة
-      </div>
-    )
-  }
-
-  const width = 900
-  const height = 320
-  const padding = 45
-
-  const maxValue = Math.max(
-    1,
-    ...points.flatMap(
-      (point) => [
-        point.visits,
-        point.realTrackingOpens,
-      ],
-    ),
-  )
-
-  const getX = (
-    index: number,
-  ) => {
-    if (points.length === 1) {
-      return width / 2
-    }
-
-    return (
-      padding +
-      (index *
-        (width -
-          padding * 2)) /
-        (points.length - 1)
-    )
-  }
-
-  const getY = (
-    value: number,
-  ) => {
-    return (
-      height -
-      padding -
-      (value / maxValue) *
-        (height -
-          padding * 2)
-    )
-  }
-
-  const visitsLine =
-    points
-      .map(
-        (
-          point,
-          index,
-        ) => {
-          return `${
-            index === 0
-              ? 'M'
-              : 'L'
-          } ${getX(
-            index,
-          )} ${getY(
-            point.visits,
-          )}`
-        },
-      )
-      .join(' ')
-
-  const visitsArea = `${visitsLine}
-    L ${getX(
-      points.length - 1,
-    )} ${
-      height - padding
-    }
-    L ${getX(0)} ${
-      height - padding
-    }
-    Z`
-
-  const opensLine =
-    points
-      .map(
-        (
-          point,
-          index,
-        ) => {
-          return `${
-            index === 0
-              ? 'M'
-              : 'L'
-          } ${getX(
-            index,
-          )} ${getY(
-            point.realTrackingOpens,
-          )}`
-        },
-      )
-      .join(' ')
-
-  const opensArea = `${opensLine}
-    L ${getX(
-      points.length - 1,
-    )} ${
-      height - padding
-    }
-    L ${getX(0)} ${
-      height - padding
-    }
-    Z`
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[320px] min-w-[700px] w-full"
-      >
-        <path
-          d={visitsArea}
-          className="fill-primary/10"
-        />
-
-        <path
-          d={opensArea}
-          className="fill-emerald-500/10"
-        />
-
-        <path
-          d={visitsLine}
-          fill="none"
-          className="stroke-primary"
-          strokeWidth="3"
-        />
-
-        <path
-          d={opensLine}
-          fill="none"
-          className="stroke-emerald-500"
-          strokeWidth="3"
-        />
-
-        {points.map(
-          (
-            point,
-            index,
-          ) => (
-            <text
-              key={`${point.label}-${index}`}
-              x={getX(index)}
-              y={
-                height - 15
-              }
-              textAnchor="middle"
-              className="fill-muted-foreground text-[12px]"
-            >
-              {point.label}
-            </text>
-          ),
-        )}
-      </svg>
-    </div>
-  )
-}
-
-function BarChartView({
-  points,
-}: {
-  points: ChartPoint[]
-}) {
-  if (!points.length) {
-    return (
-      <div className="flex h-[320px] items-center justify-center text-sm text-muted-foreground">
-        لا توجد بيانات للفترة المحددة
-      </div>
-    )
-  }
-
-  const width = 900
-  const height = 320
-  const padding = 45
-
-  const maxValue = Math.max(
-    1,
-    ...points.flatMap(
-      (point) => [
-        point.visits,
-        point.realTrackingOpens,
-      ],
-    ),
-  )
-
-  const chartWidth =
-    width - padding * 2
-
-  const groupWidth =
-    chartWidth /
-    Math.max(
-      points.length,
-      1,
-    )
-
-  const barWidth =
-    Math.max(
-      8,
-      Math.min(
-        28,
-        groupWidth * 0.25,
-      ),
-    )
-
-  const getY = (
-    value: number,
-  ) => {
-    return (
-      height -
-      padding -
-      (value / maxValue) *
-        (height -
-          padding * 2)
-    )
-  }
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[320px] min-w-[700px] w-full"
-      >
-        {points.map(
-          (
-            point,
-            index,
-          ) => {
-            const center =
-              padding +
-              groupWidth *
-                index +
-              groupWidth / 2
-
-            const visitsY =
-              getY(
-                point.visits,
-              )
-
-            const opensY =
-              getY(
-                point.realTrackingOpens,
-              )
-
-            const visitsHeight =
-              height -
-              padding -
-              visitsY
-
-            const opensHeight =
-              height -
-              padding -
-              opensY
-
-            return (
-              <g
-                key={`${point.label}-${index}`}
-              >
-                <rect
-                  x={
-                    center -
-                    barWidth -
-                    3
-                  }
-                  y={visitsY}
-                  width={barWidth}
-                  height={
-                    visitsHeight
-                  }
-                  rx="5"
-                  className="fill-primary"
-                />
-
-                <rect
-                  x={
-                    center + 3
-                  }
-                  y={opensY}
-                  width={barWidth}
-                  height={
-                    opensHeight
-                  }
-                  rx="5"
-                  className="fill-emerald-500"
-                />
-
-                <text
-                  x={center}
-                  y={
-                    height - 15
-                  }
-                  textAnchor="middle"
-                  className="fill-muted-foreground text-[12px]"
-                >
-                  {point.label}
-                </text>
-              </g>
-            )
-          },
-        )}
-      </svg>
-    </div>
-  )
-}
-
-function DonutChartView({
-  totalVisits,
-  totalRealTrackingOpens,
-}: {
-  totalVisits: number
-  totalRealTrackingOpens: number
-}) {
-  const safeVisits =
-    Math.max(
-      0,
-      totalVisits,
-    )
-
-  const safeOpens =
-    Math.min(
-      safeVisits,
-      Math.max(
-        0,
-        totalRealTrackingOpens,
-      ),
-    )
-
-  const percentage =
-    safeVisits
-      ? (safeOpens /
-          safeVisits) *
-        100
-      : 0
-
-  const radius = 78
-
-  const circumference =
-    2 * Math.PI * radius
-
-  const dash =
-    (percentage / 100) *
-    circumference
-
-  return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center gap-6 md:flex-row">
-      <div className="relative h-[210px] w-[210px]">
-        <svg
-          viewBox="0 0 210 210"
-          className="h-full w-full -rotate-90"
-        >
-          <circle
-            cx="105"
-            cy="105"
-            r={radius}
-            fill="none"
-            className="stroke-muted"
-            strokeWidth="24"
-          />
-
-          <circle
-            cx="105"
-            cy="105"
-            r={radius}
-            fill="none"
-            className="stroke-primary"
-            strokeWidth="24"
-            strokeLinecap="round"
-            strokeDasharray={`${dash} ${circumference}`}
-          />
-        </svg>
-
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-bold">
-            {percentage.toFixed(
-              1,
-            )}
-            %
-          </span>
-
-          <span className="text-xs text-muted-foreground">
-            نسبة التحول
-          </span>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-primary" />
-
-            <span className="text-sm">
-              فتح التتبع الفعلي
-            </span>
-          </div>
-
-          <p className="text-2xl font-bold">
-            {formatNumber(
-              safeOpens,
-            )}
-          </p>
-        </div>
-
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-muted-foreground/40" />
-
-            <span className="text-sm">
-              الزيارات الأخرى
-            </span>
-          </div>
-
-          <p className="text-2xl font-bold">
-            {formatNumber(
-              Math.max(
-                0,
-                safeVisits -
-                  safeOpens,
-              ),
-            )}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function StudentTrackingAnalyticsPage() {
   const router =
     useRouter()
@@ -1122,31 +477,13 @@ export default function StudentTrackingAnalyticsPage() {
         return []
       }
 
-      const points =
-        buildAnalyticsPoints(
-          rows,
-          period,
-          analyticsDefinition,
-          formatDateLabel,
-          monthNames,
-          range.year,
-        )
-
-      return points.map(
-        (point) => ({
-          label:
-            point.label,
-
-          visits:
-            point.values[
-              'visits'
-            ] ?? 0,
-
-          realTrackingOpens:
-            point.values[
-              'real_tracking_opens'
-            ] ?? 0,
-        }),
+      return buildAnalyticsPoints(
+        rows,
+        period,
+        analyticsDefinition,
+        formatDateLabel,
+        monthNames,
+        range.year,
       )
     }, [
       rows,
@@ -1182,15 +519,33 @@ export default function StudentTrackingAnalyticsPage() {
       [rows],
     )
 
+  /**
+   * المتوسط يعتمد على نقاط الرسم نفسها.
+   * مهم خصوصاً في التحليل السنوي،
+   * لأن السنة تحتوي على 12 شهراً حتى لو بعض الأشهر صفر.
+   */
   const averageVisits =
-    useMemo(
-      () =>
-        calculateAverage(
-          rows,
-          'visits',
-        ),
-      [rows],
-    )
+    useMemo(() => {
+      if (!chartPoints.length) {
+        return 0
+      }
+
+      const total =
+        chartPoints.reduce(
+          (sum, point) =>
+            sum +
+            Number(
+              point.values.visits ??
+                0,
+            ),
+          0,
+        )
+
+      return (
+        total /
+        chartPoints.length
+      )
+    }, [chartPoints])
 
   const periodLabel =
     useMemo(() => {
@@ -1468,56 +823,20 @@ export default function StudentTrackingAnalyticsPage() {
         </CardHeader>
 
         <CardContent>
-          <div className="mb-5 flex flex-wrap items-center gap-5 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-primary" />
-
-              <span>
-                الزيارات
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-emerald-500" />
-
-              <span>
-                فتح التتبع الفعلي
-              </span>
-            </div>
-          </div>
-
           {loading ? (
             <div className="flex h-[320px] items-center justify-center text-sm text-muted-foreground">
               جاري تحميل البيانات...
             </div>
-          ) : chartType ===
-            'line' ? (
-            <LineChartView
-              points={
-                chartPoints
-              }
-            />
-          ) : chartType ===
-            'area' ? (
-            <AreaChartView
-              points={
-                chartPoints
-              }
-            />
-          ) : chartType ===
-            'bar' ? (
-            <BarChartView
-              points={
-                chartPoints
-              }
-            />
           ) : (
-            <DonutChartView
-              totalVisits={
-                totals.visits
+            <AnalyticsChart
+              type={chartType}
+              data={chartPoints}
+              metrics={
+                analyticsDefinition?.metrics ??
+                []
               }
-              totalRealTrackingOpens={
-                totals.realTrackingOpens
+              formatNumber={
+                formatNumber
               }
             />
           )}
@@ -1573,38 +892,58 @@ export default function StudentTrackingAnalyticsPage() {
                     (
                       point,
                       index,
-                    ) => (
-                      <tr
-                        key={`${point.label}-${index}`}
-                        className="border-b last:border-0"
-                      >
-                        <td className="px-4 py-3 font-medium">
-                          {point.label}
-                        </td>
+                    ) => {
+                      const visits =
+                        Number(
+                          point
+                            .values
+                            .visits ??
+                            0,
+                        )
 
-                        <td className="px-4 py-3">
-                          {formatNumber(
-                            point.visits,
-                          )}
-                        </td>
+                      const realTrackingOpens =
+                        Number(
+                          point
+                            .values
+                            .real_tracking_opens ??
+                            0,
+                        )
 
-                        <td className="px-4 py-3">
-                          {formatNumber(
-                            point.realTrackingOpens,
-                          )}
-                        </td>
+                      return (
+                        <tr
+                          key={`${point.label}-${index}`}
+                          className="border-b last:border-0"
+                        >
+                          <td className="px-4 py-3 font-medium">
+                            {
+                              point.label
+                            }
+                          </td>
 
-                        <td className="px-4 py-3">
-                          {getConversionRate(
-                            point.visits,
-                            point.realTrackingOpens,
-                          ).toFixed(
-                            1,
-                          )}
-                          %
-                        </td>
-                      </tr>
-                    ),
+                          <td className="px-4 py-3">
+                            {formatNumber(
+                              visits,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {formatNumber(
+                              realTrackingOpens,
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {getConversionRate(
+                              visits,
+                              realTrackingOpens,
+                            ).toFixed(
+                              1,
+                            )}
+                            %
+                          </td>
+                        </tr>
+                      )
+                    },
                   )}
                 </tbody>
               </table>
