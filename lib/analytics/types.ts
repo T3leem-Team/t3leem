@@ -19,15 +19,10 @@ export type AnalyticsDefinition = {
   key: string
   title: string
   description?: string
-
   source: string
-
   dateColumn: string
-
   metrics: AnalyticsMetricDefinition[]
-
   periods: AnalyticsPeriod[]
-
   charts: AnalyticsChartType[]
 }
 
@@ -44,4 +39,5 @@ export type AnalyticsPoint = {
 export type AnalyticsPeriodRange = {
   from: string
   to: string
+  year: number
 }
