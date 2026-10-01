@@ -151,27 +151,48 @@ export function SettingsView() {
     const checkPermissions = async () => {
       try {
         const {
-          data: { session },
-        } = await supabase.auth.getSession()
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
 
-        if (!session) {
+        console.log('CURRENT AUTH USER:', user?.id)
+
+        if (userError) {
+          console.error(
+            'AUTH USER ERROR:',
+            userError,
+          )
+        }
+
+        if (!user) {
+          console.log('NO AUTH USER')
+
           if (mounted) {
             setCanViewAnalytics(false)
             setPermissionsLoaded(true)
           }
+
           return
         }
 
-        const { data, error } = await supabase.rpc('has_permission', {
-          required_permission: 'analytics.view',
-        })
+        const { data, error } = await supabase.rpc(
+          'has_permission',
+          {
+            required_permission: 'analytics.view',
+          },
+        )
+
+        console.log(
+          'ANALYTICS PERMISSION:',
+          data,
+        )
+
+        console.log(
+          'ANALYTICS PERMISSION ERROR:',
+          error,
+        )
 
         if (error) {
-          console.error(
-            'Failed to check analytics permission:',
-            error,
-          )
-
           if (mounted) {
             setCanViewAnalytics(false)
             setPermissionsLoaded(true)
@@ -186,7 +207,7 @@ export function SettingsView() {
         }
       } catch (error) {
         console.error(
-          'Unexpected error checking analytics permission:',
+          'Permission check error:',
           error,
         )
 
@@ -204,8 +225,8 @@ export function SettingsView() {
     }
   }, [])
 
-  const visibleManagementOptions = managementOptions.filter(
-    (item) => {
+  const visibleManagementOptions =
+    managementOptions.filter((item) => {
       if (!item.permission) {
         return true
       }
@@ -219,8 +240,7 @@ export function SettingsView() {
       }
 
       return false
-    },
-  )
+    })
 
   return (
     <div className="space-y-6">
