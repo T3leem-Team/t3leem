@@ -23,6 +23,11 @@ export type RegistrationRequest = {
   age: number | null
   phone: string
   whatsapp: string
+
+  guardianRelation: string
+  studentPhone: string
+  courseId: string | null
+
   levelId: string | null
   classId: string | null
   notes: string
@@ -93,6 +98,9 @@ export type ColumnKey =
   | 'age'
   | 'phone'
   | 'whatsapp'
+  | 'guardian_relation'
+  | 'student_phone'
+  | 'course'
   | 'level'
   | 'created_at'
   | 'request_number'
@@ -108,6 +116,11 @@ export const DEFAULT_COLUMNS: Record<
   age: false,
   phone: true,
   whatsapp: true,
+
+  guardian_relation: false,
+  student_phone: false,
+  course: false,
+
   level: true,
   created_at: false,
   request_number: false,
@@ -141,6 +154,18 @@ const BASE_COLUMNS: {
   {
     key: 'whatsapp',
     label: 'الواتساب',
+  },
+  {
+    key: 'guardian_relation',
+    label: 'صلة القرابة',
+  },
+  {
+    key: 'student_phone',
+    label: 'رقم الطالب',
+  },
+  {
+    key: 'course',
+    label: 'دورة الالتحاق',
   },
   {
     key: 'level',
@@ -185,6 +210,9 @@ type EnrollmentTablesProps = {
   getLevelName: (
     levelId: string | null,
   ) => string
+  getCourseName: (
+    courseId: string | null,
+  ) => string
   getCustomFieldValue: (
     requestId: string,
     fieldId: string,
@@ -218,6 +246,7 @@ type EnrollmentTablesProps = {
   ) => void
   clearSelectedRequests: () => void
   approveSelectedRequests: () => void
+  approveAllRequests: () => void
   bulkApproving: boolean
 }
 
@@ -226,6 +255,9 @@ function renderCell(
   column: ColumnKey,
   getLevelName: (
     levelId: string | null,
+  ) => string,
+  getCourseName: (
+    courseId: string | null,
   ) => string,
   getStatusLabel: (
     status: RegistrationRequest['status'],
@@ -274,6 +306,30 @@ function renderCell(
       return (
         <span className="tabular-nums">
           {request.whatsapp || '—'}
+        </span>
+      )
+
+    case 'guardian_relation':
+      return (
+        <span>
+          {request.guardianRelation ||
+            '—'}
+        </span>
+      )
+
+    case 'student_phone':
+      return (
+        <span className="tabular-nums">
+          {request.studentPhone || '—'}
+        </span>
+      )
+
+    case 'course':
+      return (
+        <span>
+          {getCourseName(
+            request.courseId,
+          )}
         </span>
       )
 
@@ -334,6 +390,9 @@ type RequestTableProps = {
   getLevelName: (
     levelId: string | null,
   ) => string
+  getCourseName: (
+    courseId: string | null,
+  ) => string
   getCustomFieldValue: (
     requestId: string,
     fieldId: string,
@@ -375,6 +434,7 @@ function RequestTable({
   updateFilter,
   openReview,
   getLevelName,
+  getCourseName,
   getCustomFieldValue,
   getCustomFieldDisplayValue,
   getStatusLabel,
@@ -526,6 +586,7 @@ function RequestTable({
                       request,
                       column.key,
                       getLevelName,
+                      getCourseName,
                       getStatusLabel,
                       formatDate,
                     )}
@@ -821,6 +882,7 @@ export function EnrollmentTables({
   updateFilter,
   openReview,
   getLevelName,
+  getCourseName,
   getCustomFieldValue,
   getCustomFieldDisplayValue,
   getStatusLabel,
@@ -991,6 +1053,9 @@ export function EnrollmentTables({
               getLevelName={
                 getLevelName
               }
+              getCourseName={
+                getCourseName
+              }
               getCustomFieldValue={
                 getCustomFieldValue
               }
@@ -1083,6 +1148,9 @@ export function EnrollmentTables({
                   }
                   getLevelName={
                     getLevelName
+                  }
+                  getCourseName={
+                    getCourseName
                   }
                   getCustomFieldValue={
                     getCustomFieldValue
