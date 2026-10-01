@@ -197,11 +197,14 @@ function isCourseStudyDay(
 }
 
 function formatDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('ar-BH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
+  return new Date(`${date}T00:00:00`).toLocaleDateString(
+    'ar-BH',
+    {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    },
+  )
 }
 
 function formatTime(time: string | null) {
@@ -359,18 +362,23 @@ function calculateCourseSummary(
 }
 
 export default function StudentStatusPage() {
+  /*
+   * يمنع تسجيل الزيارة أكثر من مرة أثناء نفس تحميل الصفحة.
+   */
   const visitRecordedRef = useRef(false)
 
   /*
-   * يمنع تسجيل نفس فتح المتابعة أكثر من مرة
-   * بسبب إعادة تحديث React للـ state.
+   * يمنع تسجيل نفس عملية البحث أكثر من مرة.
    *
-   * يتم تصفيره عند بداية كل بحث جديد.
+   * يتم تصفيره عند بداية بحث جديد.
    */
   const realTrackingRecordedRef = useRef(false)
 
   /*
-   * تسجيل زيارة الصفحة مرة واحدة فقط.
+   * تسجيل زيارة الصفحة.
+   *
+   * لا يعتمد على نجاح البحث.
+   * مجرد فتح الصفحة = visit.
    */
   useEffect(() => {
     if (visitRecordedRef.current) {
@@ -380,17 +388,24 @@ export default function StudentStatusPage() {
     visitRecordedRef.current = true
 
     const recordVisit = async () => {
-      const { error } = await supabase.rpc(
-        'record_student_tracking_analytics',
-        {
-          p_type: 'visit',
-        },
-      )
+      try {
+        const { error } = await supabase.rpc(
+          'record_student_tracking_analytics',
+          {
+            p_type: 'visit',
+          },
+        )
 
-      if (error) {
+        if (error) {
+          console.error(
+            'Student tracking visit analytics error:',
+            error,
+          )
+        }
+      } catch (err) {
         console.error(
-          'Student tracking visit analytics error:',
-          error,
+          'Student tracking visit analytics exception:',
+          err,
         )
       }
     }
@@ -431,73 +446,69 @@ export default function StudentStatusPage() {
     useState('')
 
   /*
-   * تسجيل "فتح متابعة حقيقي".
+   * يسجل فتح المتابعة الحقيقي.
    *
-   * مهم:
-   * لا نسجل هنا مباشرة داخل handleSearch.
+   * مهم جدًا:
    *
-   * ننتظر حتى تتحدث حالات React:
-   * - student موجود
-   * - registrationStatus = tracking
-   * - trackingStarted = true
-   * - searched = true
+   * لا ننتظر useEffect ولا مجموعة states.
    *
-   * وهذه هي نفس الشروط التي تعرض صفحة المتابعة
-   * الفعلية للمستخدم.
+   * بمجرد أن يرجع RPC بنجاح ويؤكد:
+   *
+   *   registrationStatus === 'tracking'
+   *   trackingStarted === true
+   *   student موجود
+   *
+   * نعتبر أن المستخدم وصل فعلًا إلى المتابعة.
+   *
+   * لا يتم إرسال:
+   * - CPR
+   * - اسم الطالب
+   * - student id
+   *
+   * إلى Analytics.
    */
-  useEffect(() => {
-    if (
-      !searched ||
-      !student ||
-      registrationStatus !== 'tracking' ||
-      trackingStarted !== true ||
-      realTrackingRecordedRef.current
-    ) {
+  const recordRealTrackingOpen = () => {
+    if (realTrackingRecordedRef.current) {
       return
     }
 
     realTrackingRecordedRef.current = true
 
-    const recordRealTrackingOpen = async () => {
+    void (async () => {
       try {
-        const {
-          error: analyticsError,
-        } = await supabase.rpc(
-          'record_student_tracking_analytics',
-          {
-            p_type: 'real_tracking_open',
-          },
-        )
+        const { error: analyticsError } =
+          await supabase.rpc(
+            'record_student_tracking_analytics',
+            {
+              p_type: 'real_tracking_open',
+            },
+          )
 
         if (analyticsError) {
           /*
-           * إذا فشل التسجيل نسمح بمحاولة ثانية
-           * في حالة حصل تحديث آخر للـ state.
+           * Analytics ليس جزءًا من عملية المتابعة.
+           *
+           * لذلك فشل التسجيل لا يعطل الصفحة.
+           *
+           * ونسمح بمحاولة أخرى إذا حصل بحث جديد.
            */
-          realTrackingRecordedRef.current = false
-
           console.error(
             'Real tracking open analytics error:',
             analyticsError,
           )
         }
       } catch (analyticsException) {
-        realTrackingRecordedRef.current = false
-
+        /*
+         * نفس الشيء:
+         * فشل Analytics لا يؤثر على المتابعة.
+         */
         console.error(
           'Real tracking open analytics exception:',
           analyticsException,
         )
       }
-    }
-
-    void recordRealTrackingOpen()
-  }, [
-    searched,
-    student,
-    registrationStatus,
-    trackingStarted,
-  ])
+    })()
+  }
 
   const handleSearch = async () => {
     const personalId = searchValue.trim()
@@ -509,7 +520,10 @@ export default function StudentStatusPage() {
     }
 
     /*
-     * بحث جديد = فرصة جديدة لفتح متابعة حقيقية.
+     * هذا بحث جديد.
+     *
+     * لذلك يمكن تسجيل real_tracking_open جديد
+     * إذا كان البحث التالي ناجحًا.
      */
     realTrackingRecordedRef.current = false
 
@@ -565,7 +579,11 @@ export default function StudentStatusPage() {
         payload.trackingStarted === true,
       )
 
-      // طلب التسجيل الخارجي ما زال قيد المراجعة
+      /*
+       * طلب التسجيل ما زال قيد المراجعة.
+       *
+       * لا Analytics حقيقي هنا.
+       */
       if (status === 'under_review') {
         setSearched(true)
         return
@@ -593,11 +611,40 @@ export default function StudentStatusPage() {
       setActivePersonalId(personalId)
 
       /*
-       * إذا لم تبدأ المتابعة فعليًا فلا نكمل
-       * إلى بيانات الحضور والرحلات.
+       * =====================================================
+       * نقطة تسجيل REAL TRACKING OPEN
+       * =====================================================
        *
-       * تسجيل "فتح متابعة حقيقي" يتم الآن
-       * بواسطة useEffect أعلاه بعد تحديث React.
+       * هنا لدينا كل المعلومات المطلوبة بالفعل:
+       *
+       * 1. البحث نجح.
+       * 2. الطالب موجود.
+       * 3. الحالة tracking.
+       * 4. trackingStarted = true.
+       *
+       * لا نحتاج انتظار:
+       * - setSearched
+       * - تحميل الدورات
+       * - حساب الحضور
+       * - تحميل الرحلات
+       * - أي useEffect آخر.
+       *
+       * وهذا هو سبب أن التسجيل أصبح موثوقًا.
+       */
+      if (
+        status === 'tracking' &&
+        payload.trackingStarted === true
+      ) {
+        recordRealTrackingOpen()
+      }
+
+      /*
+       * إذا لم تبدأ المتابعة فعليًا:
+       *
+       * - accepted_waiting
+       * - أي حالة أخرى
+       *
+       * لا نسجل real_tracking_open.
        */
       if (
         status !== 'tracking' ||
