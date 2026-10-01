@@ -1,11 +1,7 @@
 'use client'
 
 import {
-  useEffect,
-  useMemo,
-  useState,
-} from 'react'
-import {
+  ArrowRight,
   Check,
   ChevronDown,
   Loader2,
@@ -15,8 +11,17 @@ import {
   X,
 } from 'lucide-react'
 
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -179,10 +184,6 @@ export default function Page() {
 
     setError('')
 
-    /*
-     * تحديث الواجهة مباشرة
-     * حتى تكون الاستجابة سريعة.
-     */
     setElements(
       (current) =>
         current.map(
@@ -268,10 +269,6 @@ export default function Page() {
         )
       }
     } catch (err) {
-      /*
-       * إذا فشل الحفظ نرجع
-       * الواجهة للحالة السابقة.
-       */
       setElements(
         (current) =>
           current.map(
@@ -359,12 +356,28 @@ export default function Page() {
     }
   }
 
+  const handleBack = () => {
+    window.history.back()
+  }
+
   if (loading) {
     return (
       <div
         dir="rtl"
         className="space-y-6"
       >
+        <div className="flex justify-start">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleBack}
+            className="gap-2"
+          >
+            <ArrowRight className="h-4 w-4" />
+            عودة
+          </Button>
+        </div>
+
         <PageHeader
           title="التحكم بعناصر النظام"
           description="التحكم في الأزرار والعناصر التي تظهر للمستخدمين."
@@ -374,6 +387,7 @@ export default function Page() {
           <CardContent className="flex min-h-[300px] items-center justify-center">
             <div className="flex items-center gap-3 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
+
               <span>
                 جاري تحميل عناصر النظام...
               </span>
@@ -389,6 +403,18 @@ export default function Page() {
       dir="rtl"
       className="space-y-6"
     >
+      <div className="flex justify-start">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleBack}
+          className="gap-2"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </Button>
+      </div>
+
       <PageHeader
         title="التحكم بعناصر النظام"
         description="حدد المستخدمين الذين يمكنهم استخدام الأزرار والعناصر الحساسة داخل صفحات النظام."
