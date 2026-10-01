@@ -137,24 +137,24 @@ export function StudentsView() {
     emptyFilters
   )
 
-  const [
-    visibleColumns,
-    setVisibleColumns,
-  ] = useState<Record<string, boolean>>({
-    name: true,
-    personalId: true,
-    grade: true,
-    contact: true,
-    paymentStatus: true,
-    notes: true,
-    attendance: true,
+const [
+  visibleColumns,
+  setVisibleColumns,
+] = useState<Record<string, boolean>>({
+  name: true,
+  personalId: true,
+  grade: true,
+  contact: true,
+  paymentStatus: true,
+  notes: true,
+  attendance: true,
 
-    // أعمدة إضافية — مخفية افتراضياً
-    studentId: false,
-    guardianRelation: false,
-    studentPhone: false,
-    enrollmentCourse: false,
-  })
+  // أعمدة إضافية — مخفية افتراضياً
+  studentId: false,
+  guardianRelation: false,
+  studentPhone: false,
+  enrollmentCourseName: false,
+})
 
   const [
     dynamicFields,
