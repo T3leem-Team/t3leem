@@ -26,6 +26,9 @@ export type StudentTableFilters = {
   paymentStatus: string
   notes: string
   attendance: string
+  guardianRelation: string
+  studentPhone: string
+  enrollmentCourse: string
 }
 
 export type StudentDynamicField = {
@@ -58,6 +61,13 @@ export type StudentTableStudent = {
   className: string | null
   phone: string | null
   whatsapp: string | null
+
+  guardianRelation: string | null
+  studentPhone: string | null
+
+  enrollmentCourseId: string | null
+  enrollmentCourseName: string | null
+
   status: string
   paymentStatus: string
   amountDue: number
@@ -122,7 +132,10 @@ const baseColumns = [
 ]
 
 const extraColumns = [
-  { key: 'studentId', label: 'رقم الطالب' },
+  { key: 'studentId', label: 'معرف الطالب' },
+  { key: 'guardianRelation', label: 'صلة القرابة' },
+  { key: 'studentPhone', label: 'رقم الطالب' },
+  { key: 'enrollmentCourseName', label: 'دورة الالتحاق' },
   { key: 'gender', label: 'الجنس' },
   { key: 'age', label: 'العمر' },
   { key: 'phone', label: 'الهاتف' },
@@ -383,6 +396,36 @@ export function StudentsTable({
 
     return Array.from(values)
   }, [students])
+
+  const enrollmentCourseOptions = useMemo(() => {
+    const values = new Set<string>()
+
+    students.forEach((student) => {
+      const value = String(
+        student.enrollmentCourseName || ''
+      ).trim()
+
+      if (value) {
+        values.add(value)
+      }
+    })
+
+    const ordered = courses
+      .filter((course) =>
+        values.has(course.name)
+      )
+      .map((course) => course.name)
+
+    const remaining = Array.from(values).filter(
+      (value) =>
+        !ordered.includes(value)
+    )
+
+    return [
+      ...ordered,
+      ...remaining,
+    ]
+  }, [students, courses])
 
   const toggleStudentSelection = (
     studentId: string
@@ -963,7 +1006,7 @@ export function StudentsTable({
         >
           <Table
             dir="rtl"
-            className="min-w-[1200px]"
+            className="min-w-[1450px]"
           >
             <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow>
@@ -1053,14 +1096,33 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
+                {visibleColumns.enrollmentCourseName && (
+                  <TableHead className="min-w-[190px]">
+                    {filterSelect(
+                      'enrollmentCourse',
+                      'كل دورات الالتحاق',
+                      enrollmentCourseOptions
+                    )}
+                  </TableHead>
+                )}
+
                 {visibleExtraColumns.map(
-                  (column) => (
-                    <TableHead
-                      key={column.key}
-                    >
-                      {column.label}
-                    </TableHead>
-                  )
+                  (column) => {
+                    if (
+                      column.key ===
+                      'enrollmentCourseName'
+                    ) {
+                      return null
+                    }
+
+                    return (
+                      <TableHead
+                        key={column.key}
+                      >
+                        {column.label}
+                      </TableHead>
+                    )
+                  }
                 )}
 
                 {visibleDynamicFields.map(
@@ -1265,9 +1327,30 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
+                      {visibleColumns.enrollmentCourseName && (
+                        <TableCell>
+                          {student.enrollmentCourseName ||
+                            '-'}
+                        </TableCell>
+                      )}
+
                       {visibleColumns.studentId && (
                         <TableCell>
                           {student.studentId ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.guardianRelation && (
+                        <TableCell>
+                          {student.guardianRelation ||
+                            '-'}
+                        </TableCell>
+                      )}
+
+                      {visibleColumns.studentPhone && (
+                        <TableCell>
+                          {student.studentPhone ||
                             '-'}
                         </TableCell>
                       )}
@@ -1281,8 +1364,7 @@ export function StudentsTable({
 
                       {visibleColumns.age && (
                         <TableCell>
-                          {student.age ??
-                            '-'}
+                          {student.age ?? '-'}
                         </TableCell>
                       )}
 
