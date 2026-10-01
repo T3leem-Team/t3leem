@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -23,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
 
 type ManagementOption = {
   title: string
@@ -30,6 +32,7 @@ type ManagementOption = {
   href: string
   icon: typeof ShieldCheck
   badge?: string
+  permission?: string
 }
 
 type QuickLink = {
@@ -125,6 +128,7 @@ const managementOptions: ManagementOption[] = [
     href: '/settings/analytics',
     icon: BarChart3,
     badge: 'جديد',
+    permission: 'analytics.view',
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
@@ -137,6 +141,86 @@ const managementOptions: ManagementOption[] = [
 
 export function SettingsView() {
   const router = useRouter()
+
+  const [canViewAnalytics, setCanViewAnalytics] = useState(false)
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    const checkPermissions = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session) {
+          if (mounted) {
+            setCanViewAnalytics(false)
+            setPermissionsLoaded(true)
+          }
+          return
+        }
+
+        const { data, error } = await supabase.rpc('has_permission', {
+          required_permission: 'analytics.view',
+        })
+
+        if (error) {
+          console.error(
+            'Failed to check analytics permission:',
+            error,
+          )
+
+          if (mounted) {
+            setCanViewAnalytics(false)
+            setPermissionsLoaded(true)
+          }
+
+          return
+        }
+
+        if (mounted) {
+          setCanViewAnalytics(data === true)
+          setPermissionsLoaded(true)
+        }
+      } catch (error) {
+        console.error(
+          'Unexpected error checking analytics permission:',
+          error,
+        )
+
+        if (mounted) {
+          setCanViewAnalytics(false)
+          setPermissionsLoaded(true)
+        }
+      }
+    }
+
+    checkPermissions()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const visibleManagementOptions = managementOptions.filter(
+    (item) => {
+      if (!item.permission) {
+        return true
+      }
+
+      if (!permissionsLoaded) {
+        return false
+      }
+
+      if (item.permission === 'analytics.view') {
+        return canViewAnalytics
+      }
+
+      return false
+    },
+  )
 
   return (
     <div className="space-y-6">
@@ -205,7 +289,7 @@ export function SettingsView() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {managementOptions.map((item) => {
+          {visibleManagementOptions.map((item) => {
             const Icon = item.icon
 
             return (
