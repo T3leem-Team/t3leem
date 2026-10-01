@@ -63,14 +63,6 @@ const quickLinks: QuickLink[] = [
 
 const managementOptions: ManagementOption[] = [
   {
-    title: 'التحليلات',
-    description:
-      'عرض وتحليل مؤشرات النظام، والبدء بتحليل زيارات صفحة متابعة الطلاب وإضافة تحليلات أخرى لاحقًا.',
-    href: '/analytics',
-    icon: BarChart3,
-    badge: 'جديد',
-  },
-  {
     title: 'إعدادات التسجيل',
     description:
       'التحكم في نموذج التسجيل الخارجي والحقول المطلوبة وطرق الدفع.',
@@ -125,6 +117,14 @@ const managementOptions: ManagementOption[] = [
       'الوصول إلى السجلات والبيانات المؤرشفة وإدارتها.',
     href: '/settings/archive',
     icon: Archive,
+  },
+  {
+    title: 'التحليلات',
+    description:
+      'عرض وتحليل مؤشرات النظام، والبدء بتحليل زيارات صفحة متابعة الطلاب وإضافة تحليلات أخرى لاحقًا.',
+    href: '/analytics',
+    icon: BarChart3,
+    badge: 'جديد',
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
