@@ -9,6 +9,7 @@ import {
   GraduationCap,
   LockKeyhole,
   ShieldCheck,
+  SlidersHorizontal,
   UserCog,
   Users,
 } from 'lucide-react'
@@ -137,13 +138,30 @@ const managementOptions: ManagementOption[] = [
     href: '/settings/special-actions',
     icon: LockKeyhole,
   },
+  {
+    title: 'التحكم بعناصر النظام',
+    description:
+      'التحكم في ظهور واستخدام الأزرار والبطاقات والعناصر الداخلية للمستخدمين.',
+    href: '/settings/system-elements',
+    icon: SlidersHorizontal,
+    badge: 'خاص',
+  },
 ]
 
 export function SettingsView() {
   const router = useRouter()
 
-  const [canViewAnalytics, setCanViewAnalytics] = useState(false)
-  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
+  const [canViewAnalytics, setCanViewAnalytics] =
+    useState(false)
+
+  const [permissionsLoaded, setPermissionsLoaded] =
+    useState(false)
+
+  const [isPrimaryAdmin, setIsPrimaryAdmin] =
+    useState(false)
+
+  const [systemElementsChecked, setSystemElementsChecked] =
+    useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -155,7 +173,10 @@ export function SettingsView() {
           error: userError,
         } = await supabase.auth.getUser()
 
-        console.log('CURRENT AUTH USER:', user?.id)
+        console.log(
+          'CURRENT AUTH USER:',
+          user?.id,
+        )
 
         if (userError) {
           console.error(
@@ -170,15 +191,26 @@ export function SettingsView() {
           if (mounted) {
             setCanViewAnalytics(false)
             setPermissionsLoaded(true)
+            setIsPrimaryAdmin(false)
+            setSystemElementsChecked(true)
           }
 
           return
         }
 
-        const { data, error } = await supabase.rpc(
+        /*
+         * صلاحية صفحة التحليلات نفسها.
+         *
+         * هذه تبقى منفصلة عن صلاحيات عناصر النظام.
+         */
+        const {
+          data,
+          error,
+        } = await supabase.rpc(
           'has_permission',
           {
-            required_permission: 'analytics.view',
+            required_permission:
+              'analytics.view',
           },
         )
 
@@ -192,18 +224,55 @@ export function SettingsView() {
           error,
         )
 
-        if (error) {
-          if (mounted) {
+        if (mounted) {
+          if (error) {
             setCanViewAnalytics(false)
-            setPermissionsLoaded(true)
+          } else {
+            setCanViewAnalytics(
+              data === true,
+            )
           }
 
-          return
+          setPermissionsLoaded(true)
         }
 
-        if (mounted) {
-          setCanViewAnalytics(data === true)
-          setPermissionsLoaded(true)
+        /*
+         * التحقق من مدير النظام الأساسي.
+         *
+         * الـ API نفسه محمي ولا يسمح إلا للمستخدم:
+         * username = admin
+         * role = Admin
+         * active
+         *
+         * لذلك إذا رجع 200 فهذا هو الـ admin الأساسي.
+         */
+        try {
+          const response = await fetch(
+            '/api/admin/system-elements',
+            {
+              method: 'GET',
+              cache: 'no-store',
+            },
+          )
+
+          if (mounted) {
+            setIsPrimaryAdmin(
+              response.ok,
+            )
+            setSystemElementsChecked(
+              true,
+            )
+          }
+        } catch (error) {
+          console.error(
+            'System elements access check error:',
+            error,
+          )
+
+          if (mounted) {
+            setIsPrimaryAdmin(false)
+            setSystemElementsChecked(true)
+          }
         }
       } catch (error) {
         console.error(
@@ -214,6 +283,8 @@ export function SettingsView() {
         if (mounted) {
           setCanViewAnalytics(false)
           setPermissionsLoaded(true)
+          setIsPrimaryAdmin(false)
+          setSystemElementsChecked(true)
         }
       }
     }
@@ -227,6 +298,24 @@ export function SettingsView() {
 
   const visibleManagementOptions =
     managementOptions.filter((item) => {
+      /*
+       * التحكم بعناصر النظام:
+       * يظهر فقط للـ admin الأساسي.
+       */
+      if (
+        item.href ===
+        '/settings/system-elements'
+      ) {
+        return (
+          systemElementsChecked &&
+          isPrimaryAdmin
+        )
+      }
+
+      /*
+       * باقي العناصر التي لا تعتمد على
+       * صلاحية محددة تظهر كالمعتاد.
+       */
       if (!item.permission) {
         return true
       }
@@ -235,7 +324,10 @@ export function SettingsView() {
         return false
       }
 
-      if (item.permission === 'analytics.view') {
+      if (
+        item.permission ===
+        'analytics.view'
+      ) {
         return canViewAnalytics
       }
 
@@ -309,39 +401,43 @@ export function SettingsView() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visibleManagementOptions.map((item) => {
-            const Icon = item.icon
+          {visibleManagementOptions.map(
+            (item) => {
+              const Icon = item.icon
 
-            return (
-              <Card
-                key={item.href}
-                className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
-                onClick={() => router.push(item.href)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <Icon className="h-5 w-5" />
+              return (
+                <Card
+                  key={item.href}
+                  className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() =>
+                    router.push(item.href)
+                  }
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </div>
+
+                      {item.badge && (
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          {item.badge}
+                        </span>
+                      )}
                     </div>
 
-                    {item.badge && (
-                      <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
+                    <CardTitle className="pt-2 text-base">
+                      {item.title}
+                    </CardTitle>
 
-                  <CardTitle className="pt-2 text-base">
-                    {item.title}
-                  </CardTitle>
-
-                  <CardDescription className="leading-6">
-                    {item.description}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            )
-          })}
+                    <CardDescription className="leading-6">
+                      {item.description}
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              )
+            },
+          )}
         </div>
       </section>
     </div>
