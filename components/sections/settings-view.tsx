@@ -34,6 +34,7 @@ type ManagementOption = {
   icon: typeof ShieldCheck
   badge?: string
   permission?: string
+  elementKey?: string
 }
 
 type QuickLink = {
@@ -130,6 +131,7 @@ const managementOptions: ManagementOption[] = [
     icon: BarChart3,
     badge: 'جديد',
     permission: 'analytics.view',
+    elementKey: 'analytics.page.view',
   },
   {
     title: 'الإجراءات الإدارية الخاصة',
@@ -156,6 +158,9 @@ export function SettingsView() {
 
   const [permissionsLoaded, setPermissionsLoaded] =
     useState(false)
+
+  const [systemElementKeys, setSystemElementKeys] =
+    useState<string[]>([])
 
   const [isPrimaryAdmin, setIsPrimaryAdmin] =
     useState(false)
@@ -191,6 +196,7 @@ export function SettingsView() {
           if (mounted) {
             setCanViewAnalytics(false)
             setPermissionsLoaded(true)
+            setSystemElementKeys([])
             setIsPrimaryAdmin(false)
             setSystemElementsChecked(true)
           }
@@ -199,9 +205,9 @@ export function SettingsView() {
         }
 
         /*
-         * صلاحية صفحة التحليلات نفسها.
+         * صلاحية الصفحة العادية.
          *
-         * هذه تبقى منفصلة عن صلاحيات عناصر النظام.
+         * هذه تبقى منفصلة عن نظام عناصر النظام.
          */
         const {
           data,
@@ -237,6 +243,54 @@ export function SettingsView() {
         }
 
         /*
+         * تحميل عناصر النظام للمستخدم الحالي.
+         *
+         * /api/auth/permissions يرجع:
+         * systemElementKeys
+         *
+         * مدير النظام الأساسي admin يحصل
+         * تلقائياً على جميع العناصر النشطة.
+         */
+        try {
+          const response = await fetch(
+            '/api/auth/permissions',
+            {
+              method: 'GET',
+              cache: 'no-store',
+            },
+          )
+
+          const access =
+            await response.json()
+
+          if (!response.ok) {
+            throw new Error(
+              access.error ??
+                'تعذر تحميل عناصر النظام.',
+            )
+          }
+
+          if (mounted) {
+            setSystemElementKeys(
+              Array.isArray(
+                access.systemElementKeys,
+              )
+                ? access.systemElementKeys
+                : [],
+            )
+          }
+        } catch (error) {
+          console.error(
+            'System elements permissions error:',
+            error,
+          )
+
+          if (mounted) {
+            setSystemElementKeys([])
+          }
+        }
+
+        /*
          * التحقق من مدير النظام الأساسي.
          *
          * الـ API نفسه محمي ولا يسمح إلا للمستخدم:
@@ -259,6 +313,7 @@ export function SettingsView() {
             setIsPrimaryAdmin(
               response.ok,
             )
+
             setSystemElementsChecked(
               true,
             )
@@ -283,6 +338,7 @@ export function SettingsView() {
         if (mounted) {
           setCanViewAnalytics(false)
           setPermissionsLoaded(true)
+          setSystemElementKeys([])
           setIsPrimaryAdmin(false)
           setSystemElementsChecked(true)
         }
@@ -309,6 +365,37 @@ export function SettingsView() {
         return (
           systemElementsChecked &&
           isPrimaryAdmin
+        )
+      }
+
+      /*
+       * التحليلات تحتاج إلى صلاحيتين:
+       *
+       * 1. analytics.view
+       *    صلاحية دخول الصفحة.
+       *
+       * 2. analytics.page.view
+       *    صلاحية ظهور زر التحليلات نفسه.
+       *
+       * مدير النظام الأساسي يحصل على العنصر تلقائياً
+       * من /api/auth/permissions.
+       */
+      if (
+        item.elementKey ===
+        'analytics.page.view'
+      ) {
+        if (!permissionsLoaded) {
+          return false
+        }
+
+        if (!canViewAnalytics) {
+          return false
+        }
+
+        return (
+          systemElementKeys.includes(
+            'analytics.page.view',
+          )
         )
       }
 
