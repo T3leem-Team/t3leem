@@ -361,6 +361,17 @@ function calculateCourseSummary(
 export default function StudentStatusPage() {
   const visitRecordedRef = useRef(false)
 
+  /*
+   * يمنع تسجيل نفس فتح المتابعة أكثر من مرة
+   * بسبب إعادة تحديث React للـ state.
+   *
+   * يتم تصفيره عند بداية كل بحث جديد.
+   */
+  const realTrackingRecordedRef = useRef(false)
+
+  /*
+   * تسجيل زيارة الصفحة مرة واحدة فقط.
+   */
   useEffect(() => {
     if (visitRecordedRef.current) {
       return
@@ -419,6 +430,75 @@ export default function StudentStatusPage() {
   const [activePersonalId, setActivePersonalId] =
     useState('')
 
+  /*
+   * تسجيل "فتح متابعة حقيقي".
+   *
+   * مهم:
+   * لا نسجل هنا مباشرة داخل handleSearch.
+   *
+   * ننتظر حتى تتحدث حالات React:
+   * - student موجود
+   * - registrationStatus = tracking
+   * - trackingStarted = true
+   * - searched = true
+   *
+   * وهذه هي نفس الشروط التي تعرض صفحة المتابعة
+   * الفعلية للمستخدم.
+   */
+  useEffect(() => {
+    if (
+      !searched ||
+      !student ||
+      registrationStatus !== 'tracking' ||
+      trackingStarted !== true ||
+      realTrackingRecordedRef.current
+    ) {
+      return
+    }
+
+    realTrackingRecordedRef.current = true
+
+    const recordRealTrackingOpen = async () => {
+      try {
+        const {
+          error: analyticsError,
+        } = await supabase.rpc(
+          'record_student_tracking_analytics',
+          {
+            p_type: 'real_tracking_open',
+          },
+        )
+
+        if (analyticsError) {
+          /*
+           * إذا فشل التسجيل نسمح بمحاولة ثانية
+           * في حالة حصل تحديث آخر للـ state.
+           */
+          realTrackingRecordedRef.current = false
+
+          console.error(
+            'Real tracking open analytics error:',
+            analyticsError,
+          )
+        }
+      } catch (analyticsException) {
+        realTrackingRecordedRef.current = false
+
+        console.error(
+          'Real tracking open analytics exception:',
+          analyticsException,
+        )
+      }
+    }
+
+    void recordRealTrackingOpen()
+  }, [
+    searched,
+    student,
+    registrationStatus,
+    trackingStarted,
+  ])
+
   const handleSearch = async () => {
     const personalId = searchValue.trim()
 
@@ -427,6 +507,11 @@ export default function StudentStatusPage() {
       setSearched(true)
       return
     }
+
+    /*
+     * بحث جديد = فرصة جديدة لفتح متابعة حقيقية.
+     */
+    realTrackingRecordedRef.current = false
 
     setLoading(true)
     setSearched(false)
@@ -508,17 +593,11 @@ export default function StudentStatusPage() {
       setActivePersonalId(personalId)
 
       /*
-       * فتح متابعة حقيقي:
+       * إذا لم تبدأ المتابعة فعليًا فلا نكمل
+       * إلى بيانات الحضور والرحلات.
        *
-       * لا يتم التسجيل إلا بعد:
-       * 1. نجاح RPC الخاص بجلب الطالب.
-       * 2. وجود الطالب.
-       * 3. حالة التسجيل tracking.
-       * 4. trackingStarted = true.
-       *
-       * لا نستخدم void مباشرة هنا، بل ننتظر نتيجة
-       * تسجيل الإحصائية حتى نعرف إذا كان RPC نجح
-       * أو رجع بخطأ. وفي حال الخطأ لا نوقف متابعة الطالب.
+       * تسجيل "فتح متابعة حقيقي" يتم الآن
+       * بواسطة useEffect أعلاه بعد تحديث React.
        */
       if (
         status !== 'tracking' ||
@@ -526,29 +605,6 @@ export default function StudentStatusPage() {
       ) {
         setSearched(true)
         return
-      }
-
-      try {
-        const {
-          error: analyticsError,
-        } = await supabase.rpc(
-          'record_student_tracking_analytics',
-          {
-            p_type: 'real_tracking_open',
-          },
-        )
-
-        if (analyticsError) {
-          console.error(
-            'Real tracking open analytics error:',
-            analyticsError,
-          )
-        }
-      } catch (analyticsException) {
-        console.error(
-          'Real tracking open analytics exception:',
-          analyticsException,
-        )
       }
 
       const courses = Array.isArray(
