@@ -178,11 +178,6 @@ export function SettingsView() {
           error: userError,
         } = await supabase.auth.getUser()
 
-        console.log(
-          'CURRENT AUTH USER:',
-          user?.id,
-        )
-
         if (userError) {
           console.error(
             'AUTH USER ERROR:',
@@ -191,8 +186,6 @@ export function SettingsView() {
         }
 
         if (!user) {
-          console.log('NO AUTH USER')
-
           if (mounted) {
             setCanViewAnalytics(false)
             setPermissionsLoaded(true)
@@ -205,9 +198,9 @@ export function SettingsView() {
         }
 
         /*
-         * صلاحية الصفحة العادية.
+         * صلاحية دخول صفحة التحليلات نفسها.
          *
-         * هذه تبقى منفصلة عن نظام عناصر النظام.
+         * هذه مستقلة عن صلاحية عنصر النظام.
          */
         const {
           data,
@@ -220,36 +213,19 @@ export function SettingsView() {
           },
         )
 
-        console.log(
-          'ANALYTICS PERMISSION:',
-          data,
-        )
-
-        console.log(
-          'ANALYTICS PERMISSION ERROR:',
-          error,
-        )
-
         if (mounted) {
-          if (error) {
-            setCanViewAnalytics(false)
-          } else {
-            setCanViewAnalytics(
-              data === true,
-            )
-          }
+          setCanViewAnalytics(
+            !error && data === true,
+          )
 
           setPermissionsLoaded(true)
         }
 
         /*
-         * تحميل عناصر النظام للمستخدم الحالي.
+         * جلب صلاحيات عناصر النظام.
          *
-         * /api/auth/permissions يرجع:
-         * systemElementKeys
-         *
-         * مدير النظام الأساسي admin يحصل
-         * تلقائياً على جميع العناصر النشطة.
+         * admin الأساسي يحصل عليها تلقائياً
+         * من /api/auth/permissions.
          */
         try {
           const response = await fetch(
@@ -293,12 +269,10 @@ export function SettingsView() {
         /*
          * التحقق من مدير النظام الأساسي.
          *
-         * الـ API نفسه محمي ولا يسمح إلا للمستخدم:
+         * الـ API يسمح فقط للحساب:
          * username = admin
          * role = Admin
          * active
-         *
-         * لذلك إذا رجع 200 فهذا هو الـ admin الأساسي.
          */
         try {
           const response = await fetch(
@@ -345,7 +319,7 @@ export function SettingsView() {
       }
     }
 
-    checkPermissions()
+    void checkPermissions()
 
     return () => {
       mounted = false
@@ -369,16 +343,14 @@ export function SettingsView() {
       }
 
       /*
-       * التحليلات تحتاج إلى صلاحيتين:
+       * التحليلات:
        *
-       * 1. analytics.view
-       *    صلاحية دخول الصفحة.
+       * admin الأساسي:
+       * analytics.view فقط كافية.
        *
-       * 2. analytics.page.view
-       *    صلاحية ظهور زر التحليلات نفسه.
-       *
-       * مدير النظام الأساسي يحصل على العنصر تلقائياً
-       * من /api/auth/permissions.
+       * باقي المستخدمين:
+       * يحتاجون analytics.view
+       * + analytics.page.view
        */
       if (
         item.elementKey ===
@@ -392,10 +364,12 @@ export function SettingsView() {
           return false
         }
 
-        return (
-          systemElementKeys.includes(
-            'analytics.page.view',
-          )
+        if (isPrimaryAdmin) {
+          return true
+        }
+
+        return systemElementKeys.includes(
+          'analytics.page.view',
         )
       }
 
