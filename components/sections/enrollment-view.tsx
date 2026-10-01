@@ -83,6 +83,11 @@ function updateEnrollmentCache(
   }
 }
 
+type Course = {
+  id: string
+  name: string
+}
+
 function mapRequest(
   row: any,
 ): RegistrationRequest {
@@ -106,6 +111,14 @@ function mapRequest(
           : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
+
+    guardianRelation:
+      row.guardian_relation ?? '',
+    studentPhone:
+      row.student_phone ?? '',
+    courseId:
+      row.course_id ?? null,
+
     levelId:
       row.level_id ?? null,
     classId:
@@ -364,6 +377,9 @@ export function EnrollmentView() {
     useState<Level[]>(
       enrollmentCache?.levels ?? [],
     )
+
+  const [courses, setCourses] =
+    useState<Course[]>([])
 
   const [visibleColumns, setVisibleColumns] =
     useState<Record<string, boolean>>(
@@ -649,6 +665,39 @@ export function EnrollmentView() {
 
   /*
    * =========================================================
+   * Courses
+   * =========================================================
+   */
+
+  const loadCourses = async () => {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('courses')
+      .select('id, name')
+      .order('name', {
+        ascending: true,
+      })
+
+    if (error) {
+      console.warn(
+        'Could not load courses:',
+        error,
+      )
+
+      setCourses([])
+
+      return
+    }
+
+    setCourses(
+      (data ?? []) as Course[],
+    )
+  }
+
+  /*
+   * =========================================================
    * Custom field values
    * =========================================================
    */
@@ -799,6 +848,9 @@ export function EnrollmentView() {
         age,
         phone,
         whatsapp,
+        guardian_relation,
+        student_phone,
+        course_id,
         level_id,
         class_id,
         notes,
@@ -887,6 +939,7 @@ export function EnrollmentView() {
         }),
         loadCustomFields(),
         loadLevels(),
+        loadCourses(),
       ])
     }
 
@@ -1129,12 +1182,6 @@ export function EnrollmentView() {
       }
 
       try {
-        /*
-         * =====================================================
-         * 1) تنفيذ الترحيل عبر RPC
-         * =====================================================
-         */
-
         const {
           data,
           error,
@@ -1173,12 +1220,6 @@ export function EnrollmentView() {
           data?.already_processed ===
           true
 
-        /*
-         * =====================================================
-         * 2) التأكد من وجود الطالب
-         * =====================================================
-         */
-
         if (!studentId) {
           return {
             success: false,
@@ -1187,12 +1228,6 @@ export function EnrollmentView() {
               'تم تنفيذ عملية الموافقة، لكن لم يتم إرجاع رقم الطالب.',
           }
         }
-
-        /*
-         * =====================================================
-         * 3) تحديث مصدر الطالب
-         * =====================================================
-         */
 
         const {
           error:
@@ -1216,15 +1251,6 @@ export function EnrollmentView() {
             studentUpdateError,
           )
         }
-
-        /*
-         * =====================================================
-         * 4) حذف طلب التسجيل
-         *
-         * select('id') مهم جدًا لأنه يجعلنا نتأكد
-         * أن صف الطلب تم حذفه فعليًا.
-         * =====================================================
-         */
 
         const {
           data: deletedRows,
@@ -1254,11 +1280,6 @@ export function EnrollmentView() {
           }
         }
 
-        /*
-         * إذا لم يتم حذف أي صف فهذا يعني أن العملية
-         * لم تصل فعليًا إلى سجل الطلب.
-         */
-
         if (
           !deletedRows ||
           deletedRows.length === 0
@@ -1271,7 +1292,7 @@ export function EnrollmentView() {
               requestNumber:
                 request.requestNumber,
               studentId,
-                deletedRows,
+              deletedRows,
               alreadyProcessed,
             },
           )
@@ -1283,12 +1304,6 @@ export function EnrollmentView() {
               'تم إنشاء الطالب، لكن سجل طلب التسجيل لم يُحذف. تحقق من صلاحية DELETE أو RLS.',
           }
         }
-
-        /*
-         * =====================================================
-         * 5) نجاح كامل
-         * =====================================================
-         */
 
         console.log(
           'Registration request deleted successfully:',
@@ -1888,6 +1903,22 @@ export function EnrollmentView() {
     )
   }
 
+  const getCourseName = (
+    courseId: string | null,
+  ) => {
+    if (!courseId) {
+      return '—'
+    }
+
+    return (
+      courses.find(
+        (course) =>
+          course.id === courseId,
+      )?.name ??
+      '—'
+    )
+  }
+
   const isCustomColumnVisible = (
     fieldId: string,
   ) => {
@@ -2045,6 +2076,7 @@ export function EnrollmentView() {
                 loadImportPermissions(),
                 loadCustomFields(),
                 loadLevels(),
+                loadCourses(),
               ])
             }}
             disabled={
@@ -2097,6 +2129,9 @@ export function EnrollmentView() {
             }
             getLevelName={
               getLevelName
+            }
+            getCourseName={
+              getCourseName
             }
             getCustomFieldValue={
               getCustomFieldValue
@@ -2237,6 +2272,16 @@ export function EnrollmentView() {
                       phone: 'رقم الهاتف',
                       whatsapp:
                         'الواتساب',
+
+                      guardian_relation:
+                        'صلة القرابة',
+
+                      student_phone:
+                        'رقم الطالب',
+
+                      course:
+                        'دورة الالتحاق',
+
                       level: 'المستوى',
                       created_at:
                         'تاريخ التقديم',
@@ -2473,6 +2518,30 @@ export function EnrollmentView() {
 
                   <div>
                     <p className="text-xs text-muted-foreground">
+                      صلة القرابة
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {
+                        selectedRequest.guardianRelation ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      رقم الطالب
+                    </p>
+                    <p className="mt-1 font-medium tabular-nums">
+                      {
+                        selectedRequest.studentPhone ||
+                        'غير مضاف'
+                      }
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
                       العمر
                     </p>
                     <p className="mt-1 font-medium">
@@ -2526,6 +2595,17 @@ export function EnrollmentView() {
                     <p className="mt-1 font-medium">
                       {getLevelName(
                         selectedRequest.levelId,
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      دورة الالتحاق
+                    </p>
+                    <p className="mt-1 font-medium">
+                      {getCourseName(
+                        selectedRequest.courseId,
                       )}
                     </p>
                   </div>
