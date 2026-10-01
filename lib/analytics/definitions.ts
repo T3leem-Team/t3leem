@@ -6,7 +6,8 @@ export const analyticsDefinitions: AnalyticsDefinition[] = [
 
     title: 'تحليل زيارة صفحة متابعة الطلاب',
 
-    description: 'تحليل زيارات صفحة متابعة الطلاب وعمليات فتح المتابعة الفعلية.',
+    description:
+      'تحليل زيارات صفحة متابعة الطلاب وعمليات فتح المتابعة الفعلية.',
 
     source: 'student_tracking_analytics',
 
@@ -19,7 +20,7 @@ export const analyticsDefinitions: AnalyticsDefinition[] = [
       },
       {
         key: 'real_tracking_opens',
-        label: 'فتح المتابعة الفعلي',
+        label: 'فتح التتبع الفعلي',
       },
     ],
 
