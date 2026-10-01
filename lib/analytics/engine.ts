@@ -29,7 +29,8 @@ export function calculateTotal(
   metricKey: string,
 ): number {
   return rows.reduce(
-    (total, row) => total + getMetricValue(row, metricKey),
+    (total, row) =>
+      total + getMetricValue(row, metricKey),
     0,
   )
 }
@@ -38,11 +39,14 @@ export function calculateAverage(
   rows: AnalyticsDataRow[],
   metricKey: string,
 ): number {
-  if (rows.length === 0) {
+  if (!rows.length) {
     return 0
   }
 
-  return calculateTotal(rows, metricKey) / rows.length
+  return (
+    calculateTotal(rows, metricKey) /
+    rows.length
+  )
 }
 
 export function calculateConversionRate(
@@ -64,55 +68,42 @@ export function calculateConversionRate(
     return 0
   }
 
-  return (numerator / denominator) * 100
+  return Math.min(
+    100,
+    (numerator / denominator) * 100,
+  )
 }
 
-export function aggregateByMonth(
-  rows: AnalyticsDataRow[],
-  dateColumn: string,
-  definition: AnalyticsDefinition,
-): AnalyticsPoint[] {
-  const months = Array.from(
-    { length: 12 },
-    (_, index) => index,
-  )
+function getDateParts(
+  dateString: string,
+) {
+  const [year, month, day] = dateString
+    .split('-')
+    .map(Number)
 
-  return months.map((month) => {
-    const monthRows = rows.filter((row) => {
-      const value = row[dateColumn]
-
-      if (typeof value !== 'string') {
-        return false
-      }
-
-      const date = new Date(`${value}T00:00:00`)
-
-      return date.getMonth() === month
-    })
-
-    const values: Record<string, number> = {}
-
-    for (const metric of definition.metrics) {
-      values[metric.key] = calculateTotal(
-        monthRows,
-        metric.key,
-      )
-    }
-
-    return {
-      label: String(month + 1),
-      values,
-    }
-  })
+  return {
+    year,
+    month,
+    day,
+  }
 }
 
 export function buildAnalyticsPoints(
   rows: AnalyticsDataRow[],
   period: AnalyticsPeriod,
   definition: AnalyticsDefinition,
+  formatDateLabel: (
+    dateString: string,
+    period: AnalyticsPeriod,
+  ) => string,
+  monthNames: string[],
+  selectedYear: number,
 ): AnalyticsPoint[] {
   if (period !== 'yearly') {
     return rows.map((row) => {
+      const dateValue =
+        row[definition.dateColumn]
+
       const values: Record<string, number> = {}
 
       for (const metric of definition.metrics) {
@@ -122,21 +113,78 @@ export function buildAnalyticsPoints(
         )
       }
 
-      const dateValue = row[definition.dateColumn]
-
       return {
         label:
           typeof dateValue === 'string'
-            ? dateValue
+            ? formatDateLabel(
+                dateValue,
+                period,
+              )
             : '',
         values,
       }
     })
   }
 
-  return aggregateByMonth(
-    rows,
-    definition.dateColumn,
-    definition,
+  const monthlyTotals = Array.from(
+    { length: 12 },
+    (_, index) => {
+      const values: Record<
+        string,
+        number
+      > = {}
+
+      for (const metric of definition.metrics) {
+        values[metric.key] = 0
+      }
+
+      return {
+        month: index,
+        values,
+      }
+    },
   )
+
+  for (const row of rows) {
+    const dateValue =
+      row[definition.dateColumn]
+
+    if (typeof dateValue !== 'string') {
+      continue
+    }
+
+    const {
+      year,
+      month,
+    } = getDateParts(dateValue)
+
+    if (year !== selectedYear) {
+      continue
+    }
+
+    const monthIndex = month - 1
+
+    if (
+      monthIndex < 0 ||
+      monthIndex > 11
+    ) {
+      continue
+    }
+
+    for (const metric of definition.metrics) {
+      monthlyTotals[
+        monthIndex
+      ].values[metric.key] +=
+        getMetricValue(
+          row,
+          metric.key,
+        )
+    }
+  }
+
+  return monthlyTotals.map((item) => ({
+    label:
+      monthNames[item.month],
+    values: item.values,
+  }))
 }
