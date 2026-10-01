@@ -2,6 +2,7 @@
 
 import {
   Archive,
+  BarChart3,
   BookOpen,
   ClipboardCheck,
   ExternalLink,
@@ -61,6 +62,14 @@ const quickLinks: QuickLink[] = [
 ]
 
 const managementOptions: ManagementOption[] = [
+  {
+    title: 'التحليلات',
+    description:
+      'عرض وتحليل مؤشرات النظام، والبدء بتحليل زيارات صفحة متابعة الطلاب وإضافة تحليلات أخرى لاحقًا.',
+    href: '/analytics',
+    icon: BarChart3,
+    badge: 'جديد',
+  },
   {
     title: 'إعدادات التسجيل',
     description:
