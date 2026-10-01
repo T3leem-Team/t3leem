@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -474,29 +475,34 @@ export function AttendanceView({
     () => new Set(),
   )
 
-  /*
-   * وضع إكمال غير المسجلين.
-   */
   const [
     showUnrecordedOnly,
     setShowUnrecordedOnly,
   ] = useState(false)
 
-  /*
-   * فتح قائمة تحديد الكل.
-   */
   const [
     showBulkStatusMenu,
     setShowBulkStatusMenu,
   ] = useState(false)
 
-  /*
-   * الحفظ الجماعي جارٍ.
-   */
   const [
     isBulkSaving,
     setIsBulkSaving,
   ] = useState(false)
+
+  /*
+   * مراجع بطاقات الطلاب.
+   *
+   * تستخدم للانتقال التلقائي إلى
+   * الطالب التالي بعد نجاح التسجيل.
+   */
+  const studentCardRefs =
+    useRef<
+      Record<
+        string,
+        HTMLDivElement | null
+      >
+    >({})
 
   const todayString =
     getTodayString()
@@ -746,11 +752,6 @@ export function AttendanceView({
     )
   }
 
-  /*
-   * إحصائية تسجيل اليوم.
-   *
-   * null = لا يوجد سجل حضور فعلي.
-   */
   const attendanceSummary =
     useMemo(() => {
       let recorded = 0
@@ -792,9 +793,6 @@ export function AttendanceView({
       localStatuses,
     ])
 
-  /*
-   * نسب الحضور.
-   */
   const attendancePercentages =
     useMemo(() => {
       if (!currentCourse) {
@@ -852,10 +850,6 @@ export function AttendanceView({
       },
     )
 
-  /*
-   * عند تفعيل "إكمال غير المسجلين"
-   * نعرض فقط الطلاب الذين لا توجد لهم حالة.
-   */
   const displayedStudents =
     showUnrecordedOnly
       ? filteredStudents.filter(
@@ -868,11 +862,95 @@ export function AttendanceView({
       : filteredStudents
 
   /**
-   * فحص إضافي قبل الكتابة.
+   * الانتقال للطالب التالي بعد نجاح الحفظ.
    *
-   * الحماية الأساسية موجودة أيضًا
-   * في PostgreSQL trigger.
+   * إذا لم يوجد طالب آخر:
+   * - إذا اكتمل الجميع تظهر رسالة نهائية.
+   * - إذا كان هناك طلاب مخفيون بسبب البحث، لا ندعي أن التسجيل اكتمل.
    */
+  const moveToNextStudent =
+    (
+      currentStudentId: string,
+      savedStudentName: string,
+      savedStatus: AttendanceStatusName,
+    ) => {
+      const currentIndex =
+        displayedStudents.findIndex(
+          (student) =>
+            student.id ===
+            currentStudentId,
+        )
+
+      const nextStudent =
+        currentIndex >= 0
+          ? displayedStudents[
+              currentIndex + 1
+            ]
+          : undefined
+
+      /*
+       * نتحقق من حالة جميع الطلاب بعد
+       * اعتبار الطالب الحالي مسجلاً.
+       */
+      const allStudentsRecorded =
+        assignedStudents.every(
+          (student) => {
+            if (
+              student.id ===
+              currentStudentId
+            ) {
+              return true
+            }
+
+            return !!getStudentStatus(
+              student.id,
+              activeDate,
+            )
+          },
+        )
+
+      if (!nextStudent) {
+        if (allStudentsRecorded) {
+          setStatusMessage(
+            `✓ اكتمل تسجيل الحضور — ${assignedStudents.length} من ${assignedStudents.length} طالب`,
+          )
+        } else {
+          setStatusMessage(
+            `✓ تم تسجيل ${savedStatus} للطالب ${savedStudentName}`,
+          )
+        }
+
+        return
+      }
+
+      /*
+       * رسالة قصيرة أثناء الانتقال.
+       */
+      setStatusMessage(
+        `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
+      )
+
+      /*
+       * نعطي React فرصة لإكمال التحديث
+       * ثم نمرر الشاشة للطالب التالي.
+       */
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const element =
+            studentCardRefs.current[
+              nextStudent.id
+            ]
+
+          if (element) {
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+            })
+          }
+        })
+      })
+    }
+
   const checkCancellationBeforeSave =
     async (
       date: string,
@@ -1166,8 +1244,14 @@ export function AttendanceView({
         }
       }
 
-      setStatusMessage(
-        `تم حفظ حالة ${student.name}: ${statusName}`,
+      /*
+       * نترك React يحدث الحالة أولاً،
+       * ثم ننتقل للطالب التالي.
+       */
+      moveToNextStudent(
+        student.id,
+        student.name,
+        statusName,
       )
     } catch (error: any) {
       setAttendanceRecords(
@@ -1204,10 +1288,6 @@ export function AttendanceView({
 
   /**
    * تحديد الكل بحالة واحدة.
-   *
-   * مهم:
-   * لا نهتم بالحالة السابقة للطالب.
-   * يتم استبدالها بالحالة المختارة.
    */
   const saveAllAttendance =
     async (
@@ -1220,10 +1300,12 @@ export function AttendanceView({
       if (
         isCancelled ||
         !isAttendanceAvailable ||
-        activeDate !==
-          selectedAttendanceDate &&
+        (
+          activeDate !==
+            selectedAttendanceDate &&
           selectedAttendanceDate !==
             null
+        )
       ) {
         setStatusMessage(
           isCancelled
@@ -1265,9 +1347,6 @@ export function AttendanceView({
       setEditingStatusKey(null)
 
       try {
-        /*
-         * فحص الإلغاء قبل بدء العملية.
-         */
         const isCancelledNow =
           await checkCancellationBeforeSave(
             activeDate,
@@ -1279,10 +1358,6 @@ export function AttendanceView({
           )
         }
 
-        /*
-         * نقرأ السجلات الموجودة فعليًا
-         * لهذا اليوم والدورة قبل الكتابة.
-         */
         const {
           data: existingData,
           error: existingError,
@@ -1333,20 +1408,6 @@ export function AttendanceView({
           )
         }
 
-        /*
-         * نحتفظ بالنسخة الحالية لاسترجاعها
-         * إذا فشلت العملية.
-         */
-        const previousRecords =
-          attendanceRecords
-
-        /*
-         * حفظ الطلاب واحدًا تلو الآخر.
-         *
-         * هذا يحافظ على نفس منطق قاعدة البيانات
-         * الموجود في الحفظ الفردي ولا يفترض وجود
-         * unique constraint إضافي.
-         */
         const savedRecords: AttendanceRecord[] =
           []
 
@@ -1462,9 +1523,6 @@ export function AttendanceView({
           }
         }
 
-        /*
-         * تحديث الواجهة بالحالات المختارة.
-         */
         setLocalStatuses(
           (current) => {
             const next = {
@@ -1482,10 +1540,6 @@ export function AttendanceView({
           },
         )
 
-        /*
-         * استبدال سجلات اليوم بالسجلات
-         * التي أكدتها Supabase.
-         */
         setAttendanceRecords(
           (records) => {
             const untouched =
@@ -1506,12 +1560,6 @@ export function AttendanceView({
           },
         )
 
-        /*
-         * تحقق نهائي من قاعدة البيانات.
-         *
-         * لا نعرض "تم تسجيل الجميع"
-         * إلا إذا كانت كل سجلات الطلاب موجودة.
-         */
         const {
           data: verificationData,
           error: verificationError,
@@ -1565,16 +1613,9 @@ export function AttendanceView({
         }
 
         setStatusMessage(
-          `تم تسجيل حالة جميع الطلاب (${assignedStudents.length}/${assignedStudents.length})`,
+          `✓ اكتمل تسجيل الحضور — ${assignedStudents.length} من ${assignedStudents.length} طالب`,
         )
       } catch (error: any) {
-        /*
-         * لا نرجع localStatuses هنا بالكامل؛
-         * لأن بعض الطلاب قد يكونون حفظوا فعليًا
-         * قبل حدوث الخطأ.
-         *
-         * لذلك نعيد تحميل سجلات اليوم من Supabase.
-         */
         const {
           data: refreshedData,
         } = await supabase
@@ -1626,10 +1667,6 @@ export function AttendanceView({
           ],
         )
 
-        /*
-         * السجلات الفعلية في Supabase هي المصدر
-         * النهائي للحالة.
-         */
         setLocalStatuses(
           (current) => {
             const next = {
@@ -2264,7 +2301,6 @@ export function AttendanceView({
                     )}
                   </div>
 
-                  {/* إكمال / عرض الجميع */}
                   {!attendanceSummary.allRecorded &&
                     !showUnrecordedOnly && (
                       <button
@@ -2295,7 +2331,7 @@ export function AttendanceView({
                           false,
                         )
                       }
-                      className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted"
+                      className="h-10 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted"
                     >
                       عرض جميع الطلاب
                     </button>
@@ -2313,7 +2349,23 @@ export function AttendanceView({
 
           {/* رسالة الحفظ */}
           {statusMessage && (
-            <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+            <div
+              className={`rounded-lg border px-4 py-3 text-sm ${
+                statusMessage.startsWith('✓')
+                  ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
+                  : statusMessage.includes(
+                      'تعذر',
+                    ) ||
+                    statusMessage.includes(
+                      'ملغي',
+                    ) ||
+                    statusMessage.includes(
+                      'لا يمكن',
+                    )
+                  ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
+                  : 'border-border bg-muted/40'
+              }`}
+            >
               {statusMessage}
             </div>
           )}
@@ -2380,7 +2432,16 @@ export function AttendanceView({
                     return (
                       <div
                         key={student.id}
-                        className="rounded-xl border bg-card p-4"
+                        ref={(element) => {
+                          studentCardRefs.current[
+                            student.id
+                          ] = element
+                        }}
+                        className={`rounded-xl border bg-card p-4 transition-all ${
+                          saving
+                            ? 'opacity-70'
+                            : ''
+                        }`}
                       >
                         <div className="space-y-4">
                           {/* اسم الطالب */}
@@ -2406,7 +2467,8 @@ export function AttendanceView({
                               حالة الحضور
                             </div>
 
-                            <div className="flex flex-wrap gap-2">
+                            {/* 2 × 2 على الجوال */}
+                            <div className="grid grid-cols-2 gap-2">
                               {attendanceStatusNames.map(
                                 (
                                   statusName,
@@ -2441,13 +2503,13 @@ export function AttendanceView({
                                           return
                                         }
 
-                                        saveAttendance(
+                                        void saveAttendance(
                                           student,
                                           activeDate,
                                           statusName,
                                         )
                                       }}
-                                      className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                      className={`min-h-12 rounded-xl border px-3 py-3 text-sm font-semibold transition active:scale-[0.98] ${
                                         isSelected
                                           ? styles.selected
                                           : styles.normal
@@ -2513,7 +2575,16 @@ export function AttendanceView({
                   return (
                     <div
                       key={student.id}
-                      className="rounded-xl border bg-card px-4 py-4"
+                      ref={(element) => {
+                        studentCardRefs.current[
+                          student.id
+                        ] = element
+                      }}
+                      className={`rounded-xl border bg-card px-4 py-4 transition-all ${
+                        saving
+                          ? 'opacity-70'
+                          : ''
+                      }`}
                     >
                       <div className="space-y-4">
                         {/* الصف العلوي */}
