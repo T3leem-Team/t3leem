@@ -34,16 +34,16 @@ import { Button } from '@/components/ui/button'
 
 import {
   StudentDetails,
-  type StudentTableStudent,
-  type StudentTableFilters,
-  type StudentDynamicField,
 } from './student-details'
-
-import { StudentForm } from './student-form'
 
 import {
   StudentsTable,
+  type StudentTableStudent,
+  type StudentTableFilters,
+  type StudentDynamicField,
 } from './students-table'
+
+import { StudentForm } from './student-form'
 
 type Filters = StudentTableFilters
 
@@ -56,6 +56,7 @@ const emptyFilters: Filters = {
   paymentStatus: '',
   notes: '',
   attendance: '',
+  enrollmentCourse: '',
 }
 
 export function StudentsView() {
@@ -147,6 +148,12 @@ export function StudentsView() {
     paymentStatus: true,
     notes: true,
     attendance: true,
+
+    // أعمدة إضافية — مخفية افتراضياً
+    studentId: false,
+    guardianRelation: false,
+    studentPhone: false,
+    enrollmentCourse: false,
   })
 
   const [
@@ -201,15 +208,6 @@ export function StudentsView() {
    * ============================================================
    * تحميل / تحديث كاش الطلاب
    * ============================================================
-   *
-   * إذا كان الكاش جاهز:
-   * تظهر الصفحة فوراً.
-   *
-   * إذا كان preload شغالاً:
-   * نفس الـ Promise يستخدمه هذا المكان.
-   *
-   * إذا لم يوجد كاش:
-   * يتم تحميل البيانات من Supabase.
    */
   useEffect(() => {
     let cancelled = false
@@ -227,12 +225,6 @@ export function StudentsView() {
       }
 
       try {
-        /*
-         * لا نستخدم force هنا.
-         *
-         * إذا كان الكاش موجوداً يرجعه مباشرة.
-         * وإذا كان preload شغالاً يستخدم نفس الـ Promise.
-         */
         const data =
           await loadStudentsCache()
 
@@ -289,10 +281,6 @@ export function StudentsView() {
           error
         )
 
-        /*
-         * إذا كان عندنا كاش سابق:
-         * لا نمسحه بسبب خطأ مؤقت.
-         */
         const cached =
           getStudentsCache()
 
@@ -388,6 +376,11 @@ export function StudentsView() {
     )
   }
 
+  /*
+   * ============================================================
+   * فلترة وبحث الطلاب
+   * ============================================================
+   */
   const filteredStudents =
     useMemo(() => {
       const query =
@@ -439,26 +432,39 @@ export function StudentsView() {
               )
               .join(' ')
 
+          /*
+           * جميع الحقول الجديدة تدخل في البحث العام:
+           * - صلة القرابة
+           * - رقم الطالب
+           * - دورة الالتحاق
+           */
+          const searchableValues = [
+            student.name,
+            student.studentId,
+            student.personalId,
+            student.gender,
+            student.age,
+            student.grade,
+            student.className,
+
+            student.guardianRelation,
+            student.studentPhone,
+            student.enrollmentCourseName,
+
+            contactText,
+            student.status,
+            student.source,
+            student.paymentStatus,
+            notesText,
+            student.attendance,
+            dynamicText,
+            courseStatusText,
+            remaining,
+          ]
+
           const matchesSearch =
             !query ||
-            [
-              student.name,
-              student.studentId,
-              student.personalId,
-              student.gender,
-              student.age,
-              student.grade,
-              student.className,
-              contactText,
-              student.status,
-              student.source,
-              student.paymentStatus,
-              notesText,
-              student.attendance,
-              dynamicText,
-              courseStatusText,
-              remaining,
-            ].some(
+            searchableValues.some(
               (value) =>
                 String(
                   value ?? ''
@@ -470,7 +476,9 @@ export function StudentsView() {
           const matches = {
             name:
               !filters.name ||
-              student.name
+              String(
+                student.name ?? ''
+              )
                 .toLowerCase()
                 .includes(
                   filters.name.toLowerCase()
@@ -478,7 +486,9 @@ export function StudentsView() {
 
             personalId:
               !filters.personalId ||
-              student.personalId.includes(
+              String(
+                student.personalId ?? ''
+              ).includes(
                 filters.personalId
               ),
 
@@ -489,13 +499,17 @@ export function StudentsView() {
 
             phone:
               !filters.phone ||
-              student.phone.includes(
+              String(
+                student.phone ?? ''
+              ).includes(
                 filters.phone
               ),
 
             whatsapp:
               !filters.whatsapp ||
-              student.whatsapp.includes(
+              String(
+                student.whatsapp ?? ''
+              ).includes(
                 filters.whatsapp
               ),
 
@@ -516,6 +530,17 @@ export function StudentsView() {
               !filters.attendance ||
               student.attendance ===
                 filters.attendance,
+
+            /*
+             * دورة الالتحاق لها فلتر مستقل.
+             */
+            enrollmentCourse:
+              !filters.enrollmentCourse ||
+              String(
+                student.enrollmentCourseName ??
+                  ''
+              ) ===
+                filters.enrollmentCourse,
           }
 
           return (
@@ -615,6 +640,14 @@ export function StudentsView() {
     )
   }
 
+  /*
+   * ============================================================
+   * تصدير Excel
+   * ============================================================
+   *
+   * الحقول الجديدة تدخل دائماً في التصدير
+   * حتى لو كانت أعمدتها مخفية من الجدول.
+   */
   const exportStudentsToExcel =
     () => {
       if (
@@ -653,6 +686,11 @@ export function StudentsView() {
               '#':
                 index + 1,
 
+              /*
+               * هذا هو student_id الموجود
+               * في قاعدة البيانات.
+               * ليس رقم الطالب الجديد student_phone.
+               */
               'معرف الطالب':
                 student.studentId,
 
@@ -661,6 +699,18 @@ export function StudentsView() {
 
               'الرقم الشخصي':
                 student.personalId,
+
+              'صلة القرابة':
+                student.guardianRelation,
+
+              /*
+               * رقم الطالب الجديد
+               */
+              'رقم الطالب':
+                student.studentPhone,
+
+              'دورة الالتحاق':
+                student.enrollmentCourseName,
 
               'الجنس':
                 student.gender,
