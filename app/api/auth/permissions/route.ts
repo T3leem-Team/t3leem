@@ -20,6 +20,8 @@ const supabaseAdmin = createClient(
   },
 )
 
+const PRIMARY_ADMIN_USERNAME = 'admin'
+
 const MANAGE_ASSIGNMENTS_PERMISSION_ID =
   '549e42cf-2348-4750-a943-2ca4ce51177a'
 
@@ -59,7 +61,7 @@ async function getCurrentAccess() {
   } = await supabaseAdmin
     .from('user_profiles')
     .select(
-      'id, role, is_active',
+      'id, username, role, is_active',
     )
     .eq(
       'id',
@@ -198,11 +200,129 @@ async function getCurrentAccess() {
     )
   }
 
+  /*
+   * صلاحيات عناصر النظام
+   *
+   * هذه الصلاحيات منفصلة تماماً عن
+   * permissions / role_permissions.
+   *
+   * مدير النظام الأساسي username = admin
+   * يحصل تلقائياً على جميع العناصر النشطة.
+   *
+   * باقي المستخدمين يحصلون فقط على العناصر
+   * التي تم تعيينها لهم من صفحة التحكم بعناصر النظام.
+   */
+  let systemElementKeys: string[] = []
+
+  if (
+    profile.username ===
+      PRIMARY_ADMIN_USERNAME &&
+    profile.role === 'Admin'
+  ) {
+    const {
+      data: elements,
+      error: elementsError,
+    } =
+      await supabaseAdmin
+        .from('system_elements')
+        .select(
+          'element_key',
+        )
+        .eq(
+          'is_active',
+          true,
+        )
+
+    if (elementsError) {
+      console.error(
+        'System elements lookup error:',
+        elementsError,
+      )
+
+      return {
+        access: null,
+        response: NextResponse.json(
+          {
+            error:
+              'تعذر قراءة صلاحيات عناصر النظام.',
+          },
+          { status: 500 },
+        ),
+      }
+    }
+
+    systemElementKeys =
+      Array.from(
+        new Set(
+          (elements ?? [])
+            .map(
+              (element) =>
+                element.element_key,
+            )
+            .filter(Boolean),
+        ),
+      )
+  } else {
+    const {
+      data: elementRows,
+      error: elementRowsError,
+    } =
+      await supabaseAdmin
+        .from('system_element_users')
+        .select(`
+          element_id,
+          system_elements!inner (
+            element_key,
+            is_active
+          )
+        `)
+        .eq(
+          'user_profile_id',
+          access.profileId,
+        )
+
+    if (elementRowsError) {
+      console.error(
+        'User system elements lookup error:',
+        elementRowsError,
+      )
+
+      return {
+        access: null,
+        response: NextResponse.json(
+          {
+            error:
+              'تعذر قراءة صلاحيات عناصر النظام.',
+          },
+          { status: 500 },
+        ),
+      }
+    }
+
+    systemElementKeys =
+      Array.from(
+        new Set(
+          (elementRows ?? [])
+            .filter(
+              (row) =>
+                row.system_elements &&
+                row.system_elements.is_active,
+            )
+            .map(
+              (row) =>
+                row.system_elements.element_key,
+            )
+            .filter(Boolean),
+        ),
+      )
+  }
+
   return {
     access: {
       profile,
       permissionIds,
       permissionNames,
+      systemElementKeys,
     },
     response: null,
   }
@@ -310,6 +430,12 @@ export async function GET() {
 
         permissionNames:
           access.permissionNames,
+
+        /*
+         * صلاحيات عناصر النظام المنفصلة.
+         */
+        systemElementKeys:
+          access.systemElementKeys,
 
         permissions: [],
 
