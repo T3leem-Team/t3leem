@@ -359,12 +359,6 @@ function calculateCourseSummary(
 }
 
 export default function StudentStatusPage() {
-  /*
-   * تسجيل زيارة الصفحة مرة واحدة.
-   *
-   * useRef يمنع التسجيل مرتين أثناء React Strict Mode
-   * في بيئة التطوير.
-   */
   const visitRecordedRef = useRef(false)
 
   useEffect(() => {
@@ -374,12 +368,23 @@ export default function StudentStatusPage() {
 
     visitRecordedRef.current = true
 
-    void supabase.rpc(
-      'record_student_tracking_analytics',
-      {
-        p_type: 'visit',
-      },
-    )
+    const recordVisit = async () => {
+      const { error } = await supabase.rpc(
+        'record_student_tracking_analytics',
+        {
+          p_type: 'visit',
+        },
+      )
+
+      if (error) {
+        console.error(
+          'Student tracking visit analytics error:',
+          error,
+        )
+      }
+    }
+
+    void recordVisit()
   }, [])
 
   const [searchValue, setSearchValue] = useState('')
@@ -441,13 +446,15 @@ export default function StudentStatusPage() {
     setActivePersonalId('')
 
     try {
-      const { data, error: rpcError } =
-        await supabase.rpc(
-          'get_student_status_by_personal_id',
-          {
-            p_personal_id: personalId,
-          },
-        )
+      const {
+        data,
+        error: rpcError,
+      } = await supabase.rpc(
+        'get_student_status_by_personal_id',
+        {
+          p_personal_id: personalId,
+        },
+      )
 
       if (rpcError) {
         throw rpcError
@@ -468,6 +475,7 @@ export default function StudentStatusPage() {
         payload.registrationStatus ?? null
 
       setRegistrationStatus(status)
+
       setTrackingStarted(
         payload.trackingStarted === true,
       )
@@ -501,8 +509,16 @@ export default function StudentStatusPage() {
 
       /*
        * فتح متابعة حقيقي:
-       * لا يتم التسجيل إلا بعد التأكد أن الطالب
-       * دخل فعليًا إلى حالة المتابعة.
+       *
+       * لا يتم التسجيل إلا بعد:
+       * 1. نجاح RPC الخاص بجلب الطالب.
+       * 2. وجود الطالب.
+       * 3. حالة التسجيل tracking.
+       * 4. trackingStarted = true.
+       *
+       * لا نستخدم void مباشرة هنا، بل ننتظر نتيجة
+       * تسجيل الإحصائية حتى نعرف إذا كان RPC نجح
+       * أو رجع بخطأ. وفي حال الخطأ لا نوقف متابعة الطالب.
        */
       if (
         status !== 'tracking' ||
@@ -512,12 +528,28 @@ export default function StudentStatusPage() {
         return
       }
 
-      void supabase.rpc(
-        'record_student_tracking_analytics',
-        {
-          p_type: 'real_tracking_open',
-        },
-      )
+      try {
+        const {
+          error: analyticsError,
+        } = await supabase.rpc(
+          'record_student_tracking_analytics',
+          {
+            p_type: 'real_tracking_open',
+          },
+        )
+
+        if (analyticsError) {
+          console.error(
+            'Real tracking open analytics error:',
+            analyticsError,
+          )
+        }
+      } catch (analyticsException) {
+        console.error(
+          'Real tracking open analytics exception:',
+          analyticsException,
+        )
+      }
 
       const courses = Array.isArray(
         payload.courses,
