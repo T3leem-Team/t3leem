@@ -122,7 +122,7 @@ const managementOptions: ManagementOption[] = [
     title: 'التحليلات',
     description:
       'عرض وتحليل مؤشرات النظام، والبدء بتحليل زيارات صفحة متابعة الطلاب وإضافة تحليلات أخرى لاحقًا.',
-    href: '/analytics',
+    href: '/settings/analytics',
     icon: BarChart3,
     badge: 'جديد',
   },
