@@ -42,7 +42,16 @@ export type StudentAttendanceSummary = {
 export type StudentDetailsStudent = {
   id: string
   name: string
+
   personalId?: string
+
+  /*
+   * البيانات الجديدة
+   */
+  guardianRelation?: string | null
+  studentPhone?: string | null
+  enrollmentCourseName?: string | null
+
   grade?: string
   phone?: string
   whatsapp?: string
@@ -91,7 +100,9 @@ function formatMoney(value: number | undefined) {
   })
 }
 
-function getPaymentStatusClass(status: string | undefined) {
+function getPaymentStatusClass(
+  status: string | undefined,
+) {
   switch (status) {
     case 'مدفوع بالكامل':
       return 'text-emerald-600 dark:text-emerald-400'
@@ -298,6 +309,29 @@ export function StudentDetails({
                 />
 
                 <InfoCard
+                  label="رقم الطالب"
+                  value={
+                    student.studentPhone || '—'
+                  }
+                />
+
+                <InfoCard
+                  label="صلة القرابة"
+                  value={
+                    student.guardianRelation ||
+                    '—'
+                  }
+                />
+
+                <InfoCard
+                  label="دورة الالتحاق"
+                  value={
+                    student.enrollmentCourseName ||
+                    '—'
+                  }
+                />
+
+                <InfoCard
                   label="الصف"
                   value={student.grade || '—'}
                 />
@@ -330,7 +364,9 @@ export function StudentDetails({
               <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
                 <InfoCard
                   label="حالة الدفع"
-                  value={student.paymentStatus || '—'}
+                  value={
+                    student.paymentStatus || '—'
+                  }
                   valueClassName={getPaymentStatusClass(
                     student.paymentStatus,
                   )}
@@ -338,12 +374,16 @@ export function StudentDetails({
 
                 <InfoCard
                   label="الرسوم السنوية"
-                  value={`${formatMoney(student.amountDue)} د.ب`}
+                  value={`${formatMoney(
+                    student.amountDue,
+                  )} د.ب`}
                 />
 
                 <InfoCard
                   label="المدفوع"
-                  value={`${formatMoney(student.amountPaid)} د.ب`}
+                  value={`${formatMoney(
+                    student.amountPaid,
+                  )} د.ب`}
                 />
 
                 <InfoCard
@@ -527,7 +567,8 @@ export function StudentDetails({
 
               <div className="p-4">
                 <div className="rounded-xl bg-muted/30 p-4 text-sm whitespace-pre-wrap">
-                  {student.notes || 'لا توجد ملاحظات'}
+                  {student.notes ||
+                    'لا توجد ملاحظات'}
                 </div>
               </div>
             </section>
