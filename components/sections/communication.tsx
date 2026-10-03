@@ -298,12 +298,20 @@ export function CommunicationView() {
 
   /*
    * =========================================================
-   * Saved message flow
+   * Active saved message flow
    * =========================================================
    *
-   * إذا بدأ المستخدم برسالة محفوظة وأرسلها فعلاً،
-   * نحفظ نص الرسالة الخام المستخدمة حتى يتم استعمال
-   * نفس الرسالة للطلاب التاليين، مع تبديل المتغيرات فقط.
+   * هذه الحالة مؤقتة داخل الصفحة فقط.
+   *
+   * إذا أرسل المستخدم رسالة محفوظة:
+   * - الطالب التالي يفتح نفس الرسالة مباشرة.
+   * - المتغيرات تتغير حسب الطالب.
+   *
+   * إذا أرسل رسالة جديدة:
+   * - يتم إلغاء هذا المسار.
+   * - الطالب التالي يرى شاشة الاختيار من جديد.
+   *
+   * عند Refresh تختفي الحالة تلقائياً لأنها useState.
    */
 
   const [
@@ -1289,21 +1297,29 @@ export function CommunicationView() {
     setTemplateMessage('')
 
     /*
-     * إذا كان هناك تسلسل بدأ برسالة محفوظة وتم
-     * إرسالها فعلاً للطالب السابق، افتح مباشرة
-     * بنفس الرسالة بدون شاشة الاختيار.
+     * إذا تم إرسال رسالة محفوظة سابقاً داخل
+     * نفس جلسة الصفحة، لا نعرض شاشة الاختيار.
+     *
+     * يفتح مباشرة على نفس الرسالة.
      */
     if (activeSavedMessage) {
       setMessageMode('saved')
+
       setSelectedTemplateId(
         activeSavedMessage.templateId
       )
+
       setComposedMessage(
         activeSavedMessage.content
       )
+
       return
     }
 
+    /*
+     * لا توجد رسالة محفوظة نشطة:
+     * اعرض الاختيار من جديد.
+     */
     setMessageMode('choose')
     setSelectedTemplateId('')
     setComposedMessage('')
@@ -1339,9 +1355,11 @@ export function CommunicationView() {
   const createNewMessage =
     () => {
       /*
-       * اختيار رسالة جديدة يعني بدء تسلسل جديد
-       * وعدم استخدام القالب المحفوظ تلقائياً
-       * للطلاب التاليين.
+       * اختيار رسالة جديدة يلغي أي مسار محفوظ
+       * كان مستخدماً للطلاب السابقين.
+       *
+       * بعد إرسال هذه الرسالة، الطالب التالي
+       * سيعود لشاشة الاختيار من جديد.
        */
       setActiveSavedMessage(null)
 
@@ -1516,8 +1534,8 @@ export function CommunicationView() {
       }
 
       /*
-       * إذا تم حذف القالب الذي كان مستخدماً
-       * في التسلسل الحالي، نوقف التسلسل المحفوظ.
+       * إذا تم حذف القالب الذي يشكل المسار
+       * المحفوظ الحالي، نوقف المسار.
        */
       if (
         activeSavedMessage?.templateId ===
@@ -1562,28 +1580,39 @@ export function CommunicationView() {
       }
 
       /*
-       * إذا كانت هذه رسالة محفوظة، نحفظ النص الخام
-       * الذي تم استخدامه فعلياً حتى نستخدمه للطالب
-       * التالي مع تبديل المتغيرات فقط.
+       * إذا كانت الرسالة المختارة محفوظة:
+       *
+       * نحفظ النص الخام نفسه.
+       *
+       * مثال:
+       * أهلاً {{name}}، نذكركم بموعد...
+       *
+       * الطالب الثاني سيستخدم نفس النص،
+       * لكن {{name}} سيتغير تلقائياً.
        */
-      const isSavedMessage =
+      if (
         messageMode === 'saved' &&
-        Boolean(selectedTemplateId)
-
-      if (isSavedMessage) {
+        selectedTemplateId
+      ) {
         setActiveSavedMessage({
           templateId:
             selectedTemplateId,
           content:
             rawMessage,
         })
-      } else if (
+      }
+
+      /*
+       * إذا كانت رسالة جديدة:
+       *
+       * لا نحتفظ بها كمسار تلقائي.
+       *
+       * لذلك بعد إرسالها للطالب الحالي،
+       * الطالب التالي سيظهر له بكس الاختيار.
+       */
+      if (
         messageMode === 'new'
       ) {
-        /*
-         * الرسالة الجديدة لا تستمر تلقائياً
-         * كرسالة محفوظة للطالب التالي.
-         */
         setActiveSavedMessage(null)
       }
 
@@ -1604,6 +1633,10 @@ export function CommunicationView() {
         'noopener,noreferrer'
       )
 
+      /*
+       * يبقى زر الطالب "إعادة إرسال"
+       * بعد فتح WhatsApp.
+       */
       setOpenedStudentIds(
         (current) =>
           current.includes(
@@ -2638,8 +2671,10 @@ export function CommunicationView() {
                       variant="ghost"
                       onClick={() => {
                         /*
-                         * إذا كان هناك تسلسل محفوظ نشط،
-                         * لا نرجع إلى شاشة الاختيار.
+                         * إذا كان هناك مسار محفوظ نشط،
+                         * نعيد فتح نفس الرسالة مباشرة.
+                         *
+                         * ولا نعرض بكس الاختيار.
                          */
                         if (
                           activeSavedMessage
@@ -2647,9 +2682,11 @@ export function CommunicationView() {
                           setMessageMode(
                             'saved'
                           )
+
                           setSelectedTemplateId(
                             activeSavedMessage.templateId
                           )
+
                           setComposedMessage(
                             activeSavedMessage.content
                           )
@@ -2657,6 +2694,9 @@ export function CommunicationView() {
                           setMessageMode(
                             'choose'
                           )
+
+                          setSelectedTemplateId('')
+                          setComposedMessage('')
                         }
 
                         setTemplateMessage('')
