@@ -49,15 +49,11 @@ const normalizeWhatsAppNumber = (
   const digits =
     value.replace(/\D/g, '')
 
-  if (
-    digits.startsWith('973')
-  ) {
+  if (digits.startsWith('973')) {
     return digits
   }
 
-  if (
-    digits.length === 8
-  ) {
+  if (digits.length === 8) {
     return `973${digits}`
   }
 
@@ -77,28 +73,32 @@ const escapeVCardValue = (
 const createVCard = (
   students: GroupStudent[]
 ) => {
-  return students
-    .map((student) => {
-      const number =
-        normalizeWhatsAppNumber(
-          student
-        )
+  return (
+    students
+      .map((student) => {
+        const number =
+          normalizeWhatsAppNumber(
+            student
+          )
 
-      const name =
-        escapeVCardValue(
-          student.name
-        )
+        const name =
+          escapeVCardValue(
+            student.name.trim()
+          )
 
-      return [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        `FN:${name}`,
-        `N:${name};;;;`,
-        `TEL;TYPE=CELL,VOICE:+${number}`,
-        'END:VCARD',
-      ].join('\r\n')
-    })
-    .join('\r\n')
+        return [
+          'BEGIN:VCARD',
+          'VERSION:3.0',
+          'PRODID:-//T3LEEM//Contacts//AR',
+          `FN;CHARSET=UTF-8:${name}`,
+          `N;CHARSET=UTF-8:${name};;;;`,
+          `TEL;TYPE=CELL:+${number}`,
+          'END:VCARD',
+        ].join('\r\n')
+      })
+      .join('\r\n\r\n') +
+    '\r\n'
+  )
 }
 
 export function CommunicationViewGroups({
@@ -165,9 +165,7 @@ export function CommunicationViewGroups({
         error,
       } = await supabase
         .from('communication_group')
-        .select(
-          'whatsapp_url'
-        )
+        .select('whatsapp_url')
         .limit(1)
         .maybeSingle()
 
@@ -234,12 +232,14 @@ export function CommunicationViewGroups({
     }, [selectedStudents])
 
   const studentsWithoutNumbers =
-    selectedStudents.filter(
-      (student) =>
-        !normalizeWhatsAppNumber(
-          student
-        )
-    )
+    useMemo(() => {
+      return selectedStudents.filter(
+        (student) =>
+          !normalizeWhatsAppNumber(
+            student
+          )
+      )
+    }, [selectedStudents])
 
   const hasSavedGroup =
     Boolean(
@@ -494,8 +494,7 @@ export function CommunicationViewGroups({
       new Blob(
         [vCard],
         {
-          type:
-            'text/vcard;charset=utf-8',
+          type: 'text/vcard',
         }
       )
 
@@ -532,10 +531,12 @@ export function CommunicationViewGroups({
       link
     )
 
-    URL.revokeObjectURL(url)
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 1000)
 
     setGroupMessage(
-      `تم إنشاء ملف جهات الاتصال لـ ${studentsWithNumbers.length} طالب. استورد الملف في هاتفك لإضافة جميع الأرقام دفعة واحدة.`
+      `تم إنشاء ملف جهات الاتصال لـ ${studentsWithNumbers.length} طالب. افتح الملف في الهاتف واختر إضافة جميع جهات الاتصال.`
     )
   }
 
