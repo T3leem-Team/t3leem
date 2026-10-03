@@ -108,6 +108,55 @@ type MessageTemplate = {
 
 /*
  * =========================================================
+ * Message variables
+ * =========================================================
+ */
+
+const MESSAGE_VARIABLES = [
+  {
+    key: '{{name}}',
+    label: 'اسم الطالب',
+  },
+  {
+    key: '{{phone}}',
+    label: 'رقم الهاتف',
+  },
+  {
+    key: '{{whatsapp}}',
+    label: 'رقم WhatsApp',
+  },
+  {
+    key: '{{course}}',
+    label: 'الدورة',
+  },
+  {
+    key: '{{teacher}}',
+    label: 'المعلم',
+  },
+  {
+    key: '{{attendance}}',
+    label: 'الحضور',
+  },
+  {
+    key: '{{paid}}',
+    label: 'المبلغ المدفوع',
+  },
+  {
+    key: '{{remaining}}',
+    label: 'المبلغ المتبقي',
+  },
+  {
+    key: '{{payment_status}}',
+    label: 'حالة الدفع',
+  },
+  {
+    key: '{{date}}',
+    label: 'التاريخ',
+  },
+]
+
+/*
+ * =========================================================
  * Cache
  * =========================================================
  */
@@ -2388,36 +2437,29 @@ export function CommunicationView() {
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        {[
-                          '{{name}}',
-                          '{{phone}}',
-                          '{{whatsapp}}',
-                          '{{course}}',
-                          '{{teacher}}',
-                          '{{attendance}}',
-                          '{{paid}}',
-                          '{{remaining}}',
-                          '{{payment_status}}',
-                          '{{date}}',
-                        ].map(
+                        {MESSAGE_VARIABLES.map(
                           (variable) => (
                             <button
                               key={
-                                variable
+                                variable.key
                               }
                               type="button"
                               onClick={() =>
                                 setComposedMessage(
                                   (current) =>
-                                    `${current}${current ? ' ' : ''}${variable}`
+                                    `${current}${current ? ' ' : ''}${variable.key}`
                                 )
                               }
-                              className="rounded border bg-background px-2 py-1 font-mono text-[11px] hover:bg-muted"
+                              className="rounded border bg-background px-2.5 py-1.5 text-xs hover:bg-muted"
                             >
-                              {variable}
+                              {variable.label}
                             </button>
                           )
                         )}
+                      </div>
+
+                      <div className="mt-2 text-[11px] text-muted-foreground">
+                        عند الضغط على أي متغير سيتم إدخال الرمز الخاص به داخل الرسالة تلقائياً.
                       </div>
                     </div>
 
