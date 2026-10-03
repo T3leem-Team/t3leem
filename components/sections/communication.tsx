@@ -298,6 +298,24 @@ export function CommunicationView() {
 
   /*
    * =========================================================
+   * Saved message flow
+   * =========================================================
+   *
+   * إذا بدأ المستخدم برسالة محفوظة وأرسلها فعلاً،
+   * نحفظ نص الرسالة الخام المستخدمة حتى يتم استعمال
+   * نفس الرسالة للطلاب التاليين، مع تبديل المتغيرات فقط.
+   */
+
+  const [
+    activeSavedMessage,
+    setActiveSavedMessage,
+  ] = useState<{
+    templateId: string
+    content: string
+  } | null>(null)
+
+  /*
+   * =========================================================
    * Message modal
    * =========================================================
    */
@@ -1267,11 +1285,28 @@ export function CommunicationView() {
   ) => {
     setMessageStudent(student)
     setMessageModalOpen(true)
+    setTemplateName('')
+    setTemplateMessage('')
+
+    /*
+     * إذا كان هناك تسلسل بدأ برسالة محفوظة وتم
+     * إرسالها فعلاً للطالب السابق، افتح مباشرة
+     * بنفس الرسالة بدون شاشة الاختيار.
+     */
+    if (activeSavedMessage) {
+      setMessageMode('saved')
+      setSelectedTemplateId(
+        activeSavedMessage.templateId
+      )
+      setComposedMessage(
+        activeSavedMessage.content
+      )
+      return
+    }
+
     setMessageMode('choose')
     setSelectedTemplateId('')
     setComposedMessage('')
-    setTemplateName('')
-    setTemplateMessage('')
   }
 
   const closeMessageModal =
@@ -1303,6 +1338,13 @@ export function CommunicationView() {
 
   const createNewMessage =
     () => {
+      /*
+       * اختيار رسالة جديدة يعني بدء تسلسل جديد
+       * وعدم استخدام القالب المحفوظ تلقائياً
+       * للطلاب التاليين.
+       */
+      setActiveSavedMessage(null)
+
       setSelectedTemplateId('')
       setComposedMessage('')
       setMessageMode('new')
@@ -1473,6 +1515,17 @@ export function CommunicationView() {
         setSelectedTemplateId('')
       }
 
+      /*
+       * إذا تم حذف القالب الذي كان مستخدماً
+       * في التسلسل الحالي، نوقف التسلسل المحفوظ.
+       */
+      if (
+        activeSavedMessage?.templateId ===
+        template.id
+      ) {
+        setActiveSavedMessage(null)
+      }
+
       setTemplateDeletingId(null)
 
       setTemplateMessage(
@@ -1506,6 +1559,32 @@ export function CommunicationView() {
           'اكتب الرسالة أولاً.'
         )
         return
+      }
+
+      /*
+       * إذا كانت هذه رسالة محفوظة، نحفظ النص الخام
+       * الذي تم استخدامه فعلياً حتى نستخدمه للطالب
+       * التالي مع تبديل المتغيرات فقط.
+       */
+      const isSavedMessage =
+        messageMode === 'saved' &&
+        Boolean(selectedTemplateId)
+
+      if (isSavedMessage) {
+        setActiveSavedMessage({
+          templateId:
+            selectedTemplateId,
+          content:
+            rawMessage,
+        })
+      } else if (
+        messageMode === 'new'
+      ) {
+        /*
+         * الرسالة الجديدة لا تستمر تلقائياً
+         * كرسالة محفوظة للطالب التالي.
+         */
+        setActiveSavedMessage(null)
       }
 
       const finalMessage =
@@ -2196,7 +2275,7 @@ export function CommunicationView() {
             )}
 
             <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              عند الضغط على «إرسال» تختار الرسالة المحفوظة أو تنشئ رسالة جديدة، ثم تفتح WhatsApp والرسالة تكون جاهزة للإرسال.
+              عند الضغط على «إرسال» تختار الرسالة المحفوظة أو تنشئ رسالة جديدة. إذا بدأت برسالة محفوظة فسيتم استخدامها تلقائياً للطلاب التاليين مع تحديث المتغيرات حسب كل طالب.
             </div>
           </CardContent>
         </Card>
@@ -2224,6 +2303,12 @@ export function CommunicationView() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     إلى: {messageStudent.name}
                   </p>
+
+                  {activeSavedMessage && (
+                    <p className="mt-1 text-xs text-primary">
+                      يتم استخدام الرسالة المحفوظة السابقة تلقائياً
+                    </p>
+                  )}
                 </div>
 
                 <Button
@@ -2296,21 +2381,53 @@ export function CommunicationView() {
                         </div>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={
-                          createNewMessage
-                        }
-                      >
-                        <Pencil className="size-4" />
-                        رسالة جديدة
-                      </Button>
+                      {!activeSavedMessage && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={
+                            createNewMessage
+                          }
+                        >
+                          <Pencil className="size-4" />
+                          رسالة جديدة
+                        </Button>
+                      )}
                     </div>
 
-                    {messageTemplates.length ===
-                    0 ? (
+                    {activeSavedMessage ? (
+                      <div className="space-y-2">
+                        <div className="rounded-md border bg-primary/5 p-3">
+                          <div className="text-sm font-medium">
+                            الرسالة المحفوظة المستخدمة
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            سيتم استخدام نفس الرسالة تلقائياً مع الطلاب التاليين، مع تحديث المتغيرات.
+                          </div>
+                        </div>
+
+                        <label className="text-sm font-medium">
+                          الرسالة
+                        </label>
+
+                        <textarea
+                          value={
+                            composedMessage
+                          }
+                          onChange={(event) =>
+                            setComposedMessage(
+                              event.target
+                                .value
+                            )
+                          }
+                          rows={7}
+                          className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
+                        />
+                      </div>
+                    ) : messageTemplates.length ===
+                      0 ? (
                       <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                         لا توجد رسائل محفوظة حالياً.
                         <br />
@@ -2383,27 +2500,28 @@ export function CommunicationView() {
                       </div>
                     )}
 
-                    {selectedTemplateId && (
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          الرسالة
-                        </label>
+                    {!activeSavedMessage &&
+                      selectedTemplateId && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">
+                            الرسالة
+                          </label>
 
-                        <textarea
-                          value={
-                            composedMessage
-                          }
-                          onChange={(event) =>
-                            setComposedMessage(
-                              event.target
-                                .value
-                            )
-                          }
-                          rows={7}
-                          className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
-                        />
-                      </div>
-                    )}
+                          <textarea
+                            value={
+                              composedMessage
+                            }
+                            onChange={(event) =>
+                              setComposedMessage(
+                                event.target
+                                  .value
+                              )
+                            }
+                            rows={7}
+                            className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
+                          />
+                        </div>
+                      )}
                   </>
                 )}
 
@@ -2519,9 +2637,28 @@ export function CommunicationView() {
                       type="button"
                       variant="ghost"
                       onClick={() => {
-                        setMessageMode(
-                          'choose'
-                        )
+                        /*
+                         * إذا كان هناك تسلسل محفوظ نشط،
+                         * لا نرجع إلى شاشة الاختيار.
+                         */
+                        if (
+                          activeSavedMessage
+                        ) {
+                          setMessageMode(
+                            'saved'
+                          )
+                          setSelectedTemplateId(
+                            activeSavedMessage.templateId
+                          )
+                          setComposedMessage(
+                            activeSavedMessage.content
+                          )
+                        } else {
+                          setMessageMode(
+                            'choose'
+                          )
+                        }
+
                         setTemplateMessage('')
                       }}
                     >
