@@ -9,6 +9,7 @@ import {
 import {
   ExternalLink,
   Download,
+  Share2,
   Save,
   Trash2,
   Users,
@@ -65,7 +66,9 @@ const escapeVCardValue = (
 ) => {
   return value
     .replace(/\\/g, '\\\\')
+    .replace(/\r\n/g, '\\n')
     .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\n')
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
 }
@@ -73,32 +76,39 @@ const escapeVCardValue = (
 const createVCard = (
   students: GroupStudent[]
 ) => {
-  return (
-    students
-      .map((student) => {
-        const number =
-          normalizeWhatsAppNumber(
-            student
-          )
+  const cards = students
+    .map((student) => {
+      const number =
+        normalizeWhatsAppNumber(
+          student
+        )
 
-        const name =
-          escapeVCardValue(
-            student.name.trim()
-          )
+      if (!number) {
+        return ''
+      }
 
-        return [
-          'BEGIN:VCARD',
-          'VERSION:3.0',
-          'PRODID:-//T3LEEM//Contacts//AR',
-          `FN;CHARSET=UTF-8:${name}`,
-          `N;CHARSET=UTF-8:${name};;;;`,
-          `TEL;TYPE=CELL:+${number}`,
-          'END:VCARD',
-        ].join('\r\n')
-      })
-      .join('\r\n\r\n') +
-    '\r\n'
-  )
+      const name =
+        escapeVCardValue(
+          student.name.trim()
+        )
+
+      const uid =
+        `t3leem-${student.id}`
+
+      return [
+        'BEGIN:VCARD',
+        'VERSION:3.0',
+        `UID:${uid}`,
+        `FN;CHARSET=UTF-8:${name}`,
+        `N;CHARSET=UTF-8:${name};;;;`,
+        `TEL;TYPE=CELL:+${number}`,
+        'END:VCARD',
+      ].join('\r\n')
+    })
+    .filter(Boolean)
+    .join('\r\n')
+
+  return `${cards}\r\n`
 }
 
 export function CommunicationViewGroups({
@@ -134,6 +144,11 @@ export function CommunicationViewGroups({
     loading,
     setLoading,
   ] = useState(true)
+
+  const [
+    sharingContacts,
+    setSharingContacts,
+  ] = useState(false)
 
   const [
     selectedGroupStudentIds,
@@ -470,11 +485,33 @@ export function CommunicationViewGroups({
 
   /*
    * =========================================================
-   * VCF
+   * Create VCF
    * =========================================================
    */
 
-  const downloadContacts = () => {
+  const buildContactsFile = () => {
+    const vCard =
+      createVCard(
+        studentsWithNumbers
+      )
+
+    return new File(
+      [vCard],
+      'T3LEEM-contacts.vcf',
+      {
+        type:
+          'text/vcard',
+      }
+    )
+  }
+
+  /*
+   * =========================================================
+   * Share / Download VCF
+   * =========================================================
+   */
+
+  const shareContacts = async () => {
     if (
       studentsWithNumbers.length ===
       0
@@ -485,59 +522,134 @@ export function CommunicationViewGroups({
       return
     }
 
-    const vCard =
-      createVCard(
-        studentsWithNumbers
-      )
+    setSharingContacts(true)
+    setGroupMessage('')
 
-    const blob =
-      new Blob(
-        [vCard],
-        {
-          type: 'text/vcard',
-        }
-      )
+    try {
+      const file =
+        buildContactsFile()
 
-    const url =
-      URL.createObjectURL(blob)
+      const safeName =
+        groupName
+          .trim()
+          .replace(
+            /[\\/:*?"<>|]/g,
+            ''
+          )
 
-    const link =
-      document.createElement(
-        'a'
-      )
+      const filename =
+        safeName
+          ? `T3LEEM-${safeName}.vcf`
+          : 'T3LEEM-طلاب-المجموعة.vcf'
 
-    const safeName =
-      groupName
-        .trim()
-        .replace(
-          /[\\/:*?"<>|]/g,
-          ''
+      const finalFile =
+        new File(
+          [file],
+          filename,
+          {
+            type:
+              'text/vcard',
+          }
         )
 
-    link.href = url
+      const canShareFiles =
+        typeof navigator !==
+          'undefined' &&
+        typeof navigator.share ===
+          'function' &&
+        typeof navigator.canShare ===
+          'function' &&
+        navigator.canShare({
+          files: [finalFile],
+        })
 
-    link.download =
-      safeName
-        ? `T3LEEM-${safeName}.vcf`
-        : 'T3LEEM-طلاب-المجموعة.vcf'
+      if (canShareFiles) {
+        await navigator.share({
+          title:
+            'جهات اتصال T3LEEM',
+          text:
+            `جهات اتصال ${studentsWithNumbers.length} طالب`,
+          files: [finalFile],
+        })
 
-    document.body.appendChild(
-      link
-    )
+        setGroupMessage(
+          `تم تجهيز ${studentsWithNumbers.length} جهة اتصال للمشاركة.`
+        )
 
-    link.click()
+        return
+      }
 
-    document.body.removeChild(
-      link
-    )
+      /*
+       * Fallback للمتصفحات التي لا تدعم
+       * مشاركة الملفات.
+       */
 
-    setTimeout(() => {
-      URL.revokeObjectURL(url)
-    }, 1000)
+      const blob =
+        new Blob(
+          [createVCard(
+            studentsWithNumbers
+          )],
+          {
+            type:
+              'text/vcard;charset=utf-8',
+          }
+        )
 
-    setGroupMessage(
-      `تم إنشاء ملف جهات الاتصال لـ ${studentsWithNumbers.length} طالب. افتح الملف في الهاتف واختر إضافة جميع جهات الاتصال.`
-    )
+      const url =
+        URL.createObjectURL(blob)
+
+      const link =
+        document.createElement(
+          'a'
+        )
+
+      link.href = url
+      link.download =
+        filename
+
+      document.body.appendChild(
+        link
+      )
+
+      link.click()
+
+      document.body.removeChild(
+        link
+      )
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 1000)
+
+      setGroupMessage(
+        `تم إنشاء ملف VCF يحتوي على ${studentsWithNumbers.length} جهة اتصال.`
+      )
+    } catch (error) {
+      /*
+       * المستخدم قد يغلق نافذة المشاركة
+       * بدون اختيار أي تطبيق.
+       */
+
+      if (
+        error instanceof Error &&
+        error.name ===
+          'AbortError'
+      ) {
+        setGroupMessage('')
+        return
+      }
+
+      console.error(
+        'Share contacts error:',
+        error
+      )
+
+      setGroupMessage(
+        'تعذر مشاركة ملف جهات الاتصال.'
+      )
+    } finally {
+      setSharingContacts(false)
+    }
   }
 
   /*
@@ -569,7 +681,7 @@ export function CommunicationViewGroups({
           </h2>
 
           <p className="mt-1 text-sm text-muted-foreground">
-            اختر الطلاب، أنشئ ملف جهات اتصال واحد، ثم أنشئ المجموعة يدوياً في WhatsApp.
+            اختر الطلاب، جهّز جهات الاتصال دفعة واحدة، ثم أنشئ المجموعة يدوياً في WhatsApp.
           </p>
         </div>
 
@@ -597,7 +709,7 @@ export function CommunicationViewGroups({
               />
 
               <p className="text-xs text-muted-foreground">
-                الاسم يستخدم لتسمية ملف جهات الاتصال فقط. إنشاء اسم مجموعة WhatsApp يتم داخل WhatsApp.
+                الاسم يستخدم لتسمية ملف جهات الاتصال فقط. اسم مجموعة WhatsApp يتم تحديده داخل WhatsApp.
               </p>
             </div>
 
@@ -750,23 +862,37 @@ export function CommunicationViewGroups({
                 </div>
 
                 <div className="mt-1 text-xs text-muted-foreground">
-                  سيتم إنشاء ملف واحد يحتوي على جميع الطلاب المحددين الذين لديهم أرقام.
+                  سيتم تجهيز ملف واحد يحتوي على جميع الطلاب المحددين الذين لديهم أرقام.
                 </div>
               </div>
 
               <Button
                 type="button"
                 onClick={
-                  downloadContacts
+                  shareContacts
                 }
                 disabled={
+                  sharingContacts ||
                   studentsWithNumbers.length ===
-                  0
+                    0
                 }
               >
-                <Download className="size-4" />
-                إنشاء ملف جهات الاتصال
+                {sharingContacts ? (
+                  <>
+                    <Share2 className="size-4 animate-pulse" />
+                    جاري تجهيز الملف...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="size-4" />
+                    مشاركة جهات الاتصال
+                  </>
+                )}
               </Button>
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                في الآيفون ستظهر لك نافذة المشاركة بدل فتح أول جهة اتصال مباشرة.
+              </p>
             </div>
 
             <div className="rounded-lg border border-dashed p-4">
@@ -780,19 +906,23 @@ export function CommunicationViewGroups({
                 </li>
 
                 <li>
-                  2. اضغط «إنشاء ملف جهات الاتصال».
+                  2. اضغط «مشاركة جهات الاتصال».
                 </li>
 
                 <li>
-                  3. استورد ملف VCF في هاتفك، وسيتم إضافة جهات الاتصال دفعة واحدة.
+                  3. من نافذة المشاركة اختر حفظ الملف في «الملفات» أو التطبيق المناسب.
                 </li>
 
                 <li>
-                  4. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال المطلوبة.
+                  4. افتح ملف VCF من المكان الذي حفظته فيه واستورد جهات الاتصال.
                 </li>
 
                 <li>
-                  5. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.
+                  5. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال.
+                </li>
+
+                <li>
+                  6. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.
                 </li>
               </ol>
             </div>
