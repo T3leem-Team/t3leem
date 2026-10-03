@@ -8,7 +8,6 @@ import {
 
 import {
   ExternalLink,
-  Download,
   Share2,
   Save,
   Trash2,
@@ -74,8 +73,12 @@ const escapeVCardValue = (
 }
 
 const createVCard = (
-  students: GroupStudent[]
+  students: GroupStudent[],
+  prefix: string
 ) => {
+  const cleanPrefix =
+    prefix.trim()
+
   const cards = students
     .map((student) => {
       const number =
@@ -87,9 +90,14 @@ const createVCard = (
         return ''
       }
 
+      const fullName =
+        cleanPrefix
+          ? `${cleanPrefix} ${student.name.trim()}`
+          : student.name.trim()
+
       const name =
         escapeVCardValue(
-          student.name.trim()
+          fullName
         )
 
       const uid =
@@ -156,6 +164,11 @@ export function CommunicationViewGroups({
   ] = useState<string[]>(
     selectedStudentIds
   )
+
+  const [
+    contactNamePrefix,
+    setContactNamePrefix,
+  ] = useState('تعليم')
 
   /*
    * =========================================================
@@ -492,7 +505,8 @@ export function CommunicationViewGroups({
   const buildContactsFile = () => {
     const vCard =
       createVCard(
-        studentsWithNumbers
+        studentsWithNumbers,
+        contactNamePrefix
       )
 
     return new File(
@@ -542,9 +556,15 @@ export function CommunicationViewGroups({
           ? `T3LEEM-${safeName}.vcf`
           : 'T3LEEM-طلاب-المجموعة.vcf'
 
+      const finalVCard =
+        createVCard(
+          studentsWithNumbers,
+          contactNamePrefix
+        )
+
       const finalFile =
         new File(
-          [file],
+          [finalVCard],
           filename,
           {
             type:
@@ -586,9 +606,7 @@ export function CommunicationViewGroups({
 
       const blob =
         new Blob(
-          [createVCard(
-            studentsWithNumbers
-          )],
+          [finalVCard],
           {
             type:
               'text/vcard;charset=utf-8',
@@ -856,13 +874,46 @@ export function CommunicationViewGroups({
               )}
 
             <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="mb-3">
+              <div className="mb-4">
                 <div className="font-semibold">
                   إضافة الطلاب إلى الهاتف
                 </div>
 
                 <div className="mt-1 text-xs text-muted-foreground">
                   سيتم تجهيز ملف واحد يحتوي على جميع الطلاب المحددين الذين لديهم أرقام.
+                </div>
+              </div>
+
+              <div className="mb-4 space-y-2">
+                <label className="text-sm font-medium">
+                  الكلمة قبل اسم الطالب
+                </label>
+
+                <input
+                  value={
+                    contactNamePrefix
+                  }
+                  onChange={(event) =>
+                    setContactNamePrefix(
+                      event.target.value
+                    )
+                  }
+                  placeholder="مثلاً: تعليم"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  ستتم إضافة هذه الكلمة قبل اسم كل طالب في جهات الاتصال.
+                  اتركها فارغة إذا كنت تريد حفظ الاسم بدون إضافة.
+                </p>
+
+                <div className="rounded-md bg-muted/50 p-2 text-xs">
+                  مثال:{' '}
+                  <span className="font-medium">
+                    {contactNamePrefix.trim()
+                      ? `${contactNamePrefix.trim()} أحمد محمد`
+                      : 'أحمد محمد'}
+                  </span>
                 </div>
               </div>
 
@@ -906,23 +957,27 @@ export function CommunicationViewGroups({
                 </li>
 
                 <li>
-                  2. اضغط «مشاركة جهات الاتصال».
+                  2. اختر الكلمة التي تريد ظهورها قبل أسماء الطلاب.
                 </li>
 
                 <li>
-                  3. من نافذة المشاركة اختر حفظ الملف في «الملفات» أو التطبيق المناسب.
+                  3. اضغط «مشاركة جهات الاتصال».
                 </li>
 
                 <li>
-                  4. افتح ملف VCF من المكان الذي حفظته فيه واستورد جهات الاتصال.
+                  4. من نافذة المشاركة اختر حفظ الملف في «الملفات» أو التطبيق المناسب.
                 </li>
 
                 <li>
-                  5. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال.
+                  5. افتح ملف VCF من المكان الذي حفظته فيه واستورد جهات الاتصال.
                 </li>
 
                 <li>
-                  6. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.
+                  6. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال.
+                </li>
+
+                <li>
+                  7. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.
                 </li>
               </ol>
             </div>
