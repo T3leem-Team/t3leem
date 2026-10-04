@@ -46,6 +46,7 @@ type FilterType =
   | 'teacher_course_attendance'
   | 'payment'
   | 'not_assigned_current_course'
+  | 'invalid_personal_id'
 
 type Student = {
   id: string
@@ -300,18 +301,6 @@ export function CommunicationView() {
    * =========================================================
    * Active saved message flow
    * =========================================================
-   *
-   * هذه الحالة مؤقتة داخل الصفحة فقط.
-   *
-   * إذا أرسل المستخدم رسالة محفوظة:
-   * - الطالب التالي يفتح نفس الرسالة مباشرة.
-   * - المتغيرات تتغير حسب الطالب.
-   *
-   * إذا أرسل رسالة جديدة:
-   * - يتم إلغاء هذا المسار.
-   * - الطالب التالي يرى شاشة الاختيار من جديد.
-   *
-   * عند Refresh تختفي الحالة تلقائياً لأنها useState.
    */
 
   const [
@@ -850,6 +839,40 @@ export function CommunicationView() {
           )
       }
 
+      /*
+       * =====================================================
+       * رقم شخصي أقل من 9 أرقام
+       * =====================================================
+       *
+       * نحذف أي مسافات أو رموز من الرقم أولاً،
+       * ثم نحسب عدد الأرقام فقط.
+       *
+       * مثال:
+       * 12345678      => يظهر
+       * 1234567       => يظهر
+       * 123456789     => لا يظهر
+       * 1234-5678     => يعتبر 8 أرقام ويظهر
+       * فارغ           => يظهر لأنه غير صحيح أيضاً
+       */
+
+      if (
+        filterType ===
+        'invalid_personal_id'
+      ) {
+        result =
+          result.filter(
+            (student) => {
+              const digits =
+                (student.personalId ?? '')
+                  .replace(/\D/g, '')
+
+              return (
+                digits.length < 9
+              )
+            }
+          )
+      }
+
       if (
         filterType ===
           'attendance_status' ||
@@ -1296,12 +1319,6 @@ export function CommunicationView() {
     setTemplateName('')
     setTemplateMessage('')
 
-    /*
-     * إذا تم إرسال رسالة محفوظة سابقاً داخل
-     * نفس جلسة الصفحة، لا نعرض شاشة الاختيار.
-     *
-     * يفتح مباشرة على نفس الرسالة.
-     */
     if (activeSavedMessage) {
       setMessageMode('saved')
 
@@ -1316,10 +1333,6 @@ export function CommunicationView() {
       return
     }
 
-    /*
-     * لا توجد رسالة محفوظة نشطة:
-     * اعرض الاختيار من جديد.
-     */
     setMessageMode('choose')
     setSelectedTemplateId('')
     setComposedMessage('')
@@ -1354,13 +1367,6 @@ export function CommunicationView() {
 
   const createNewMessage =
     () => {
-      /*
-       * اختيار رسالة جديدة يلغي أي مسار محفوظ
-       * كان مستخدماً للطلاب السابقين.
-       *
-       * بعد إرسال هذه الرسالة، الطالب التالي
-       * سيعود لشاشة الاختيار من جديد.
-       */
       setActiveSavedMessage(null)
 
       setSelectedTemplateId('')
@@ -1533,10 +1539,6 @@ export function CommunicationView() {
         setSelectedTemplateId('')
       }
 
-      /*
-       * إذا تم حذف القالب الذي يشكل المسار
-       * المحفوظ الحالي، نوقف المسار.
-       */
       if (
         activeSavedMessage?.templateId ===
         template.id
@@ -1579,17 +1581,6 @@ export function CommunicationView() {
         return
       }
 
-      /*
-       * إذا كانت الرسالة المختارة محفوظة:
-       *
-       * نحفظ النص الخام نفسه.
-       *
-       * مثال:
-       * أهلاً {{name}}، نذكركم بموعد...
-       *
-       * الطالب الثاني سيستخدم نفس النص،
-       * لكن {{name}} سيتغير تلقائياً.
-       */
       if (
         messageMode === 'saved' &&
         selectedTemplateId
@@ -1602,14 +1593,6 @@ export function CommunicationView() {
         })
       }
 
-      /*
-       * إذا كانت رسالة جديدة:
-       *
-       * لا نحتفظ بها كمسار تلقائي.
-       *
-       * لذلك بعد إرسالها للطالب الحالي،
-       * الطالب التالي سيظهر له بكس الاختيار.
-       */
       if (
         messageMode === 'new'
       ) {
@@ -1633,10 +1616,6 @@ export function CommunicationView() {
         'noopener,noreferrer'
       )
 
-      /*
-       * يبقى زر الطالب "إعادة إرسال"
-       * بعد فتح WhatsApp.
-       */
       setOpenedStudentIds(
         (current) =>
           current.includes(
@@ -1877,6 +1856,10 @@ export function CommunicationView() {
                 <option value="not_assigned_current_course">
                   غير مشاركين في الدورة الحالية
                 </option>
+
+                <option value="invalid_personal_id">
+                  رقم شخصي أقل من 9 أرقام
+                </option>
               </select>
 
               {filterType ===
@@ -1890,6 +1873,13 @@ export function CommunicationView() {
                     مدفوع أقل من الرسوم السنوية
                   </option>
                 </select>
+              )}
+
+              {filterType ===
+                'invalid_personal_id' && (
+                <div className="flex items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700">
+                  تنبيه: هؤلاء الطلاب لديهم رقم شخصي غير صحيح ويحتاج إلى تصحيح.
+                </div>
               )}
             </div>
 
@@ -2181,6 +2171,10 @@ export function CommunicationView() {
                             </span>
 
                             <span className="block truncate text-xs text-muted-foreground">
+                              الرقم الشخصي:{' '}
+                              {student.personalId ||
+                                'غير موجود'}
+                              {' • '}
                               {number ||
                                 'لا يوجد رقم WhatsApp'}
                             </span>
@@ -2670,12 +2664,6 @@ export function CommunicationView() {
                       type="button"
                       variant="ghost"
                       onClick={() => {
-                        /*
-                         * إذا كان هناك مسار محفوظ نشط،
-                         * نعيد فتح نفس الرسالة مباشرة.
-                         *
-                         * ولا نعرض بكس الاختيار.
-                         */
                         if (
                           activeSavedMessage
                         ) {
