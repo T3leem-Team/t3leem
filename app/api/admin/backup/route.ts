@@ -304,6 +304,12 @@ const commonColumnNames: Record<
   teacher_id:
     'معرف المعلم',
 
+  subject_id:
+    'معرف المادة الدراسية',
+
+  course_subject_id:
+    'معرف مادة الدورة',
+
   trip_id:
     'معرف الرحلة',
 
@@ -457,12 +463,6 @@ const commonColumnNames: Record<
   balance_after:
     'الرصيد بعد العملية',
 
-  description:
-    'الوصف',
-
-  transaction_type:
-    'نوع الحركة',
-
   payment_link:
     'رابط الدفع',
 
@@ -553,12 +553,6 @@ const commonColumnNames: Record<
   show_age:
     'إظهار العمر',
 
-  name:
-    'الاسم',
-
-  student_id:
-    'معرف الطالب',
-
   personal_id:
     'الرقم الشخصي',
 
@@ -646,14 +640,8 @@ const commonColumnNames: Record<
   tracking_token:
     'رمز التتبع',
 
-  request_number:
-    'رقم الطلب',
-
   registration_number:
     'رقم التسجيل',
-
-  source:
-    'المصدر',
 
   reason:
     'السبب',
@@ -868,6 +856,16 @@ type RowContext = {
   >
 
   teachers?: Map<
+    string,
+    string
+  >
+
+  subjects?: Map<
+    string,
+    string
+  >
+
+  courseSubjects?: Map<
     string,
     string
   >
@@ -1214,6 +1212,65 @@ export async function GET() {
       )
 
     /* -----------------------------------------------------
+       المواد الدراسية
+       ----------------------------------------------------- */
+
+    const courseSubjects =
+      courseIds.length > 0
+        ? await getAll(
+            admin,
+            'course_subjects',
+            (query) =>
+              query.in(
+                'course_id',
+                courseIds,
+              ),
+          )
+        : []
+
+    const courseSubjectIds =
+      idsFrom(
+        courseSubjects,
+        'id',
+      )
+
+    const subjectIds =
+      idsFrom(
+        courseSubjects,
+        'subject_id',
+      )
+
+    const subjects =
+      subjectIds.length > 0
+        ? await getAll(
+            admin,
+            'subjects',
+            (query) =>
+              query.in(
+                'id',
+                subjectIds,
+              ),
+          )
+        : []
+
+    /* -----------------------------------------------------
+       معلمو المواد الدراسية
+       ----------------------------------------------------- */
+
+    const courseSubjectTeachers =
+      courseSubjectIds.length > 0
+        ? await getAll(
+            admin,
+            'course_subject_teachers',
+            (query) =>
+              query.in(
+                'course_subject_id',
+                courseSubjectIds,
+              ),
+          )
+        : []
+
+    /* -----------------------------------------------------
        المدفوعات
        ----------------------------------------------------- */
 
@@ -1304,6 +1361,20 @@ export async function GET() {
       )
 
     /* -----------------------------------------------------
+       سجل حضور المعلمين
+       غياب + تأخر فقط من supervision_records
+       ----------------------------------------------------- */
+
+    const teacherAttendanceRecords =
+      supervisionRecords.filter(
+        (row) =>
+          row.type ===
+            'teacher_absent' ||
+          row.type ===
+            'teacher_late',
+      )
+
+    /* -----------------------------------------------------
        الرحلات
        ----------------------------------------------------- */
 
@@ -1385,7 +1456,7 @@ export async function GET() {
       )
 
     /* -----------------------------------------------------
-       معلمو المواد
+       معلمو الدورات
        ----------------------------------------------------- */
 
     const courseTeachers =
@@ -1499,11 +1570,51 @@ export async function GET() {
         ),
       )
 
+    const courseSubjectTeacherIds =
+      Array.from(
+        new Set(
+          courseSubjectTeachers
+            .map(
+              (row) =>
+                row.teacher_id,
+            )
+            .filter(
+              (
+                value,
+              ): value is string =>
+                typeof value ===
+                  'string' &&
+                value.length > 0,
+            ),
+        ),
+      )
+
+    const supervisionTeacherIds =
+      Array.from(
+        new Set(
+          supervisionRecords
+            .map(
+              (row) =>
+                row.teacher_id,
+            )
+            .filter(
+              (
+                value,
+              ): value is string =>
+                typeof value ===
+                  'string' &&
+                value.length > 0,
+            ),
+        ),
+      )
+
     const teacherIds =
       Array.from(
         new Set([
           ...courseTeacherIds,
           ...assignmentTeacherIds,
+          ...courseSubjectTeacherIds,
+          ...supervisionTeacherIds,
         ]),
       )
 
@@ -1662,69 +1773,6 @@ export async function GET() {
         'name',
       )
 
-    const enrollmentMap =
-      new Map<
-        string,
-        string
-      >()
-
-    for (
-      const row of enrollments
-    ) {
-      if (
-        typeof row.id !==
-        'string'
-      ) {
-        continue
-      }
-
-      const studentName =
-        typeof row.student_id ===
-          'string'
-          ? studentMap.get(
-              row.student_id,
-            )
-          : undefined
-
-      const levelName =
-        typeof row.level_id ===
-          'string'
-          ? levels.find(
-              (level) =>
-                level.id ===
-                row.level_id,
-            )?.name
-          : undefined
-
-      const className =
-        typeof row.class_id ===
-          'string'
-          ? classes.find(
-              (item) =>
-                item.id ===
-                row.class_id,
-            )?.name
-          : undefined
-
-      const parts =
-        [
-          studentName,
-          levelName,
-          className,
-        ].filter(
-          Boolean,
-        )
-
-      enrollmentMap.set(
-        row.id,
-        parts.length > 0
-          ? parts.join(
-              ' - ',
-            )
-          : row.id,
-      )
-    }
-
     const levelMap =
       makeMap(
         levels,
@@ -1752,6 +1800,122 @@ export async function GET() {
         'id',
         'name',
       )
+
+    const subjectMap =
+      makeMap(
+        subjects,
+        'id',
+        'name',
+      )
+
+    const courseSubjectMap =
+      new Map<
+        string,
+        string
+      >()
+
+    for (
+      const row of courseSubjects
+    ) {
+      if (
+        typeof row.id !==
+        'string'
+      ) {
+        continue
+      }
+
+      const courseName =
+        typeof row.course_id ===
+          'string'
+          ? courseMap.get(
+              row.course_id,
+            )
+          : undefined
+
+      const subjectName =
+        typeof row.subject_id ===
+          'string'
+          ? subjectMap.get(
+              row.subject_id,
+            )
+          : undefined
+
+      const parts =
+        [
+          courseName,
+          subjectName,
+        ].filter(
+          Boolean,
+        )
+
+      courseSubjectMap.set(
+        row.id,
+        parts.length > 0
+          ? parts.join(
+              ' - ',
+            )
+          : row.id,
+      )
+    }
+
+    const enrollmentMap =
+      new Map<
+        string,
+        string
+      >()
+
+    for (
+      const row of enrollments
+    ) {
+      if (
+        typeof row.id !==
+        'string'
+      ) {
+        continue
+      }
+
+      const studentName =
+        typeof row.student_id ===
+          'string'
+          ? studentMap.get(
+              row.student_id,
+            )
+          : undefined
+
+      const levelName =
+        typeof row.level_id ===
+          'string'
+          ? levelMap.get(
+              row.level_id,
+            )
+          : undefined
+
+      const className =
+        typeof row.class_id ===
+          'string'
+          ? classMap.get(
+              row.class_id,
+            )
+          : undefined
+
+      const parts =
+        [
+          studentName,
+          levelName,
+          className,
+        ].filter(
+          Boolean,
+        )
+
+      enrollmentMap.set(
+        row.id,
+        parts.length > 0
+          ? parts.join(
+              ' - ',
+            )
+          : row.id,
+      )
+    }
 
     const tripMap =
       makeMap(
@@ -1785,24 +1949,40 @@ export async function GET() {
       {
         academicYears:
           academicYearMap,
+
         students:
           studentMap,
+
         enrollments:
           enrollmentMap,
+
         levels:
           levelMap,
+
         classes:
           classMap,
+
         courses:
           courseMap,
+
         teachers:
           teacherMap,
+
+        subjects:
+          subjectMap,
+
+        courseSubjects:
+          courseSubjectMap,
+
         trips:
           tripMap,
+
         attendanceStatuses:
           attendanceStatusMap,
+
         customFields:
           customFieldMap,
+
         dynamicFields:
           dynamicFieldMap,
       }
@@ -2004,6 +2184,50 @@ export async function GET() {
 
           lookup:
             academicYearMap,
+        },
+      ],
+    )
+
+    /* -----------------------------------------------------
+       المواد
+       ----------------------------------------------------- */
+
+    appendSheet(
+      workbook,
+      'المواد',
+      subjects,
+      context,
+    )
+
+    /* -----------------------------------------------------
+       مواد الدورات
+       ----------------------------------------------------- */
+
+    appendSheet(
+      workbook,
+      'مواد الدورات',
+      courseSubjects,
+      context,
+      [
+        {
+          column:
+            'course_id',
+
+          label:
+            'الدورة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'subject_id',
+
+          label:
+            'المادة',
+
+          lookup:
+            subjectMap,
         },
       ],
     )
@@ -2283,12 +2507,12 @@ export async function GET() {
     )
 
     /* -----------------------------------------------------
-       معلمو المواد
+       معلمو الدورات
        ----------------------------------------------------- */
 
     appendSheet(
       workbook,
-      'معلمو المواد',
+      'معلمو الدورات',
       courseTeachers,
       context,
       [
@@ -2297,10 +2521,43 @@ export async function GET() {
             'course_id',
 
           label:
-            'المادة',
+            'الدورة',
 
           lookup:
             courseMap,
+        },
+        {
+          column:
+            'teacher_id',
+
+          label:
+            'المعلم',
+
+          lookup:
+            teacherMap,
+        },
+      ],
+    )
+
+    /* -----------------------------------------------------
+       معلمو المواد
+       ----------------------------------------------------- */
+
+    appendSheet(
+      workbook,
+      'معلمو المواد',
+      courseSubjectTeachers,
+      context,
+      [
+        {
+          column:
+            'course_subject_id',
+
+          label:
+            'مادة الدورة',
+
+          lookup:
+            courseSubjectMap,
         },
         {
           column:
@@ -2354,6 +2611,50 @@ export async function GET() {
 
           lookup:
             studentMap,
+        },
+      ],
+    )
+
+    /* -----------------------------------------------------
+       سجل حضور المعلمين
+       غياب + تأخر
+       ----------------------------------------------------- */
+
+    appendSheet(
+      workbook,
+      'سجل حضور المعلمين',
+      teacherAttendanceRecords,
+      context,
+      [
+        {
+          column:
+            'academic_year_id',
+
+          label:
+            'السنة الدراسية',
+
+          lookup:
+            academicYearMap,
+        },
+        {
+          column:
+            'course_id',
+
+          label:
+            'الدورة',
+
+          lookup:
+            courseMap,
+        },
+        {
+          column:
+            'teacher_id',
+
+          label:
+            'المعلم',
+
+          lookup:
+            teacherMap,
         },
       ],
     )
@@ -2514,7 +2815,7 @@ export async function GET() {
             'course_id',
 
           label:
-            'المادة',
+            'الدورة',
 
           lookup:
             courseMap,
