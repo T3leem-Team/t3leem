@@ -10,6 +10,7 @@ import {
   Loader2,
   RefreshCw,
   Settings2,
+  Trash2,
   X,
 } from 'lucide-react'
 
@@ -1854,6 +1855,205 @@ export function EnrollmentView() {
 
   /*
    * =========================================================
+   * Clear all registration requests
+   * =========================================================
+   */
+
+  const clearAllRegistrationRequests =
+    async () => {
+      if (
+        saving ||
+        bulkApproving
+      ) {
+        return
+      }
+
+      if (requests.length === 0) {
+        setStatusMessage(
+          'لا توجد طلبات تسجيل لمسحها.',
+        )
+
+        return
+      }
+
+      const firstConfirmed =
+        window.confirm(
+          `⚠️ تنبيه مهم\n\nأنت على وشك مسح جميع طلبات التسجيل الموجودة في السنة الأكاديمية الحالية.\n\nعدد الطلبات: ${requests.length}\n\nسيتم حذف طلبات التسجيل فقط، ولن يتم حذف الطلاب أو التسجيلات أو المدفوعات.\n\nهل تريد المتابعة؟`,
+        )
+
+      if (!firstConfirmed) {
+        return
+      }
+
+      const secondConfirmed =
+        window.confirm(
+          `⚠️ تأكيد نهائي\n\nسيتم حذف ${requests.length} طلب تسجيل نهائيًا ولا يمكن التراجع عن هذه العملية.\n\nاضغط "موافق" للمتابعة.`,
+        )
+
+      if (!secondConfirmed) {
+        return
+      }
+
+      setSaving(true)
+
+      setStatusMessage(
+        'جاري مسح طلبات التسجيل...',
+      )
+
+      try {
+        const {
+          data: academicYear,
+          error:
+            academicYearError,
+        } = await supabase
+          .from('academic_years')
+          .select('id')
+          .eq('is_current', true)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (academicYearError) {
+          throw new Error(
+            `تعذر تحديد السنة الأكاديمية الحالية: ${academicYearError.message}`,
+          )
+        }
+
+        if (!academicYear) {
+          throw new Error(
+            'لا توجد سنة أكاديمية حالية مفعلة.',
+          )
+        }
+
+        const {
+          data: requestRows,
+          error:
+            requestRowsError,
+        } = await supabase
+          .from(
+            'registration_requests',
+          )
+          .select('id')
+          .eq(
+            'academic_year_id',
+            academicYear.id,
+          )
+
+        if (requestRowsError) {
+          throw new Error(
+            `تعذر تحميل طلبات التسجيل: ${requestRowsError.message}`,
+          )
+        }
+
+        const requestIds =
+          (requestRows ?? []).map(
+            (row) => row.id,
+          )
+
+        if (
+          requestIds.length ===
+          0
+        ) {
+          setRequests([])
+          setSelectedRequestIds([])
+          setCustomFieldValues([])
+          setSelectedRequest(null)
+          setShowReview(false)
+
+          updateEnrollmentCache({
+            requests: [],
+            customFieldValues: [],
+          })
+
+          setStatusMessage(
+            'لا توجد طلبات تسجيل لمسحها.',
+          )
+
+          return
+        }
+
+        /*
+         * Delete custom field values first.
+         * These belong specifically to registration requests.
+         */
+        const {
+          error:
+            customValuesError,
+        } = await supabase
+          .from(
+            'custom_field_values',
+          )
+          .delete()
+          .eq(
+            'record_type',
+            'registration_request',
+          )
+          .in(
+            'record_id',
+            requestIds,
+          )
+
+        if (customValuesError) {
+          throw new Error(
+            `تعذر مسح القيم الإضافية للطلبات: ${customValuesError.message}`,
+          )
+        }
+
+        /*
+         * Delete requests belonging to the current academic year only.
+         */
+        const {
+          error: deleteError,
+        } = await supabase
+          .from(
+            'registration_requests',
+          )
+          .delete()
+          .eq(
+            'academic_year_id',
+            academicYear.id,
+          )
+
+        if (deleteError) {
+          throw new Error(
+            `تعذر مسح طلبات التسجيل: ${deleteError.message}`,
+          )
+        }
+
+        /*
+         * Clear local state
+         */
+        setRequests([])
+        setSelectedRequestIds([])
+        setCustomFieldValues([])
+        setSelectedRequest(null)
+        setShowReview(false)
+
+        updateEnrollmentCache({
+          requests: [],
+          customFieldValues: [],
+        })
+
+        setStatusMessage(
+          `تم مسح ${requestIds.length} طلب تسجيل بنجاح ✅`,
+        )
+      } catch (error) {
+        console.error(
+          'Clear registration requests error:',
+          error,
+        )
+
+        setStatusMessage(
+          error instanceof Error
+            ? error.message
+            : 'حدث خطأ أثناء مسح طلبات التسجيل.',
+        )
+      } finally {
+        setSaving(false)
+      }
+    }
+
+  /*
+   * =========================================================
    * Columns
    * =========================================================
    */
@@ -2070,6 +2270,27 @@ export function EnrollmentView() {
 
           <Button
             variant="outline"
+            onClick={
+              clearAllRegistrationRequests
+            }
+            disabled={
+              loading ||
+              saving ||
+              bulkApproving ||
+              requests.length === 0
+            }
+            className="gap-2 border-red-300 bg-red-50 text-red-700 hover:border-red-400 hover:bg-red-100 hover:text-red-800"
+          >
+            {saving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Trash2 className="size-4" />
+            )}
+            مسح الطلبات
+          </Button>
+
+          <Button
+            variant="outline"
             onClick={async () => {
               await Promise.all([
                 loadRequests(),
@@ -2082,7 +2303,8 @@ export function EnrollmentView() {
             disabled={
               loading ||
               permissionsLoading ||
-              bulkApproving
+              bulkApproving ||
+              saving
             }
             className="gap-2"
           >
@@ -2090,7 +2312,8 @@ export function EnrollmentView() {
               className={`size-4 ${
                 loading ||
                 permissionsLoading ||
-                bulkApproving
+                bulkApproving ||
+                saving
                   ? 'animate-spin'
                   : ''
               }`}
