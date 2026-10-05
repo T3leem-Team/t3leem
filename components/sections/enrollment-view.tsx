@@ -2178,57 +2178,16 @@ export function EnrollmentView() {
     setVisibleColumns(next)
   }
 
-   /*
-   * =========================================================
-   * Render
-   * =========================================================
-   */
-
-  return (
-    <div className="space-y-6" dir="rtl">
-    {/* زر العودة */}
-    <div
-      className="relative h-10"
-      dir="rtl"
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        onClick={() => router.back()}
-        aria-label="العودة"
-        title="العودة"
-        className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
-      >
-        <ArrowRight className="size-5 stroke-[2.5]"
-        />
-      </Button>
-    </div>
-
-    <PageHeader
-      title="طلبات التسجيل"
-      description={`${pendingCount} طلب بانتظار المراجعة من إجمالي ${requests.length} طلب`}
-    />
-
-    {statusMessage && (
-      <div
-        className={`rounded-lg border p-4 text-sm ${
-          statusMessage.includes('خطأ') ||
-          statusMessage.includes('تعذر')
-            ? 'border-red-200 bg-red-50 text-red-800'
-            : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-        }`}
-      >
-        {statusMessage}
-      </div>
-    )}
-
-    {/* الإحصائيات والأزرار */}
+      {/* الإحصائيات والأزرار */}
     <div
       className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      dir="rtl"
+      dir="ltr"
     >
-      <div className="flex w-full flex-wrap items-center justify-start gap-2" dir="rtl">
+      {/* الإحصائيات - أقصى اليسار */}
+      <div
+        className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto"
+        dir="rtl"
+      >
         <div className="rounded-lg border bg-background px-3 py-2 text-sm">
           <span className="text-muted-foreground">
             بانتظار المراجعة:
@@ -2250,7 +2209,11 @@ export function EnrollmentView() {
         )}
       </div>
 
-      <div className="flex w-full flex-wrap items-center justify-start gap-2" dir="rtl">
+      {/* الأزرار - أقصى اليمين */}
+      <div
+        className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto"
+        dir="rtl"
+      >
         {!permissionsLoading &&
           allowCurrentYearImport && (
             <Button
