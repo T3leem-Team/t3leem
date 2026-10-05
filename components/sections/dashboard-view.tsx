@@ -8,9 +8,11 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   CalendarCheck,
   ClipboardCheck,
   Clock3,
+  Download,
   RefreshCw,
   Search,
   UserCheck,
@@ -108,6 +110,14 @@ type AttendanceRecord = {
   statusId: string
   note: string | null
   courseId: string
+}
+
+type AttendanceNote = {
+  id: string
+  studentId: string
+  attendanceDate: string
+  statusName: string
+  note: string
 }
 
 type DashboardStats = {
@@ -719,6 +729,13 @@ export function DashboardView() {
    * --------------------------------------------------
    * تحميل حضور الدورة المحددة فقط
    * --------------------------------------------------
+   *
+   * ملاحظة مهمة:
+   * يتم تحميل جميع سجلات الحضور للدورة،
+   * وليس تاريخ اليوم فقط.
+   *
+   * لذلك يمكن استخدام attendance.note
+   * لعرض الملاحظات القديمة أيضًا.
    */
   const loadAttendance =
     useCallback(
@@ -836,17 +853,6 @@ export function DashboardView() {
    * --------------------------------------------------
    * تحميل البيانات الثقيلة في الخلفية
    * --------------------------------------------------
-   *
-   * المرحلة الأولى:
-   * assignments
-   * courseTeachers
-   * students
-   * registrations
-   * attendance statuses
-   *
-   * وبعدها يتم تحميل المعلمين بشكل مستقل.
-   *
-   * بهذا الشكل المعلمين لا يؤخرون بقية البيانات.
    */
   const loadBackgroundData =
     useCallback(
@@ -1100,11 +1106,6 @@ export function DashboardView() {
               []
             ).length
 
-          /*
-           * ------------------------------------------
-           * نعرض البيانات التي وصلت فورًا
-           * ------------------------------------------
-           */
           setAssignments(
             mappedAssignments,
           )
@@ -1138,14 +1139,6 @@ export function DashboardView() {
               pendingCount,
           })
 
-          /*
-           * ------------------------------------------
-           * تحميل المعلمين بشكل مستقل
-           * ------------------------------------------
-           *
-           * لا ننتظر هذا الطلب قبل تحديث بقية
-           * بيانات Dashboard.
-           */
           const teacherIds =
             Array.from(
               new Set(
@@ -1212,10 +1205,6 @@ export function DashboardView() {
               mappedTeachers,
           })
 
-          /*
-           * يبقى واضح أن عملية التحميل
-           * مرتبطة بالسنة الحالية.
-           */
           void currentYearId
         } catch (error) {
           console.error(
@@ -1231,12 +1220,6 @@ export function DashboardView() {
    * --------------------------------------------------
    * التحميل الأساسي
    * --------------------------------------------------
-   *
-   * مهم:
-   * هذه العملية لا تنتظر فحص الصلاحية.
-   *
-   * الصلاحية تُفحص محليًا من sessionStorage
-   * في effect مستقل.
    */
   const loadData =
     useCallback(
@@ -1252,13 +1235,6 @@ export function DashboardView() {
         }
 
         try {
-          /*
-           * ============================
-           * المرحلة الأولى
-           * ============================
-           *
-           * السنة + الدورات + التسجيلات
-           */
           const [
             yearResult,
             coursesResult,
@@ -1437,7 +1413,8 @@ export function DashboardView() {
               .filter(
                 (enrollment) =>
                   normalizeId(
-                    enrollment.academic_year_id,
+                    enrollment.academicYearId ??
+                      enrollment.academic_year_id,
                   ) ===
                   normalizeId(
                     currentYear.id,
@@ -1467,11 +1444,6 @@ export function DashboardView() {
                 }),
               )
 
-          /*
-           * ------------------------------------------
-           * تحديد الدورة
-           * ------------------------------------------
-           */
           let nextSelectedCourseId =
             selectedCourseId
 
@@ -1515,11 +1487,6 @@ export function DashboardView() {
               ''
           }
 
-          /*
-           * ------------------------------------------
-           * وضع البيانات الخفيفة مباشرة
-           * ------------------------------------------
-           */
           setAcademicYear(
             currentYear,
           )
@@ -1547,16 +1514,8 @@ export function DashboardView() {
               nextSelectedCourseId,
           })
 
-          /*
-           * Dashboard أصبح جاهزًا للعرض.
-           */
           setLoading(false)
 
-          /*
-           * ------------------------------------------
-           * المرحلة الثانية: الخلفية
-           * ------------------------------------------
-           */
           const courseIds =
             mappedCourses.map(
               (course) =>
@@ -1604,12 +1563,6 @@ export function DashboardView() {
    * --------------------------------------------------
    * أول فتح
    * --------------------------------------------------
-   *
-   * مهم جدًا:
-   * لا يوجد checkingAccess هنا.
-   *
-   * لذلك يبدأ تحميل Dashboard فورًا
-   * بالتوازي مع فحص sessionStorage.
    */
   useEffect(() => {
     if (dashboardCache !== null) {
@@ -1843,6 +1796,204 @@ export function DashboardView() {
       selectedDate,
     ])
 
+  /*
+   * --------------------------------------------------
+   * ملاحظات المعلمين
+   * --------------------------------------------------
+   *
+   * نقرأ الملاحظات من attendance.note.
+   *
+   * مهم:
+   * attendanceRecords تحتوي جميع سجلات الحضور
+   * للدورة المحددة، لذلك الملاحظات القديمة
+   * تبقى ظاهرة حتى عند تغيير التاريخ.
+   */
+  const attendanceNotes =
+    useMemo<AttendanceNote[]>(
+      () => {
+        const selectedCourse =
+          normalizeId(
+            selectedCourseId,
+          )
+
+        if (!selectedCourse) {
+          return []
+        }
+
+        return attendanceRecords
+          .filter((record) => {
+            if (
+              normalizeId(
+                record.courseId,
+              ) !== selectedCourse
+            ) {
+              return false
+            }
+
+            return Boolean(
+              normalizeText(
+                record.note,
+              ),
+            )
+          })
+          .map((record) => {
+            const statusName =
+              statusMap.get(
+                normalizeId(
+                  record.statusId,
+                ),
+              ) ?? ''
+
+            return {
+              id: record.id,
+              studentId:
+                record.studentId,
+              attendanceDate:
+                normalizeAttendanceDate(
+                  record.attendanceDate,
+                ),
+              statusName:
+                getAttendanceStatusLabel(
+                  statusName,
+                ) ?? 'غير محدد',
+              note:
+                normalizeText(
+                  record.note,
+                ),
+            }
+          })
+          .sort((a, b) => {
+            const dateCompare =
+              b.attendanceDate.localeCompare(
+                a.attendanceDate,
+              )
+
+            if (dateCompare !== 0) {
+              return dateCompare
+            }
+
+            return a.id.localeCompare(
+              b.id,
+            )
+          })
+      },
+      [
+        attendanceRecords,
+        selectedCourseId,
+        statusMap,
+      ],
+    )
+
+  /*
+   * --------------------------------------------------
+   * تنزيل جميع ملاحظات الدورة
+   * --------------------------------------------------
+   */
+  const downloadAttendanceNotes =
+    useCallback(() => {
+      if (
+        !selectedCourse ||
+        attendanceNotes.length === 0
+      ) {
+        return
+      }
+
+      const escapeCsv = (
+        value: string,
+      ) =>
+        `"${String(value)
+          .replace(/"/g, '""')
+          .replace(
+            /\r?\n/g,
+            ' ',
+          )}"`
+
+      const rows = [
+        [
+          'التاريخ',
+          'الطالب',
+          'رقم الطالب',
+          'الرقم الشخصي',
+          'الحالة',
+          'الملاحظة',
+        ],
+        ...attendanceNotes.map(
+          (item) => {
+            const student =
+              students.find(
+                (student) =>
+                  normalizeId(
+                    student.id,
+                  ) ===
+                  normalizeId(
+                    item.studentId,
+                  ),
+              )
+
+            return [
+              formatDate(
+                item.attendanceDate,
+              ),
+              student?.name ??
+                'طالب غير معروف',
+              student?.studentId ??
+                '',
+              student?.personalId ??
+                '',
+              item.statusName,
+              item.note,
+            ]
+          },
+        ),
+      ]
+
+      const csv =
+        '\uFEFF' +
+        rows
+          .map((row) =>
+            row
+              .map(escapeCsv)
+              .join(','),
+          )
+          .join('\r\n')
+
+      const blob = new Blob(
+        [csv],
+        {
+          type: 'text/csv;charset=utf-8;',
+        },
+      )
+
+      const url =
+        URL.createObjectURL(
+          blob,
+        )
+
+      const link =
+        document.createElement('a')
+
+      link.href = url
+
+      link.download =
+        `ملاحظات-${selectedCourse.name}-${getLocalDateString()}.csv`
+
+      document.body.appendChild(
+        link,
+      )
+
+      link.click()
+
+      document.body.removeChild(
+        link,
+      )
+
+      URL.revokeObjectURL(url)
+    }, [
+      selectedCourse,
+      attendanceNotes,
+      students,
+    ])
+
   const stats = useMemo<DashboardStats>(
     () => {
       const studentIds =
@@ -1963,7 +2114,9 @@ export function DashboardView() {
         }
 
         const normalizedCourseId =
-          normalizeId(selectedCourseId)
+          normalizeId(
+            selectedCourseId,
+          )
 
         const courseTeacherRows =
           courseTeachers.filter(
@@ -2467,6 +2620,23 @@ export function DashboardView() {
         dir="rtl"
         className="space-y-6"
       >
+        {/* زر العودة */}
+        <div className="relative h-10">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() =>
+              router.back()
+            }
+            aria-label="العودة"
+            title="العودة"
+            className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
+          >
+            <ArrowRight className="size-5 stroke-[2.5]" />
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -3096,26 +3266,141 @@ export function DashboardView() {
         {/* Teacher comments */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="size-5 text-slate-500" />
-              تعليقات المعلمين على الطلبة
-            </CardTitle>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="size-5 text-slate-500" />
+                ملاحظات المعلمين على الطلبة
+              </CardTitle>
+
+              <Button
+                type="button"
+                onClick={
+                  downloadAttendanceNotes
+                }
+                disabled={
+                  attendanceNotes.length ===
+                  0
+                }
+                className="h-10 gap-2 border border-emerald-200 bg-emerald-50 px-4 text-emerald-700 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="size-4" />
+                تنزيل كل الملاحظات
+              </Button>
+            </div>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              ملاحظات المعلمين المسجلة في الحضور للدورة المحددة
+            </p>
           </CardHeader>
 
           <CardContent>
-            <div className="flex min-h-[110px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
-              <div>
-                <ClipboardCheck className="mx-auto size-7 text-slate-300" />
+            {attendanceNotes.length ===
+            0 ? (
+              <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
+                <div>
+                  <ClipboardCheck className="mx-auto size-7 text-slate-300" />
 
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  تعليقات المعلمين ستظهر هنا
-                </p>
+                  <p className="mt-3 text-sm font-medium text-muted-foreground">
+                    لا توجد ملاحظات مسجلة
+                  </p>
 
-                <p className="mt-1 text-xs text-muted-foreground">
-                  سيتم تفعيل هذه الخاصية لاحقًا.
-                </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    ستظهر هنا أي ملاحظة يكتبها المعلم أثناء تسجيل حضور الطالب.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border">
+                <div className="hidden grid-cols-[120px_minmax(180px,1fr)_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
+                  <div>التاريخ</div>
+                  <div>الطالب</div>
+                  <div>الحالة</div>
+                  <div>الملاحظة</div>
+                </div>
+
+                <div className="divide-y">
+                  {attendanceNotes.map(
+                    (item) => {
+                      const student =
+                        students.find(
+                          (student) =>
+                            normalizeId(
+                              student.id,
+                            ) ===
+                            normalizeId(
+                              item.studentId,
+                            ),
+                        )
+
+                      return (
+                        <div
+                          key={
+                            item.id
+                          }
+                          className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_120px_1fr] md:items-start md:gap-4"
+                        >
+                          <div>
+                            <p className="text-xs text-muted-foreground md:hidden">
+                              التاريخ
+                            </p>
+
+                            <p className="mt-1 text-sm font-medium md:mt-0">
+                              {formatDate(
+                                item.attendanceDate,
+                              )}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-muted-foreground md:hidden">
+                              الطالب
+                            </p>
+
+                            <p className="mt-1 font-medium md:mt-0">
+                              {student?.name ??
+                                'طالب غير معروف'}
+                            </p>
+
+                            {student?.studentId && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                رقم الطالب:{' '}
+                                {
+                                  student.studentId
+                                }
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-muted-foreground md:hidden">
+                              الحالة
+                            </p>
+
+                            <span className="mt-1 inline-flex rounded-full border bg-muted px-3 py-1 text-xs font-medium md:mt-0">
+                              {
+                                item.statusName
+                              }
+                            </span>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-muted-foreground md:hidden">
+                              الملاحظة
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 md:mt-0">
+                              {
+                                item.note
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    },
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
