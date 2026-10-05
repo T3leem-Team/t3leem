@@ -53,15 +53,21 @@ type StudentFormProps = {
   attendanceStatuses: AttendanceStatus[]
   closeStudentDrawer: () => void
   setSupabaseStatus: (message: string) => void
-  setStudentList: React.Dispatch<React.SetStateAction<any[]>>
+  setStudentList: React.Dispatch<
+    React.SetStateAction<any[]>
+  >
 }
 
 function getTodayString() {
   const today = new Date()
 
   const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
+  const month = String(
+    today.getMonth() + 1,
+  ).padStart(2, '0')
+  const day = String(
+    today.getDate(),
+  ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -76,7 +82,10 @@ function normalizeArabicDay(day: string) {
 }
 
 function getDayOfWeek(dateString: string) {
-  const date = new Date(`${dateString}T00:00:00`)
+  const date = new Date(
+    `${dateString}T00:00:00`,
+  )
+
   const day = date.getDay()
 
   const days = [
@@ -96,17 +105,22 @@ function isCourseStudyDay(
   dateString: string,
   course: Course,
 ) {
-  if (!course.days || course.days.length === 0) {
+  if (
+    !course.days ||
+    course.days.length === 0
+  ) {
     return true
   }
 
-  const currentDay = normalizeArabicDay(
-    getDayOfWeek(dateString),
-  )
+  const currentDay =
+    normalizeArabicDay(
+      getDayOfWeek(dateString),
+    )
 
   return course.days.some(
     (day) =>
-      normalizeArabicDay(day) === currentDay,
+      normalizeArabicDay(day) ===
+      currentDay,
   )
 }
 
@@ -133,13 +147,18 @@ function getCourseStatus(
     return 'انتهت'
   }
 
-  const assigned = assignments.some(
-    (assignment) =>
-      assignment.course_id === course.id &&
-      assignment.student_id === studentId,
-  )
+  const assigned =
+    assignments.some(
+      (assignment) =>
+        assignment.course_id ===
+          course.id &&
+        assignment.student_id ===
+          studentId,
+    )
 
-  return assigned ? 'حاضر' : 'لم يحضر'
+  return assigned
+    ? 'حاضر'
+    : 'لم يحضر'
 }
 
 function getStatusName(
@@ -148,7 +167,8 @@ function getStatusName(
 ) {
   return (
     attendanceStatuses.find(
-      (status) => status.id === statusId,
+      (status) =>
+        status.id === statusId,
     )?.name ?? ''
   )
 }
@@ -165,7 +185,8 @@ function calculateAttendanceSummary(
   }>,
   attendanceStatuses: AttendanceStatus[],
 ) {
-  const today = getTodayString()
+  const today =
+    getTodayString()
 
   let present = 0
   let absent = 0
@@ -209,14 +230,12 @@ function calculateAttendanceSummary(
   while (current <= end) {
     const dateString = [
       current.getFullYear(),
-      String(current.getMonth() + 1).padStart(
-        2,
-        '0',
-      ),
-      String(current.getDate()).padStart(
-        2,
-        '0',
-      ),
+      String(
+        current.getMonth() + 1,
+      ).padStart(2, '0'),
+      String(
+        current.getDate(),
+      ).padStart(2, '0'),
     ].join('-')
 
     if (
@@ -228,27 +247,35 @@ function calculateAttendanceSummary(
     ) {
       totalDays += 1
 
-      const record = records.find(
-        (item) =>
-          item.studentId === studentId &&
-          item.courseId === course.id &&
-          item.attendanceDate ===
-            dateString,
-      )
+      const record =
+        records.find(
+          (item) =>
+            item.studentId ===
+              studentId &&
+            item.courseId ===
+              course.id &&
+            item.attendanceDate ===
+              dateString,
+        )
 
       if (!record) {
         notRecorded += 1
       } else {
-        const status = getStatusName(
-          record.statusId,
-          attendanceStatuses,
-        )
+        const status =
+          getStatusName(
+            record.statusId,
+            attendanceStatuses,
+          )
 
         if (status === 'حاضر') {
           present += 1
-        } else if (status === 'غائب') {
+        } else if (
+          status === 'غائب'
+        ) {
           absent += 1
-        } else if (status === 'متأخر') {
+        } else if (
+          status === 'متأخر'
+        ) {
           late += 1
         } else if (
           status === 'مستأذن'
@@ -294,32 +321,27 @@ function calculateAttendanceSummary(
 
 /*
  * ============================================================
- * تحويل أخطاء Supabase إلى رسائل واضحة للمستخدم
+ * تحويل أخطاء Supabase إلى رسائل مفهومة
  * ============================================================
  */
 function getReadableSupabaseError(
   error: any,
-  fieldName?: string,
 ) {
   if (!error) {
     return 'حدث خطأ غير معروف.'
   }
 
-  const code = String(
-    error.code ?? '',
-  )
+  const code =
+    String(error.code ?? '')
 
-  const message = String(
-    error.message ?? '',
-  )
+  const message =
+    String(error.message ?? '')
 
-  const details = String(
-    error.details ?? '',
-  )
+  const details =
+    String(error.details ?? '')
 
-  const hint = String(
-    error.hint ?? '',
-  )
+  const hint =
+    String(error.hint ?? '')
 
   const fullText =
     `${message} ${details} ${hint}`.toLowerCase()
@@ -329,73 +351,67 @@ function getReadableSupabaseError(
    */
   if (
     code === '23505' ||
-    fullText.includes('duplicate key') ||
-    fullText.includes('unique constraint') ||
-    fullText.includes('already exists')
+    fullText.includes(
+      'duplicate key',
+    ) ||
+    fullText.includes(
+      'unique constraint',
+    ) ||
+    fullText.includes(
+      'already exists',
+    )
   ) {
-    if (
-      fullText.includes('personal_id') ||
-      fieldName === 'personal_id'
-    ) {
-      return 'الرقم الشخصي مستخدم مسبقًا لطالب آخر. يرجى التأكد من الرقم الشخصي أو البحث عن الطالب الموجود بدل تسجيله مرة أخرى.'
-    }
-
-    if (
-      fullText.includes('phone') ||
-      fieldName === 'phone'
-    ) {
-      return 'رقم الهاتف مستخدم مسبقًا في النظام.'
-    }
-
-    if (
-      fullText.includes('whatsapp') ||
-      fieldName === 'whatsapp'
-    ) {
-      return 'رقم الواتساب مستخدم مسبقًا في النظام.'
-    }
-
-    return 'هناك بيانات مكررة. يبدو أن إحدى القيم التي أدخلتها مستخدمة مسبقًا في النظام.'
+    return (
+      '❌ لا يمكن حفظ الطالب: توجد بيانات مكررة في قاعدة البيانات. غالبًا الرقم الشخصي مسجل مسبقًا لطالب آخر.'
+    )
   }
 
   /*
-   * قيمة لا تطابق CHECK constraint
-   */
-  if (
-    code === '23514' ||
-    fullText.includes('check constraint')
-  ) {
-    return 'إحدى البيانات المدخلة لا تطابق القاعدة المطلوبة في النظام. يرجى مراجعة القيم المدخلة، خصوصًا الرقم الشخصي أو الهاتف أو حالة الطالب.'
-  }
-
-  /*
-   * Foreign Key
-   */
-  if (
-    code === '23503' ||
-    fullText.includes('foreign key')
-  ) {
-    return 'لا يمكن حفظ الطالب لأن إحدى البيانات المرتبطة به غير موجودة أو غير صحيحة. يرجى التأكد من السنة الدراسية والصف الأكاديمي.'
-  }
-
-  /*
-   * NOT NULL
+   * قيمة مطلوبة مفقودة
    */
   if (
     code === '23502' ||
-    fullText.includes('not-null') ||
-    fullText.includes('not null')
+    fullText.includes(
+      'not-null',
+    ) ||
+    fullText.includes(
+      'null value',
+    )
   ) {
-    return 'هناك حقل مطلوب في قاعدة البيانات لم يتم إدخال قيمته. يرجى التأكد من تعبئة جميع البيانات الأساسية.'
+    return (
+      '❌ لا يمكن حفظ الطالب: يوجد حقل مطلوب لم يتم إدخاله.'
+    )
   }
 
   /*
-   * صيغة UUID
+   * مشكلة في العلاقة بين الجداول
+   */
+  if (
+    code === '23503' ||
+    fullText.includes(
+      'foreign key',
+    ) ||
+    fullText.includes(
+      'violates foreign key',
+    )
+  ) {
+    return (
+      '❌ لا يمكن حفظ الطالب: توجد مشكلة في ربط الطالب ببيانات النظام مثل السنة الدراسية أو الصف الأكاديمي.'
+    )
+  }
+
+  /*
+   * قيمة غير صحيحة
    */
   if (
     code === '22P02' ||
-    fullText.includes('invalid input syntax')
+    fullText.includes(
+      'invalid input syntax',
+    )
   ) {
-    return 'إحدى البيانات المدخلة ليست بالصيغة الصحيحة. يرجى مراجعة الصف أو السنة الدراسية أو البيانات المرتبطة.'
+    return (
+      '❌ لا يمكن حفظ الطالب: إحدى البيانات المدخلة غير صحيحة.'
+    )
   }
 
   /*
@@ -403,35 +419,27 @@ function getReadableSupabaseError(
    */
   if (
     code === '42501' ||
-    fullText.includes('permission denied') ||
-    fullText.includes('row-level security')
+    fullText.includes(
+      'permission denied',
+    ) ||
+    fullText.includes(
+      'row-level security',
+    ) ||
+    fullText.includes(
+      'rls',
+    )
   ) {
-    return 'ليس لديك صلاحية لتنفيذ هذه العملية. يرجى التأكد من صلاحيات حساب المستخدم وقواعد الوصول في النظام.'
+    return (
+      '❌ لا يمكن حفظ الطالب: لا توجد صلاحية كافية لتنفيذ العملية في قاعدة البيانات.'
+    )
   }
 
   /*
-   * خطأ في الاتصال
+   * إرجاع الخطأ الأصلي إذا لم نتعرف عليه.
    */
-  if (
-    fullText.includes('network') ||
-    fullText.includes('fetch') ||
-    fullText.includes('connection')
-  ) {
-    return 'تعذر الاتصال بقاعدة البيانات. تحقق من اتصال الإنترنت ثم حاول مرة أخرى.'
-  }
-
-  /*
-   * إذا كان لدينا اسم حقل محدد
-   */
-  if (fieldName) {
-    return `تعذر حفظ الحقل ${fieldName}. سبب الرفض من قاعدة البيانات: ${message}`
-  }
-
-  /*
-   * آخر حل:
-   * عرض رسالة Supabase الأصلية بدل إخفائها.
-   */
-  return message || 'حدث خطأ أثناء حفظ البيانات.'
+  return (
+    `❌ تعذر حفظ البيانات.\n\nسبب قاعدة البيانات:\n${message || 'خطأ غير معروف'}`
+  )
 }
 
 export function StudentForm({
@@ -452,9 +460,11 @@ export function StudentForm({
   ) {
     e.preventDefault()
 
-    const form = e.currentTarget
+    const form =
+      e.currentTarget
 
-    const data = new FormData(form)
+    const data =
+      new FormData(form)
 
     /*
      * ============================================================
@@ -462,140 +472,187 @@ export function StudentForm({
      * ============================================================
      */
 
-    const name = String(
-      data.get('name') || '',
-    ).trim()
+    const name =
+      String(
+        data.get('name') || '',
+      ).trim()
 
-    const personalId = String(
-      data.get('personalId') || '',
-    ).trim()
+    const personalId =
+      String(
+        data.get('personalId') ||
+          '',
+      ).trim()
 
-    const grade = String(
-      data.get('grade') || '',
-    ).trim()
+    const grade =
+      String(
+        data.get('grade') || '',
+      ).trim()
 
-    const phone = String(
-      data.get('phone') || '',
-    ).trim()
+    const phone =
+      String(
+        data.get('phone') || '',
+      ).trim()
 
-    const whatsapp = String(
-      data.get('whatsapp') || '',
-    ).trim()
+    const whatsapp =
+      String(
+        data.get('whatsapp') ||
+          '',
+      ).trim()
 
-    const chronicDiseases = String(
-      data.get('chronicDiseases') || '',
-    ).trim()
+    const chronicDiseases =
+      String(
+        data.get(
+          'chronicDiseases',
+        ) || '',
+      ).trim()
 
-    const amountPaid = Number(
-      data.get('amountPaid') || 0,
-    )
+    const amountPaid =
+      Number(
+        data.get('amountPaid') ||
+          0,
+      )
 
-    const notes = String(
-      data.get('notes') || '',
-    ).trim()
+    const notes =
+      String(
+        data.get('notes') || '',
+      ).trim()
 
     /*
      * ============================================================
-     * التحقق الأساسي
+     * التحقق من البيانات الأساسية
      * ============================================================
      */
 
     if (!name) {
       setSupabaseStatus(
-        '❌ لم يتم حفظ الطالب: اسم الطالب مطلوب.',
+        '❌ لم يتم تسجيل الطالب: اسم الطالب مطلوب.',
       )
       return
     }
 
     if (!personalId) {
       setSupabaseStatus(
-        '❌ لم يتم حفظ الطالب: الرقم الشخصي مطلوب.',
+        '❌ لم يتم تسجيل الطالب: الرقم الشخصي مطلوب.',
       )
       return
     }
 
     if (!grade) {
       setSupabaseStatus(
-        '❌ لم يتم حفظ الطالب: يجب اختيار الصف الأكاديمي.',
+        '❌ لم يتم تسجيل الطالب: يجب اختيار الصف الأكاديمي.',
       )
       return
     }
 
     /*
      * ============================================================
-     * التحقق من الرقم الشخصي
-     *
-     * لا نفترض طولًا معينًا هنا.
-     * فقط نمنع الأحرف والمسافات والرموز.
-     * قانون الطول الفعلي يبقى حسب قاعدة البيانات.
+     * فحص الرقم الشخصي
      * ============================================================
      */
 
-    if (!/^\d+$/.test(personalId)) {
-      setSupabaseStatus(
-        '❌ الرقم الشخصي غير صحيح: يجب أن يحتوي على أرقام فقط، بدون مسافات أو أحرف أو رموز.',
+    const {
+      data: duplicateStudent,
+      error: duplicateCheckError,
+    } = await supabase
+      .from('students')
+      .select(
+        'id, name, personal_id',
       )
+      .eq(
+        'personal_id',
+        personalId,
+      )
+      .maybeSingle()
+
+    if (duplicateCheckError) {
+      /*
+       * في حالة التعديل، لا نعتبر المشكلة
+       * خطأ تكرار إذا كان الرقم يعود لنفس الطالب.
+       */
+      const readableError =
+        getReadableSupabaseError(
+          duplicateCheckError,
+        )
+
+      setSupabaseStatus(
+        `❌ تعذر التحقق من الرقم الشخصي قبل الحفظ.\n\n${readableError}`,
+      )
+
+      return
+    }
+
+    /*
+     * إذا وجدنا طالبًا بنفس الرقم الشخصي
+     */
+    if (
+      duplicateStudent &&
+      duplicateStudent.id !==
+        editingStudent?.id
+    ) {
+      setSupabaseStatus(
+        `❌ لا يمكن تسجيل الطالب.\n\nالرقم الشخصي «${personalId}» مسجل مسبقًا في النظام.\n\nالطالب المسجل بهذا الرقم:\n«${duplicateStudent.name}»\n\nإذا كان هذا هو نفس الطالب، استخدم تعديل بدل إضافة طالب جديد.`,
+      )
+
       return
     }
 
     /*
      * ============================================================
-     * التحقق من رقم الهاتف
+     * فحص المبلغ
      * ============================================================
      */
 
     if (
-      phone &&
-      !/^\d+$/.test(phone)
-    ) {
-      setSupabaseStatus(
-        '❌ رقم الهاتف غير صحيح: يجب أن يحتوي على أرقام فقط.',
+      !Number.isFinite(
+        amountPaid,
       )
-      return
-    }
-
-    if (
-      whatsapp &&
-      !/^\d+$/.test(whatsapp)
     ) {
       setSupabaseStatus(
-        '❌ رقم الواتساب غير صحيح: يجب أن يحتوي على أرقام فقط.',
-      )
-      return
-    }
-
-    /*
-     * ============================================================
-     * التحقق من المبلغ
-     * ============================================================
-     */
-
-    if (
-      !Number.isFinite(amountPaid)
-    ) {
-      setSupabaseStatus(
-        '❌ المبلغ المدفوع غير صحيح: يجب إدخال رقم صحيح.',
+        '❌ لم يتم تسجيل الطالب: المبلغ المدفوع غير صحيح.',
       )
       return
     }
 
     if (amountPaid < 0) {
       setSupabaseStatus(
-        '❌ المبلغ المدفوع غير صحيح: لا يمكن أن يكون المبلغ سالبًا.',
+        '❌ لم يتم تسجيل الطالب: المبلغ المدفوع لا يمكن أن يكون أقل من صفر.',
       )
       return
     }
 
+    if (
+      !editingStudent &&
+      amountPaid >
+        currentAnnualFee &&
+      currentAnnualFee > 0
+    ) {
+      setSupabaseStatus(
+        `❌ لم يتم تسجيل الطالب.\n\nالمبلغ المدفوع (${amountPaid.toFixed(
+          3,
+        )} د.ب) أكبر من الرسوم السنوية (${currentAnnualFee.toFixed(
+          3,
+        )} د.ب).`,
+      )
+
+      return
+    }
+
+    /*
+     * ============================================================
+     * فحص السنة الدراسية
+     * ============================================================
+     */
+
     if (!currentAcademicYearId) {
       setSupabaseStatus(
-        '❌ لا يمكن حفظ الطالب: لا توجد سنة دراسية حالية مفعلة.',
+        '❌ لم يتم تسجيل الطالب: لا توجد سنة دراسية حالية مفعلة في النظام.',
       )
       return
     }
 
     /*
      * ============================================================
-     * التحقق من الصف الأكاديمي
+     * فحص الصف
      * ============================================================
      */
 
@@ -607,77 +664,9 @@ export function StudentForm({
 
     if (!selectedLevel) {
       setSupabaseStatus(
-        `❌ الصف الأكاديمي «${grade}» غير موجود في النظام. يرجى اختيار صف موجود من القائمة.`,
-      )
-      return
-    }
-
-    /*
-     * ============================================================
-     * التحقق من الرسوم
-     * ============================================================
-     */
-
-    if (
-      !editingStudent &&
-      amountPaid > currentAnnualFee &&
-      currentAnnualFee > 0
-    ) {
-      setSupabaseStatus(
-        `❌ المبلغ المدفوع (${amountPaid.toFixed(
-          3,
-        )} د.ب) أكبر من الرسوم السنوية (${currentAnnualFee.toFixed(
-          3,
-        )} د.ب). يرجى إدخال مبلغ صحيح.`,
-      )
-      return
-    }
-
-    /*
-     * ============================================================
-     * فحص الرقم الشخصي قبل الإضافة
-     *
-     * في حالة التعديل نستثني الطالب الحالي.
-     * ============================================================
-     */
-
-    const {
-      data: duplicatePersonalId,
-      error: duplicatePersonalIdError,
-    } = await supabase
-      .from('students')
-      .select(
-        'id, name, personal_id',
-      )
-      .eq(
-        'personal_id',
-        personalId,
-      )
-      .neq(
-        'id',
-        editingStudent?.id ?? '',
-      )
-      .maybeSingle()
-
-    if (duplicatePersonalIdError) {
-      console.error(
-        'personal ID lookup error:',
-        duplicatePersonalIdError,
+        `❌ لم يتم تسجيل الطالب.\n\nالصف «${grade}» غير موجود في قائمة الصفوف الأكاديمية.`,
       )
 
-      setSupabaseStatus(
-        `❌ تعذر التحقق من الرقم الشخصي قبل الحفظ: ${getReadableSupabaseError(
-          duplicatePersonalIdError,
-          'personal_id',
-        )}`,
-      )
-      return
-    }
-
-    if (duplicatePersonalId) {
-      setSupabaseStatus(
-        `❌ لا يمكن حفظ الطالب: الرقم الشخصي «${personalId}» مستخدم مسبقًا للطالب «${duplicatePersonalId.name}».`,
-      )
       return
     }
 
@@ -713,29 +702,22 @@ export function StudentForm({
         .single()
 
       if (error) {
-        console.error(
-          'update student error:',
-          error,
-        )
-
         setSupabaseStatus(
-          `❌ لم يتم تعديل الطالب: ${getReadableSupabaseError(
+          `❌ لم يتم تعديل الطالب.\n\n${getReadableSupabaseError(
             error,
-            'بيانات الطالب',
           )}`,
         )
+
         return
       }
 
       /*
-       * ========================================================
-       * قراءة ربط الصف الحالي
-       * ========================================================
+       * البحث عن ربط الصف
        */
-
       const {
         data: existingEnrollment,
-        error: enrollmentLookupError,
+        error:
+          enrollmentLookupError,
       } = await supabase
         .from('enrollments')
         .select('id')
@@ -749,29 +731,22 @@ export function StudentForm({
         )
         .maybeSingle()
 
-      if (enrollmentLookupError) {
-        console.error(
-          'enrollment lookup error:',
-          enrollmentLookupError,
-        )
-
+      if (
+        enrollmentLookupError
+      ) {
         setSupabaseStatus(
-          `❌ تم تعديل بيانات الطالب، لكن تعذر قراءة ربط الصف الأكاديمي: ${getReadableSupabaseError(
+          `❌ تم تعديل بيانات الطالب، لكن تعذر قراءة ربط الصف الأكاديمي.\n\n${getReadableSupabaseError(
             enrollmentLookupError,
           )}`,
         )
+
         return
       }
 
-      /*
-       * ========================================================
-       * تعديل ربط الصف
-       * ========================================================
-       */
-
       if (existingEnrollment) {
         const {
-          error: enrollmentUpdateError,
+          error:
+            enrollmentUpdateError,
         } = await supabase
           .from('enrollments')
           .update({
@@ -784,22 +759,21 @@ export function StudentForm({
             existingEnrollment.id,
           )
 
-        if (enrollmentUpdateError) {
-          console.error(
-            'enrollment update error:',
-            enrollmentUpdateError,
-          )
-
+        if (
+          enrollmentUpdateError
+        ) {
           setSupabaseStatus(
-            `❌ تم تعديل بيانات الطالب، لكن لم يتم تعديل الصف الأكاديمي: ${getReadableSupabaseError(
+            `❌ تم تعديل بيانات الطالب، لكن تعذر تعديل الصف الأكاديمي.\n\n${getReadableSupabaseError(
               enrollmentUpdateError,
             )}`,
           )
+
           return
         }
       } else {
         const {
-          error: enrollmentInsertError,
+          error:
+            enrollmentInsertError,
         } = await supabase
           .from('enrollments')
           .insert({
@@ -815,27 +789,22 @@ export function StudentForm({
               getTodayString(),
           })
 
-        if (enrollmentInsertError) {
-          console.error(
-            'enrollment insert error:',
-            enrollmentInsertError,
-          )
-
+        if (
+          enrollmentInsertError
+        ) {
           setSupabaseStatus(
-            `❌ تم تعديل بيانات الطالب، لكن لم يتم ربط الصف الأكاديمي: ${getReadableSupabaseError(
+            `❌ تم تعديل بيانات الطالب، لكن تعذر ربط الصف الأكاديمي.\n\n${getReadableSupabaseError(
               enrollmentInsertError,
             )}`,
           )
+
           return
         }
       }
 
       /*
-       * ========================================================
-       * تحديث القائمة
-       * ========================================================
+       * تحديث القائمة المحلية
        */
-
       setStudentList(
         (current) =>
           current.map(
@@ -907,28 +876,24 @@ export function StudentForm({
         .single()
 
       if (error) {
-        console.error(
-          'insert student error:',
-          error,
-        )
-
         setSupabaseStatus(
           `❌ لم يتم تسجيل الطالب.\n\n${getReadableSupabaseError(
             error,
-            'بيانات الطالب',
-          )}`,
+          )}\n\nالرقم الشخصي المستخدم: ${personalId}`,
         )
+
         return
       }
 
       /*
-       * ========================================================
-       * ربط الصف الأكاديمي
-       * ========================================================
+       * ============================================================
+       * ربط الطالب بالصف
+       * ============================================================
        */
 
       const {
-        error: enrollmentError,
+        error:
+          enrollmentError,
       } = await supabase
         .from('enrollments')
         .insert({
@@ -945,13 +910,8 @@ export function StudentForm({
         })
 
       if (enrollmentError) {
-        console.error(
-          'enrollment insert error:',
-          enrollmentError,
-        )
-
         /*
-         * تنظيف الطالب الذي تم إنشاؤه
+         * محاولة تنظيف الطالب الذي تم إنشاؤه
          */
         await supabase
           .from('students')
@@ -962,22 +922,24 @@ export function StudentForm({
           )
 
         setSupabaseStatus(
-          `❌ لم يتم تسجيل الطالب بالكامل.\n\nتم رفض ربط الطالب بالصف الأكاديمي.\n\nالسبب: ${getReadableSupabaseError(
+          `❌ لم يتم إكمال تسجيل الطالب.\n\nتم إنشاء الطالب مؤقتًا، لكن فشل ربطه بالصف الأكاديمي.\n\n${getReadableSupabaseError(
             enrollmentError,
           )}`,
         )
+
         return
       }
 
       /*
-       * ========================================================
-       * الدفعة الأولى
-       * ========================================================
+       * ============================================================
+       * حفظ الدفعة الأولى
+       * ============================================================
        */
 
       if (amountPaid > 0) {
         const {
-          error: paymentError,
+          error:
+            paymentError,
         } = await supabase
           .from('payments')
           .insert({
@@ -985,24 +947,16 @@ export function StudentForm({
               newStudent.id,
             academic_year_id:
               currentAcademicYearId,
-            amount:
-              amountPaid,
+            amount: amountPaid,
             payment_method:
               'نقدي',
             payment_date:
-              new Date()
-                .toISOString()
-                .slice(0, 10),
+              getTodayString(),
           })
 
         if (paymentError) {
-          console.error(
-            'payment insert error:',
-            paymentError,
-          )
-
           /*
-           * تنظيف البيانات التي تم إنشاؤها
+           * تنظيف التسجيل إذا فشلت الدفعة
            */
           await supabase
             .from('enrollments')
@@ -1025,23 +979,24 @@ export function StudentForm({
             )
 
           setSupabaseStatus(
-            `❌ لم يتم تسجيل الطالب بالكامل.\n\nتم حفظ بيانات الطالب مؤقتًا، لكن تم رفض الدفعة الأولى.\n\nالسبب: ${getReadableSupabaseError(
+            `❌ لم يتم إكمال تسجيل الطالب.\n\nتم إنشاء الطالب وربطه بالصف، لكن فشل حفظ الدفعة الأولى.\n\n${getReadableSupabaseError(
               paymentError,
             )}`,
           )
+
           return
         }
       }
 
       /*
-       * ========================================================
+       * ============================================================
        * تحديد حالة الدفع
-       * ========================================================
+       * ============================================================
        */
 
       const paymentStatus =
         amountPaid >=
-          currentAnnualFee &&
+            currentAnnualFee &&
         currentAnnualFee > 0
           ? 'مدفوع بالكامل'
           : amountPaid > 0
@@ -1049,9 +1004,9 @@ export function StudentForm({
             : 'غير مدفوع'
 
       /*
-       * ========================================================
-       * تجهيز الطالب للقائمة
-       * ========================================================
+       * ============================================================
+       * إنشاء الطالب داخل القائمة المحلية
+       * ============================================================
        */
 
       const mappedStudent = {
@@ -1119,9 +1074,7 @@ export function StudentForm({
           '',
 
         attendance:
-          currentCourse
-            ? 'لم يحضر'
-            : 'لم يحضر',
+          'لم يحضر',
 
         courseStatuses:
           courses.map(
@@ -1170,15 +1123,15 @@ export function StudentForm({
       )
 
       /*
-       * ========================================================
-       * نجاح التسجيل
-       * ========================================================
+       * ============================================================
+       * رسالة النجاح
+       * ============================================================
        */
 
       setSupabaseStatus(
         amountPaid > 0
-          ? '✅ تم تسجيل الطالب وربط الصف الأكاديمي وحفظ الدفعة الأولى بنجاح.'
-          : '✅ تم تسجيل الطالب وربط الصف الأكاديمي بنجاح.',
+          ? '✅ تم تسجيل الطالب بنجاح، وربطه بالصف، وحفظ الدفعة الأولى.'
+          : '✅ تم تسجيل الطالب بنجاح وربطه بالصف الأكاديمي.',
       )
     }
 
@@ -1230,7 +1183,9 @@ export function StudentForm({
             editingStudent?.id ??
             'new'
           }
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
         >
           <div className="space-y-6 p-6">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -1261,8 +1216,6 @@ export function StudentForm({
                   name="personalId"
                   type="text"
                   required
-                  inputMode="numeric"
-                  pattern="[0-9]+"
                   defaultValue={
                     editingStudent?.personalId ??
                     ''
@@ -1273,7 +1226,8 @@ export function StudentForm({
                 />
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  يجب إدخال أرقام فقط.
+                  يجب أن يكون الرقم الشخصي
+                  غير مسجل لطالب آخر.
                 </p>
               </div>
 
@@ -1318,7 +1272,6 @@ export function StudentForm({
                 <input
                   name="phone"
                   type="tel"
-                  inputMode="numeric"
                   defaultValue={
                     editingStudent?.phone ??
                     ''
@@ -1337,7 +1290,6 @@ export function StudentForm({
                 <input
                   name="whatsapp"
                   type="tel"
-                  inputMode="numeric"
                   defaultValue={
                     editingStudent?.whatsapp ??
                     ''
@@ -1383,7 +1335,8 @@ export function StudentForm({
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      حسب السنة الدراسية الحالية:{' '}
+                      حسب السنة الدراسية
+                      الحالية:{' '}
                       {
                         currentAcademicYearName
                       }
@@ -1428,7 +1381,8 @@ export function StudentForm({
                   </div>
 
                   <p className="mt-3 text-xs text-muted-foreground">
-                    يمكنك تسجيل الدفعة الأولى مع إضافة الطالب. سيتم حفظها كدفعة فعلية، ويمكن إضافة الدفعات اللاحقة من قسم المدفوعات.
+                    يمكنك تسجيل الدفعة الأولى
+                    مع إضافة الطالب.
                   </p>
                 </>
               ) : (
@@ -1440,7 +1394,8 @@ export function StudentForm({
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground">
-                        لتسجيل دفعة جديدة استخدم حالة الدفع من قائمة الطلاب.
+                        لتسجيل دفعة جديدة
+                        استخدم قسم المدفوعات.
                       </p>
                     </div>
 
