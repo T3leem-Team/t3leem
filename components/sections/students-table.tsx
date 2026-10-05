@@ -868,134 +868,170 @@ export function StudentsTable({
 
         {showColumns && (
           <div className="rounded-lg border bg-muted/20 p-4">
-            <div className="mb-3 text-sm font-semibold">
-              تخصيص الأعمدة
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-semibold">
+                تخصيص الأعمدة
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowColumns(false)
+                }
+                className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+              >
+                إغلاق
+              </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-5">
 
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-muted-foreground">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">
                   الأعمدة الأساسية
                 </div>
 
-                {baseColumns.map(
-                  (column) => (
-                    <label
-                      key={column.key}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          visibleColumns[
-                            column.key
-                          ] !== false
-                        }
-                        onChange={() =>
-                          onToggleColumn(
-                            column.key
-                          )
-                        }
-                      />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {baseColumns.map(
+                    (column) => (
+                      <label
+                        key={column.key}
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={
+                            visibleColumns[
+                              column.key
+                            ] !== false
+                          }
+                          onChange={() =>
+                            onToggleColumn(
+                              column.key
+                            )
+                          }
+                          className="h-4 w-4 shrink-0"
+                        />
 
-                      {column.label}
-                    </label>
-                  )
-                )}
+                        <span className="truncate">
+                          {column.label}
+                        </span>
+                      </label>
+                    )
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-muted-foreground">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-muted-foreground">
                   أعمدة إضافية
                 </div>
 
-                {extraColumns.map(
-                  (column) => (
-                    <label
-                      key={column.key}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          !!visibleColumns[
-                            column.key
-                          ]
-                        }
-                        onChange={() =>
-                          onToggleColumn(
-                            column.key
-                          )
-                        }
-                      />
-
-                      {column.label}
-                    </label>
-                  )
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-muted-foreground">
-                  الحقول والدورات
-                </div>
-
-                {dynamicFields
-                  .filter(
-                    (field) =>
-                      field.is_active
-                  )
-                  .map(
-                    (field) => (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {extraColumns.map(
+                    (column) => (
                       <label
-                        key={field.id}
-                        className="flex items-center gap-2 text-sm"
+                        key={column.key}
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
                       >
                         <input
                           type="checkbox"
                           checked={
                             !!visibleColumns[
-                              `dynamic-${field.id}`
+                              column.key
                             ]
                           }
                           onChange={() =>
                             onToggleColumn(
-                              `dynamic-${field.id}`
+                              column.key
                             )
                           }
+                          className="h-4 w-4 shrink-0"
                         />
 
-                        {field.name}
+                        <span className="truncate">
+                          {column.label}
+                        </span>
                       </label>
                     )
                   )}
-
-                {courses.map(
-                  (course) => (
-                    <label
-                      key={course.id}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          !!visibleColumns[
-                            `course-${course.id}`
-                          ]
-                        }
-                        onChange={() =>
-                          onToggleColumn(
-                            `course-${course.id}`
-                          )
-                        }
-                      />
-
-                      {course.name}
-                    </label>
-                  )
-                )}
+                </div>
               </div>
+
+              {(dynamicFields.some(
+                (field) =>
+                  field.is_active
+              ) ||
+                courses.length > 0) && (
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-muted-foreground">
+                    الحقول والدورات
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {dynamicFields
+                      .filter(
+                        (field) =>
+                          field.is_active
+                      )
+                      .map(
+                        (field) => (
+                          <label
+                            key={field.id}
+                            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={
+                                !!visibleColumns[
+                                  `dynamic-${field.id}`
+                                ]
+                              }
+                              onChange={() =>
+                                onToggleColumn(
+                                  `dynamic-${field.id}`
+                                )
+                              }
+                              className="h-4 w-4 shrink-0"
+                            />
+
+                            <span className="truncate">
+                              {field.name}
+                            </span>
+                          </label>
+                        )
+                      )}
+
+                    {courses.map(
+                      (course) => (
+                        <label
+                          key={course.id}
+                          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={
+                              !!visibleColumns[
+                                `course-${course.id}`
+                              ]
+                            }
+                            onChange={() =>
+                              onToggleColumn(
+                                `course-${course.id}`
+                              )
+                            }
+                            className="h-4 w-4 shrink-0"
+                          />
+
+                          <span className="truncate">
+                            {course.name}
+                          </span>
+                        </label>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
