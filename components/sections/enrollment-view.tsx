@@ -2178,14 +2178,14 @@ export function EnrollmentView() {
     setVisibleColumns(next)
   }
 
-  /*
- /* =========================================================
- * Render
- * =========================================================
- */
+   /*
+   * =========================================================
+   * Render
+   * =========================================================
+   */
 
-return (
-  <div className="space-y-6" dir="rtl">
+  return (
+    <div className="space-y-6" dir="rtl">
     {/* زر العودة */}
     <div
       className="relative h-10"
