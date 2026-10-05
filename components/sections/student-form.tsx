@@ -1,7 +1,14 @@
 'use client'
 
-import { FormEvent } from 'react'
-import { X } from 'lucide-react'
+import {
+  FormEvent,
+  useState,
+} from 'react'
+
+import {
+  X,
+  AlertCircle,
+} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -185,8 +192,7 @@ function calculateAttendanceSummary(
   }>,
   attendanceStatuses: AttendanceStatus[],
 ) {
-  const today =
-    getTodayString()
+  const today = getTodayString()
 
   let present = 0
   let absent = 0
@@ -247,16 +253,14 @@ function calculateAttendanceSummary(
     ) {
       totalDays += 1
 
-      const record =
-        records.find(
-          (item) =>
-            item.studentId ===
-              studentId &&
-            item.courseId ===
-              course.id &&
-            item.attendanceDate ===
-              dateString,
-        )
+      const record = records.find(
+        (item) =>
+          item.studentId ===
+            studentId &&
+          item.courseId === course.id &&
+          item.attendanceDate ===
+            dateString,
+      )
 
       if (!record) {
         notRecorded += 1
@@ -319,129 +323,6 @@ function calculateAttendanceSummary(
   }
 }
 
-/*
- * ============================================================
- * تحويل أخطاء Supabase إلى رسائل مفهومة
- * ============================================================
- */
-function getReadableSupabaseError(
-  error: any,
-) {
-  if (!error) {
-    return 'حدث خطأ غير معروف.'
-  }
-
-  const code =
-    String(error.code ?? '')
-
-  const message =
-    String(error.message ?? '')
-
-  const details =
-    String(error.details ?? '')
-
-  const hint =
-    String(error.hint ?? '')
-
-  const fullText =
-    `${message} ${details} ${hint}`.toLowerCase()
-
-  /*
-   * الرقم الشخصي مكرر
-   */
-  if (
-    code === '23505' ||
-    fullText.includes(
-      'duplicate key',
-    ) ||
-    fullText.includes(
-      'unique constraint',
-    ) ||
-    fullText.includes(
-      'already exists',
-    )
-  ) {
-    return (
-      '❌ لا يمكن حفظ الطالب: توجد بيانات مكررة في قاعدة البيانات. غالبًا الرقم الشخصي مسجل مسبقًا لطالب آخر.'
-    )
-  }
-
-  /*
-   * قيمة مطلوبة مفقودة
-   */
-  if (
-    code === '23502' ||
-    fullText.includes(
-      'not-null',
-    ) ||
-    fullText.includes(
-      'null value',
-    )
-  ) {
-    return (
-      '❌ لا يمكن حفظ الطالب: يوجد حقل مطلوب لم يتم إدخاله.'
-    )
-  }
-
-  /*
-   * مشكلة في العلاقة بين الجداول
-   */
-  if (
-    code === '23503' ||
-    fullText.includes(
-      'foreign key',
-    ) ||
-    fullText.includes(
-      'violates foreign key',
-    )
-  ) {
-    return (
-      '❌ لا يمكن حفظ الطالب: توجد مشكلة في ربط الطالب ببيانات النظام مثل السنة الدراسية أو الصف الأكاديمي.'
-    )
-  }
-
-  /*
-   * قيمة غير صحيحة
-   */
-  if (
-    code === '22P02' ||
-    fullText.includes(
-      'invalid input syntax',
-    )
-  ) {
-    return (
-      '❌ لا يمكن حفظ الطالب: إحدى البيانات المدخلة غير صحيحة.'
-    )
-  }
-
-  /*
-   * صلاحيات
-   */
-  if (
-    code === '42501' ||
-    fullText.includes(
-      'permission denied',
-    ) ||
-    fullText.includes(
-      'row-level security',
-    ) ||
-    fullText.includes(
-      'rls',
-    )
-  ) {
-    return (
-      '❌ لا يمكن حفظ الطالب: لا توجد صلاحية كافية لتنفيذ العملية في قاعدة البيانات.'
-    )
-  }
-
-  /*
-   * إرجاع الخطأ الأصلي إذا لم نتعرف عليه.
-   */
-  return (
-    `❌ تعذر حفظ البيانات.\n\nسبب قاعدة البيانات:\n${message || 'خطأ غير معروف'}`
-  )
-}
-
 export function StudentForm({
   editingStudent,
   academicLevels,
@@ -455,48 +336,213 @@ export function StudentForm({
   setSupabaseStatus,
   setStudentList,
 }: StudentFormProps) {
+  const [errorMessage, setErrorMessage] =
+    useState('')
+
+  const [isErrorOpen, setIsErrorOpen] =
+    useState(false)
+
+  /*
+   * ============================================================
+   * نافذة الخطأ
+   * ============================================================
+   */
+  const showError = (
+    message: string,
+  ) => {
+    setErrorMessage(message)
+    setIsErrorOpen(true)
+  }
+
+  const closeError = () => {
+    setIsErrorOpen(false)
+    setErrorMessage('')
+  }
+
+  /*
+   * ============================================================
+   * تحويل أخطاء Supabase إلى رسائل مفهومة
+   * ============================================================
+   */
+  const getDatabaseErrorMessage = (
+    error: any,
+  ) => {
+    const message = String(
+      error?.message ?? '',
+    )
+
+    const details = String(
+      error?.details ?? '',
+    )
+
+    const combined =
+      `${message} ${details}`.toLowerCase()
+
+    /*
+     * الرقم الشخصي مكرر
+     */
+    if (
+      combined.includes(
+        'personal_id',
+      ) ||
+      combined.includes(
+        'personal id',
+      ) ||
+      combined.includes(
+        'duplicate key',
+      ) ||
+      combined.includes(
+        'unique constraint',
+      ) ||
+      combined.includes(
+        'already exists',
+      )
+    ) {
+      return (
+        'الرقم الشخصي مكرر.\n\nهذا الرقم موجود مسبقًا في قاعدة البيانات. استخدم رقمًا شخصيًا مختلفًا.'
+      )
+    }
+
+    /*
+     * student_id مكرر
+     */
+    if (
+      combined.includes(
+        'student_id',
+      )
+    ) {
+      return (
+        'تعذر إنشاء رقم الطالب.\n\nرقم الطالب الناتج موجود مسبقًا في قاعدة البيانات.'
+      )
+    }
+
+    /*
+     * السنة الدراسية
+     */
+    if (
+      combined.includes(
+        'academic_year',
+      )
+    ) {
+      return (
+        'تعذر ربط الطالب بالسنة الدراسية الحالية.\n\nتأكد من وجود سنة دراسية مفعلة.'
+      )
+    }
+
+    /*
+     * الصف الأكاديمي
+     */
+    if (
+      combined.includes(
+        'level_id',
+      )
+    ) {
+      return (
+        'تعذر ربط الطالب بالصف الأكاديمي.\n\nتأكد من أن الصف المحدد موجود في النظام.'
+      )
+    }
+
+    /*
+     * الهاتف
+     */
+    if (
+      combined.includes(
+        'phone',
+      )
+    ) {
+      return (
+        'تعذر حفظ رقم الهاتف.\n\nتحقق من رقم الهاتف المدخل.'
+      )
+    }
+
+    /*
+     * واتساب
+     */
+    if (
+      combined.includes(
+        'whatsapp',
+      )
+    ) {
+      return (
+        'تعذر حفظ رقم الواتساب.\n\nتحقق من رقم الواتساب المدخل.'
+      )
+    }
+
+    /*
+     * صلاحيات قاعدة البيانات
+     */
+    if (
+      combined.includes(
+        'permission',
+      ) ||
+      combined.includes(
+        'row-level security',
+      ) ||
+      combined.includes(
+        'rls',
+      )
+    ) {
+      return (
+        'تم رفض العملية من قاعدة البيانات.\n\nلا توجد صلاحية كافية لتنفيذ هذه العملية.'
+      )
+    }
+
+    /*
+     * القيمة غير صحيحة
+     */
+    if (
+      combined.includes(
+        'invalid input',
+      ) ||
+      combined.includes(
+        'invalid value',
+      )
+    ) {
+      return (
+        'إحدى البيانات المدخلة غير صحيحة.\n\nتحقق من جميع الحقول وحاول مرة أخرى.'
+      )
+    }
+
+    /*
+     * الرسالة الأصلية إذا لم نتعرف عليها
+     */
+    return (
+      message ||
+      'حدث خطأ غير معروف أثناء حفظ الطالب.'
+    )
+  }
+
   async function handleSubmit(
     e: FormEvent<HTMLFormElement>,
   ) {
     e.preventDefault()
 
-    const form =
-      e.currentTarget
+    closeError()
 
-    const data =
-      new FormData(form)
+    const form = e.currentTarget
 
-    /*
-     * ============================================================
-     * قراءة البيانات
-     * ============================================================
-     */
+    const data = new FormData(form)
 
-    const name =
-      String(
-        data.get('name') || '',
-      ).trim()
+    const name = String(
+      data.get('name') || '',
+    ).trim()
 
     const personalId =
       String(
-        data.get('personalId') ||
-          '',
+        data.get('personalId') || '',
       ).trim()
 
-    const grade =
-      String(
-        data.get('grade') || '',
-      ).trim()
+    const grade = String(
+      data.get('grade') || '',
+    )
 
-    const phone =
-      String(
-        data.get('phone') || '',
-      ).trim()
+    const phone = String(
+      data.get('phone') || '',
+    ).trim()
 
     const whatsapp =
       String(
-        data.get('whatsapp') ||
-          '',
+        data.get('whatsapp') || '',
       ).trim()
 
     const chronicDiseases =
@@ -508,151 +554,100 @@ export function StudentForm({
 
     const amountPaid =
       Number(
-        data.get('amountPaid') ||
-          0,
+        data.get('amountPaid') || 0,
       )
 
-    const notes =
-      String(
-        data.get('notes') || '',
-      ).trim()
+    const notes = String(
+      data.get('notes') || '',
+    ).trim()
 
     /*
      * ============================================================
-     * التحقق من البيانات الأساسية
+     * التحقق من الحقول الأساسية
      * ============================================================
      */
 
+    const missingFields: string[] =
+      []
+
     if (!name) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: اسم الطالب مطلوب.',
+      missingFields.push(
+        'اسم الطالب',
       )
-      return
     }
 
     if (!personalId) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: الرقم الشخصي مطلوب.',
+      missingFields.push(
+        'الرقم الشخصي',
       )
-      return
     }
 
     if (!grade) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: يجب اختيار الصف الأكاديمي.',
+      missingFields.push(
+        'الصف الأكاديمي',
       )
-      return
     }
 
-    /*
-     * ============================================================
-     * فحص الرقم الشخصي
-     * ============================================================
-     */
-
-    const {
-      data: duplicateStudent,
-      error: duplicateCheckError,
-    } = await supabase
-      .from('students')
-      .select(
-        'id, name, personal_id',
-      )
-      .eq(
-        'personal_id',
-        personalId,
-      )
-      .maybeSingle()
-
-    if (duplicateCheckError) {
-      /*
-       * في حالة التعديل، لا نعتبر المشكلة
-       * خطأ تكرار إذا كان الرقم يعود لنفس الطالب.
-       */
-      const readableError =
-        getReadableSupabaseError(
-          duplicateCheckError,
-        )
-
-      setSupabaseStatus(
-        `❌ تعذر التحقق من الرقم الشخصي قبل الحفظ.\n\n${readableError}`,
-      )
-
-      return
-    }
-
-    /*
-     * إذا وجدنا طالبًا بنفس الرقم الشخصي
-     */
     if (
-      duplicateStudent &&
-      duplicateStudent.id !==
-        editingStudent?.id
+      missingFields.length > 0
     ) {
-      setSupabaseStatus(
-        `❌ لا يمكن تسجيل الطالب.\n\nالرقم الشخصي «${personalId}» مسجل مسبقًا في النظام.\n\nالطالب المسجل بهذا الرقم:\n«${duplicateStudent.name}»\n\nإذا كان هذا هو نفس الطالب، استخدم تعديل بدل إضافة طالب جديد.`,
+      showError(
+        `يرجى تعبئة الحقول التالية:\n\n• ${missingFields.join(
+          '\n• ',
+        )}`,
       )
-
       return
     }
 
     /*
      * ============================================================
-     * فحص المبلغ
+     * التحقق من الرقم الشخصي
+     * ============================================================
+     */
+
+    if (
+      personalId.length < 5
+    ) {
+      showError(
+        'الرقم الشخصي غير صحيح.\n\nيجب إدخال الرقم الشخصي كاملًا.',
+      )
+      return
+    }
+
+    /*
+     * ============================================================
+     * التحقق من المبلغ
      * ============================================================
      */
 
     if (
       !Number.isFinite(
         amountPaid,
-      )
+      ) ||
+      amountPaid < 0
     ) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: المبلغ المدفوع غير صحيح.',
+      showError(
+        'المبلغ المدفوع غير صحيح.\n\nيجب أن يكون المبلغ صفرًا أو مبلغًا موجبًا.',
       )
-      return
-    }
-
-    if (amountPaid < 0) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: المبلغ المدفوع لا يمكن أن يكون أقل من صفر.',
-      )
-      return
-    }
-
-    if (
-      !editingStudent &&
-      amountPaid >
-        currentAnnualFee &&
-      currentAnnualFee > 0
-    ) {
-      setSupabaseStatus(
-        `❌ لم يتم تسجيل الطالب.\n\nالمبلغ المدفوع (${amountPaid.toFixed(
-          3,
-        )} د.ب) أكبر من الرسوم السنوية (${currentAnnualFee.toFixed(
-          3,
-        )} د.ب).`,
-      )
-
       return
     }
 
     /*
      * ============================================================
-     * فحص السنة الدراسية
+     * السنة الدراسية
      * ============================================================
      */
 
     if (!currentAcademicYearId) {
-      setSupabaseStatus(
-        '❌ لم يتم تسجيل الطالب: لا توجد سنة دراسية حالية مفعلة في النظام.',
+      showError(
+        'لا توجد سنة دراسية حالية مفعلة.\n\nيجب تفعيل سنة دراسية قبل تسجيل الطالب.',
       )
       return
     }
 
     /*
      * ============================================================
-     * فحص الصف
+     * الصف الأكاديمي
      * ============================================================
      */
 
@@ -663,10 +658,80 @@ export function StudentForm({
       )
 
     if (!selectedLevel) {
-      setSupabaseStatus(
-        `❌ لم يتم تسجيل الطالب.\n\nالصف «${grade}» غير موجود في قائمة الصفوف الأكاديمية.`,
+      showError(
+        `الصف الأكاديمي "${grade}" غير موجود.\n\nاختر صفًا موجودًا في قائمة الصفوف.`,
+      )
+      return
+    }
+
+    /*
+     * ============================================================
+     * التحقق من الرسوم
+     * ============================================================
+     */
+
+    if (
+      !editingStudent &&
+      amountPaid >
+        currentAnnualFee &&
+      currentAnnualFee > 0
+    ) {
+      showError(
+        `المبلغ المدفوع أكبر من الرسوم السنوية.\n\nالرسوم السنوية: ${currentAnnualFee.toFixed(
+          3,
+        )} د.ب\nالمبلغ المدخل: ${amountPaid.toFixed(
+          3,
+        )} د.ب`,
+      )
+      return
+    }
+
+    /*
+     * ============================================================
+     * التحقق من تكرار الرقم الشخصي
+     *
+     * نتحقق هنا قبل INSERT حتى يحصل المستخدم
+     * على رسالة واضحة بدل رسالة PostgreSQL.
+     * ============================================================
+     */
+
+    const {
+      data: duplicateStudents,
+      error: duplicateCheckError,
+    } = await supabase
+      .from('students')
+      .select(
+        'id, name, personal_id',
+      )
+      .eq(
+        'personal_id',
+        personalId,
       )
 
+    if (duplicateCheckError) {
+      showError(
+        `تعذر التحقق من الرقم الشخصي.\n\n${getDatabaseErrorMessage(
+          duplicateCheckError,
+        )}`,
+      )
+      return
+    }
+
+    /*
+     * في حالة التعديل:
+     * نستثني الطالب الحالي من عملية التحقق.
+     */
+    const duplicateStudent =
+      duplicateStudents?.find(
+        (student) =>
+          student.id !==
+          editingStudent?.id,
+      )
+
+    if (duplicateStudent) {
+      showError(
+        `الرقم الشخصي "${personalId}" مستخدم مسبقًا.\n\nالطالب المسجل بهذا الرقم:\n"${duplicateStudent.name}"\n\nلا يمكن تسجيل طالب آخر بنفس الرقم الشخصي.`,
+      )
       return
     }
 
@@ -702,17 +767,16 @@ export function StudentForm({
         .single()
 
       if (error) {
-        setSupabaseStatus(
-          `❌ لم يتم تعديل الطالب.\n\n${getReadableSupabaseError(
+        showError(
+          `تعذر تعديل بيانات الطالب.\n\n${getDatabaseErrorMessage(
             error,
           )}`,
         )
-
         return
       }
 
       /*
-       * البحث عن ربط الصف
+       * البحث عن ربط الطالب بالسنة الدراسية
        */
       const {
         data: existingEnrollment,
@@ -731,15 +795,12 @@ export function StudentForm({
         )
         .maybeSingle()
 
-      if (
-        enrollmentLookupError
-      ) {
-        setSupabaseStatus(
-          `❌ تم تعديل بيانات الطالب، لكن تعذر قراءة ربط الصف الأكاديمي.\n\n${getReadableSupabaseError(
+      if (enrollmentLookupError) {
+        showError(
+          `تعذر قراءة ربط الطالب بالصف الأكاديمي.\n\n${getDatabaseErrorMessage(
             enrollmentLookupError,
           )}`,
         )
-
         return
       }
 
@@ -759,15 +820,12 @@ export function StudentForm({
             existingEnrollment.id,
           )
 
-        if (
-          enrollmentUpdateError
-        ) {
-          setSupabaseStatus(
-            `❌ تم تعديل بيانات الطالب، لكن تعذر تعديل الصف الأكاديمي.\n\n${getReadableSupabaseError(
+        if (enrollmentUpdateError) {
+          showError(
+            `تعذر تعديل الصف الأكاديمي.\n\n${getDatabaseErrorMessage(
               enrollmentUpdateError,
             )}`,
           )
-
           return
         }
       } else {
@@ -789,22 +847,16 @@ export function StudentForm({
               getTodayString(),
           })
 
-        if (
-          enrollmentInsertError
-        ) {
-          setSupabaseStatus(
-            `❌ تم تعديل بيانات الطالب، لكن تعذر ربط الصف الأكاديمي.\n\n${getReadableSupabaseError(
+        if (enrollmentInsertError) {
+          showError(
+            `تعذر ربط الطالب بالصف الأكاديمي.\n\n${getDatabaseErrorMessage(
               enrollmentInsertError,
             )}`,
           )
-
           return
         }
       }
 
-      /*
-       * تحديث القائمة المحلية
-       */
       setStudentList(
         (current) =>
           current.map(
@@ -841,78 +893,141 @@ export function StudentForm({
       )
 
       setSupabaseStatus(
-        '✅ تم تعديل بيانات الطالب وربط الصف الأكاديمي بنجاح.',
+        'تم تعديل الطالب وربط الصف الأكاديمي في Supabase ✅',
       )
-    } else {
-      /*
-       * ============================================================
-       * إضافة طالب جديد
-       * ============================================================
-       */
 
-      const {
-        data: newStudent,
-        error,
-      } = await supabase
+      closeStudentDrawer()
+
+      form.reset()
+
+      return
+    }
+
+    /*
+     * ============================================================
+     * إضافة طالب جديد
+     * ============================================================
+     */
+
+    const {
+      data: newStudent,
+      error,
+    } = await supabase
+      .from('students')
+      .insert({
+        academic_year_id:
+          currentAcademicYearId,
+        name,
+        personal_id:
+          personalId,
+        phone,
+        whatsapp,
+        notes,
+        health_notes:
+          chronicDiseases,
+        status: 'نشط',
+        fee_exempt: false,
+        source: 'manual',
+      })
+      .select(
+        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
+      )
+      .single()
+
+    if (error) {
+      showError(
+        `تعذر حفظ الطالب.\n\n${getDatabaseErrorMessage(
+          error,
+        )}`,
+      )
+      return
+    }
+
+    /*
+     * ============================================================
+     * ربط الصف الأكاديمي
+     * ============================================================
+     */
+
+    const {
+      error: enrollmentError,
+    } = await supabase
+      .from('enrollments')
+      .insert({
+        student_id:
+          newStudent.id,
+        academic_year_id:
+          currentAcademicYearId,
+        level_id:
+          selectedLevel.id,
+        class_id: null,
+        status: 'نشط',
+        join_date:
+          getTodayString(),
+      })
+
+    if (enrollmentError) {
+      /*
+       * محاولة تنظيف الطالب إذا فشل ربط الصف.
+       */
+      await supabase
         .from('students')
-        .insert({
-          academic_year_id:
-            currentAcademicYearId,
-          name,
-          personal_id:
-            personalId,
-          phone,
-          whatsapp,
-          notes,
-          health_notes:
-            chronicDiseases,
-          status: 'نشط',
-          fee_exempt: false,
-          source: 'manual',
-        })
-        .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
-        )
-        .single()
-
-      if (error) {
-        setSupabaseStatus(
-          `❌ لم يتم تسجيل الطالب.\n\n${getReadableSupabaseError(
-            error,
-          )}\n\nالرقم الشخصي المستخدم: ${personalId}`,
+        .delete()
+        .eq(
+          'id',
+          newStudent.id,
         )
 
-        return
-      }
-
-      /*
-       * ============================================================
-       * ربط الطالب بالصف
-       * ============================================================
-       */
-
-      const {
-        error:
+      showError(
+        `تم إنشاء الطالب، ولكن تعذر ربطه بالصف الأكاديمي.\n\n${getDatabaseErrorMessage(
           enrollmentError,
+        )}\n\nتم إلغاء إنشاء الطالب تلقائيًا حتى لا تبقى بيانات ناقصة.`,
+      )
+
+      return
+    }
+
+    /*
+     * ============================================================
+     * الدفعة الأولى
+     * ============================================================
+     */
+
+    if (amountPaid > 0) {
+      const {
+        error: paymentError,
       } = await supabase
-        .from('enrollments')
+        .from('payments')
         .insert({
           student_id:
             newStudent.id,
           academic_year_id:
             currentAcademicYearId,
-          level_id:
-            selectedLevel.id,
-          class_id: null,
-          status: 'نشط',
-          join_date:
-            getTodayString(),
+          amount: amountPaid,
+          payment_method:
+            'نقدي',
+          payment_date:
+            new Date()
+              .toISOString()
+              .slice(0, 10),
         })
 
-      if (enrollmentError) {
+      if (paymentError) {
         /*
-         * محاولة تنظيف الطالب الذي تم إنشاؤه
+         * تنظيف كل ما تم إنشاؤه
          */
+        await supabase
+          .from('enrollments')
+          .delete()
+          .eq(
+            'student_id',
+            newStudent.id,
+          )
+          .eq(
+            'academic_year_id',
+            currentAcademicYearId,
+          )
+
         await supabase
           .from('students')
           .delete()
@@ -921,489 +1036,431 @@ export function StudentForm({
             newStudent.id,
           )
 
-        setSupabaseStatus(
-          `❌ لم يتم إكمال تسجيل الطالب.\n\nتم إنشاء الطالب مؤقتًا، لكن فشل ربطه بالصف الأكاديمي.\n\n${getReadableSupabaseError(
-            enrollmentError,
-          )}`,
+        showError(
+          `تم رفض الدفعة الأولى.\n\n${getDatabaseErrorMessage(
+            paymentError,
+          )}\n\nتم إلغاء تسجيل الطالب بالكامل حتى لا تبقى عملية ناقصة.`,
         )
 
         return
       }
-
-      /*
-       * ============================================================
-       * حفظ الدفعة الأولى
-       * ============================================================
-       */
-
-      if (amountPaid > 0) {
-        const {
-          error:
-            paymentError,
-        } = await supabase
-          .from('payments')
-          .insert({
-            student_id:
-              newStudent.id,
-            academic_year_id:
-              currentAcademicYearId,
-            amount: amountPaid,
-            payment_method:
-              'نقدي',
-            payment_date:
-              getTodayString(),
-          })
-
-        if (paymentError) {
-          /*
-           * تنظيف التسجيل إذا فشلت الدفعة
-           */
-          await supabase
-            .from('enrollments')
-            .delete()
-            .eq(
-              'student_id',
-              newStudent.id,
-            )
-            .eq(
-              'academic_year_id',
-              currentAcademicYearId,
-            )
-
-          await supabase
-            .from('students')
-            .delete()
-            .eq(
-              'id',
-              newStudent.id,
-            )
-
-          setSupabaseStatus(
-            `❌ لم يتم إكمال تسجيل الطالب.\n\nتم إنشاء الطالب وربطه بالصف، لكن فشل حفظ الدفعة الأولى.\n\n${getReadableSupabaseError(
-              paymentError,
-            )}`,
-          )
-
-          return
-        }
-      }
-
-      /*
-       * ============================================================
-       * تحديد حالة الدفع
-       * ============================================================
-       */
-
-      const paymentStatus =
-        amountPaid >=
-            currentAnnualFee &&
-        currentAnnualFee > 0
-          ? 'مدفوع بالكامل'
-          : amountPaid > 0
-            ? 'مدفوع جزئيًا'
-            : 'غير مدفوع'
-
-      /*
-       * ============================================================
-       * إنشاء الطالب داخل القائمة المحلية
-       * ============================================================
-       */
-
-      const mappedStudent = {
-        id: newStudent.id,
-
-        studentId:
-          newStudent.student_id ??
-          '',
-
-        name:
-          newStudent.name,
-
-        personalId:
-          newStudent.personal_id ??
-          '',
-
-        gender: '',
-
-        age: null,
-
-        grade,
-
-        phone:
-          newStudent.phone ??
-          '',
-
-        whatsapp:
-          newStudent.whatsapp ??
-          '',
-
-        status:
-          newStudent.status ??
-          'نشط',
-
-        source:
-          newStudent.source ??
-          'manual',
-
-        createdAt:
-          new Date().toISOString(),
-
-        updatedAt: '',
-
-        academicYearId:
-          currentAcademicYearId,
-
-        paymentStatus,
-
-        amountDue:
-          currentAnnualFee,
-
-        amountPaid,
-
-        feeExempt:
-          Boolean(
-            newStudent.fee_exempt,
-          ),
-
-        chronicDiseases:
-          newStudent.health_notes ??
-          '',
-
-        notes:
-          newStudent.notes ??
-          '',
-
-        attendance:
-          'لم يحضر',
-
-        courseStatuses:
-          courses.map(
-            (course) => ({
-              courseId:
-                course.id,
-
-              courseName:
-                course.name,
-
-              startDate:
-                course.start_date,
-
-              endDate:
-                course.end_date,
-
-              status:
-                getCourseStatus(
-                  course,
-                  newStudent.id,
-                  [],
-                  getTodayString(),
-                ),
-            }),
-          ),
-
-        attendanceSummaries:
-          courses.map(
-            (course) =>
-              calculateAttendanceSummary(
-                newStudent.id,
-                course,
-                [],
-                attendanceStatuses,
-              ),
-          ),
-
-        attendanceRecords: [],
-      }
-
-      setStudentList(
-        (current) => [
-          mappedStudent,
-          ...current,
-        ],
-      )
-
-      /*
-       * ============================================================
-       * رسالة النجاح
-       * ============================================================
-       */
-
-      setSupabaseStatus(
-        amountPaid > 0
-          ? '✅ تم تسجيل الطالب بنجاح، وربطه بالصف، وحفظ الدفعة الأولى.'
-          : '✅ تم تسجيل الطالب بنجاح وربطه بالصف الأكاديمي.',
-      )
     }
 
+    /*
+     * ============================================================
+     * حالة الدفع
+     * ============================================================
+     */
+
+    const paymentStatus =
+      amountPaid >=
+        currentAnnualFee &&
+      currentAnnualFee > 0
+        ? 'مدفوع بالكامل'
+        : amountPaid > 0
+          ? 'مدفوع جزئيًا'
+          : 'غير مدفوع'
+
+    /*
+     * ============================================================
+     * تجهيز الطالب للقائمة
+     * ============================================================
+     */
+
+    const mappedStudent = {
+      id: newStudent.id,
+
+      studentId:
+        newStudent.student_id ??
+        '',
+
+      name:
+        newStudent.name,
+
+      personalId:
+        newStudent.personal_id ??
+        '',
+
+      gender: '',
+
+      age: null,
+
+      grade,
+
+      phone:
+        newStudent.phone ??
+        '',
+
+      whatsapp:
+        newStudent.whatsapp ??
+        '',
+
+      status:
+        newStudent.status ??
+        'نشط',
+
+      source:
+        newStudent.source ??
+        'manual',
+
+      createdAt:
+        new Date().toISOString(),
+
+      updatedAt: '',
+
+      academicYearId:
+        currentAcademicYearId,
+
+      paymentStatus,
+
+      amountDue:
+        currentAnnualFee,
+
+      amountPaid,
+
+      feeExempt:
+        Boolean(
+          newStudent.fee_exempt,
+        ),
+
+      chronicDiseases:
+        newStudent.health_notes ??
+        '',
+
+      notes:
+        newStudent.notes ?? '',
+
+      attendance:
+        currentCourse
+          ? 'لم يحضر'
+          : 'لم يحضر',
+
+      courseStatuses:
+        courses.map(
+          (course) => ({
+            courseId:
+              course.id,
+
+            courseName:
+              course.name,
+
+            startDate:
+              course.start_date,
+
+            endDate:
+              course.end_date,
+
+            status:
+              getCourseStatus(
+                course,
+                newStudent.id,
+                [],
+                getTodayString(),
+              ),
+          }),
+        ),
+
+      attendanceSummaries:
+        courses.map(
+          (course) =>
+            calculateAttendanceSummary(
+              newStudent.id,
+              course,
+              [],
+              attendanceStatuses,
+            ),
+        ),
+
+      attendanceRecords: [],
+    }
+
+    setStudentList(
+      (current) => [
+        mappedStudent,
+        ...current,
+      ],
+    )
+
+    setSupabaseStatus(
+      amountPaid > 0
+        ? 'تم حفظ الطالب والدفعة الأولى وربط الصف الأكاديمي في Supabase ✅'
+        : 'تم حفظ الطالب وربط الصف الأكاديمي في Supabase ✅',
+    )
+
     closeStudentDrawer()
+
     form.reset()
   }
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button
-        type="button"
-        aria-label="إغلاق"
-        className="absolute inset-0 bg-black/40"
-        onClick={
-          closeStudentDrawer
-        }
-      />
+    <>
+      {/* ==========================================================
+          نافذة الخطأ
+          ========================================================== */}
 
-      <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {editingStudent
-                ? 'تعديل بيانات الطالب'
-                : 'إضافة طالب'}
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {editingStudent
-                ? 'تعديل بيانات الطالب الأساسية'
-                : 'إدخال بيانات الطالب الأساسية'}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={
-              closeStudentDrawer
-            }
-            className="rounded-md p-2 hover:bg-muted"
-            aria-label="إغلاق"
+      {isErrorOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+          <div
+            dir="rtl"
+            className="w-full max-w-md overflow-hidden rounded-xl border border-red-200 bg-background shadow-2xl"
           >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <form
-          key={
-            editingStudent?.id ??
-            'new'
-          }
-          onSubmit={
-            handleSubmit
-          }
-        >
-          <div className="space-y-6 p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="mb-2 block text-sm font-medium">
-                  اسم الطالب
-                </label>
-
-                <input
-                  name="name"
-                  type="text"
-                  required
-                  defaultValue={
-                    editingStudent?.name ??
-                    ''
-                  }
-                  placeholder="أدخل اسم الطالب"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                />
+            <div className="flex items-start gap-3 border-b border-red-200 bg-red-50 px-5 py-4 dark:bg-red-950/30">
+              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400">
+                <AlertCircle className="size-5" />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  الرقم الشخصي
-                </label>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-red-700 dark:text-red-400">
+                  تعذر حفظ الطالب
+                </h3>
 
-                <input
-                  name="personalId"
-                  type="text"
-                  required
-                  defaultValue={
-                    editingStudent?.personalId ??
-                    ''
-                  }
-                  placeholder="أدخل الرقم الشخصي"
-                  dir="ltr"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                />
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  يجب أن يكون الرقم الشخصي
-                  غير مسجل لطالب آخر.
+                <p className="mt-1 text-sm text-red-600/90 dark:text-red-300/90">
+                  يرجى مراجعة السبب أدناه.
                 </p>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  الصف الأكاديمي
-                </label>
-
-                <select
-                  name="grade"
-                  required
-                  defaultValue={
-                    editingStudent?.grade ??
-                    ''
-                  }
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                >
-                  <option value="">
-                    اختر الصف
-                  </option>
-
-                  {academicLevels.map(
-                    (level) => (
-                      <option
-                        key={level.id}
-                        value={
-                          level.name
-                        }
-                      >
-                        {level.name}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  رقم الهاتف
-                </label>
-
-                <input
-                  name="phone"
-                  type="tel"
-                  defaultValue={
-                    editingStudent?.phone ??
-                    ''
-                  }
-                  placeholder="مثال: 33xxxxxx"
-                  dir="ltr"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  رقم واتساب
-                </label>
-
-                <input
-                  name="whatsapp"
-                  type="tel"
-                  defaultValue={
-                    editingStudent?.whatsapp ??
-                    ''
-                  }
-                  placeholder="مثال: 33xxxxxx"
-                  dir="ltr"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="border-t pt-5">
-              <h3 className="mb-4 text-sm font-semibold">
-                المعلومات الصحية
-              </h3>
-
-              <label className="mb-2 block text-sm font-medium">
-                الأمراض المزمنة
-              </label>
-
-              <input
-                name="chronicDiseases"
-                type="text"
-                defaultValue={
-                  editingStudent?.chronicDiseases ??
-                  ''
+              <button
+                type="button"
+                onClick={
+                  closeError
                 }
-                placeholder="لا يوجد"
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              />
+                className="rounded-md p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40"
+                aria-label="إغلاق رسالة الخطأ"
+              >
+                <X className="size-5" />
+              </button>
             </div>
 
-            <div className="border-t pt-5">
-              <h3 className="mb-4 text-sm font-semibold">
-                المعلومات المالية
-              </h3>
+            <div className="whitespace-pre-line px-5 py-5 text-sm leading-7">
+              {errorMessage}
+            </div>
 
-              <div className="rounded-md border bg-muted/30 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      الرسوم السنوية
-                    </p>
+            <div className="flex justify-end border-t bg-muted/20 px-5 py-4">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={
+                  closeError
+                }
+              >
+                فهمت
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      حسب السنة الدراسية
-                      الحالية:{' '}
-                      {
-                        currentAcademicYearName
-                      }
-                    </p>
-                  </div>
+      {/* ==========================================================
+          السايد بار
+          ========================================================== */}
 
-                  <div className="text-lg font-semibold">
-                    {currentAnnualFee.toLocaleString(
-                      'ar-BH',
-                      {
-                        minimumFractionDigits: 3,
-                        maximumFractionDigits: 3,
-                      },
-                    )}{' '}
-                    د.ب
-                  </div>
+      <div className="fixed inset-0 z-50">
+        <button
+          type="button"
+          aria-label="إغلاق"
+          className="absolute inset-0 bg-black/40"
+          onClick={
+            closeStudentDrawer
+          }
+        />
+
+        <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold">
+                {editingStudent
+                  ? 'تعديل بيانات الطالب'
+                  : 'إضافة طالب'}
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {editingStudent
+                  ? 'تعديل بيانات الطالب الأساسية'
+                  : 'إدخال بيانات الطالب الأساسية'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                closeStudentDrawer
+              }
+              className="rounded-md p-2 hover:bg-muted"
+              aria-label="إغلاق"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          <form
+            key={
+              editingStudent?.id ??
+              'new'
+            }
+            onSubmit={
+              handleSubmit
+            }
+          >
+            <div className="space-y-6 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-medium">
+                    اسم الطالب
+                  </label>
+
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    defaultValue={
+                      editingStudent?.name ??
+                      ''
+                    }
+                    placeholder="أدخل اسم الطالب"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    الرقم الشخصي
+                  </label>
+
+                  <input
+                    name="personalId"
+                    type="text"
+                    required
+                    defaultValue={
+                      editingStudent?.personalId ??
+                      ''
+                    }
+                    placeholder="أدخل الرقم الشخصي"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    يجب أن يكون الرقم الشخصي
+                    غير مستخدم لطالب آخر.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    الصف الأكاديمي
+                  </label>
+
+                  <select
+                    name="grade"
+                    required
+                    defaultValue={
+                      editingStudent?.grade ??
+                      ''
+                    }
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">
+                      اختر الصف
+                    </option>
+
+                    {academicLevels.map(
+                      (level) => (
+                        <option
+                          key={
+                            level.id
+                          }
+                          value={
+                            level.name
+                          }
+                        >
+                          {
+                            level.name
+                          }
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    رقم الهاتف
+                  </label>
+
+                  <input
+                    name="phone"
+                    type="tel"
+                    defaultValue={
+                      editingStudent?.phone ??
+                      ''
+                    }
+                    placeholder="مثال: 33xxxxxx"
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    رقم واتساب
+                  </label>
+
+                  <input
+                    name="whatsapp"
+                    type="tel"
+                    defaultValue={
+                      editingStudent?.whatsapp ??
+                      ''
+                    }
+                    placeholder="مثال: 33xxxxxx"
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
                 </div>
               </div>
 
-              {!editingStudent ? (
-                <>
-                  <div className="mt-4">
-                    <label className="mb-2 block text-sm font-medium">
-                      الدفعة الأولى
-                    </label>
+              <div className="border-t pt-5">
+                <h3 className="mb-4 text-sm font-semibold">
+                  المعلومات الصحية
+                </h3>
 
-                    <input
-                      name="amountPaid"
-                      type="number"
-                      min="0"
-                      max={
-                        currentAnnualFee >
-                        0
-                          ? currentAnnualFee
-                          : undefined
-                      }
-                      step="0.001"
-                      defaultValue="0"
-                      placeholder="0"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
+                <label className="mb-2 block text-sm font-medium">
+                  الأمراض المزمنة
+                </label>
 
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    يمكنك تسجيل الدفعة الأولى
-                    مع إضافة الطالب.
-                  </p>
-                </>
-              ) : (
-                <div className="mt-4 rounded-md border bg-muted/30 p-4">
+                <input
+                  name="chronicDiseases"
+                  type="text"
+                  defaultValue={
+                    editingStudent?.chronicDiseases ??
+                    ''
+                  }
+                  placeholder="لا يوجد"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                />
+              </div>
+
+              <div className="border-t pt-5">
+                <h3 className="mb-4 text-sm font-semibold">
+                  المعلومات المالية
+                </h3>
+
+                <div className="rounded-md border bg-muted/30 p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium">
-                        المدفوع حتى الآن
+                        الرسوم السنوية
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground">
-                        لتسجيل دفعة جديدة
-                        استخدم قسم المدفوعات.
+                        حسب السنة الدراسية الحالية:{' '}
+                        {
+                          currentAcademicYearName
+                        }
                       </p>
                     </div>
 
                     <div className="text-lg font-semibold">
-                      {Number(
-                        editingStudent?.amountPaid ??
-                          0,
-                      ).toLocaleString(
+                      {currentAnnualFee.toLocaleString(
                         'ar-BH',
                         {
                           minimumFractionDigits: 3,
@@ -1414,49 +1471,107 @@ export function StudentForm({
                     </div>
                   </div>
                 </div>
-              )}
+
+                {!editingStudent ? (
+                  <>
+                    <div className="mt-4">
+                      <label className="mb-2 block text-sm font-medium">
+                        الدفعة الأولى
+                      </label>
+
+                      <input
+                        name="amountPaid"
+                        type="number"
+                        min="0"
+                        max={
+                          currentAnnualFee >
+                          0
+                            ? currentAnnualFee
+                            : undefined
+                        }
+                        step="0.001"
+                        defaultValue="0"
+                        placeholder="0"
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                      />
+                    </div>
+
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      يمكنك تسجيل الدفعة الأولى مع إضافة الطالب. سيتم حفظها كدفعة فعلية، ويمكن إضافة الدفعات اللاحقة من قسم المدفوعات.
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-4 rounded-md border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">
+                          المدفوع حتى الآن
+                        </p>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          لتسجيل دفعة جديدة استخدم حالة الدفع من قائمة الطلاب.
+                        </p>
+                      </div>
+
+                      <div className="text-lg font-semibold">
+                        {Number(
+                          editingStudent?.amountPaid ??
+                            0,
+                        ).toLocaleString(
+                          'ar-BH',
+                          {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          },
+                        )}{' '}
+                        د.ب
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-5">
+                <label className="mb-2 block text-sm font-medium">
+                  ملاحظات
+                </label>
+
+                <textarea
+                  name="notes"
+                  defaultValue={
+                    editingStudent?.notes ??
+                    ''
+                  }
+                  placeholder="أدخل أي ملاحظات إضافية..."
+                  rows={4}
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
+                />
+              </div>
             </div>
 
-            <div className="border-t pt-5">
-              <label className="mb-2 block text-sm font-medium">
-                ملاحظات
-              </label>
+            <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
+              <Button
+                type="submit"
+                className="flex-1"
+              >
+                {editingStudent
+                  ? 'حفظ التعديلات'
+                  : 'حفظ الطالب'}
+              </Button>
 
-              <textarea
-                name="notes"
-                defaultValue={
-                  editingStudent?.notes ??
-                  ''
+              <Button
+                type="button"
+                variant="outline"
+                onClick={
+                  closeStudentDrawer
                 }
-                placeholder="أدخل أي ملاحظات إضافية..."
-                rows={4}
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
-              />
+              >
+                إلغاء
+              </Button>
             </div>
-          </div>
-
-          <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
-            <Button
-              type="submit"
-              className="flex-1"
-            >
-              {editingStudent
-                ? 'حفظ التعديلات'
-                : 'حفظ الطالب'}
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={
-                closeStudentDrawer
-              }
-            >
-              إلغاء
-            </Button>
-          </div>
-        </form>
-      </aside>
-    </div>
+          </form>
+        </aside>
+      </div>
+    </>
   )
 }
