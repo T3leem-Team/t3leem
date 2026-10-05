@@ -904,21 +904,21 @@ export function StudentsView() {
 
       {/* سهم العودة - أعلى يمين الصفحة */}
       <div
-        className="relative h-9"
+        className="relative h-10"
         dir="rtl"
       >
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="icon"
           onClick={() =>
             router.back()
           }
           aria-label="العودة"
           title="العودة"
-          className="absolute right-0 top-0 h-9 w-9"
+          className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
         >
-          <ArrowRight className="size-5" />
+          <ArrowRight className="size-5 stroke-[2.5]" />
         </Button>
       </div>
 
@@ -975,7 +975,8 @@ export function StudentsView() {
 
           <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
 
-            <div className="flex flex-wrap items-center gap-4 text-sm">
+            {/* الإحصائيات */}
+            <div className="flex flex-wrap items-center gap-4 text-sm sm:order-2">
               <div>
                 <span className="text-muted-foreground">
                   إجمالي الطلاب:
@@ -1028,10 +1029,10 @@ export function StudentsView() {
               )}
             </div>
 
-            {/* أزرار الصفحة - صف واحد */}
+            {/* أزرار الصفحة - صف واحد جهة اليسار */}
             <div
-              dir="rtl"
-              className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1"
+              dir="ltr"
+              className="order-first flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:order-1"
             >
               <Button
                 type="button"
