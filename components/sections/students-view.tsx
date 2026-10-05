@@ -1390,10 +1390,11 @@ return (
         setSupabaseStatus={
           setSupabaseStatus
         }
-        setStudentList={
+          setStudentList={
           setStudentList as any
         }
       />
     )}
   </div>
 )
+}
