@@ -1,7 +1,15 @@
 'use client'
 
-import { Filter, Settings2, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import {
+  Filter,
+  Settings2,
+  Trash2,
+} from 'lucide-react'
+
+import {
+  useMemo,
+  useState,
+} from 'react'
 
 import {
   Table,
@@ -97,14 +105,18 @@ type Props = {
   selectedStudentId: string | null
   currentCourseName?: string | null
 
-  onSelectStudent: (studentId: string) => void
+  onSelectStudent: (
+    studentId: string
+  ) => void
 
   onUpdateFilter: (
     key: keyof StudentTableFilters,
     value: string
   ) => void
 
-  onToggleColumn: (key: string) => void
+  onToggleColumn: (
+    key: string
+  ) => void
 
   onOpenNotes: (
     student: StudentTableStudent
@@ -122,38 +134,118 @@ type Props = {
 }
 
 const baseColumns = [
-  { key: 'name', label: 'الاسم' },
-  { key: 'personalId', label: 'رقم الهوية' },
-  { key: 'grade', label: 'المرحلة / المستوى' },
-  { key: 'contact', label: 'التواصل' },
-  { key: 'paymentStatus', label: 'حالة السداد' },
-  { key: 'notes', label: 'الملاحظات' },
-  { key: 'attendance', label: 'الحضور' },
+  {
+    key: 'name',
+    label: 'الاسم',
+  },
+  {
+    key: 'personalId',
+    label: 'رقم الهوية',
+  },
+  {
+    key: 'grade',
+    label: 'المرحلة / المستوى',
+  },
+  {
+    key: 'contact',
+    label: 'التواصل',
+  },
+  {
+    key: 'paymentStatus',
+    label: 'حالة السداد',
+  },
+  {
+    key: 'notes',
+    label: 'الملاحظات',
+  },
+  {
+    key: 'attendance',
+    label: 'الحضور',
+  },
 ]
 
 const extraColumns = [
-  { key: 'studentId', label: 'معرف الطالب' },
-  { key: 'guardianRelation', label: 'صلة القرابة' },
-  { key: 'studentPhone', label: 'رقم الطالب' },
-  { key: 'enrollmentCourseName', label: 'دورة الالتحاق' },
-  { key: 'gender', label: 'الجنس' },
-  { key: 'age', label: 'العمر' },
-  { key: 'phone', label: 'الهاتف' },
-  { key: 'whatsapp', label: 'واتساب' },
-  { key: 'status', label: 'الحالة' },
-  { key: 'className', label: 'الفصل' },
-  { key: 'source', label: 'المصدر' },
-  { key: 'amountDue', label: 'المستحق' },
-  { key: 'amountPaid', label: 'المدفوع' },
-  { key: 'remaining', label: 'المتبقي' },
-  { key: 'feeExempt', label: 'الإعفاء' },
-  { key: 'chronicDiseases', label: 'الحالات الصحية' },
-  { key: 'createdAt', label: 'تاريخ الإضافة' },
-  { key: 'updatedAt', label: 'آخر تحديث' },
-  { key: 'academicYearName', label: 'العام الدراسي' },
+  {
+    key: 'studentId',
+    label: 'معرف الطالب',
+  },
+  {
+    key: 'guardianRelation',
+    label: 'صلة القرابة',
+  },
+  {
+    key: 'studentPhone',
+    label: 'رقم الطالب',
+  },
+  {
+    key: 'enrollmentCourseName',
+    label: 'دورة الالتحاق',
+  },
+  {
+    key: 'gender',
+    label: 'الجنس',
+  },
+  {
+    key: 'age',
+    label: 'العمر',
+  },
+  {
+    key: 'phone',
+    label: 'الهاتف',
+  },
+  {
+    key: 'whatsapp',
+    label: 'واتساب',
+  },
+  {
+    key: 'status',
+    label: 'الحالة',
+  },
+  {
+    key: 'className',
+    label: 'الفصل',
+  },
+  {
+    key: 'source',
+    label: 'المصدر',
+  },
+  {
+    key: 'amountDue',
+    label: 'المستحق',
+  },
+  {
+    key: 'amountPaid',
+    label: 'المدفوع',
+  },
+  {
+    key: 'remaining',
+    label: 'المتبقي',
+  },
+  {
+    key: 'feeExempt',
+    label: 'الإعفاء',
+  },
+  {
+    key: 'chronicDiseases',
+    label: 'الحالات الصحية',
+  },
+  {
+    key: 'createdAt',
+    label: 'تاريخ الإضافة',
+  },
+  {
+    key: 'updatedAt',
+    label: 'آخر تحديث',
+  },
+  {
+    key: 'academicYearName',
+    label: 'العام الدراسي',
+  },
 ]
 
-function formatDate(value: string | null) {
+function formatDate(
+  value: string | null
+) {
   if (!value) return '-'
 
   const date = new Date(value)
@@ -162,10 +254,14 @@ function formatDate(value: string | null) {
     return '-'
   }
 
-  return date.toLocaleDateString('ar-BH')
+  return date.toLocaleDateString(
+    'ar-BH'
+  )
 }
 
-function getSourceLabel(source: string | null) {
+function getSourceLabel(
+  source: string | null
+) {
   switch (source) {
     case 'manual':
       return 'إضافة من قسم الطلاب'
@@ -190,7 +286,9 @@ function getSourceLabel(source: string | null) {
   }
 }
 
-function getPaymentStatusLabel(status: string) {
+function getPaymentStatusLabel(
+  status: string
+) {
   switch (status) {
     case 'paid':
     case 'مدفوع بالكامل':
@@ -214,8 +312,11 @@ function getPaymentStatusLabel(status: string) {
   }
 }
 
-function normalizePaymentStatus(status: string) {
-  const label = getPaymentStatusLabel(status)
+function normalizePaymentStatus(
+  status: string
+) {
+  const label =
+    getPaymentStatusLabel(status)
 
   if (
     label === 'مدفوع جزئيًا' ||
@@ -230,7 +331,9 @@ function normalizePaymentStatus(status: string) {
 function normalizeAttendanceStatus(
   status: string | null | undefined
 ) {
-  const value = String(status || '').trim()
+  const value = String(
+    status || ''
+  ).trim()
 
   if (!value) {
     return 'لم يسجل'
@@ -280,180 +383,282 @@ export function StudentsTable({
   onOpenAttendance,
   onDeleteSelected,
 }: Props) {
-  const [showColumns, setShowColumns] =
-    useState(false)
+  const [
+    showColumns,
+    setShowColumns,
+  ] = useState(false)
 
-  const [selectionMode, setSelectionMode] =
-    useState(false)
+  const [
+    selectionMode,
+    setSelectionMode,
+  ] = useState(false)
 
-  const [selectedStudentIds, setSelectedStudentIds] =
-    useState<string[]>([])
+  const [
+    selectedStudentIds,
+    setSelectedStudentIds,
+  ] = useState<string[]>([])
 
-  const [paymentStudent, setPaymentStudent] =
-    useState<StudentTableStudent | null>(null)
-
-  const [showAddPayment, setShowAddPayment] =
-    useState(false)
-
-  const [paymentAmount, setPaymentAmount] =
-    useState('')
-
-  const [paymentMethod, setPaymentMethod] =
-    useState<'نقدي' | 'تحويل' | 'بطاقة'>('نقدي')
-
-  const [paymentDate, setPaymentDate] =
-    useState(
-      new Date().toISOString().slice(0, 10)
+  const [
+    paymentStudent,
+    setPaymentStudent,
+  ] =
+    useState<StudentTableStudent | null>(
+      null
     )
 
-  const [paymentReference, setPaymentReference] =
-    useState('')
+  const [
+    showAddPayment,
+    setShowAddPayment,
+  ] = useState(false)
 
-  const [paymentNotes, setPaymentNotes] =
-    useState('')
+  const [
+    paymentAmount,
+    setPaymentAmount,
+  ] = useState('')
 
-  const [paymentSaving, setPaymentSaving] =
-    useState(false)
+  const [
+    paymentMethod,
+    setPaymentMethod,
+  ] = useState<
+    'نقدي' | 'تحويل' | 'بطاقة'
+  >('نقدي')
 
-  const [paymentMessage, setPaymentMessage] =
-    useState('')
+  const [
+    paymentDate,
+    setPaymentDate,
+  ] = useState(
+    new Date()
+      .toISOString()
+      .slice(0, 10)
+  )
 
-  const [showDeleteConfirm, setShowDeleteConfirm] =
-    useState(false)
+  const [
+    paymentReference,
+    setPaymentReference,
+  ] = useState('')
 
-  const [deleteSaving, setDeleteSaving] =
-    useState(false)
+  const [
+    paymentNotes,
+    setPaymentNotes,
+  ] = useState('')
 
-  const [deleteMessage, setDeleteMessage] =
-    useState('')
+  const [
+    paymentSaving,
+    setPaymentSaving,
+  ] = useState(false)
 
-  const gradeOptions = useMemo(() => {
-    const existingValues = new Set<string>()
+  const [
+    paymentMessage,
+    setPaymentMessage,
+  ] = useState('')
 
-    students.forEach((student) => {
-      const value = String(
-        student.grade || ''
-      ).trim()
+  const [
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+  ] = useState(false)
 
-      if (value) {
-        existingValues.add(value)
-      }
-    })
+  const [
+    deleteSaving,
+    setDeleteSaving,
+  ] = useState(false)
 
-    const ordered = academicLevels
-      .filter((level) =>
-        existingValues.has(level.name)
+  const [
+    deleteMessage,
+    setDeleteMessage,
+  ] = useState('')
+
+  const gradeOptions =
+    useMemo(() => {
+      const existingValues =
+        new Set<string>()
+
+      students.forEach(
+        (student) => {
+          const value =
+            String(
+              student.grade || ''
+            ).trim()
+
+          if (value) {
+            existingValues.add(
+              value
+            )
+          }
+        }
       )
-      .sort(
-        (a, b) =>
-          Number(a.sort_order ?? 0) -
-          Number(b.sort_order ?? 0)
-      )
-      .map((level) => level.name)
 
-    const remaining = Array.from(
-      existingValues
-    ).filter(
-      (value) =>
-        !ordered.includes(value)
-    )
+      const ordered =
+        academicLevels
+          .filter((level) =>
+            existingValues.has(
+              level.name
+            )
+          )
+          .sort(
+            (a, b) =>
+              Number(
+                a.sort_order ?? 0
+              ) -
+              Number(
+                b.sort_order ?? 0
+              )
+          )
+          .map(
+            (level) =>
+              level.name
+          )
 
-    return [
-      ...ordered,
-      ...remaining,
-    ]
-  }, [students, academicLevels])
-
-  const paymentStatusOptions = useMemo(() => {
-    const values = new Set<string>()
-
-    students.forEach((student) => {
-      const value = normalizePaymentStatus(
-        student.paymentStatus
-      )
-
-      if (value && value !== '-') {
-        values.add(value)
-      }
-    })
-
-    return Array.from(values)
-  }, [students])
-
-  const attendanceOptions = useMemo(() => {
-    const values = new Set<string>()
-
-    students.forEach((student) => {
-      const value =
-        normalizeAttendanceStatus(
-          student.attendance
+      const remaining =
+        Array.from(
+          existingValues
+        ).filter(
+          (value) =>
+            !ordered.includes(
+              value
+            )
         )
 
-      if (value) {
-        values.add(value)
-      }
-    })
+      return [
+        ...ordered,
+        ...remaining,
+      ]
+    }, [
+      students,
+      academicLevels,
+    ])
 
-    return Array.from(values)
-  }, [students])
+  const paymentStatusOptions =
+    useMemo(() => {
+      const values =
+        new Set<string>()
 
-  const enrollmentCourseOptions = useMemo(() => {
-    const values = new Set<string>()
+      students.forEach(
+        (student) => {
+          const value =
+            normalizePaymentStatus(
+              student.paymentStatus
+            )
 
-    students.forEach((student) => {
-      const value = String(
-        student.enrollmentCourseName || ''
-      ).trim()
-
-      if (value) {
-        values.add(value)
-      }
-    })
-
-    const ordered = courses
-      .filter((course) =>
-        values.has(course.name)
+          if (
+            value &&
+            value !== '-'
+          ) {
+            values.add(value)
+          }
+        }
       )
-      .map((course) => course.name)
 
-    const remaining = Array.from(values).filter(
-      (value) =>
-        !ordered.includes(value)
-    )
+      return Array.from(values)
+    }, [students])
 
-    return [
-      ...ordered,
-      ...remaining,
-    ]
-  }, [students, courses])
+  const attendanceOptions =
+    useMemo(() => {
+      const values =
+        new Set<string>()
+
+      students.forEach(
+        (student) => {
+          const value =
+            normalizeAttendanceStatus(
+              student.attendance
+            )
+
+          if (value) {
+            values.add(value)
+          }
+        }
+      )
+
+      return Array.from(values)
+    }, [students])
+
+  const enrollmentCourseOptions =
+    useMemo(() => {
+      const values =
+        new Set<string>()
+
+      students.forEach(
+        (student) => {
+          const value =
+            String(
+              student.enrollmentCourseName ||
+                ''
+            ).trim()
+
+          if (value) {
+            values.add(value)
+          }
+        }
+      )
+
+      const ordered =
+        courses
+          .filter((course) =>
+            values.has(
+              course.name
+            )
+          )
+          .map(
+            (course) =>
+              course.name
+          )
+
+      const remaining =
+        Array.from(values).filter(
+          (value) =>
+            !ordered.includes(
+              value
+            )
+        )
+
+      return [
+        ...ordered,
+        ...remaining,
+      ]
+    }, [
+      students,
+      courses,
+    ])
 
   const toggleStudentSelection = (
     studentId: string
   ) => {
-    setSelectedStudentIds((current) =>
-      current.includes(studentId)
-        ? current.filter(
-            (id) => id !== studentId
-          )
-        : [...current, studentId]
+    setSelectedStudentIds(
+      (current) =>
+        current.includes(studentId)
+          ? current.filter(
+              (id) =>
+                id !== studentId
+            )
+          : [
+              ...current,
+              studentId,
+            ]
     )
   }
 
   const toggleSelectAll = () => {
-    const allStudentIds = students.map(
-      (student) => student.id
-    )
+    const allStudentIds =
+      students.map(
+        (student) =>
+          student.id
+      )
 
     const allSelected =
       allStudentIds.length > 0 &&
-      allStudentIds.every((id) =>
-        selectedStudentIds.includes(id)
+      allStudentIds.every(
+        (id) =>
+          selectedStudentIds.includes(
+            id
+          )
       )
 
     if (allSelected) {
       setSelectedStudentIds([])
     } else {
-      setSelectedStudentIds(allStudentIds)
+      setSelectedStudentIds(
+        allStudentIds
+      )
     }
   }
 
@@ -466,62 +671,71 @@ export function StudentsTable({
     setDeleteMessage('')
   }
 
-  const openDeleteConfirmation = () => {
-    if (
-      selectedStudentIds.length === 0 ||
-      deleteSaving
-    ) {
-      return
-    }
-
-    setDeleteMessage('')
-    setShowDeleteConfirm(true)
-  }
-
-  const closeDeleteConfirmation = () => {
-    if (deleteSaving) return
-
-    setShowDeleteConfirm(false)
-    setDeleteMessage('')
-  }
-
-  const confirmDeleteSelected = async () => {
-    if (
-      selectedStudentIds.length === 0 ||
-      deleteSaving
-    ) {
-      return
-    }
-
-    setDeleteSaving(true)
-    setDeleteMessage('')
-
-    try {
-      const ids = Array.from(
-        new Set(
-          selectedStudentIds.filter(Boolean)
-        )
-      )
-
-      if (ids.length === 0) {
+  const openDeleteConfirmation =
+    () => {
+      if (
+        selectedStudentIds.length ===
+          0 ||
+        deleteSaving
+      ) {
         return
       }
 
-      await onDeleteSelected(ids)
-
-      setSelectedStudentIds([])
-      setSelectionMode(false)
-      setShowDeleteConfirm(false)
-    } catch (error) {
-      setDeleteMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر حذف الطلاب المحددين.'
-      )
-    } finally {
-      setDeleteSaving(false)
+      setDeleteMessage('')
+      setShowDeleteConfirm(true)
     }
-  }
+
+  const closeDeleteConfirmation =
+    () => {
+      if (deleteSaving) return
+
+      setShowDeleteConfirm(false)
+      setDeleteMessage('')
+    }
+
+  const confirmDeleteSelected =
+    async () => {
+      if (
+        selectedStudentIds.length ===
+          0 ||
+        deleteSaving
+      ) {
+        return
+      }
+
+      setDeleteSaving(true)
+      setDeleteMessage('')
+
+      try {
+        const ids = Array.from(
+          new Set(
+            selectedStudentIds.filter(
+              Boolean
+            )
+          )
+        )
+
+        if (ids.length === 0) {
+          return
+        }
+
+        await onDeleteSelected(
+          ids
+        )
+
+        setSelectedStudentIds([])
+        setSelectionMode(false)
+        setShowDeleteConfirm(false)
+      } catch (error) {
+        setDeleteMessage(
+          error instanceof Error
+            ? error.message
+            : 'تعذر حذف الطلاب المحددين.'
+        )
+      } finally {
+        setDeleteSaving(false)
+      }
+    }
 
   const openPayment = (
     student: StudentTableStudent
@@ -531,7 +745,9 @@ export function StudentsTable({
     setPaymentAmount('')
     setPaymentMethod('نقدي')
     setPaymentDate(
-      new Date().toISOString().slice(0, 10)
+      new Date()
+        .toISOString()
+        .slice(0, 10)
     )
     setPaymentReference('')
     setPaymentNotes('')
@@ -549,29 +765,43 @@ export function StudentsTable({
   const savePayment = async () => {
     if (!paymentStudent) return
 
-    const amount = Number(paymentAmount)
+    const amount =
+      Number(paymentAmount)
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       setPaymentMessage(
         'أدخل مبلغاً صحيحاً.'
       )
       return
     }
 
-    if (!paymentStudent.academicYearId) {
+    if (
+      !paymentStudent.academicYearId
+    ) {
       setPaymentMessage(
         'لا توجد سنة دراسية مرتبطة بالطالب.'
       )
       return
     }
 
-    const remaining = Math.max(
-      Number(paymentStudent.amountDue) -
-        Number(paymentStudent.amountPaid),
-      0
-    )
+    const remaining =
+      Math.max(
+        Number(
+          paymentStudent.amountDue
+        ) -
+          Number(
+            paymentStudent.amountPaid
+          ),
+        0
+      )
 
-    if (amount > remaining + 0.000001) {
+    if (
+      amount >
+      remaining + 0.000001
+    ) {
       setPaymentMessage(
         `المبلغ أكبر من المتبقي. المتبقي: ${remaining.toFixed(3)} د.ب`
       )
@@ -582,31 +812,34 @@ export function StudentsTable({
     setPaymentMessage('')
 
     try {
-      const response = await fetch(
-        '/api/payments',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            student_id:
-              paymentStudent.id,
-            academic_year_id:
-              paymentStudent.academicYearId,
-            amount,
-            payment_method:
-              paymentMethod,
-            payment_date:
-              paymentDate,
-            reference_number:
-              paymentReference || null,
-            notes:
-              paymentNotes || null,
-          }),
-        }
-      )
+      const response =
+        await fetch(
+          '/api/payments',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              student_id:
+                paymentStudent.id,
+              academic_year_id:
+                paymentStudent.academicYearId,
+              amount,
+              payment_method:
+                paymentMethod,
+              payment_date:
+                paymentDate,
+              reference_number:
+                paymentReference ||
+                null,
+              notes:
+                paymentNotes ||
+                null,
+            }),
+          }
+        )
 
       const data =
         await response.json()
@@ -721,14 +954,16 @@ export function StudentsTable({
             {placeholder}
           </option>
 
-          {options.map((option) => (
-            <option
-              key={option}
-              value={option}
-            >
-              {option}
-            </option>
-          ))}
+          {options.map(
+            (option) => (
+              <option
+                key={option}
+                value={option}
+              >
+                {option}
+              </option>
+            )
+          )}
         </select>
       </div>
     )
@@ -737,7 +972,9 @@ export function StudentsTable({
   const visibleExtraColumns =
     extraColumns.filter(
       (column) =>
-        visibleColumns[column.key]
+        visibleColumns[
+          column.key
+        ]
     )
 
   const visibleDynamicFields =
@@ -762,7 +999,9 @@ export function StudentsTable({
     (selectionMode ? 1 : 0) +
     baseColumns.filter(
       (column) =>
-        visibleColumns[column.key] !== false
+        visibleColumns[
+          column.key
+        ] !== false
     ).length +
     visibleExtraColumns.length +
     visibleDynamicFields.length +
@@ -770,10 +1009,11 @@ export function StudentsTable({
 
   const allStudentsSelected =
     students.length > 0 &&
-    students.every((student) =>
-      selectedStudentIds.includes(
-        student.id
-      )
+    students.every(
+      (student) =>
+        selectedStudentIds.includes(
+          student.id
+        )
     )
 
   const selectedCount =
@@ -795,7 +1035,9 @@ export function StudentsTable({
                 if (selectionMode) {
                   exitSelectionMode()
                 } else {
-                  setSelectionMode(true)
+                  setSelectionMode(
+                    true
+                  )
                 }
               }}
               className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
@@ -825,7 +1067,8 @@ export function StudentsTable({
                     openDeleteConfirmation
                   }
                   disabled={
-                    selectedCount === 0 ||
+                    selectedCount ===
+                      0 ||
                     deleteSaving
                   }
                   className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
@@ -843,10 +1086,15 @@ export function StudentsTable({
               type="button"
               onClick={() =>
                 setShowColumns(
-                  (current) => !current
+                  (current) =>
+                    !current
                 )
               }
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${
+                showColumns
+                  ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
+                  : 'hover:bg-muted'
+              }`}
             >
               <Settings2 className="h-4 w-4" />
 
@@ -867,10 +1115,22 @@ export function StudentsTable({
           )}
 
         {showColumns && (
-          <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="rounded-xl border border-primary/20 bg-primary/[0.035] p-4 shadow-sm transition-all">
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm font-semibold">
-                تخصيص الأعمدة
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Settings2 className="h-4 w-4" />
+                  </div>
+
+                  <span>
+                    تخصيص الأعمدة
+                  </span>
+                </div>
+
+                <div className="mt-1 text-xs text-muted-foreground">
+                  اختر الأعمدة التي تريد ظهورها في جدول الطلاب.
+                </div>
               </div>
 
               <button
@@ -878,7 +1138,7 @@ export function StudentsTable({
                 onClick={() =>
                   setShowColumns(false)
                 }
-                className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+                className="rounded-md border bg-background px-3 py-1.5 text-xs hover:bg-muted"
               >
                 إغلاق
               </button>
@@ -895,15 +1155,18 @@ export function StudentsTable({
                   {baseColumns.map(
                     (column) => (
                       <label
-                        key={column.key}
-                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                        key={
+                          column.key
+                        }
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
                       >
                         <input
                           type="checkbox"
                           checked={
                             visibleColumns[
                               column.key
-                            ] !== false
+                            ] !==
+                            false
                           }
                           onChange={() =>
                             onToggleColumn(
@@ -914,7 +1177,9 @@ export function StudentsTable({
                         />
 
                         <span className="truncate">
-                          {column.label}
+                          {
+                            column.label
+                          }
                         </span>
                       </label>
                     )
@@ -931,8 +1196,10 @@ export function StudentsTable({
                   {extraColumns.map(
                     (column) => (
                       <label
-                        key={column.key}
-                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                        key={
+                          column.key
+                        }
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
                       >
                         <input
                           type="checkbox"
@@ -950,7 +1217,9 @@ export function StudentsTable({
                         />
 
                         <span className="truncate">
-                          {column.label}
+                          {
+                            column.label
+                          }
                         </span>
                       </label>
                     )
@@ -962,7 +1231,8 @@ export function StudentsTable({
                 (field) =>
                   field.is_active
               ) ||
-                courses.length > 0) && (
+                courses.length >
+                  0) && (
                 <div>
                   <div className="mb-2 text-xs font-semibold text-muted-foreground">
                     الحقول والدورات
@@ -977,8 +1247,10 @@ export function StudentsTable({
                       .map(
                         (field) => (
                           <label
-                            key={field.id}
-                            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                            key={
+                              field.id
+                            }
+                            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
                           >
                             <input
                               type="checkbox"
@@ -996,7 +1268,9 @@ export function StudentsTable({
                             />
 
                             <span className="truncate">
-                              {field.name}
+                              {
+                                field.name
+                              }
                             </span>
                           </label>
                         )
@@ -1005,8 +1279,10 @@ export function StudentsTable({
                     {courses.map(
                       (course) => (
                         <label
-                          key={course.id}
-                          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:bg-muted/50"
+                          key={
+                            course.id
+                          }
+                          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
                         >
                           <input
                             type="checkbox"
@@ -1024,7 +1300,9 @@ export function StudentsTable({
                           />
 
                           <span className="truncate">
-                            {course.name}
+                            {
+                              course.name
+                            }
                           </span>
                         </label>
                       )
@@ -1153,9 +1431,13 @@ export function StudentsTable({
 
                     return (
                       <TableHead
-                        key={column.key}
+                        key={
+                          column.key
+                        }
                       >
-                        {column.label}
+                        {
+                          column.label
+                        }
                       </TableHead>
                     )
                   }
@@ -1186,7 +1468,10 @@ export function StudentsTable({
 
             <TableBody>
               {students.map(
-                (student, index) => {
+                (
+                  student,
+                  index
+                ) => {
                   const remaining =
                     student.feeExempt
                       ? 0
@@ -1211,7 +1496,9 @@ export function StudentsTable({
 
                   return (
                     <TableRow
-                      key={student.id}
+                      key={
+                        student.id
+                      }
                       data-state={
                         isCurrentStudent
                           ? 'selected'
@@ -1223,7 +1510,9 @@ export function StudentsTable({
                           : 'hover:bg-muted/50'
                       }`}
                       onClick={() => {
-                        if (selectionMode) {
+                        if (
+                          selectionMode
+                        ) {
                           toggleStudentSelection(
                             student.id
                           )
@@ -1251,7 +1540,9 @@ export function StudentsTable({
                                 student.id
                               )
                             }
-                            onClick={(event) =>
+                            onClick={(
+                              event
+                            ) =>
                               event.stopPropagation()
                             }
                             aria-label={`تحديد ${student.name}`}
@@ -1261,7 +1552,9 @@ export function StudentsTable({
 
                       {visibleColumns.name !== false && (
                         <TableCell className="font-medium">
-                          {student.name}
+                          {
+                            student.name
+                          }
                         </TableCell>
                       )}
 
@@ -1289,7 +1582,9 @@ export function StudentsTable({
 
                             {student.whatsapp && (
                               <div className="text-muted-foreground">
-                                {student.whatsapp}
+                                {
+                                  student.whatsapp
+                                }
                               </div>
                             )}
                           </div>
@@ -1400,7 +1695,8 @@ export function StudentsTable({
 
                       {visibleColumns.age && (
                         <TableCell>
-                          {student.age ?? '-'}
+                          {student.age ??
+                            '-'}
                         </TableCell>
                       )}
 
@@ -1448,7 +1744,9 @@ export function StudentsTable({
                         <TableCell>
                           {Number(
                             student.amountDue
-                          ).toFixed(3)}
+                          ).toFixed(
+                            3
+                          )}
                         </TableCell>
                       )}
 
@@ -1456,7 +1754,9 @@ export function StudentsTable({
                         <TableCell>
                           {Number(
                             student.amountPaid
-                          ).toFixed(3)}
+                          ).toFixed(
+                            3
+                          )}
                         </TableCell>
                       )}
 
@@ -1569,7 +1869,9 @@ export function StudentsTable({
       {showDeleteConfirm && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
               event.target ===
               event.currentTarget
@@ -1581,7 +1883,9 @@ export function StudentsTable({
           <div
             dir="rtl"
             className="w-full max-w-md rounded-xl bg-background p-5 shadow-xl"
-            onMouseDown={(event) =>
+            onMouseDown={(
+              event
+            ) =>
               event.stopPropagation()
             }
           >
@@ -1597,8 +1901,7 @@ export function StudentsTable({
               </div>
 
               <p className="text-sm text-muted-foreground">
-                هل أنت متأكد من مسح الطلاب
-                المحددين؟
+                هل أنت متأكد من مسح الطلاب المحددين؟
               </p>
 
               <div className="mt-3 rounded-lg border bg-muted/30 p-3 text-sm">
@@ -1610,8 +1913,7 @@ export function StudentsTable({
               </div>
 
               <p className="mt-3 text-xs text-destructive">
-                هذه العملية قد تؤدي إلى حذف
-                بيانات الطلاب المرتبطة بهم.
+                هذه العملية قد تؤدي إلى حذف بيانات الطلاب المرتبطة بهم.
               </p>
             </div>
 
@@ -1627,7 +1929,9 @@ export function StudentsTable({
                 onClick={
                   confirmDeleteSelected
                 }
-                disabled={deleteSaving}
+                disabled={
+                  deleteSaving
+                }
                 className="flex-1 rounded-md bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {deleteSaving
@@ -1640,7 +1944,9 @@ export function StudentsTable({
                 onClick={
                   closeDeleteConfirmation
                 }
-                disabled={deleteSaving}
+                disabled={
+                  deleteSaving
+                }
                 className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
               >
                 إلغاء
@@ -1653,7 +1959,9 @@ export function StudentsTable({
       {paymentStudent && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(event) => {
+          onMouseDown={(
+            event
+          ) => {
             if (
               event.target ===
               event.currentTarget
@@ -1665,7 +1973,9 @@ export function StudentsTable({
           <div
             className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
             dir="rtl"
-            onMouseDown={(event) =>
+            onMouseDown={(
+              event
+            ) =>
               event.stopPropagation()
             }
           >
@@ -1682,8 +1992,12 @@ export function StudentsTable({
 
               <button
                 type="button"
-                onClick={closePayment}
-                disabled={paymentSaving}
+                onClick={
+                  closePayment
+                }
+                disabled={
+                  paymentSaving
+                }
                 className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
               >
                 إغلاق
@@ -1699,7 +2013,9 @@ export function StudentsTable({
                 <div className="mt-1 font-semibold">
                   {Number(
                     paymentStudent.amountDue
-                  ).toFixed(3)}{' '}
+                  ).toFixed(
+                    3
+                  )}{' '}
                   د.ب
                 </div>
               </div>
@@ -1712,7 +2028,9 @@ export function StudentsTable({
                 <div className="mt-1 font-semibold">
                   {Number(
                     paymentStudent.amountPaid
-                  ).toFixed(3)}{' '}
+                  ).toFixed(
+                    3
+                  )}{' '}
                   د.ب
                 </div>
               </div>
@@ -1731,7 +2049,9 @@ export function StudentsTable({
                         paymentStudent.amountPaid
                       ),
                     0
-                  ).toFixed(3)}{' '}
+                  ).toFixed(
+                    3
+                  )}{' '}
                   د.ب
                 </div>
               </div>
@@ -1793,7 +2113,8 @@ export function StudentsTable({
                             event
                           ) =>
                             setPaymentAmount(
-                              event.target.value
+                              event.target
+                                .value
                             )
                           }
                           className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-1"
@@ -1814,7 +2135,8 @@ export function StudentsTable({
                             event
                           ) =>
                             setPaymentMethod(
-                              event.target
+                              event
+                                .target
                                 .value as
                                 | 'نقدي'
                                 | 'تحويل'
@@ -1851,7 +2173,8 @@ export function StudentsTable({
                             event
                           ) =>
                             setPaymentDate(
-                              event.target
+                              event
+                                .target
                                 .value
                             )
                           }
@@ -1872,7 +2195,8 @@ export function StudentsTable({
                             event
                           ) =>
                             setPaymentReference(
-                              event.target
+                              event
+                                .target
                                 .value
                             )
                           }
@@ -1894,7 +2218,8 @@ export function StudentsTable({
                             event
                           ) =>
                             setPaymentNotes(
-                              event.target
+                              event
+                                .target
                                 .value
                             )
                           }
@@ -1906,7 +2231,9 @@ export function StudentsTable({
 
                       {paymentMessage && (
                         <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                          {paymentMessage}
+                          {
+                            paymentMessage
+                          }
                         </div>
                       )}
 
@@ -1936,7 +2263,7 @@ export function StudentsTable({
                           disabled={
                             paymentSaving
                           }
-                          className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted"
+                          className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
                         >
                           إلغاء
                         </button>
