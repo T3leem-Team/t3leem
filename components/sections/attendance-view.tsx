@@ -54,10 +54,15 @@ export type AttendanceStatusName =
   | 'غائب'
   | 'متأخر'
   | 'مستأذن'
+  | 'غير منضم'
 
-export type AttendanceNotes = Record<string, string>
+export type TeacherAttendanceStatus =
+  | 'حاضر'
+  | 'غائب'
+  | 'متأخر'
+  | 'مستأذن'
 
-const attendanceStatusNames: AttendanceStatusName[] = [
+const attendanceStatusNames: TeacherAttendanceStatus[] = [
   'حاضر',
   'غائب',
   'متأخر',
@@ -93,6 +98,10 @@ function normalizeStatusName(
     return 'مستأذن'
   }
 
+  if (normalized === 'غير منضم') {
+    return 'غير منضم'
+  }
+
   return null
 }
 
@@ -100,7 +109,7 @@ export { normalizeStatusName }
 
 function getStatusIdByName(
   statuses: AttendanceStatus[],
-  statusName: AttendanceStatusName,
+  statusName: TeacherAttendanceStatus,
 ) {
   const status = statuses.find(
     (item) =>
@@ -165,9 +174,16 @@ function getStatusClasses(
         selected:
           'border-blue-600 bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
       }
+
+    case 'غير منضم':
+      return {
+        normal:
+          'border-gray-400 bg-gray-50 text-gray-600 dark:bg-gray-950/30 dark:text-gray-400',
+        selected:
+          'border-gray-500 bg-gray-100 text-gray-700 dark:bg-gray-950/50 dark:text-gray-300',
+      }
   }
 }
-
 function getAttendancePercentage(
   studentId: string,
   courseId: string,
