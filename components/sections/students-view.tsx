@@ -137,24 +137,23 @@ export function StudentsView() {
     emptyFilters
   )
 
-const [
-  visibleColumns,
-  setVisibleColumns,
-] = useState<Record<string, boolean>>({
-  name: true,
-  personalId: true,
-  grade: true,
-  contact: true,
-  paymentStatus: true,
-  notes: true,
-  attendance: true,
+  const [
+    visibleColumns,
+    setVisibleColumns,
+  ] = useState<Record<string, boolean>>({
+    name: true,
+    personalId: true,
+    grade: true,
+    contact: true,
+    paymentStatus: true,
+    notes: true,
+    attendance: true,
 
-  // أعمدة إضافية — مخفية افتراضياً
-  studentId: false,
-  guardianRelation: false,
-  studentPhone: false,
-  enrollmentCourseName: false,
-})
+    studentId: false,
+    guardianRelation: false,
+    studentPhone: false,
+    enrollmentCourseName: false,
+  })
 
   const [
     dynamicFields,
@@ -309,6 +308,10 @@ const [
    * ============================================================
    * الحذف الجماعي
    * ============================================================
+   *
+   * يستخدم نفس RPC الخاص بالحذف الكامل.
+   * لا نحذف مباشرة من students حتى يتم التعامل
+   * مع attendance والرحلات وبقية العلاقات.
    */
   const deleteSelectedStudents = async (
     studentIds: string[]
@@ -323,45 +326,95 @@ const [
       return
     }
 
-    const {
-      error,
-    } = await supabase
-      .from('students')
-      .delete()
-      .in('id', ids)
-
-    if (error) {
-      throw new Error(
-        `خطأ في حذف الطلاب: ${error.message}`
+    const selectedStudents =
+      studentList.filter(
+        (student) =>
+          ids.includes(student.id)
       )
-    }
-
-    setStudentList(
-      (current) => {
-        const next =
-          current.filter(
-            (student) =>
-              !ids.includes(student.id)
-          )
-
-        updateStudentsCacheStudentList(
-          next
-        )
-
-        return next
-      }
-    )
 
     if (
-      selectedStudentId &&
-      ids.includes(selectedStudentId)
+      selectedStudents.length === 0
     ) {
-      setSelectedStudentId('')
+      return
     }
 
-    setSupabaseStatus(
-      `تم حذف ${ids.length} طالب من Supabase ✅`
-    )
+    const names =
+      selectedStudents
+        .map(
+          (student) =>
+            `«${student.name}»`
+        )
+        .join('، ')
+
+    const confirmed =
+      window.confirm(
+        `⚠️ تأكيد الحذف النهائي\n\nهل أنت متأكد من حذف الطلاب التالية أسماؤهم نهائيًا؟\n\n${names}\n\nسيتم حذف بيانات الطلاب وسجلاتهم المرتبطة بهم من النظام.\n\nهذا حذف نهائي وكامل ولا يمكن التراجع عنه.`
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      for (const id of ids) {
+        const {
+          error,
+        } = await supabase.rpc(
+          'delete_student_completely',
+          {
+            p_student_id: id,
+          }
+        )
+
+        if (error) {
+          throw new Error(
+            `خطأ في حذف الطالب: ${error.message}`
+          )
+        }
+      }
+
+      setStudentList(
+        (current) => {
+          const next =
+            current.filter(
+              (student) =>
+                !ids.includes(
+                  student.id
+                )
+            )
+
+          updateStudentsCacheStudentList(
+            next
+          )
+
+          return next
+        }
+      )
+
+      if (
+        selectedStudentId &&
+        ids.includes(selectedStudentId)
+      ) {
+        setSelectedStudentId('')
+      }
+
+      setSupabaseStatus(
+        `تم حذف ${selectedStudents.length} طالب نهائيًا من النظام ✅`
+      )
+    } catch (error) {
+      console.error(
+        'deleteSelectedStudents error:',
+        error
+      )
+
+      setSupabaseStatus(
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء حذف الطلاب'
+      )
+
+      throw error
+    }
   }
 
   const updateFilter = (
@@ -432,12 +485,6 @@ const [
               )
               .join(' ')
 
-          /*
-           * جميع الحقول الجديدة تدخل في البحث العام:
-           * - صلة القرابة
-           * - رقم الطالب
-           * - دورة الالتحاق
-           */
           const searchableValues = [
             student.name,
             student.studentId,
@@ -531,9 +578,6 @@ const [
               student.attendance ===
                 filters.attendance,
 
-            /*
-             * دورة الالتحاق لها فلتر مستقل.
-             */
             enrollmentCourse:
               !filters.enrollmentCourse ||
               String(
@@ -644,9 +688,6 @@ const [
    * ============================================================
    * تصدير Excel
    * ============================================================
-   *
-   * الحقول الجديدة تدخل دائماً في التصدير
-   * حتى لو كانت أعمدتها مخفية من الجدول.
    */
   const exportStudentsToExcel =
     () => {
@@ -686,11 +727,6 @@ const [
               '#':
                 index + 1,
 
-              /*
-               * هذا هو student_id الموجود
-               * في قاعدة البيانات.
-               * ليس رقم الطالب الجديد student_phone.
-               */
               'معرف الطالب':
                 student.studentId,
 
@@ -703,9 +739,6 @@ const [
               'صلة القرابة':
                 student.guardianRelation,
 
-              /*
-               * رقم الطالب الجديد
-               */
               'رقم الطالب':
                 student.studentPhone,
 
@@ -1086,61 +1119,86 @@ const [
                   !selectedStudentId
                 }
                 onClick={async () => {
+                  if (!selectedStudentId) {
+                    return
+                  }
+
+                  const selected =
+                    studentList.find(
+                      (student) =>
+                        student.id ===
+                        selectedStudentId
+                    )
+
+                  if (!selected) {
+                    return
+                  }
+
                   const confirmed =
                     window.confirm(
-                      '⚠️ هل أنت متأكد من حذف الطالب؟\n\nسيتم حذف بيانات الطالب، ولا يمكن التراجع عن هذه العملية.'
+                      `⚠️ تأكيد الحذف النهائي\n\nهل أنت متأكد من حذف الطالب «${selected.name}» نهائيًا؟\n\nسيتم حذف بيانات الطالب وسجلاته المرتبطة به من النظام بالكامل.\n\n⚠️ هذا حذف نهائي وكامل ولا يمكن التراجع عنه.`
                     )
 
                   if (!confirmed) {
                     return
                   }
 
-                  const {
-                    error,
-                  } =
-                    await supabase
-                      .from(
-                        'students'
-                      )
-                      .delete()
-                      .eq(
-                        'id',
-                        selectedStudentId
+                  try {
+                    const {
+                      error,
+                    } =
+                      await supabase.rpc(
+                        'delete_student_completely',
+                        {
+                          p_student_id:
+                            selectedStudentId,
+                        }
                       )
 
-                  if (error) {
-                    setSupabaseStatus(
-                      `خطأ في حذف الطالب: ${error.message}`
-                    )
-                    return
-                  }
+                    if (error) {
+                      throw new Error(
+                        error.message
+                      )
+                    }
 
-                  setStudentList(
-                    (current) => {
-                      const next =
-                        current.filter(
-                          (
-                            student
-                          ) =>
-                            student.id !==
-                            selectedStudentId
+                    setStudentList(
+                      (current) => {
+                        const next =
+                          current.filter(
+                            (
+                              student
+                            ) =>
+                              student.id !==
+                              selectedStudentId
+                          )
+
+                        updateStudentsCacheStudentList(
+                          next
                         )
 
-                      updateStudentsCacheStudentList(
-                        next
-                      )
+                        return next
+                      }
+                    )
 
-                      return next
-                    }
-                  )
+                    setSelectedStudentId(
+                      ''
+                    )
 
-                  setSelectedStudentId(
-                    ''
-                  )
+                    setSupabaseStatus(
+                      `تم حذف الطالب «${selected.name}» نهائيًا من النظام ✅`
+                    )
+                  } catch (error) {
+                    console.error(
+                      'delete student error:',
+                      error
+                    )
 
-                  setSupabaseStatus(
-                    'تم حذف الطالب من Supabase ✅'
-                  )
+                    setSupabaseStatus(
+                      error instanceof Error
+                        ? `خطأ في حذف الطالب: ${error.message}`
+                        : 'حدث خطأ أثناء حذف الطالب'
+                    )
+                  }
                 }}
               >
                 <X className="size-4" />
