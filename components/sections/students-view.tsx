@@ -32,12 +32,13 @@ import {
 } from '@/lib/students-cache'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-import {
-  StudentDetails,
-} from './student-details'
+import { StudentDetails } from './student-details'
 
 import {
   StudentsTable,
@@ -902,15 +903,20 @@ export function StudentsView() {
     <div className="space-y-6">
 
       {/* سهم العودة - أعلى يمين الصفحة */}
-      <div className="flex justify-end">
+      <div
+        className="relative h-9"
+        dir="rtl"
+      >
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          onClick={() => router.back()}
+          onClick={() =>
+            router.back()
+          }
           aria-label="العودة"
           title="العودة"
-          className="h-9 w-9"
+          className="absolute right-0 top-0 h-9 w-9"
         >
           <ArrowRight className="size-5" />
         </Button>
@@ -1025,7 +1031,7 @@ export function StudentsView() {
             {/* أزرار الصفحة - صف واحد */}
             <div
               dir="rtl"
-              className="flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:max-w-full"
+              className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1"
             >
               <Button
                 type="button"
@@ -1166,7 +1172,9 @@ export function StudentsView() {
                   !selectedStudentId
                 }
                 onClick={async () => {
-                  if (!selectedStudentId) {
+                  if (
+                    !selectedStudentId
+                  ) {
                     return
                   }
 
