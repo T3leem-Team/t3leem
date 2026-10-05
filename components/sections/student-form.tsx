@@ -40,6 +40,7 @@ type StudentFormStudent = {
   studentId?: string
   name: string
   personalId?: string
+  guardianRelation?: string
   phone?: string
   whatsapp?: string
   grade?: string
@@ -532,6 +533,12 @@ export function StudentForm({
         data.get('personalId') || '',
       ).trim()
 
+    const guardianRelation =
+      String(
+        data.get('guardianRelation') ||
+          '',
+      ).trim()
+
     const grade = String(
       data.get('grade') || '',
     )
@@ -751,6 +758,8 @@ export function StudentForm({
           name,
           personal_id:
             personalId,
+          guardian_relation:
+            guardianRelation,
           phone,
           whatsapp,
           notes,
@@ -762,7 +771,7 @@ export function StudentForm({
           editingStudent.id,
         )
         .select(
-          'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
+          'id, student_id, name, personal_id, guardian_relation, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
         )
         .single()
 
@@ -870,6 +879,9 @@ export function StudentForm({
                     personalId:
                       updatedStudent.personal_id ??
                       '',
+                    guardianRelation:
+                      updatedStudent.guardian_relation ??
+                      '',
                     phone:
                       updatedStudent.phone ??
                       '',
@@ -920,6 +932,8 @@ export function StudentForm({
         name,
         personal_id:
           personalId,
+        guardian_relation:
+          guardianRelation,
         phone,
         whatsapp,
         notes,
@@ -930,7 +944,7 @@ export function StudentForm({
         source: 'manual',
       })
       .select(
-        'id, student_id, name, personal_id, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
+        'id, student_id, name, personal_id, guardian_relation, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
       )
       .single()
 
@@ -1079,6 +1093,10 @@ export function StudentForm({
 
       personalId:
         newStudent.personal_id ??
+        '',
+
+      guardianRelation:
+        newStudent.guardian_relation ??
         '',
 
       gender: '',
@@ -1342,6 +1360,23 @@ export function StudentForm({
                     يجب أن يكون الرقم الشخصي
                     غير مستخدم لطالب آخر.
                   </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    صلة القرابة
+                  </label>
+
+                  <input
+                    name="guardianRelation"
+                    type="text"
+                    defaultValue={
+                      editingStudent?.guardianRelation ??
+                      ''
+                    }
+                    placeholder="مثال: الأب، الأم، الأخ"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
                 </div>
 
                 <div>
