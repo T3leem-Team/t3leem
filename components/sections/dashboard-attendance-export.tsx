@@ -72,7 +72,7 @@ type Enrollment = {
   academicYearId: string
   levelId: string | null
   status: string
-  createdAt: string | null
+  joinDate: string | null
 }
 
 type Props = {
@@ -464,12 +464,11 @@ export function DashboardAttendanceExport({
         )
 
         /*
-         * مهم:
-         * نجلب الـ enrollments من قاعدة البيانات حتى نعرف
-         * تاريخ انضمام كل طالب للسنة الدراسية.
+         * نجلب الـ enrollments من قاعدة البيانات.
          *
-         * إذا كان تاريخ الدرس قبل تاريخ إنشاء الـ enrollment
-         * فالحالة تكون "غير منضم".
+         * مهم:
+         * تحديد "غير منضم" يعتمد على join_date
+         * وليس created_at.
          */
         let enrollments: Enrollment[] = []
 
@@ -489,7 +488,7 @@ export function DashboardAttendanceExport({
                 academic_year_id,
                 level_id,
                 status,
-                created_at
+                join_date
               `,
             )
             .eq(
@@ -501,7 +500,7 @@ export function DashboardAttendanceExport({
               studentIds,
             )
             .order(
-              'created_at',
+              'join_date',
               {
                 ascending: true,
               },
@@ -533,16 +532,16 @@ export function DashboardAttendanceExport({
                 status: String(
                   item.status ?? '',
                 ),
-                createdAt:
-                  item.created_at
-                    ? String(item.created_at)
+                joinDate:
+                  item.join_date
+                    ? String(item.join_date)
                     : null,
               }),
             )
         }
 
         /*
-         * نستخدم أقدم Enrollment للسنة الحالية
+         * نستخدم أقدم join_date للسنة الحالية
          * لكل طالب.
          */
         const enrollmentMap =
@@ -555,7 +554,7 @@ export function DashboardAttendanceExport({
 
           if (
             !studentId ||
-            !enrollment.createdAt
+            !enrollment.joinDate
           ) {
             continue
           }
@@ -634,20 +633,21 @@ export function DashboardAttendanceExport({
             enrollmentMap.get(studentId)
 
           /*
-           * تاريخ الانضمام الرسمي.
+           * التاريخ الرسمي لانضمام الطالب.
            *
-           * مثال:
-           * enrollment created_at =
-           * 2026-10-05 15:23
+           * مثال مهدي:
+           * join_date = 2026-10-05
            *
-           * إذن:
-           * 2026-10-04 = غير منضم
-           * 2026-10-05 = يبدأ فحص الحضور
+           * لذلك:
+           * قبل 2026-10-05 = غير منضم
+           * من 2026-10-05 وما بعده:
+           *   يوجد سجل = حالة الحضور
+           *   لا يوجد سجل = لم يسجل
            */
           const enrollmentDate =
-            enrollment?.createdAt
+            enrollment?.joinDate
               ? normalizeAttendanceDate(
-                  enrollment.createdAt,
+                  enrollment.joinDate,
                 )
               : null
 
@@ -670,15 +670,15 @@ export function DashboardAttendanceExport({
             let statusLabel: string
 
             /*
-             * إذا لم يكن الطالب منضمًا في تاريخ الدرس،
-             * تكون الحالة "غير منضم".
+             * قبل join_date:
+             * الطالب غير منضم.
              *
-             * هذه الحالة لا تدخل في:
-             * - عدد الأيام المسجلة
-             * - نسبة الحضور
+             * من join_date وما بعده:
+             * إذا يوجد سجل حضور نعرض الحالة الحقيقية.
+             * وإذا لا يوجد سجل نعرض "لم يسجل".
              */
             if (
-              !enrollmentDate ||
+              enrollmentDate &&
               lessonDate < enrollmentDate
             ) {
               statusLabel = 'غير منضم'
@@ -757,7 +757,7 @@ export function DashboardAttendanceExport({
             'الأيام غير المنضمة':
               lessonDates.filter(
                 (lessonDate) =>
-                  !enrollmentDate ||
+                  enrollmentDate &&
                   lessonDate < enrollmentDate,
               ).length,
             'الأيام المسجلة':
