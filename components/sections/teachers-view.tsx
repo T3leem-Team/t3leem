@@ -2694,6 +2694,9 @@ export function TeachersView() {
                   currentCourse={
                     currentCourse
                   }
+                  teacherId={
+                    selectedTeacher.id
+                  }
                   assignedStudents={
                     assignedStudents
                   }
