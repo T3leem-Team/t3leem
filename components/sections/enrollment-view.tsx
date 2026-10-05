@@ -2228,7 +2228,7 @@ export function EnrollmentView() {
       className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       dir="rtl"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-start gap-2" dir="rtl">
         <div className="rounded-lg border bg-background px-3 py-2 text-sm">
           <span className="text-muted-foreground">
             بانتظار المراجعة:
@@ -2250,7 +2250,7 @@ export function EnrollmentView() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-start gap-2" dir="rtl">
         {!permissionsLoading &&
           allowCurrentYearImport && (
             <Button
