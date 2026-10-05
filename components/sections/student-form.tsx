@@ -487,6 +487,7 @@ export function StudentForm({
               selectedLevel.id,
             class_id: null,
             status: 'نشط',
+            join_date: getTodayString(),
           })
 
         if (enrollmentInsertError) {
@@ -588,6 +589,9 @@ export function StudentForm({
             selectedLevel.id,
           class_id: null,
           status: 'نشط',
+
+          // تاريخ التحاق الطالب الفعلي
+          join_date: getTodayString(),
         })
 
       if (enrollmentError) {
