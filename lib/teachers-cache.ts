@@ -534,6 +534,7 @@ export async function loadTeachersCache(
             academic_year_id,
             level_id,
             status,
+            join_date,
             levels (
               id,
               name,
@@ -821,6 +822,9 @@ export async function loadTeachersCache(
                   '—',
                 enrollmentId:
                   enrollment.id,
+                joinDate:
+                  enrollment.join_date ??
+                  null,
               }
             },
           )
@@ -873,6 +877,7 @@ export async function loadTeachersCache(
           levelId: '',
           levelName: '—',
           enrollmentId: '',
+          joinDate: null,
         })
       }
 
