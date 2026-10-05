@@ -383,6 +383,7 @@ function isCourseStudyDay(
 
 type AttendanceViewProps = {
   currentCourse: Course | null
+  teacherId: string | null
   assignedStudents: Student[]
   attendanceStatuses: AttendanceStatus[]
   attendanceRecords: AttendanceRecord[]
@@ -405,6 +406,7 @@ type AttendanceViewProps = {
 
 export function AttendanceView({
   currentCourse,
+  teacherId,
   assignedStudents,
   attendanceStatuses,
   attendanceRecords,
