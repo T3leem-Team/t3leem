@@ -958,6 +958,7 @@ export function StudentsView() {
       <Card>
         <CardContent className="space-y-4 p-4">
 
+          {/* البحث العام */}
           <div className="relative">
             <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
@@ -973,18 +974,22 @@ export function StudentsView() {
             />
           </div>
 
-          <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* =====================================================
+              الإحصائيات + أزرار الصفحة
+              ===================================================== */}
+          <div className="rounded-md border bg-muted/30 p-3">
 
             {/* الإحصائيات */}
-            <div className="flex flex-wrap items-center gap-4 text-sm sm:order-2">
+            <div
+              dir="rtl"
+              className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b pb-3 text-sm"
+            >
               <div>
                 <span className="text-muted-foreground">
                   إجمالي الطلاب:
                 </span>{' '}
                 <span className="font-semibold">
-                  {
-                    studentList.length
-                  }
+                  {studentList.length}
                 </span>
               </div>
 
@@ -1029,46 +1034,43 @@ export function StudentsView() {
               )}
             </div>
 
-            {/* أزرار الصفحة - صف واحد جهة اليسار */}
+            {/* أزرار الصفحة */}
             <div
-              dir="ltr"
-              className="order-first flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:order-1"
+              dir="rtl"
+              className="flex flex-wrap items-center gap-2 pt-3"
             >
+              {/* إضافة طالب */}
               <Button
                 type="button"
-                variant="outline"
-                className="shrink-0 whitespace-nowrap"
                 onClick={
-                  exportStudentsToExcel
+                  openAddStudent
                 }
-                disabled={
-                  filteredStudents.length ===
-                  0
-                }
+                className="shrink-0 whitespace-nowrap"
               >
-                <Download className="size-4" />
-                تنزيل Excel
+                <UserPlus className="size-4" />
+                إضافة طالب
               </Button>
 
+              {/* تعديل */}
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
                 onClick={
                   openEditStudent
                 }
+                className="shrink-0 whitespace-nowrap"
               >
                 <Pencil className="size-4" />
                 تعديل
               </Button>
 
+              {/* إعفاء */}
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
@@ -1159,16 +1161,17 @@ export function StudentsView() {
                       : 'تم إلغاء إعفاء الطالب ✅'
                   )
                 }}
+                className="shrink-0 whitespace-nowrap"
               >
                 {selectedStudent?.feeExempt
                   ? 'إلغاء الإعفاء'
                   : 'إعفاء'}
               </Button>
 
+              {/* مسح */}
               <Button
                 type="button"
                 variant="destructive"
-                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
@@ -1256,20 +1259,30 @@ export function StudentsView() {
                     )
                   }
                 }}
+                className="shrink-0 whitespace-nowrap"
               >
                 <X className="size-4" />
                 مسح
               </Button>
 
+              {/* فاصل */}
+              <div className="hidden flex-1 sm:block" />
+
+              {/* تنزيل Excel */}
               <Button
                 type="button"
-                className="shrink-0 whitespace-nowrap"
+                variant="outline"
                 onClick={
-                  openAddStudent
+                  exportStudentsToExcel
                 }
+                disabled={
+                  filteredStudents.length ===
+                  0
+                }
+                className="shrink-0 whitespace-nowrap"
               >
-                <UserPlus className="size-4" />
-                إضافة طالب
+                <Download className="size-4" />
+                تنزيل Excel
               </Button>
             </div>
           </div>
