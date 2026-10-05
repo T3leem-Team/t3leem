@@ -4,6 +4,8 @@ import {
 } from 'react'
 
 import {
+  CalendarDays,
+  ChevronDown,
   ClipboardCheck,
   Download,
   UserCheck,
@@ -100,12 +102,8 @@ type AttendanceNote = {
   attendanceDate: string
   statusName: string
   note: string
+  teacherName: string
 }
-
-type NotesFilter =
-  | 'all'
-  | 'present'
-  | 'absent'
 
 type DashboardViewPanelsProps = {
   selectedCourse: Course | null
@@ -254,6 +252,23 @@ export function DashboardViewPanels({
   setSelectedStudent,
   router,
 }: DashboardViewPanelsProps) {
+  const [notesDownloadOpen, setNotesDownloadOpen] =
+    useState(false)
+
+  const [customDownloadOpen, setCustomDownloadOpen] =
+    useState(false)
+
+  const [notesFromDate, setNotesFromDate] =
+    useState(
+      selectedCourse?.startDate ??
+        getLocalDateString(),
+    )
+
+  const [notesToDate, setNotesToDate] =
+    useState(
+      getLocalDateString(),
+    )
+
   const statusMap = useMemo(
     () =>
       new Map(
@@ -269,20 +284,18 @@ export function DashboardViewPanels({
     [attendanceStatuses],
   )
 
+  const todayDate =
+    getLocalDateString()
+
   const attendanceNotes =
     useMemo<AttendanceNote[]>(
       () => {
-        const selectedCourse =
+        const courseId =
           normalizeId(
             selectedCourseId,
           )
 
-        const selectedDay =
-          normalizeAttendanceDate(
-            selectedDate,
-          )
-
-        if (!selectedCourse) {
+        if (!courseId) {
           return []
         }
 
@@ -291,7 +304,7 @@ export function DashboardViewPanels({
             if (
               normalizeId(
                 record.courseId,
-              ) !== selectedCourse
+              ) !== courseId
             ) {
               return false
             }
@@ -299,7 +312,7 @@ export function DashboardViewPanels({
             if (
               normalizeAttendanceDate(
                 record.attendanceDate,
-              ) !== selectedDay
+              ) !== todayDate
             ) {
               return false
             }
@@ -318,6 +331,54 @@ export function DashboardViewPanels({
                 ),
               ) ?? ''
 
+            const studentAssignments =
+              assignments.filter(
+                (assignment) =>
+                  normalizeId(
+                    assignment.courseId,
+                  ) ===
+                    courseId &&
+                  normalizeId(
+                    assignment.studentId,
+                  ) ===
+                    normalizeId(
+                      record.studentId,
+                    ),
+              )
+
+            const teacherNames =
+              Array.from(
+                new Set(
+                  studentAssignments
+                    .map(
+                      (
+                        assignment,
+                      ) =>
+                        teachers.find(
+                          (
+                            teacher,
+                          ) =>
+                            normalizeId(
+                              teacher.id,
+                            ) ===
+                            normalizeId(
+                              assignment.teacherId,
+                            ),
+                        )?.name,
+                    )
+                    .filter(
+                      (
+                        name,
+                      ): name is string =>
+                        Boolean(
+                          normalizeText(
+                            name,
+                          ),
+                        ),
+                    ),
+                ),
+              )
+
             return {
               id: record.id,
               studentId:
@@ -334,6 +395,12 @@ export function DashboardViewPanels({
                 normalizeText(
                   record.note,
                 ),
+              teacherName:
+                teacherNames.length > 0
+                  ? teacherNames.join(
+                      '، ',
+                    )
+                  : 'غير محدد',
             }
           })
           .sort((a, b) =>
@@ -344,74 +411,147 @@ export function DashboardViewPanels({
       },
       [
         attendanceRecords,
+        assignments,
         selectedCourseId,
-        selectedDate,
         statusMap,
+        teachers,
+        todayDate,
       ],
     )
 
-  const [allNotesCount, presentNotesCount, absentNotesCount] =
-    useMemo(() => {
-      let present = 0
-      let absent = 0
-
-      for (const item of attendanceNotes) {
-        if (
-          isPresentStatus(
-            item.statusName,
+  const allCourseNotes =
+    useMemo<AttendanceNote[]>(
+      () => {
+        const courseId =
+          normalizeId(
+            selectedCourseId,
           )
-        ) {
-          present += 1
+
+        if (!courseId) {
+          return []
         }
 
-        if (
-          isAbsentStatus(
-            item.statusName,
-          )
-        ) {
-          absent += 1
-        }
-      }
+        return attendanceRecords
+          .filter((record) => {
+            if (
+              normalizeId(
+                record.courseId,
+              ) !== courseId
+            ) {
+              return false
+            }
 
-      return [
-        attendanceNotes.length,
-        present,
-        absent,
-      ]
-    }, [attendanceNotes])
+            return Boolean(
+              normalizeText(
+                record.note,
+              ),
+            )
+          })
+          .map((record) => {
+            const rawStatus =
+              statusMap.get(
+                normalizeId(
+                  record.statusId,
+                ),
+              ) ?? ''
 
-  const [notesFilter, setNotesFilter] =
-    useState<NotesFilter>('all')
+            const studentAssignments =
+              assignments.filter(
+                (assignment) =>
+                  normalizeId(
+                    assignment.courseId,
+                  ) ===
+                    courseId &&
+                  normalizeId(
+                    assignment.studentId,
+                  ) ===
+                    normalizeId(
+                      record.studentId,
+                    ),
+              )
 
-  const filteredNotes =
-    useMemo(() => {
-      if (
-        notesFilter === 'present'
-      ) {
-        return attendanceNotes.filter(
-          (item) =>
-            isPresentStatus(
-              item.statusName,
-            ),
-        )
-      }
+            const teacherNames =
+              Array.from(
+                new Set(
+                  studentAssignments
+                    .map(
+                      (
+                        assignment,
+                      ) =>
+                        teachers.find(
+                          (
+                            teacher,
+                          ) =>
+                            normalizeId(
+                              teacher.id,
+                            ) ===
+                            normalizeId(
+                              assignment.teacherId,
+                            ),
+                        )?.name,
+                    )
+                    .filter(
+                      (
+                        name,
+                      ): name is string =>
+                        Boolean(
+                          normalizeText(
+                            name,
+                          ),
+                        ),
+                    ),
+                ),
+              )
 
-      if (
-        notesFilter === 'absent'
-      ) {
-        return attendanceNotes.filter(
-          (item) =>
-            isAbsentStatus(
-              item.statusName,
-            ),
-        )
-      }
+            return {
+              id: record.id,
+              studentId:
+                record.studentId,
+              attendanceDate:
+                normalizeAttendanceDate(
+                  record.attendanceDate,
+                ),
+              statusName:
+                getAttendanceStatusLabel(
+                  rawStatus,
+                ),
+              note:
+                normalizeText(
+                  record.note,
+                ),
+              teacherName:
+                teacherNames.length > 0
+                  ? teacherNames.join(
+                      '، ',
+                    )
+                  : 'غير محدد',
+            }
+          })
+          .sort((a, b) => {
+            const dateCompare =
+              b.attendanceDate.localeCompare(
+                a.attendanceDate,
+              )
 
-      return attendanceNotes
-    }, [
-      attendanceNotes,
-      notesFilter,
-    ])
+            if (
+              dateCompare !== 0
+            ) {
+              return dateCompare
+            }
+
+            return a.id.localeCompare(
+              b.id,
+            )
+          })
+      },
+      [
+        attendanceRecords,
+        assignments,
+        selectedCourseId,
+        statusMap,
+        teachers,
+      ],
+    )
 
   const selectedStudentCourses =
     useMemo(() => {
@@ -497,106 +637,178 @@ export function DashboardViewPanels({
       teachers,
     ])
 
-  const downloadAttendanceNotes =
-    () => {
-      if (
-        !selectedCourse ||
-        filteredNotes.length === 0
-      ) {
-        return
-      }
-
-      const escapeCsv = (
-        value: string,
-      ) =>
-        `"${String(value)
-          .replace(/"/g, '""')
-          .replace(
-            /\r?\n/g,
-            ' ',
-          )}"`
-
-      const rows = [
-        [
-          'التاريخ',
-          'الطالب',
-          'رقم الطالب',
-          'الرقم الشخصي',
-          'الحالة',
-          'الملاحظة',
-        ],
-        ...filteredNotes.map(
-          (item) => {
-            const student =
-              students.find(
-                (student) =>
-                  normalizeId(
-                    student.id,
-                  ) ===
-                  normalizeId(
-                    item.studentId,
-                  ),
-              )
-
-            return [
-              formatDate(
-                item.attendanceDate,
-              ),
-              student?.name ??
-                'طالب غير معروف',
-              student?.studentId ??
-                '',
-              student?.personalId ??
-                '',
-              item.statusName,
-              item.note,
-            ]
-          },
-        ),
-      ]
-
-      const csv =
-        '\uFEFF' +
-        rows
-          .map((row) =>
-            row
-              .map(escapeCsv)
-              .join(','),
-          )
-          .join('\r\n')
-
-      const blob = new Blob(
-        [csv],
-        {
-          type: 'text/csv;charset=utf-8;',
-        },
-      )
-
-      const url =
-        URL.createObjectURL(
-          blob,
-        )
-
-      const link =
-        document.createElement('a')
-
-      link.href = url
-
-      link.download =
-        `ملاحظات-${selectedCourse.name}-${selectedDate || getLocalDateString()}.csv`
-
-      document.body.appendChild(
-        link,
-      )
-
-      link.click()
-
-      document.body.removeChild(
-        link,
-      )
-
-      URL.revokeObjectURL(url)
+  const downloadNotes = (
+    notes: AttendanceNote[],
+    fromDate: string,
+    toDate: string,
+  ) => {
+    if (
+      !selectedCourse ||
+      notes.length === 0
+    ) {
+      return
     }
+
+    const filteredNotes =
+      notes.filter((item) => {
+        const date =
+          normalizeAttendanceDate(
+            item.attendanceDate,
+          )
+
+        return (
+          date >= fromDate &&
+          date <= toDate
+        )
+      })
+
+    if (
+      filteredNotes.length === 0
+    ) {
+      return
+    }
+
+    const escapeCsv = (
+      value: string,
+    ) =>
+      `"${String(value)
+        .replace(/"/g, '""')
+        .replace(
+          /\r?\n/g,
+          ' ',
+        )}"`
+
+    const rows = [
+      [
+        'التاريخ',
+        'الطالب',
+        'رقم الطالب',
+        'الرقم الشخصي',
+        'المعلم',
+        'الحالة',
+        'الملاحظة',
+      ],
+      ...filteredNotes.map(
+        (item) => {
+          const student =
+            students.find(
+              (student) =>
+                normalizeId(
+                  student.id,
+                ) ===
+                normalizeId(
+                  item.studentId,
+                ),
+            )
+
+          return [
+            formatDate(
+              item.attendanceDate,
+            ),
+            student?.name ??
+              'طالب غير معروف',
+            student?.studentId ??
+              '',
+            student?.personalId ??
+              '',
+            item.teacherName,
+            item.statusName,
+            item.note,
+          ]
+        },
+      ),
+    ]
+
+    const csv =
+      '\uFEFF' +
+      rows
+        .map((row) =>
+          row
+            .map(escapeCsv)
+            .join(','),
+        )
+        .join('\r\n')
+
+    const blob = new Blob(
+      [csv],
+      {
+        type: 'text/csv;charset=utf-8;',
+      },
+    )
+
+    const url =
+      URL.createObjectURL(
+        blob,
+      )
+
+    const link =
+      document.createElement('a')
+
+    link.href = url
+
+    const safeCourseName =
+      selectedCourse.name.replace(
+        /[\\/:*?"<>|]/g,
+        '-',
+      )
+
+    link.download =
+      `ملاحظات-${safeCourseName}-${fromDate}-إلى-${toDate}.csv`
+
+    document.body.appendChild(
+      link,
+    )
+
+    link.click()
+
+    document.body.removeChild(
+      link,
+    )
+
+    URL.revokeObjectURL(url)
+
+    setNotesDownloadOpen(false)
+    setCustomDownloadOpen(false)
+  }
+
+  const downloadFromCourseStart = () => {
+    if (!selectedCourse) {
+      return
+    }
+
+    const fromDate =
+      normalizeAttendanceDate(
+        selectedCourse.startDate,
+      ) ||
+      normalizeAttendanceDate(
+        allCourseNotes[
+          allCourseNotes.length - 1
+        ]?.attendanceDate,
+      ) ||
+      todayDate
+
+    downloadNotes(
+      allCourseNotes,
+      fromDate,
+      todayDate,
+    )
+  }
+
+  const downloadCustomNotes = () => {
+    if (
+      !notesFromDate ||
+      !notesToDate ||
+      notesFromDate > notesToDate
+    ) {
+      return
+    }
+
+    downloadNotes(
+      allCourseNotes,
+      notesFromDate,
+      notesToDate,
+    )
+  }
 
   return (
     <>
@@ -652,133 +864,208 @@ export function DashboardViewPanels({
               </CardTitle>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                ملاحظات المعلمين المسجلة في الحضور للتاريخ المحدد
+                ملاحظات المعلمين المسجلة اليوم
               </p>
             </div>
 
-            <Button
-              type="button"
-              onClick={
-                downloadAttendanceNotes
-              }
-              disabled={
-                filteredNotes.length ===
-                0
-              }
-              className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Download className="size-4" />
-              تنزيل الملاحظات
-            </Button>
+            <div className="relative">
+              <Button
+                type="button"
+                onClick={() =>
+                  setNotesDownloadOpen(
+                    (value) => !value,
+                  )
+                }
+                disabled={
+                  allCourseNotes.length ===
+                  0
+                }
+                className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="size-4" />
+
+                تنزيل الملاحظات
+
+                <ChevronDown
+                  className={`size-4 transition-transform ${
+                    notesDownloadOpen
+                      ? 'rotate-180'
+                      : ''
+                  }`}
+                />
+              </Button>
+
+              {notesDownloadOpen && (
+                <div
+                  dir="rtl"
+                  className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
+                >
+                  {!customDownloadOpen ? (
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={
+                          downloadFromCourseStart
+                        }
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
+                      >
+                        <Download className="size-4 shrink-0 text-sky-600" />
+
+                        <span>
+                          من بداية الدورة حتى الآن
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotesFromDate(
+                            selectedCourse?.startDate ??
+                              getLocalDateString(),
+                          )
+
+                          setNotesToDate(
+                            getLocalDateString(),
+                          )
+
+                          setCustomDownloadOpen(
+                            true,
+                          )
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
+                      >
+                        <CalendarDays className="size-4 shrink-0 text-sky-600" />
+
+                        <span>
+                          مخصص
+                        </span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 p-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold">
+                          تحديد الفترة
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCustomDownloadOpen(
+                              false,
+                            )
+                          }
+                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-label="رجوع"
+                          title="رجوع"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                            من تاريخ
+                          </label>
+
+                          <input
+                            type="date"
+                            value={
+                              notesFromDate
+                            }
+                            max={
+                              notesToDate ||
+                              getLocalDateString()
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setNotesFromDate(
+                                event
+                                  .target
+                                  .value,
+                              )
+                            }
+                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                            إلى تاريخ
+                          </label>
+
+                          <input
+                            type="date"
+                            value={
+                              notesToDate
+                            }
+                            min={
+                              notesFromDate
+                            }
+                            max={
+                              getLocalDateString()
+                            }
+                            onChange={(
+                              event,
+                            ) =>
+                              setNotesToDate(
+                                event
+                                  .target
+                                  .value,
+                              )
+                            }
+                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={
+                          downloadCustomNotes
+                        }
+                        disabled={
+                          !notesFromDate ||
+                          !notesToDate ||
+                          notesFromDate >
+                            notesToDate
+                        }
+                        className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Download className="size-4" />
+                        تنزيل الفترة
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </CardHeader>
 
         <CardContent>
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                setNotesFilter('all')
-              }
-              className={`rounded-xl border px-3 py-3 text-center transition-colors ${
-                notesFilter === 'all'
-                  ? 'border-slate-300 bg-slate-100 text-slate-800 shadow-sm'
-                  : 'border-slate-200 bg-background text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <p className="text-xs font-medium">
-                الكل
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                {allNotesCount}
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setNotesFilter(
-                  'present',
-                )
-              }
-              className={`rounded-xl border px-3 py-3 text-center transition-colors ${
-                notesFilter === 'present'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm'
-                  : 'border-emerald-100 bg-background text-emerald-600 hover:bg-emerald-50/50'
-              }`}
-            >
-              <p className="text-xs font-medium">
-                الحاضر
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                {
-                  presentNotesCount
-                }
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setNotesFilter(
-                  'absent',
-                )
-              }
-              className={`rounded-xl border px-3 py-3 text-center transition-colors ${
-                notesFilter === 'absent'
-                  ? 'border-red-200 bg-red-50 text-red-700 shadow-sm'
-                  : 'border-red-100 bg-background text-red-600 hover:bg-red-50/50'
-              }`}
-            >
-              <p className="text-xs font-medium">
-                الغائب
-              </p>
-
-              <p className="mt-1 text-xl font-bold">
-                {
-                  absentNotesCount
-                }
-              </p>
-            </button>
-          </div>
-
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
             <p className="text-xs text-muted-foreground">
-              التاريخ المحدد
+              التاريخ
             </p>
 
             <p className="text-sm font-medium">
               {formatDate(
-                selectedDate,
+                todayDate,
               )}
             </p>
           </div>
 
-          {lessonDateStatus !==
-            'lesson' ? (
+          {attendanceNotes.length ===
+          0 ? (
             <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
               <div>
                 <ClipboardCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا يوجد درس في هذا التاريخ
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  اختر تاريخًا يوجد فيه درس لعرض الملاحظات.
-                </p>
-              </div>
-            </div>
-          ) : filteredNotes.length ===
-            0 ? (
-            <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
-              <div>
-                <ClipboardCheck className="mx-auto size-7 text-slate-300" />
-
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا توجد ملاحظات لهذا الخيار
+                  لا توجد ملاحظات اليوم
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -788,13 +1075,17 @@ export function DashboardViewPanels({
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border">
-              <div className="hidden grid-cols-[120px_minmax(180px,1fr)_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
+              <div className="hidden grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
                 <div>
                   التاريخ
                 </div>
 
                 <div>
                   الطالب
+                </div>
+
+                <div>
+                  المعلم
                 </div>
 
                 <div>
@@ -807,7 +1098,7 @@ export function DashboardViewPanels({
               </div>
 
               <div className="divide-y">
-                {filteredNotes.map(
+                {attendanceNotes.map(
                   (item) => {
                     const student =
                       students.find(
@@ -825,7 +1116,7 @@ export function DashboardViewPanels({
                         key={
                           item.id
                         }
-                        className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_120px_1fr] md:items-start md:gap-4"
+                        className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] md:items-start md:gap-4"
                       >
                         <div>
                           <p className="text-xs text-muted-foreground md:hidden">
@@ -857,6 +1148,18 @@ export function DashboardViewPanels({
                               }
                             </p>
                           )}
+                        </div>
+
+                        <div>
+                          <p className="text-xs text-muted-foreground md:hidden">
+                            المعلم
+                          </p>
+
+                          <p className="mt-1 text-sm font-medium md:mt-0">
+                            {
+                              item.teacherName
+                            }
+                          </p>
                         </div>
 
                         <div>
