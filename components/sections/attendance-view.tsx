@@ -709,26 +709,41 @@ export function AttendanceView({
   }
 
   const getStudentStatus = (
-    studentId: string,
-    date: string,
-  ) => {
-    const key = `${date}:${studentId}`
+  studentId: string,
+  date: string,
+): AttendanceStatusName | null => {
+  const key = `${date}:${studentId}`
 
-    if (localStatuses[key]) {
-      return localStatuses[key]
-    }
+  // إذا كان الطالب لم ينضم بعد في هذا التاريخ،
+  // حالته النظامية تلقائيًا "غير منضم".
+  const student = assignedStudents.find(
+    (item) => item.id === studentId,
+  )
 
-    const record =
-      getRecordForStudent(
-        studentId,
-        date,
-      )
-
-    return getStatusName(
-      attendanceStatuses,
-      record?.statusId,
-    )
+  if (
+    student?.joinDate &&
+    date < student.joinDate
+  ) {
+    return 'غير منضم'
   }
+
+  // الحالات المحلية المؤقتة لها الأولوية
+  if (localStatuses[key]) {
+    return localStatuses[key]
+  }
+
+  // بعدها نقرأ السجل الحقيقي من قاعدة البيانات
+  const record =
+    getRecordForStudent(
+      studentId,
+      date,
+    )
+
+  return getStatusName(
+    attendanceStatuses,
+    record?.statusId,
+  )
+}
 
   const isStudentEligibleForAttendance = (
     student: Student,
