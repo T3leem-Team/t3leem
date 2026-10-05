@@ -517,7 +517,7 @@ export function AttendanceView({
         } = await supabase
           .from('supervision_records')
           .select(
-            'record_date, type',
+            'record_date, type, teacher_id',
           )
           .eq(
             'course_id',
@@ -544,7 +544,26 @@ export function AttendanceView({
         for (const record of
           data ?? []) {
           if (
-            record.record_date
+            !record.record_date
+          ) {
+            continue
+          }
+
+          if (
+            record.type ===
+            'day_cancelled'
+          ) {
+            dates.add(
+              record.record_date,
+            )
+            continue
+          }
+
+          if (
+            record.type ===
+              'lesson_cancelled' &&
+            record.teacher_id ===
+              teacherId
           ) {
             dates.add(
               record.record_date,
@@ -560,7 +579,10 @@ export function AttendanceView({
     return () => {
       cancelled = true
     }
-  }, [currentCourse?.id])
+  }, [
+    currentCourse?.id,
+    teacherId,
+  ])
 
   useEffect(() => {
     if (!currentCourse || !activeDate) {
@@ -583,7 +605,9 @@ export function AttendanceView({
           error,
         } = await supabase
           .from('supervision_records')
-          .select('id, type')
+          .select(
+            'id, type, teacher_id',
+          )
           .eq(
             'course_id',
             currentCourse.id,
@@ -605,8 +629,11 @@ export function AttendanceView({
           setIsDayCancelled(false)
           setIsLessonCancelled(false)
         } else {
+          const records =
+            data ?? []
+
           setIsDayCancelled(
-            (data ?? []).some(
+            records.some(
               (record) =>
                 record.type ===
                 'day_cancelled',
@@ -614,10 +641,12 @@ export function AttendanceView({
           )
 
           setIsLessonCancelled(
-            (data ?? []).some(
+            records.some(
               (record) =>
                 record.type ===
-                'lesson_cancelled',
+                  'lesson_cancelled' &&
+                record.teacher_id ===
+                  teacherId,
             ),
           )
         }
@@ -635,6 +664,7 @@ export function AttendanceView({
   }, [
     currentCourse?.id,
     activeDate,
+    teacherId,
   ])
 
   const dateState = useMemo(() => {
@@ -711,41 +741,37 @@ export function AttendanceView({
   }
 
   const getStudentStatus = (
-  studentId: string,
-  date: string,
-): AttendanceStatusName | null => {
-  const key = `${date}:${studentId}`
+    studentId: string,
+    date: string,
+  ): AttendanceStatusName | null => {
+    const key = `${date}:${studentId}`
 
-  // إذا كان الطالب لم ينضم بعد في هذا التاريخ،
-  // حالته النظامية تلقائيًا "غير منضم".
-  const student = assignedStudents.find(
-    (item) => item.id === studentId,
-  )
-
-  if (
-    student?.joinDate &&
-    date < student.joinDate
-  ) {
-    return 'غير منضم'
-  }
-
-  // الحالات المحلية المؤقتة لها الأولوية
-  if (localStatuses[key]) {
-    return localStatuses[key]
-  }
-
-  // بعدها نقرأ السجل الحقيقي من قاعدة البيانات
-  const record =
-    getRecordForStudent(
-      studentId,
-      date,
+    const student = assignedStudents.find(
+      (item) => item.id === studentId,
     )
 
-  return getStatusName(
-    attendanceStatuses,
-    record?.statusId,
-  )
-}
+    if (
+      student?.joinDate &&
+      date < student.joinDate
+    ) {
+      return 'غير منضم'
+    }
+
+    if (localStatuses[key]) {
+      return localStatuses[key]
+    }
+
+    const record =
+      getRecordForStudent(
+        studentId,
+        date,
+      )
+
+    return getStatusName(
+      attendanceStatuses,
+      record?.statusId,
+    )
+  }
 
   const isStudentEligibleForAttendance = (
     student: Student,
@@ -971,41 +997,51 @@ export function AttendanceView({
       })
     }
 
-  const checkCancellationBeforeSave =
-    async (
-      date: string,
-    ) => {
-      if (!currentCourse) {
-        return false
-      }
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('supervision_records')
-        .select('id, type')
-        .eq(
-          'course_id',
-          currentCourse.id,
-        )
-        .eq(
-          'record_date',
-          date,
-        )
-        .in('type', [
-          'day_cancelled',
-          'lesson_cancelled',
-        ])
-        .limit(1)
-        .maybeSingle()
-
-      if (error) {
-        throw error
-      }
-
-      return !!data
+ const checkCancellationBeforeSave =
+  async (
+    date: string,
+  ) => {
+    if (!currentCourse) {
+      return false
     }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('supervision_records')
+      .select(
+        'id, type, teacher_id',
+      )
+      .eq(
+        'course_id',
+        currentCourse.id,
+      )
+      .eq(
+        'record_date',
+        date,
+      )
+      .in('type', [
+        'day_cancelled',
+        'lesson_cancelled',
+      ])
+
+    if (error) {
+      throw error
+    }
+
+    return (data ?? []).some(
+      (record) =>
+        record.type ===
+          'day_cancelled' ||
+        (
+          record.type ===
+            'lesson_cancelled' &&
+          record.teacher_id ===
+            teacherId
+        ),
+    )
+  }
 
   const saveAttendance = async (
     student: Student,
@@ -2485,10 +2521,6 @@ export function AttendanceView({
                   const editing =
                     editingStatusKey === key
 
-                  /*
-                   * إذا كانت الحالة غير منضم:
-                   * لا نفتح وضع الاختيار إطلاقًا.
-                   */
                   if (
                     status ===
                     'غير منضم'
@@ -2595,9 +2627,6 @@ export function AttendanceView({
                     )
                   }
 
-                  /*
-                   * لم يتم اختيار حالة بعد.
-                   */
                   if (
                     !status ||
                     editing
