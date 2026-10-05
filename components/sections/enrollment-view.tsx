@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
 import {
   AlertTriangle,
+  ArrowRight,
   Check,
   FileArchive,
   FileSpreadsheet,
@@ -283,6 +286,8 @@ type KeyRow = {
 }
 
 export function EnrollmentView() {
+  const router = useRouter()
+
   const [requests, setRequests] =
     useState<RegistrationRequest[]>(
       enrollmentCache?.requests ?? [],
@@ -2174,921 +2179,903 @@ export function EnrollmentView() {
   }
 
   /*
-   * =========================================================
-   * Render
-   * =========================================================
-   */
+ /* =========================================================
+ * Render
+ * =========================================================
+ */
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="طلبات التسجيل"
-        description={`${pendingCount} طلب بانتظار المراجعة من إجمالي ${requests.length} طلب`}
-      />
+return (
+  <div className="space-y-6" dir="rtl">
+    {/* زر العودة */}
+    <div
+      className="relative h-10"
+      dir="rtl"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={() => router.back()}
+        aria-label="العودة"
+        title="العودة"
+        className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
+      >
+        <ArrowRight className="size-5 stroke-[2.5]"
+        />
+      </Button>
+    </div>
 
-      {statusMessage && (
-        <div
-          className={`rounded-lg border p-4 text-sm ${
-            statusMessage.includes(
-              'خطأ',
-            ) ||
-            statusMessage.includes(
-              'تعذر',
-            )
-              ? 'border-red-200 bg-red-50 text-red-800'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-          }`}
-        >
-          {statusMessage}
+    <PageHeader
+      title="طلبات التسجيل"
+      description={`${pendingCount} طلب بانتظار المراجعة من إجمالي ${requests.length} طلب`}
+    />
+
+    {statusMessage && (
+      <div
+        className={`rounded-lg border p-4 text-sm ${
+          statusMessage.includes('خطأ') ||
+          statusMessage.includes('تعذر')
+            ? 'border-red-200 bg-red-50 text-red-800'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        }`}
+      >
+        {statusMessage}
+      </div>
+    )}
+
+    {/* الإحصائيات والأزرار */}
+    <div
+      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      dir="rtl"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="rounded-lg border bg-background px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            بانتظار المراجعة:
+          </span>{' '}
+          <span className="font-semibold">
+            {pendingCount}
+          </span>
         </div>
-      )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="rounded-lg border bg-background px-3 py-2 text-sm">
-            <span className="text-muted-foreground">
-              بانتظار المراجعة:
-            </span>{' '}
-            <span className="font-semibold">
-              {pendingCount}
+        {specialCount > 0 && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <AlertTriangle className="size-4 shrink-0" />
+
+            <span>
+              {specialCount}{' '}
+              طلب فيه ملاحظات أو معلومات صحية
             </span>
           </div>
+        )}
+      </div>
 
-          {specialCount > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <AlertTriangle className="size-4" />
-
-              <span>
-                {specialCount}{' '}
-                طلب فيه ملاحظات أو معلومات صحية
-              </span>
-            </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {!permissionsLoading &&
+          allowCurrentYearImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowImport(true)
+              }
+              className="shrink-0 whitespace-nowrap gap-2"
+            >
+              <FileSpreadsheet className="size-4" />
+              استيراد سجل
+            </Button>
           )}
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          {!permissionsLoading &&
-            allowCurrentYearImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowImport(true)
-                }
-                className="gap-2"
-              >
-                <FileSpreadsheet className="size-4" />
-                استيراد سجل
-              </Button>
-            )}
+        {!permissionsLoading &&
+          allowArchiveImport && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                setShowArchive(true)
+              }
+              className="shrink-0 whitespace-nowrap gap-2"
+            >
+              <FileArchive className="size-4" />
+              استيراد للأرشيف
+            </Button>
+          )}
 
-          {!permissionsLoading &&
-            allowArchiveImport && (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setShowArchive(true)
-                }
-                className="gap-2"
-              >
-                <FileArchive className="size-4" />
-                استيراد للأرشيف
-              </Button>
-            )}
+        <Button
+          variant="outline"
+          onClick={() =>
+            setShowColumnSettings(true)
+          }
+          className="shrink-0 whitespace-nowrap gap-2"
+        >
+          <Settings2 className="size-4" />
+          تخصيص الأعمدة
+        </Button>
 
-          <Button
-            variant="outline"
-            onClick={() =>
-              setShowColumnSettings(
-                true,
-              )
-            }
-            className="gap-2"
-          >
-            <Settings2 className="size-4" />
-            تخصيص الأعمدة
-          </Button>
+        <Button
+          variant="outline"
+          onClick={
+            clearAllRegistrationRequests
+          }
+          disabled={
+            loading ||
+            saving ||
+            bulkApproving ||
+            requests.length === 0
+          }
+          className="shrink-0 whitespace-nowrap gap-2 border-red-300 bg-red-50 text-red-700 hover:border-red-400 hover:bg-red-100 hover:text-red-800"
+        >
+          {saving ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+          مسح الطلبات
+        </Button>
 
-          <Button
-            variant="outline"
-            onClick={
-              clearAllRegistrationRequests
-            }
-            disabled={
-              loading ||
-              saving ||
-              bulkApproving ||
-              requests.length === 0
-            }
-            className="gap-2 border-red-300 bg-red-50 text-red-700 hover:border-red-400 hover:bg-red-100 hover:text-red-800"
-          >
-            {saving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Trash2 className="size-4" />
-            )}
-            مسح الطلبات
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={async () => {
-              await Promise.all([
-                loadRequests(),
-                loadImportPermissions(),
-                loadCustomFields(),
-                loadLevels(),
-                loadCourses(),
-              ])
-            }}
-            disabled={
+        <Button
+          variant="outline"
+          onClick={async () => {
+            await Promise.all([
+              loadRequests(),
+              loadImportPermissions(),
+              loadCustomFields(),
+              loadLevels(),
+              loadCourses(),
+            ])
+          }}
+          disabled={
+            loading ||
+            permissionsLoading ||
+            bulkApproving ||
+            saving
+          }
+          className="shrink-0 whitespace-nowrap gap-2"
+        >
+          <RefreshCw
+            className={`size-4 ${
               loading ||
               permissionsLoading ||
               bulkApproving ||
               saving
-            }
-            className="gap-2"
-          >
-            <RefreshCw
-              className={`size-4 ${
-                loading ||
-                permissionsLoading ||
-                bulkApproving ||
-                saving
-                  ? 'animate-spin'
-                  : ''
-              }`}
-            />
-            تحديث الطلبات
-          </Button>
-        </div>
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          <EnrollmentTables
-            externalRequests={
-              externalRequests
-            }
-            importedRequests={
-              importedRequests
-            }
-            loading={loading}
-            visibleColumns={
-              visibleColumns
-            }
-            customFields={
-              customFields
-            }
-            customFieldValues={
-              customFieldValues
-            }
-            levels={levels}
-            filters={filters}
-            updateFilter={
-              updateFilter
-            }
-            openReview={
-              openReview
-            }
-            getLevelName={
-              getLevelName
-            }
-            getCourseName={
-              getCourseName
-            }
-            getCustomFieldValue={
-              getCustomFieldValue
-            }
-            getCustomFieldDisplayValue={
-              getCustomFieldDisplayValue
-            }
-            getStatusLabel={
-              getStatusLabel
-            }
-            formatDate={
-              formatDate
-            }
-            hasHealthNotes={
-              hasHealthNotes
-            }
-            hasNotes={
-              hasNotes
-            }
-            hasSpecialInformation={
-              hasSpecialInformation
-            }
-            selectedRequestIds={
-              selectedRequestIds
-            }
-            toggleRequestSelection={
-              toggleRequestSelection
-            }
-            selectAllRequests={
-              selectAllRequests
-            }
-            clearSelectedRequests={
-              clearSelectedRequests
-            }
-            approveSelectedRequests={
-              approveSelectedRequests
-            }
-            approveAllRequests={
-              approveAllRequests
-            }
-            bulkApproving={
-              bulkApproving
-            }
+                ? 'animate-spin'
+                : ''
+            }`}
           />
+          تحديث الطلبات
+        </Button>
+      </div>
+    </div>
 
-          {hasFilters && (
-            <div className="flex items-center justify-between border-t px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Filter className="size-4" />
-
-                عرض{' '}
-                {filteredRequests.length}{' '}
-                من{' '}
-                {requests.length}{' '}
-                طلب
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={
-                  clearFilters
-                }
-              >
-                مسح الفلاتر
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {showImport && (
-        <EnrollmentImport
-          onClose={() => {
-            setShowImport(false)
-          }}
-          onImported={async () => {
-            setShowImport(false)
-
-            await loadRequests()
-          }}
-        />
-      )}
-
-      {showArchive && (
-        <EnrollmentArchive
-          onClose={() =>
-            setShowArchive(
-              false,
-            )
+    {/* جدول طلبات التسجيل */}
+    <Card>
+      <CardContent className="p-0">
+        <EnrollmentTables
+          externalRequests={
+            externalRequests
+          }
+          importedRequests={
+            importedRequests
+          }
+          loading={loading}
+          visibleColumns={
+            visibleColumns
+          }
+          customFields={
+            customFields
+          }
+          customFieldValues={
+            customFieldValues
+          }
+          levels={levels}
+          filters={filters}
+          updateFilter={
+            updateFilter
+          }
+          openReview={
+            openReview
+          }
+          getLevelName={
+            getLevelName
+          }
+          getCourseName={
+            getCourseName
+          }
+          getCustomFieldValue={
+            getCustomFieldValue
+          }
+          getCustomFieldDisplayValue={
+            getCustomFieldDisplayValue
+          }
+          getStatusLabel={
+            getStatusLabel
+          }
+          formatDate={
+            formatDate
+          }
+          hasHealthNotes={
+            hasHealthNotes
+          }
+          hasNotes={
+            hasNotes
+          }
+          hasSpecialInformation={
+            hasSpecialInformation
+          }
+          selectedRequestIds={
+            selectedRequestIds
+          }
+          toggleRequestSelection={
+            toggleRequestSelection
+          }
+          selectAllRequests={
+            selectAllRequests
+          }
+          clearSelectedRequests={
+            clearSelectedRequests
+          }
+          approveSelectedRequests={
+            approveSelectedRequests
+          }
+          approveAllRequests={
+            approveAllRequests
+          }
+          bulkApproving={
+            bulkApproving
           }
         />
-      )}
 
-      {showColumnSettings && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-xl border bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b p-5">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  تخصيص أعمدة طلبات التسجيل
-                </h2>
+        {hasFilters && (
+          <div
+            className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            dir="rtl"
+          >
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Filter className="size-4 shrink-0" />
 
-                <p className="mt-1 text-sm text-muted-foreground">
-                  اختر الأعمدة التي تريد ظهورها في الجدول.
-                </p>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() =>
-                  setShowColumnSettings(
-                    false,
-                  )
-                }
-              >
-                <X className="size-4" />
-              </Button>
+              عرض{' '}
+              {filteredRequests.length}{' '}
+              من{' '}
+              {requests.length}{' '}
+              طلب
             </div>
 
-            <div className="max-h-[65vh] overflow-y-auto p-5">
-              <div className="space-y-2">
-                <div className="mb-3 text-sm font-semibold">
-                  الحقول الأساسية
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={
+                clearFilters
+              }
+              className="shrink-0 whitespace-nowrap"
+            >
+              مسح الفلاتر
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+
+    {/* استيراد السجل */}
+    {showImport && (
+      <EnrollmentImport
+        onClose={() => {
+          setShowImport(false)
+        }}
+        onImported={async () => {
+          setShowImport(false)
+
+          await loadRequests()
+        }}
+      />
+    )}
+
+    {/* استيراد الأرشيف */}
+    {showArchive && (
+      <EnrollmentArchive
+        onClose={() =>
+          setShowArchive(false)
+        }
+      />
+    )}
+
+    {/* تخصيص الأعمدة */}
+    {showColumnSettings && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+        <div
+          className="max-h-[90vh] w-full max-w-lg overflow-hidden rounded-xl border bg-background shadow-xl"
+          dir="rtl"
+        >
+          <div className="flex items-center justify-between border-b p-5">
+            <div>
+              <h2 className="text-lg font-semibold">
+                تخصيص أعمدة طلبات التسجيل
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                اختر الأعمدة التي تريد ظهورها في الجدول.
+              </p>
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                setShowColumnSettings(false)
+              }
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          <div className="max-h-[65vh] overflow-y-auto p-5">
+            <div className="space-y-2">
+              <div className="mb-3 text-sm font-semibold">
+                الحقول الأساسية
+              </div>
+
+              {Object.keys(
+                DEFAULT_COLUMNS,
+              ).map((key) => {
+                const column =
+                  {
+                    name: 'اسم الطالب',
+                    personal_id:
+                      'الرقم الشخصي',
+                    gender: 'الجنس',
+                    age: 'العمر',
+                    phone: 'رقم الهاتف',
+                    whatsapp:
+                      'الواتساب',
+                    guardian_relation:
+                      'صلة القرابة',
+                    student_phone:
+                      'رقم الطالب',
+                    course:
+                      'دورة الالتحاق',
+                    level: 'المستوى',
+                    created_at:
+                      'تاريخ التقديم',
+                    request_number:
+                      'رقم الطلب',
+                    status: 'الحالة',
+                  }[key] ?? key
+
+                return (
+                  <label
+                    key={key}
+                    className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
+                  >
+                    <span className="text-sm">
+                      {column}
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={Boolean(
+                        visibleColumns[key],
+                      )}
+                      onChange={() =>
+                        toggleBaseColumn(
+                          key as ColumnKey,
+                        )
+                      }
+                      className="size-4"
+                    />
+                  </label>
+                )
+              })}
+
+              <div className="mb-3 mt-6 text-sm font-semibold">
+                الحقول الإضافية
+              </div>
+
+              {customFields.length ===
+              0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                  لا توجد حقول إضافية مضافة للتسجيل حاليًا.
                 </div>
-
-                {Object.keys(
-                  DEFAULT_COLUMNS,
-                ).map((key) => {
-                  const column =
-                    {
-                      name: 'اسم الطالب',
-                      personal_id:
-                        'الرقم الشخصي',
-                      gender: 'الجنس',
-                      age: 'العمر',
-                      phone: 'رقم الهاتف',
-                      whatsapp:
-                        'الواتساب',
-
-                      guardian_relation:
-                        'صلة القرابة',
-
-                      student_phone:
-                        'رقم الطالب',
-
-                      course:
-                        'دورة الالتحاق',
-
-                      level: 'المستوى',
-                      created_at:
-                        'تاريخ التقديم',
-                      request_number:
-                        'رقم الطلب',
-                      status: 'الحالة',
-                    }[
-                      key
-                    ] ?? key
-
-                  return (
+              ) : (
+                customFields.map(
+                  (field) => (
                     <label
-                      key={key}
+                      key={field.id}
                       className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
                     >
-                      <span className="text-sm">
-                        {column}
-                      </span>
+                      <div>
+                        <div className="text-sm font-medium">
+                          {field.name}
+                        </div>
+
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {field.field_type ===
+                          'text'
+                            ? 'نص'
+                            : field.field_type ===
+                                'number'
+                              ? 'رقم'
+                              : field.field_type ===
+                                  'date'
+                                ? 'تاريخ'
+                                : field.field_type ===
+                                    'select'
+                                  ? 'اختيار'
+                                  : field.field_type ===
+                                      'boolean'
+                                    ? 'نعم / لا'
+                                    : field.field_type ===
+                                        'textarea'
+                                      ? 'نص طويل'
+                                      : field.field_type}
+                        </div>
+                      </div>
 
                       <input
                         type="checkbox"
-                        checked={
-                          Boolean(
-                            visibleColumns[
-                              key
-                            ],
-                          )
-                        }
-                        onChange={() =>
-                          toggleBaseColumn(
-                            key as ColumnKey,
+                        checked={isCustomColumnVisible(
+                          field.id,
+                        )}
+                        onChange={(event) =>
+                          setCustomColumnVisible(
+                            field.id,
+                            event.target.checked,
                           )
                         }
                         className="size-4"
                       />
                     </label>
-                  )
-                })}
-
-                <div className="mb-3 mt-6 text-sm font-semibold">
-                  الحقول الإضافية
-                </div>
-
-                {customFields.length ===
-                0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                    لا توجد حقول إضافية مضافة للتسجيل حاليًا.
-                  </div>
-                ) : (
-                  customFields.map(
-                    (field) => (
-                      <label
-                        key={
-                          field.id
-                        }
-                        className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
-                      >
-                        <div>
-                          <div className="text-sm font-medium">
-                            {
-                              field.name
-                            }
-                          </div>
-
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {field.field_type ===
-                            'text'
-                              ? 'نص'
-                              : field.field_type ===
-                                  'number'
-                                ? 'رقم'
-                                : field.field_type ===
-                                    'date'
-                                  ? 'تاريخ'
-                                  : field.field_type ===
-                                      'select'
-                                    ? 'اختيار'
-                                    : field.field_type ===
-                                        'boolean'
-                                      ? 'نعم / لا'
-                                      : field.field_type ===
-                                          'textarea'
-                                        ? 'نص طويل'
-                                        : field.field_type}
-                          </div>
-                        </div>
-
-                        <input
-                          type="checkbox"
-                          checked={isCustomColumnVisible(
-                            field.id,
-                          )}
-                          onChange={(
-                            event,
-                          ) =>
-                            setCustomColumnVisible(
-                              field.id,
-                              event
-                                .target
-                                .checked,
-                            )
-                          }
-                          className="size-4"
-                        />
-                      </label>
-                    ),
-                  )
-                )}
-              </div>
+                  ),
+                )
+              )}
             </div>
+          </div>
 
-            <div className="flex items-center justify-between border-t p-4">
+          <div
+            className="flex items-center justify-between border-t p-4"
+            dir="rtl"
+          >
+            <Button
+              variant="ghost"
+              onClick={
+                resetColumnSettings
+              }
+            >
+              استعادة الافتراضي
+            </Button>
+
+            <Button
+              onClick={() =>
+                setShowColumnSettings(false)
+              }
+            >
+              تم
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* مراجعة الطلب */}
+    {showReview &&
+      selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  مراجعة طلب التسجيل
+                </h2>
+
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRequest.requestNumber ||
+                      selectedRequest.id}
+                  </p>
+
+                  {selectedRequest.source ===
+                    'import' && (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                      مستورد من Excel
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <Button
                 variant="ghost"
-                onClick={
-                  resetColumnSettings
-                }
+                size="icon"
+                onClick={closeReview}
+                disabled={saving}
               >
-                استعادة الافتراضي
+                <X className="size-4" />
               </Button>
+            </div>
 
-              <Button
-                onClick={() =>
-                  setShowColumnSettings(
-                    false,
-                  )
-                }
+            <div className="space-y-5 p-5">
+              {hasSpecialInformation(
+                selectedRequest,
+              ) && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+
+                    <div>
+                      <p className="font-semibold">
+                        تنبيه: توجد معلومات تحتاج الانتباه
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {hasHealthNotes(
+                          selectedRequest,
+                        ) && (
+                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
+                            🩺 يحتوي على معلومات صحية
+                          </span>
+                        )}
+
+                        {hasNotes(
+                          selectedRequest,
+                        ) && (
+                          <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                            📝 يحتوي على ملاحظات
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    اسم الطالب
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.name ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الرقم الشخصي
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.personalId ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    صلة القرابة
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.guardianRelation ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    رقم الطالب
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.studentPhone ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    العمر
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.age ??
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الجنس
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.gender ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    رقم الهاتف
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.phone ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الواتساب
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.whatsapp ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    المستوى
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {getLevelName(
+                      selectedRequest.levelId,
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    دورة الالتحاق
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {getCourseName(
+                      selectedRequest.courseId,
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    تاريخ التقديم
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {formatDate(
+                      selectedRequest.createdAt,
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {customFields.length > 0 && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    الحقول الإضافية
+                  </p>
+
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    {customFields.map(
+                      (field) => {
+                        const value =
+                          getCustomFieldValue(
+                            selectedRequest.id,
+                            field.id,
+                          )
+
+                        return (
+                          <div
+                            key={field.id}
+                          >
+                            <p className="text-xs text-muted-foreground">
+                              {field.name}
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap font-medium">
+                              {getCustomFieldDisplayValue(
+                                field,
+                                value,
+                              )}
+                            </p>
+                          </div>
+                        )
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  المعلومات الصحية
+                </p>
+
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasHealthNotes(
+                      selectedRequest,
+                    )
+                      ? 'font-medium text-rose-700'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {selectedRequest.healthNotes ||
+                    'لا توجد معلومات صحية'}
+                </p>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  الملاحظات
+                </p>
+
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasNotes(
+                      selectedRequest,
+                    )
+                      ? 'font-medium text-amber-800'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {selectedRequest.notes ||
+                    'لا توجد ملاحظات'}
+                </p>
+              </div>
+
+              {selectedRequest.paymentMethod && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    بيانات الدفع
+                  </p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        طريقة الدفع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {
+                          selectedRequest.paymentMethod
+                        }
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المبلغ المدخل
+                      </p>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatAmount(
+                          selectedRequest.paymentAmount,
+                        )}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المرجع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentReference ||
+                          '—'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        حالة الدفع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentStatus ===
+                        'verified'
+                          ? 'تم التحقق'
+                          : selectedRequest.paymentStatus ===
+                              'rejected'
+                            ? 'مرفوض'
+                            : selectedRequest.paymentStatus ===
+                                'pending'
+                              ? 'بانتظار التحقق'
+                              : 'غير مطلوب'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedRequest.paymentProofUrl && (
+                    <a
+                      href={
+                        selectedRequest.paymentProofUrl
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex text-sm font-medium text-primary underline"
+                    >
+                      عرض إثبات الدفع
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {selectedRequest.rejectionReason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+                  <p className="text-sm font-medium">
+                    سبب الرفض
+                  </p>
+
+                  <p className="mt-2 text-sm">
+                    {
+                      selectedRequest.rejectionReason
+                    }
+                  </p>
+                </div>
+              )}
+
+              {/* أزرار المراجعة */}
+              <div
+                className="flex flex-wrap items-center justify-start gap-2 border-t pt-4"
+                dir="rtl"
               >
-                تم
-              </Button>
+                <Button
+                  variant="ghost"
+                  onClick={closeReview}
+                  disabled={saving}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  إغلاق
+                </Button>
+
+                {(selectedRequest.status ===
+                  'pending' ||
+                  selectedRequest.status ===
+                    'under_review') && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        rejectRequest(
+                          selectedRequest,
+                        )
+                      }
+                      disabled={
+                        saving ||
+                        bulkApproving
+                      }
+                      className="shrink-0 whitespace-nowrap gap-2 border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <X className="size-4" />
+                      )}
+                      رفض الطلب
+                    </Button>
+
+                    <Button
+                      onClick={() =>
+                        approveRequest(
+                          selectedRequest,
+                        )
+                      }
+                      disabled={
+                        saving ||
+                        bulkApproving
+                      }
+                      className="shrink-0 whitespace-nowrap gap-2"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Check className="size-4" />
+                      )}
+                      قبول وترحيل للطلاب
+                    </Button>
+                  </>
+                )}
+
+                {selectedRequest.status ===
+                  'approved' && (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                    <Check className="size-4" />
+                    تم قبول الطلب وترحيله للطلاب
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
-
-      {showReview &&
-        selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
-              <div className="flex items-center justify-between border-b p-5">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    مراجعة طلب التسجيل
-                  </h2>
-
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="text-sm text-muted-foreground">
-                      {
-                        selectedRequest.requestNumber ||
-                        selectedRequest.id
-                      }
-                    </p>
-
-                    {selectedRequest.source ===
-                      'import' && (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                        مستورد من Excel
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={
-                    closeReview
-                  }
-                  disabled={saving}
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-
-              <div className="space-y-5 p-5">
-                {hasSpecialInformation(
-                  selectedRequest,
-                ) && (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="mt-0.5 size-5 shrink-0" />
-
-                      <div>
-                        <p className="font-semibold">
-                          تنبيه: توجد معلومات تحتاج الانتباه
-                        </p>
-
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {hasHealthNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                              🩺 يحتوي على معلومات صحية
-                            </span>
-                          )}
-
-                          {hasNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                              📝 يحتوي على ملاحظات
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      اسم الطالب
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {
-                        selectedRequest.name ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الرقم الشخصي
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {
-                        selectedRequest.personalId ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      صلة القرابة
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {
-                        selectedRequest.guardianRelation ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      رقم الطالب
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {
-                        selectedRequest.studentPhone ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      العمر
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {
-                        selectedRequest.age ??
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الجنس
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {
-                        selectedRequest.gender ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      رقم الهاتف
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {
-                        selectedRequest.phone ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الواتساب
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {
-                        selectedRequest.whatsapp ||
-                        'غير مضاف'
-                      }
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      المستوى
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {getLevelName(
-                        selectedRequest.levelId,
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      دورة الالتحاق
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {getCourseName(
-                        selectedRequest.courseId,
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      تاريخ التقديم
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {formatDate(
-                        selectedRequest.createdAt,
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {customFields.length >
-                  0 && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm font-medium">
-                      الحقول الإضافية
-                    </p>
-
-                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                      {customFields.map(
-                        (field) => {
-                          const value =
-                            getCustomFieldValue(
-                              selectedRequest.id,
-                              field.id,
-                            )
-
-                          return (
-                            <div
-                              key={
-                                field.id
-                              }
-                            >
-                              <p className="text-xs text-muted-foreground">
-                                {
-                                  field.name
-                                }
-                              </p>
-
-                              <p className="mt-1 whitespace-pre-wrap font-medium">
-                                {getCustomFieldDisplayValue(
-                                  field,
-                                  value,
-                                )}
-                              </p>
-                            </div>
-                          )
-                        },
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    المعلومات الصحية
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasHealthNotes(
-                        selectedRequest,
-                      )
-                        ? 'font-medium text-rose-700'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {
-                      selectedRequest.healthNotes ||
-                      'لا توجد معلومات صحية'
-                    }
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    الملاحظات
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasNotes(
-                        selectedRequest,
-                      )
-                        ? 'font-medium text-amber-800'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {
-                      selectedRequest.notes ||
-                      'لا توجد ملاحظات'
-                    }
-                  </p>
-                </div>
-
-                {selectedRequest.paymentMethod && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm font-medium">
-                      بيانات الدفع
-                    </p>
-
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          طريقة الدفع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {
-                            selectedRequest.paymentMethod
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المبلغ المدخل
-                        </p>
-                        <p className="mt-1 font-medium tabular-nums">
-                          {formatAmount(
-                            selectedRequest.paymentAmount,
-                          )}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المرجع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {
-                            selectedRequest.paymentReference ||
-                            '—'
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          حالة الدفع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {selectedRequest.paymentStatus ===
-                          'verified'
-                            ? 'تم التحقق'
-                            : selectedRequest.paymentStatus ===
-                                'rejected'
-                              ? 'مرفوض'
-                              : selectedRequest.paymentStatus ===
-                                  'pending'
-                                ? 'بانتظار التحقق'
-                                : 'غير مطلوب'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedRequest.paymentProofUrl && (
-                      <a
-                        href={
-                          selectedRequest.paymentProofUrl
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 inline-flex text-sm font-medium text-primary underline"
-                      >
-                        عرض إثبات الدفع
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {selectedRequest.rejectionReason && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
-                    <p className="text-sm font-medium">
-                      سبب الرفض
-                    </p>
-
-                    <p className="mt-2 text-sm">
-                      {
-                        selectedRequest.rejectionReason
-                      }
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-                  <Button
-                    variant="ghost"
-                    onClick={
-                      closeReview
-                    }
-                    disabled={saving}
-                  >
-                    إغلاق
-                  </Button>
-
-                  {(selectedRequest.status ===
-                    'pending' ||
-                    selectedRequest.status ===
-                      'under_review') && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          rejectRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          bulkApproving
-                        }
-                        className="gap-2"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <X className="size-4" />
-                        )}
-                        رفض الطلب
-                      </Button>
-
-                      <Button
-                        onClick={() =>
-                          approveRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          bulkApproving
-                        }
-                        className="gap-2"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Check className="size-4" />
-                        )}
-                        قبول وترحيل للطلاب
-                      </Button>
-                    </>
-                  )}
-
-                  {selectedRequest.status ===
-                    'approved' && (
-                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                      <Check className="size-4" />
-                      تم قبول الطلب وترحيله للطلاب
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-    </div>
-  )
-}
+  </div>
+)
