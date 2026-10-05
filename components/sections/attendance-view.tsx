@@ -76,13 +76,8 @@ function normalizeStatusName(
     .trim()
     .replace(/\s+/g, ' ')
 
-  if (normalized === 'حاضر') {
-    return 'حاضر'
-  }
-
-  if (normalized === 'غائب') {
-    return 'غائب'
-  }
+  if (normalized === 'حاضر') return 'حاضر'
+  if (normalized === 'غائب') return 'غائب'
 
   if (
     normalized === 'متأخر' ||
@@ -184,6 +179,7 @@ function getStatusClasses(
       }
   }
 }
+
 function getAttendancePercentage(
   studentId: string,
   courseId: string,
@@ -329,40 +325,27 @@ function normalizeCourseDay(
   > = {
     الأحد: 0,
     الاحد: 0,
-
     الاثنين: 1,
     الإثنين: 1,
     الاثنينِ: 1,
-
     الثلاثاء: 2,
-
     الأربعاء: 3,
     الاربعاء: 3,
-
     الخميس: 4,
-
     الجمعة: 5,
-
     السبت: 6,
-
     sunday: 0,
     sun: 0,
-
     monday: 1,
     mon: 1,
-
     tuesday: 2,
     tue: 2,
-
     wednesday: 3,
     wed: 3,
-
     thursday: 4,
     thu: 4,
-
     friday: 5,
     fri: 5,
-
     saturday: 6,
     sat: 6,
   }
@@ -400,31 +383,21 @@ function isCourseStudyDay(
 
 type AttendanceViewProps = {
   currentCourse: Course | null
-
   assignedStudents: Student[]
-
   attendanceStatuses: AttendanceStatus[]
-
   attendanceRecords: AttendanceRecord[]
-
   setAttendanceRecords: Dispatch<
     SetStateAction<AttendanceRecord[]>
   >
-
   attendanceNotes: AttendanceNotes
-
   setAttendanceNotes: Dispatch<
     SetStateAction<AttendanceNotes>
   >
-
   statusMessage: string
-
   setStatusMessage: Dispatch<
     SetStateAction<string>
   >
-
   selectedAttendanceDate: string | null
-
   setSelectedAttendanceDate: Dispatch<
     SetStateAction<string | null>
   >
@@ -507,12 +480,6 @@ export function AttendanceView({
     setIsBulkSaving,
   ] = useState(false)
 
-  /*
-   * مراجع بطاقات الطلاب.
-   *
-   * تستخدم للانتقال التلقائي إلى
-   * الطالب التالي بعد نجاح التسجيل.
-   */
   const studentCardRefs =
     useRef<
       Record<
@@ -532,9 +499,6 @@ export function AttendanceView({
     isDayCancelled ||
     isLessonCancelled
 
-  /*
-   * تحميل جميع تواريخ الإلغاء للدورة.
-   */
   useEffect(() => {
     if (!currentCourse) {
       setCancelledDates(new Set())
@@ -596,9 +560,6 @@ export function AttendanceView({
     }
   }, [currentCourse?.id])
 
-  /*
-   * التحقق من إلغاء اليوم أو الحصة.
-   */
   useEffect(() => {
     if (!currentCourse || !activeDate) {
       setIsDayCancelled(false)
@@ -769,24 +730,48 @@ export function AttendanceView({
     )
   }
 
+  const isStudentEligibleForAttendance = (
+    student: Student,
+    date: string,
+  ) => {
+    if (!student.joinDate) {
+      return true
+    }
+
+    return date >= student.joinDate
+  }
+
   const attendanceSummary =
     useMemo(() => {
       let recorded = 0
+      let total = 0
 
       for (const student of assignedStudents) {
+        if (
+          !isStudentEligibleForAttendance(
+            student,
+            activeDate,
+          )
+        ) {
+          continue
+        }
+
         const status =
           getStudentStatus(
             student.id,
             activeDate,
           )
 
+        if (status === 'غير منضم') {
+          continue
+        }
+
+        total += 1
+
         if (status) {
           recorded += 1
         }
       }
-
-      const total =
-        assignedStudents.length
 
       const unrecorded =
         Math.max(
@@ -871,6 +856,10 @@ export function AttendanceView({
     showUnrecordedOnly
       ? filteredStudents.filter(
           (student) =>
+            isStudentEligibleForAttendance(
+              student,
+              activeDate,
+            ) &&
             !getStudentStatus(
               student.id,
               activeDate,
@@ -878,18 +867,11 @@ export function AttendanceView({
         )
       : filteredStudents
 
-  /**
-   * الانتقال للطالب التالي بعد نجاح الحفظ.
-   *
-   * إذا لم يوجد طالب آخر:
-   * - إذا اكتمل الجميع تظهر رسالة نهائية.
-   * - إذا كان هناك طلاب مخفيون بسبب البحث، لا ندعي أن التسجيل اكتمل.
-   */
   const moveToNextStudent =
     (
       currentStudentId: string,
       savedStudentName: string,
-      savedStatus: AttendanceStatusName,
+      savedStatus: TeacherAttendanceStatus,
     ) => {
       const currentIndex =
         displayedStudents.findIndex(
@@ -905,12 +887,17 @@ export function AttendanceView({
             ]
           : undefined
 
-      /*
-       * نتحقق من حالة جميع الطلاب بعد
-       * اعتبار الطالب الحالي مسجلاً.
-       */
+      const eligibleStudents =
+        assignedStudents.filter(
+          (student) =>
+            isStudentEligibleForAttendance(
+              student,
+              activeDate,
+            ),
+        )
+
       const allStudentsRecorded =
-        assignedStudents.every(
+        eligibleStudents.every(
           (student) => {
             if (
               student.id ===
@@ -919,9 +906,15 @@ export function AttendanceView({
               return true
             }
 
-            return !!getStudentStatus(
-              student.id,
-              activeDate,
+            const status =
+              getStudentStatus(
+                student.id,
+                activeDate,
+              )
+
+            return (
+              !!status &&
+              status !== 'غير منضم'
             )
           },
         )
@@ -929,7 +922,7 @@ export function AttendanceView({
       if (!nextStudent) {
         if (allStudentsRecorded) {
           setStatusMessage(
-            `✓ اكتمل تسجيل الحضور — ${assignedStudents.length} من ${assignedStudents.length} طالب`,
+            `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
           )
         } else {
           setStatusMessage(
@@ -940,17 +933,10 @@ export function AttendanceView({
         return
       }
 
-      /*
-       * رسالة قصيرة أثناء الانتقال.
-       */
       setStatusMessage(
         `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
       )
 
-      /*
-       * نعطي React فرصة لإكمال التحديث
-       * ثم نمرر الشاشة للطالب التالي.
-       */
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const element =
@@ -1004,13 +990,10 @@ export function AttendanceView({
       return !!data
     }
 
-  /**
-   * حفظ حالة طالب واحد.
-   */
   const saveAttendance = async (
     student: Student,
     date: string,
-    statusName: AttendanceStatusName,
+    statusName: TeacherAttendanceStatus,
   ) => {
     if (!currentCourse) {
       return
@@ -1025,6 +1008,18 @@ export function AttendanceView({
         isCancelled
           ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
           : 'لا يمكن تسجيل الحضور في هذا اليوم.',
+      )
+      return
+    }
+
+    if (
+      !isStudentEligibleForAttendance(
+        student,
+        date,
+      )
+    ) {
+      setStatusMessage(
+        'هذا الطالب لم يكن منضمًا في تاريخ الحضور المحدد.',
       )
       return
     }
@@ -1056,6 +1051,23 @@ export function AttendanceView({
         student.id,
         date,
       )
+
+    const existingStatus = existing
+      ? getStatusName(
+          attendanceStatuses,
+          existing.statusId,
+        )
+      : null
+
+    if (
+      existingStatus ===
+      'غير منضم'
+    ) {
+      setStatusMessage(
+        'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
+      )
+      return
+    }
 
     const previousRecords =
       attendanceRecords
@@ -1261,10 +1273,6 @@ export function AttendanceView({
         }
       }
 
-      /*
-       * نترك React يحدث الحالة أولاً،
-       * ثم ننتقل للطالب التالي.
-       */
       moveToNextStudent(
         student.id,
         student.name,
@@ -1303,12 +1311,9 @@ export function AttendanceView({
     }
   }
 
-  /**
-   * تحديد الكل بحالة واحدة.
-   */
   const saveAllAttendance =
     async (
-      statusName: AttendanceStatusName,
+      statusName: TeacherAttendanceStatus,
     ) => {
       if (!currentCourse) {
         return
@@ -1332,12 +1337,21 @@ export function AttendanceView({
         return
       }
 
+      const eligibleStudents =
+        assignedStudents.filter(
+          (student) =>
+            isStudentEligibleForAttendance(
+              student,
+              activeDate,
+            ),
+        )
+
       if (
-        assignedStudents.length ===
+        eligibleStudents.length ===
         0
       ) {
         setStatusMessage(
-          'لا يوجد طلاب لتسجيل الحضور.',
+          'لا يوجد طلاب مستحقون لتسجيل الحضور في هذا التاريخ.',
         )
         return
       }
@@ -1428,14 +1442,36 @@ export function AttendanceView({
         const savedRecords: AttendanceRecord[] =
           []
 
+        const modifiedStudentIds =
+          new Set<string>()
+
         for (const student of
-          assignedStudents) {
+          eligibleStudents) {
           const existing =
             existingByStudent.get(
               student.id,
             )
 
+          if (existing) {
+            const existingStatus =
+              getStatusName(
+                attendanceStatuses,
+                existing.statusId,
+              )
+
+            if (
+              existingStatus ===
+              'غير منضم'
+            ) {
+              continue
+            }
+          }
+
           const key = `${activeDate}:${student.id}`
+
+          modifiedStudentIds.add(
+            student.id,
+          )
 
           if (existing) {
             const {
@@ -1547,7 +1583,15 @@ export function AttendanceView({
             }
 
             for (const student of
-              assignedStudents) {
+              eligibleStudents) {
+              if (
+                !modifiedStudentIds.has(
+                  student.id,
+                )
+              ) {
+                continue
+              }
+
               next[
                 `${activeDate}:${student.id}`
               ] = statusName
@@ -1566,7 +1610,10 @@ export function AttendanceView({
                     record.courseId ===
                       currentCourse.id &&
                     record.attendanceDate ===
-                      activeDate
+                      activeDate &&
+                    modifiedStudentIds.has(
+                      record.studentId,
+                    )
                   ),
               )
 
@@ -1607,7 +1654,7 @@ export function AttendanceView({
           )
 
         const verifiedCount =
-          assignedStudents.filter(
+          eligibleStudents.filter(
             (student) =>
               verifiedStudentIds.has(
                 student.id,
@@ -1616,21 +1663,21 @@ export function AttendanceView({
 
         if (
           verifiedCount !==
-          assignedStudents.length
+          eligibleStudents.length
         ) {
           const remaining =
-            assignedStudents.length -
+            eligibleStudents.length -
             verifiedCount
 
           setStatusMessage(
-            `لم يكتمل التسجيل — باقي ${remaining} من ${assignedStudents.length} طالب.`,
+            `لم يكتمل التسجيل — باقي ${remaining} من ${eligibleStudents.length} طالب.`,
           )
 
           return
         }
 
         setStatusMessage(
-          `✓ اكتمل تسجيل الحضور — ${assignedStudents.length} من ${assignedStudents.length} طالب`,
+          `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
         )
       } catch (error: any) {
         const {
@@ -1727,9 +1774,6 @@ export function AttendanceView({
       }
     }
 
-  /**
-   * إلغاء حالة الحضور وحذف سجل الحضور.
-   */
   const clearAttendance = async (
     student: Student,
     date: string,
@@ -1751,15 +1795,6 @@ export function AttendanceView({
       return
     }
 
-    const key = `${date}:${student.id}`
-
-    if (
-      savingKey === key ||
-      isBulkSaving
-    ) {
-      return
-    }
-
     const existing =
       getRecordForStudent(
         student.id,
@@ -1767,19 +1802,31 @@ export function AttendanceView({
       )
 
     if (!existing) {
-      setLocalStatuses(
-        (current) => {
-          const next = {
-            ...current,
-          }
+      return
+    }
 
-          delete next[key]
-
-          return next
-        },
+    const existingStatus =
+      getStatusName(
+        attendanceStatuses,
+        existing.statusId,
       )
 
-      setEditingStatusKey(null)
+    if (
+      existingStatus ===
+      'غير منضم'
+    ) {
+      setStatusMessage(
+        'لا يمكن حذف حالة "غير منضم" لأنها حالة نظامية تلقائية.',
+      )
+      return
+    }
+
+    const key = `${date}:${student.id}`
+
+    if (
+      savingKey === key ||
+      isBulkSaving
+    ) {
       return
     }
 
@@ -1871,9 +1918,6 @@ export function AttendanceView({
     }
   }
 
-  /**
-   * حفظ الملاحظة.
-   */
   const saveNote = async (
     student: Student,
     date: string,
@@ -2025,7 +2069,6 @@ export function AttendanceView({
       dir="rtl"
       className="space-y-5"
     >
-      {/* العنوان والتاريخ */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold">
@@ -2057,7 +2100,6 @@ export function AttendanceView({
         />
       </div>
 
-      {/* حالة فحص الإلغاء */}
       {isCheckingCancellation && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
@@ -2070,7 +2112,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* الدورة لم تبدأ */}
       {dateState ===
         'before-course' && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
@@ -2094,7 +2135,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* انتهت الدورة */}
       {dateState ===
         'after-course' && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
@@ -2118,7 +2158,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* لا يوجد درس */}
       {dateState ===
         'no-lesson' && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
@@ -2139,7 +2178,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* اليوم أو الحصة ملغاة */}
       {dateState ===
         'cancelled' && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-950/20">
@@ -2160,7 +2198,6 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* درس مستقبلي */}
       {dateState ===
         'future-lesson' && (
         <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
@@ -2181,10 +2218,8 @@ export function AttendanceView({
         </div>
       )}
 
-      {/* محتوى الحضور */}
       {isAttendanceAvailable && (
         <>
-          {/* حالة اكتمال التسجيل */}
           <div
             className={`rounded-xl border px-4 py-3 ${
               attendanceSummary.allRecorded
@@ -2197,8 +2232,7 @@ export function AttendanceView({
                 <span className="text-lg">
                   {attendanceSummary.allRecorded
                     ? '✓'
-                    : '!'
-                  }
+                    : '!'}
                 </span>
 
                 <div className="min-w-0">
@@ -2236,10 +2270,8 @@ export function AttendanceView({
             </div>
           </div>
 
-          {/* أدوات الحضور */}
           <div className="rounded-xl border bg-card p-3">
             <div className="flex flex-col gap-3">
-              {/* البحث */}
               <input
                 type="text"
                 value={searchTerm}
@@ -2254,7 +2286,6 @@ export function AttendanceView({
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap gap-2">
-                  {/* تحديد الكل */}
                   <div className="relative">
                     <button
                       type="button"
@@ -2364,7 +2395,6 @@ export function AttendanceView({
             </div>
           </div>
 
-          {/* رسالة الحفظ */}
           {statusMessage && (
             <div
               className={`rounded-lg border px-4 py-3 text-sm ${
@@ -2387,7 +2417,6 @@ export function AttendanceView({
             </div>
           )}
 
-          {/* قائمة الطلبة */}
           <div className="space-y-4">
             {displayedStudents.length ===
             0 ? (
@@ -2440,7 +2469,117 @@ export function AttendanceView({
                     editingStatusKey === key
 
                   /*
-                   * لم يتم اختيار حالة بعد
+                   * إذا كانت الحالة غير منضم:
+                   * لا نفتح وضع الاختيار إطلاقًا.
+                   */
+                  if (
+                    status ===
+                    'غير منضم'
+                  ) {
+                    const selectedStyles =
+                      getStatusClasses(
+                        status,
+                      )
+
+                    return (
+                      <div
+                        key={student.id}
+                        ref={(element) => {
+                          studentCardRefs.current[
+                            student.id
+                          ] = element
+                        }}
+                        className={`rounded-xl border bg-card px-4 py-4 transition-all ${
+                          saving
+                            ? 'opacity-70'
+                            : ''
+                        }`}
+                      >
+                        <div className="space-y-4">
+                          <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                            <div className="min-w-0 xl:flex-1">
+                              <div className="font-semibold">
+                                {
+                                  student.name
+                                }
+                              </div>
+
+                              {student.levelName && (
+                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                  {
+                                    student.levelName
+                                  }
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled
+                              className={`h-10 shrink-0 cursor-not-allowed rounded-lg border px-5 text-sm font-medium opacity-90 ${selectedStyles.selected}`}
+                            >
+                              غير منضم
+                            </button>
+
+                            <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
+                              <span className="text-sm font-bold text-muted-foreground">
+                                —
+                              </span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                              ملاحظات المعلم
+                            </label>
+
+                            <textarea
+                              value={note}
+                              onChange={(
+                                event,
+                              ) =>
+                                setAttendanceNotes(
+                                  (current) => ({
+                                    ...current,
+                                    [key]:
+                                      event
+                                        .target
+                                        .value,
+                                  }),
+                                )
+                              }
+                              onBlur={(event) =>
+                                saveNote(
+                                  student,
+                                  activeDate,
+                                  event.target
+                                    .value,
+                                )
+                              }
+                              placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
+                              rows={3}
+                              className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            />
+
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">
+                                اضغط خارج الخانة لحفظ الملاحظة
+                              </span>
+
+                              {savingNote && (
+                                <span className="text-xs text-muted-foreground">
+                                  جارٍ الحفظ...
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  /*
+                   * لم يتم اختيار حالة بعد.
                    */
                   if (
                     !status ||
@@ -2461,7 +2600,6 @@ export function AttendanceView({
                         }`}
                       >
                         <div className="space-y-4">
-                          {/* اسم الطالب */}
                           <div>
                             <div className="font-semibold">
                               {
@@ -2478,13 +2616,11 @@ export function AttendanceView({
                             )}
                           </div>
 
-                          {/* حالات الحضور */}
                           <div>
                             <div className="mb-2 text-xs font-medium text-muted-foreground">
                               حالة الحضور
                             </div>
 
-                            {/* 2 × 2 على الجوال */}
                             <div className="grid grid-cols-2 gap-2">
                               {attendanceStatusNames.map(
                                 (
@@ -2513,7 +2649,7 @@ export function AttendanceView({
                                           isSelected &&
                                           status
                                         ) {
-                                          clearAttendance(
+                                          void clearAttendance(
                                             student,
                                             activeDate,
                                           )
@@ -2546,7 +2682,6 @@ export function AttendanceView({
                             </div>
                           </div>
 
-                          {/* ملاحظات المعلم */}
                           <div>
                             <label className="mb-2 block text-xs font-medium text-muted-foreground">
                               ملاحظات المعلم
@@ -2581,9 +2716,6 @@ export function AttendanceView({
                     )
                   }
 
-                  /*
-                   * تم اختيار الحالة.
-                   */
                   const selectedStyles =
                     getStatusClasses(
                       status,
@@ -2604,9 +2736,7 @@ export function AttendanceView({
                       }`}
                     >
                       <div className="space-y-4">
-                        {/* الصف العلوي */}
                         <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-                          {/* اسم الطالب */}
                           <div className="min-w-0 xl:flex-1">
                             <div className="font-semibold">
                               {
@@ -2623,17 +2753,29 @@ export function AttendanceView({
                             )}
                           </div>
 
-                          {/* الحالة */}
                           <button
                             type="button"
-                            disabled={saving}
-                            onClick={() =>
+                            disabled={
+                              saving ||
+                              status ===
+                                'غير منضم'
+                            }
+                            onClick={() => {
+                              if (
+                                status ===
+                                'غير منضم'
+                              ) {
+                                return
+                              }
+
                               setEditingStatusKey(
                                 key,
                               )
-                            }
+                            }}
                             className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
-                              saving
+                              saving ||
+                              status ===
+                                'غير منضم'
                                 ? 'cursor-not-allowed opacity-50'
                                 : 'cursor-pointer'
                             }`}
@@ -2641,19 +2783,20 @@ export function AttendanceView({
                             {status}
                           </button>
 
-                          {/* نسبة الحضور */}
                           <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
                             <span
                               className={`text-sm font-bold ${getPercentageClass(
                                 percentage,
                               )}`}
                             >
-                              {percentage}%
+                              {status ===
+                              'غير منضم'
+                                ? '—'
+                                : `${percentage}%`}
                             </span>
                           </div>
                         </div>
 
-                        {/* ملاحظات المعلم */}
                         <div>
                           <label className="mb-2 block text-xs font-medium text-muted-foreground">
                             ملاحظات المعلم
@@ -2709,7 +2852,6 @@ export function AttendanceView({
         </>
       )}
 
-      {/* فترة الدورة */}
       <p className="text-xs text-muted-foreground">
         فترة الدورة:{' '}
         {formatDateForDisplay(
