@@ -12,7 +12,6 @@ import {
   CalendarCheck,
   ClipboardCheck,
   Clock3,
-  Download,
   RefreshCw,
   Search,
   UserCheck,
@@ -38,11 +37,12 @@ import {
 import { Button } from '@/components/ui/button'
 
 import {
-  AttendanceDetails,
   type TeacherAttendanceDetail,
 } from '@/components/sections/teacher-attendance-details'
 
 import { DashboardAttendanceExport } from '@/components/sections/dashboard-attendance-export'
+
+import { DashboardViewPanels } from '@/components/sections/dashboard-view-panels'
 
 type AcademicYear = {
   id: string
@@ -110,14 +110,6 @@ type AttendanceRecord = {
   statusId: string
   note: string | null
   courseId: string
-}
-
-type AttendanceNote = {
-  id: string
-  studentId: string
-  attendanceDate: string
-  statusName: string
-  note: string
 }
 
 type DashboardStats = {
@@ -420,15 +412,6 @@ export function DashboardView() {
   const hasDashboardCache =
     dashboardCache !== null
 
-  /*
-   * هذا الفحص محلي فقط.
-   *
-   * LoginPage سبق أن فحص الصلاحيات من السيرفر
-   * وحفظ الأقسام في sessionStorage.
-   *
-   * لا يوجد هنا أي طلب إلى:
-   * /api/auth/dashboard-sections
-   */
   const [
     checkingAccess,
     setCheckingAccess,
@@ -602,16 +585,6 @@ export function DashboardView() {
     [],
   )
 
-  /*
-   * --------------------------------------------------
-   * فحص الصلاحية محليًا فقط
-   * --------------------------------------------------
-   *
-   * LoginPage قام مسبقًا بفحص الصلاحيات من السيرفر
-   * وحفظ النتيجة في sessionStorage.
-   *
-   * لذلك Dashboard لا يعيد طلب API.
-   */
   useEffect(() => {
     const sections =
       getDashboardSections()
@@ -651,11 +624,6 @@ export function DashboardView() {
     router.replace('/login')
   }, [router])
 
-  /*
-   * --------------------------------------------------
-   * تحميل حالات الحضور مرة واحدة فقط
-   * --------------------------------------------------
-   */
   const loadAttendanceStatuses =
     useCallback(
       async () => {
@@ -725,18 +693,6 @@ export function DashboardView() {
       ],
     )
 
-  /*
-   * --------------------------------------------------
-   * تحميل حضور الدورة المحددة فقط
-   * --------------------------------------------------
-   *
-   * ملاحظة مهمة:
-   * يتم تحميل جميع سجلات الحضور للدورة،
-   * وليس تاريخ اليوم فقط.
-   *
-   * لذلك يمكن استخدام attendance.note
-   * لعرض الملاحظات القديمة أيضًا.
-   */
   const loadAttendance =
     useCallback(
       async (courseIds: string[]) => {
@@ -849,11 +805,6 @@ export function DashboardView() {
       [updateDashboardCache],
     )
 
-  /*
-   * --------------------------------------------------
-   * تحميل البيانات الثقيلة في الخلفية
-   * --------------------------------------------------
-   */
   const loadBackgroundData =
     useCallback(
       async (
@@ -1216,11 +1167,6 @@ export function DashboardView() {
       [updateDashboardCache],
     )
 
-  /*
-   * --------------------------------------------------
-   * التحميل الأساسي
-   * --------------------------------------------------
-   */
   const loadData =
     useCallback(
       async (
@@ -1559,11 +1505,6 @@ export function DashboardView() {
       ],
     )
 
-  /*
-   * --------------------------------------------------
-   * أول فتح
-   * --------------------------------------------------
-   */
   useEffect(() => {
     if (dashboardCache !== null) {
       return
@@ -1580,9 +1521,6 @@ export function DashboardView() {
     })
   }, [loadData])
 
-  /*
-   * حفظ الاختيارات في الكاش.
-   */
   useEffect(() => {
     updateDashboardCache({
       selectedCourseId,
@@ -1594,10 +1532,6 @@ export function DashboardView() {
     updateDashboardCache,
   ])
 
-  /*
-   * عند تغيير الدورة:
-   * نحمل حضور الدورة الجديدة.
-   */
   useEffect(() => {
     if (!selectedCourseId) {
       return
@@ -1611,10 +1545,6 @@ export function DashboardView() {
     loadAttendance,
   ])
 
-  /*
-   * إذا حالات الحضور غير موجودة:
-   * نحملها مرة واحدة.
-   */
   useEffect(() => {
     if (
       attendanceStatuses.length > 0
@@ -1628,11 +1558,6 @@ export function DashboardView() {
     loadAttendanceStatuses,
   ])
 
-  /*
-   * --------------------------------------------------
-   * تحديث الحضور للدورة المحددة
-   * --------------------------------------------------
-   */
   useEffect(() => {
     if (!selectedCourseId) {
       return
@@ -1794,204 +1719,6 @@ export function DashboardView() {
       attendanceRecords,
       selectedCourseId,
       selectedDate,
-    ])
-
-  /*
-   * --------------------------------------------------
-   * ملاحظات المعلمين
-   * --------------------------------------------------
-   *
-   * نقرأ الملاحظات من attendance.note.
-   *
-   * مهم:
-   * attendanceRecords تحتوي جميع سجلات الحضور
-   * للدورة المحددة، لذلك الملاحظات القديمة
-   * تبقى ظاهرة حتى عند تغيير التاريخ.
-   */
-  const attendanceNotes =
-    useMemo<AttendanceNote[]>(
-      () => {
-        const selectedCourse =
-          normalizeId(
-            selectedCourseId,
-          )
-
-        if (!selectedCourse) {
-          return []
-        }
-
-        return attendanceRecords
-          .filter((record) => {
-            if (
-              normalizeId(
-                record.courseId,
-              ) !== selectedCourse
-            ) {
-              return false
-            }
-
-            return Boolean(
-              normalizeText(
-                record.note,
-              ),
-            )
-          })
-          .map((record) => {
-            const statusName =
-              statusMap.get(
-                normalizeId(
-                  record.statusId,
-                ),
-              ) ?? ''
-
-            return {
-              id: record.id,
-              studentId:
-                record.studentId,
-              attendanceDate:
-                normalizeAttendanceDate(
-                  record.attendanceDate,
-                ),
-              statusName:
-                getAttendanceStatusLabel(
-                  statusName,
-                ) ?? 'غير محدد',
-              note:
-                normalizeText(
-                  record.note,
-                ),
-            }
-          })
-          .sort((a, b) => {
-            const dateCompare =
-              b.attendanceDate.localeCompare(
-                a.attendanceDate,
-              )
-
-            if (dateCompare !== 0) {
-              return dateCompare
-            }
-
-            return a.id.localeCompare(
-              b.id,
-            )
-          })
-      },
-      [
-        attendanceRecords,
-        selectedCourseId,
-        statusMap,
-      ],
-    )
-
-  /*
-   * --------------------------------------------------
-   * تنزيل جميع ملاحظات الدورة
-   * --------------------------------------------------
-   */
-  const downloadAttendanceNotes =
-    useCallback(() => {
-      if (
-        !selectedCourse ||
-        attendanceNotes.length === 0
-      ) {
-        return
-      }
-
-      const escapeCsv = (
-        value: string,
-      ) =>
-        `"${String(value)
-          .replace(/"/g, '""')
-          .replace(
-            /\r?\n/g,
-            ' ',
-          )}"`
-
-      const rows = [
-        [
-          'التاريخ',
-          'الطالب',
-          'رقم الطالب',
-          'الرقم الشخصي',
-          'الحالة',
-          'الملاحظة',
-        ],
-        ...attendanceNotes.map(
-          (item) => {
-            const student =
-              students.find(
-                (student) =>
-                  normalizeId(
-                    student.id,
-                  ) ===
-                  normalizeId(
-                    item.studentId,
-                  ),
-              )
-
-            return [
-              formatDate(
-                item.attendanceDate,
-              ),
-              student?.name ??
-                'طالب غير معروف',
-              student?.studentId ??
-                '',
-              student?.personalId ??
-                '',
-              item.statusName,
-              item.note,
-            ]
-          },
-        ),
-      ]
-
-      const csv =
-        '\uFEFF' +
-        rows
-          .map((row) =>
-            row
-              .map(escapeCsv)
-              .join(','),
-          )
-          .join('\r\n')
-
-      const blob = new Blob(
-        [csv],
-        {
-          type: 'text/csv;charset=utf-8;',
-        },
-      )
-
-      const url =
-        URL.createObjectURL(
-          blob,
-        )
-
-      const link =
-        document.createElement('a')
-
-      link.href = url
-
-      link.download =
-        `ملاحظات-${selectedCourse.name}-${getLocalDateString()}.csv`
-
-      document.body.appendChild(
-        link,
-      )
-
-      link.click()
-
-      document.body.removeChild(
-        link,
-      )
-
-      URL.revokeObjectURL(url)
-    }, [
-      selectedCourse,
-      attendanceNotes,
-      students,
     ])
 
   const stats = useMemo<DashboardStats>(
@@ -2513,96 +2240,6 @@ export function DashboardView() {
       ],
     )
 
-  const selectedStudentCourses =
-    useMemo(() => {
-      if (!selectedStudent) {
-        return []
-      }
-
-      return assignments
-        .filter(
-          (assignment) =>
-            normalizeId(
-              assignment.studentId,
-            ) ===
-            normalizeId(
-              selectedStudent.student.id,
-            ),
-        )
-        .map(
-          (assignment) =>
-            courses.find(
-              (course) =>
-                normalizeId(
-                  course.id,
-                ) ===
-                normalizeId(
-                  assignment.courseId,
-                ),
-            ),
-        )
-        .filter(
-          (
-            course,
-          ): course is Course =>
-            Boolean(course),
-        )
-    }, [
-      selectedStudent,
-      assignments,
-      courses,
-    ])
-
-  const selectedStudentTeachers =
-    useMemo(() => {
-      if (!selectedStudent) {
-        return []
-      }
-
-      return Array.from(
-        new Set(
-          assignments
-            .filter(
-              (assignment) =>
-                normalizeId(
-                  assignment.studentId,
-                ) ===
-                normalizeId(
-                  selectedStudent.student.id,
-                ),
-            )
-            .map(
-              (assignment) =>
-                teachers.find(
-                  (teacher) =>
-                    normalizeId(
-                      teacher.id,
-                    ) ===
-                    normalizeId(
-                      assignment.teacherId,
-                    ),
-                )?.name,
-            )
-            .filter(
-              (
-                name,
-              ): name is string =>
-                Boolean(name),
-            ),
-        ),
-      )
-    }, [
-      selectedStudent,
-      assignments,
-      teachers,
-    ])
-
-  /*
-   * ننتظر فقط فحص sessionStorage المحلي
-   * أو تحميل البيانات الأساسية.
-   *
-   * لا يوجد أي API للصلاحيات هنا.
-   */
   if (checkingAccess || loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -2620,7 +2257,6 @@ export function DashboardView() {
         dir="rtl"
         className="space-y-6"
       >
-        {/* زر العودة */}
         <div className="relative h-10">
           <Button
             type="button"
@@ -2637,7 +2273,6 @@ export function DashboardView() {
           </Button>
         </div>
 
-        {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -2677,7 +2312,6 @@ export function DashboardView() {
           </Button>
         </div>
 
-        {/* Quick student search */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -2796,7 +2430,6 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        {/* Course / date */}
         <Card>
           <CardContent className="p-5">
             <div className="grid gap-4 md:grid-cols-2">
@@ -2872,7 +2505,6 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        {/* Year / course membership */}
         <div className="grid gap-4 sm:grid-cols-3">
           <Card>
             <CardContent className="p-5">
@@ -2941,7 +2573,6 @@ export function DashboardView() {
           </Card>
         </div>
 
-        {/* Daily attendance */}
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3221,407 +2852,58 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        {/* Pending registrations */}
-        {pendingRegistrationCount >
-          0 && (
-          <button
-            type="button"
-            onClick={() =>
-              router.push(
-                '/enrollment',
-              )
-            }
-            className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-right shadow-sm transition-colors hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-200"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                  <ClipboardCheck className="size-5" />
-                </div>
-
-                <div>
-                  <p className="font-medium text-amber-900">
-                    طلبات تسجيل جديدة
-                  </p>
-
-                  <p className="mt-1 text-xs text-amber-700/80">
-                    لديك{' '}
-                    {
-                      pendingRegistrationCount
-                    }{' '}
-                    طلب تسجيل معلّق
-                  </p>
-                </div>
-              </div>
-
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-200 text-sm font-semibold text-amber-800">
-                {
-                  pendingRegistrationCount
-                }
-              </span>
-            </div>
-          </button>
-        )}
-
-        {/* Teacher comments */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="size-5 text-slate-500" />
-                ملاحظات المعلمين على الطلبة
-              </CardTitle>
-
-              <Button
-                type="button"
-                onClick={
-                  downloadAttendanceNotes
-                }
-                disabled={
-                  attendanceNotes.length ===
-                  0
-                }
-                className="h-10 gap-2 border border-emerald-200 bg-emerald-50 px-4 text-emerald-700 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download className="size-4" />
-                تنزيل كل الملاحظات
-              </Button>
-            </div>
-
-            <p className="mt-1 text-xs text-muted-foreground">
-              ملاحظات المعلمين المسجلة في الحضور للدورة المحددة
-            </p>
-          </CardHeader>
-
-          <CardContent>
-            {attendanceNotes.length ===
-            0 ? (
-              <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
-                <div>
-                  <ClipboardCheck className="mx-auto size-7 text-slate-300" />
-
-                  <p className="mt-3 text-sm font-medium text-muted-foreground">
-                    لا توجد ملاحظات مسجلة
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    ستظهر هنا أي ملاحظة يكتبها المعلم أثناء تسجيل حضور الطالب.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-xl border">
-                <div className="hidden grid-cols-[120px_minmax(180px,1fr)_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
-                  <div>التاريخ</div>
-                  <div>الطالب</div>
-                  <div>الحالة</div>
-                  <div>الملاحظة</div>
-                </div>
-
-                <div className="divide-y">
-                  {attendanceNotes.map(
-                    (item) => {
-                      const student =
-                        students.find(
-                          (student) =>
-                            normalizeId(
-                              student.id,
-                            ) ===
-                            normalizeId(
-                              item.studentId,
-                            ),
-                        )
-
-                      return (
-                        <div
-                          key={
-                            item.id
-                          }
-                          className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_120px_1fr] md:items-start md:gap-4"
-                        >
-                          <div>
-                            <p className="text-xs text-muted-foreground md:hidden">
-                              التاريخ
-                            </p>
-
-                            <p className="mt-1 text-sm font-medium md:mt-0">
-                              {formatDate(
-                                item.attendanceDate,
-                              )}
-                            </p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground md:hidden">
-                              الطالب
-                            </p>
-
-                            <p className="mt-1 font-medium md:mt-0">
-                              {student?.name ??
-                                'طالب غير معروف'}
-                            </p>
-
-                            {student?.studentId && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                رقم الطالب:{' '}
-                                {
-                                  student.studentId
-                                }
-                              </p>
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground md:hidden">
-                              الحالة
-                            </p>
-
-                            <span className="mt-1 inline-flex rounded-full border bg-muted px-3 py-1 text-xs font-medium md:mt-0">
-                              {
-                                item.statusName
-                              }
-                            </span>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground md:hidden">
-                              الملاحظة
-                            </p>
-
-                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 md:mt-0">
-                              {
-                                item.note
-                              }
-                            </p>
-                          </div>
-                        </div>
-                      )
-                    },
-                  )}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Student details modal */}
-      {selectedStudent && (
-        <div
-          dir="rtl"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onMouseDown={() =>
-            setSelectedStudent(null)
+        <DashboardViewPanels
+          selectedCourse={
+            selectedCourse
           }
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-background shadow-xl"
-            onMouseDown={(event) =>
-              event.stopPropagation()
-            }
-          >
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <div>
-                <h2 className="font-semibold">
-                  تفاصيل الطالب
-                </h2>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  من البحث السريع
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setSelectedStudent(
-                    null,
-                  )
-                }
-                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 p-5">
-              <div className="rounded-xl border p-4">
-                <p className="text-lg font-semibold">
-                  {
-                    selectedStudent
-                      .student
-                      .name
-                  }
-                </p>
-
-                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  {selectedStudent
-                    .student
-                    .studentId && (
-                    <p>
-                      <span className="text-muted-foreground">
-                        رقم الطالب:
-                      </span>{' '}
-                      {
-                        selectedStudent
-                          .student
-                          .studentId
-                      }
-                    </p>
-                  )}
-
-                  {selectedStudent
-                    .student
-                    .personalId && (
-                    <p>
-                      <span className="text-muted-foreground">
-                        الرقم الشخصي:
-                      </span>{' '}
-                      {
-                        selectedStudent
-                          .student
-                          .personalId
-                      }
-                    </p>
-                  )}
-
-                  {selectedStudent
-                    .student
-                    .phone && (
-                    <p>
-                      <span className="text-muted-foreground">
-                        الهاتف:
-                      </span>{' '}
-                      {
-                        selectedStudent
-                          .student
-                          .phone
-                      }
-                    </p>
-                  )}
-
-                  <p>
-                    <span className="text-muted-foreground">
-                      الحالة:
-                    </span>{' '}
-                    {
-                      selectedStudent
-                        .student
-                        .status ??
-                      'غير محدد'
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <p className="text-sm font-medium">
-                  الدورات
-                </p>
-
-                {selectedStudentCourses.length >
-                0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedStudentCourses.map(
-                      (course) => (
-                        <span
-                          key={
-                            course.id
-                          }
-                          className="rounded-full bg-muted px-3 py-1 text-xs"
-                        >
-                          {
-                            course.name
-                          }
-                        </span>
-                      ),
-                    )}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    غير منضم لأي دورة
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <p className="text-sm font-medium">
-                  المعلمون
-                </p>
-
-                {selectedStudentTeachers.length >
-                0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {selectedStudentTeachers.map(
-                      (teacher) => (
-                        <span
-                          key={
-                            teacher
-                          }
-                          className="rounded-full bg-muted px-3 py-1 text-xs"
-                        >
-                          {
-                            teacher
-                          }
-                        </span>
-                      ),
-                    )}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    لا يوجد معلم موزع عليه
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-xl border p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium">
-                    حضور اليوم
-                  </p>
-
-                  {selectedDate && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatDate(
-                        selectedDate,
-                      )}
-                    </span>
-                  )}
-                </div>
-
-                <p className="mt-2 text-sm">
-                  {selectedStudent.attendanceStatus ??
-                    'لا يوجد سجل حضور'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Teacher attendance details */}
-      {attendanceDetailsOpen &&
-        lessonDateStatus ===
-          'lesson' && (
-          <AttendanceDetails
-            courseName={
-              selectedCourse?.name ??
-              'الدورة'
-            }
-            date={selectedDate}
-            details={
-              teacherAttendanceDetails
-            }
-            overallPercentage={
-              attendancePercentage
-            }
-            onClose={() =>
-              setAttendanceDetailsOpen(
-                false,
-              )
-            }
-          />
-        )}
+          academicYear={
+            academicYear
+          }
+          pendingRegistrationCount={
+            pendingRegistrationCount
+          }
+          assignments={
+            assignments
+          }
+          courses={courses}
+          teachers={teachers}
+          students={students}
+          attendanceRecords={
+            attendanceRecords
+          }
+          attendanceStatuses={
+            attendanceStatuses
+          }
+          selectedCourseId={
+            selectedCourseId
+          }
+          selectedDate={
+            selectedDate
+          }
+          lessonDateStatus={
+            lessonDateStatus
+          }
+          teacherAttendanceDetails={
+            teacherAttendanceDetails
+          }
+          attendancePercentage={
+            attendancePercentage
+          }
+          attendanceDetailsOpen={
+            attendanceDetailsOpen
+          }
+          setAttendanceDetailsOpen={
+            setAttendanceDetailsOpen
+          }
+          selectedStudent={
+            selectedStudent
+          }
+          setSelectedStudent={
+            setSelectedStudent
+          }
+          router={router}
+        />
+      </div>
     </>
   )
 }
