@@ -6,6 +6,8 @@ import {
   useState,
 } from 'react'
 
+import { useRouter } from 'next/navigation'
+
 import {
   Search,
   UserPlus,
@@ -13,6 +15,7 @@ import {
   Download,
   X,
   Loader2,
+  ArrowRight,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -56,10 +59,14 @@ const emptyFilters: Filters = {
   paymentStatus: '',
   notes: '',
   attendance: '',
+  guardianRelation: '',
+  studentPhone: '',
   enrollmentCourse: '',
 }
 
 export function StudentsView() {
+  const router = useRouter()
+
   const initialCache =
     getStudentsCache()
 
@@ -308,10 +315,6 @@ export function StudentsView() {
    * ============================================================
    * الحذف الجماعي
    * ============================================================
-   *
-   * يستخدم نفس RPC الخاص بالحذف الكامل.
-   * لا نحذف مباشرة من students حتى يتم التعامل
-   * مع attendance والرحلات وبقية العلاقات.
    */
   const deleteSelectedStudents = async (
     studentIds: string[]
@@ -577,6 +580,24 @@ export function StudentsView() {
               !filters.attendance ||
               student.attendance ===
                 filters.attendance,
+
+            guardianRelation:
+              !filters.guardianRelation ||
+              String(
+                student.guardianRelation ?? ''
+              )
+                .toLowerCase()
+                .includes(
+                  filters.guardianRelation.toLowerCase()
+                ),
+
+            studentPhone:
+              !filters.studentPhone ||
+              String(
+                student.studentPhone ?? ''
+              ).includes(
+                filters.studentPhone
+              ),
 
             enrollmentCourse:
               !filters.enrollmentCourse ||
@@ -879,6 +900,22 @@ export function StudentsView() {
 
   return (
     <div className="space-y-6">
+
+      {/* سهم العودة - أعلى يمين الصفحة */}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => router.back()}
+          aria-label="العودة"
+          title="العودة"
+          className="h-9 w-9"
+        >
+          <ArrowRight className="size-5" />
+        </Button>
+      </div>
+
       <div
         className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm transition-all ${
           isLoadingStudents
@@ -914,6 +951,7 @@ export function StudentsView() {
 
       <Card>
         <CardContent className="space-y-4 p-4">
+
           <div className="relative">
             <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
@@ -930,6 +968,7 @@ export function StudentsView() {
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">
@@ -983,10 +1022,15 @@ export function StudentsView() {
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* أزرار الصفحة - صف واحد */}
+            <div
+              dir="rtl"
+              className="flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:max-w-full"
+            >
               <Button
                 type="button"
                 variant="outline"
+                className="shrink-0 whitespace-nowrap"
                 onClick={
                   exportStudentsToExcel
                 }
@@ -1002,6 +1046,7 @@ export function StudentsView() {
               <Button
                 type="button"
                 variant="outline"
+                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
@@ -1016,6 +1061,7 @@ export function StudentsView() {
               <Button
                 type="button"
                 variant="outline"
+                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
@@ -1115,6 +1161,7 @@ export function StudentsView() {
               <Button
                 type="button"
                 variant="destructive"
+                className="shrink-0 whitespace-nowrap"
                 disabled={
                   !selectedStudentId
                 }
@@ -1203,6 +1250,17 @@ export function StudentsView() {
               >
                 <X className="size-4" />
                 مسح
+              </Button>
+
+              <Button
+                type="button"
+                className="shrink-0 whitespace-nowrap"
+                onClick={
+                  openAddStudent
+                }
+              >
+                <UserPlus className="size-4" />
+                إضافة طالب
               </Button>
             </div>
           </div>
