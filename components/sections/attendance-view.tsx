@@ -29,6 +29,7 @@ export type Student = {
   levelId: string
   levelName: string
   enrollmentId: string
+  joinDate: string | null
 }
 
 export type AttendanceStatus = {
