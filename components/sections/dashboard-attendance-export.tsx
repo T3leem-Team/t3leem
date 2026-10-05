@@ -10,6 +10,7 @@ import {
 import * as XLSX from 'xlsx'
 
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase'
 
 type AcademicYear = {
   id: string
@@ -63,6 +64,15 @@ type AttendanceRecord = {
   statusId: string
   note: string | null
   courseId: string
+}
+
+type Enrollment = {
+  id: string
+  studentId: string
+  academicYearId: string
+  levelId: string | null
+  status: string
+  createdAt: string | null
 }
 
 type Props = {
@@ -453,6 +463,113 @@ export function DashboardAttendanceExport({
           (student) => normalizeId(student.id),
         )
 
+        /*
+         * مهم:
+         * نجلب الـ enrollments من قاعدة البيانات حتى نعرف
+         * تاريخ انضمام كل طالب للسنة الدراسية.
+         *
+         * إذا كان تاريخ الدرس قبل تاريخ إنشاء الـ enrollment
+         * فالحالة تكون "غير منضم".
+         */
+        let enrollments: Enrollment[] = []
+
+        if (
+          academicYear?.id &&
+          studentIds.length > 0
+        ) {
+          const {
+            data: enrollmentData,
+            error: enrollmentError,
+          } = await supabase
+            .from('enrollments')
+            .select(
+              `
+                id,
+                student_id,
+                academic_year_id,
+                level_id,
+                status,
+                created_at
+              `,
+            )
+            .eq(
+              'academic_year_id',
+              academicYear.id,
+            )
+            .in(
+              'student_id',
+              studentIds,
+            )
+            .order(
+              'created_at',
+              {
+                ascending: true,
+              },
+            )
+
+          if (enrollmentError) {
+            console.error(
+              'Attendance export enrollment query error:',
+              enrollmentError,
+            )
+
+            throw enrollmentError
+          }
+
+          enrollments =
+            (enrollmentData ?? []).map(
+              (item) => ({
+                id: String(item.id),
+                studentId: String(
+                  item.student_id,
+                ),
+                academicYearId: String(
+                  item.academic_year_id,
+                ),
+                levelId:
+                  item.level_id
+                    ? String(item.level_id)
+                    : null,
+                status: String(
+                  item.status ?? '',
+                ),
+                createdAt:
+                  item.created_at
+                    ? String(item.created_at)
+                    : null,
+              }),
+            )
+        }
+
+        /*
+         * نستخدم أقدم Enrollment للسنة الحالية
+         * لكل طالب.
+         */
+        const enrollmentMap =
+          new Map<string, Enrollment>()
+
+        for (const enrollment of enrollments) {
+          const studentId = normalizeId(
+            enrollment.studentId,
+          )
+
+          if (
+            !studentId ||
+            !enrollment.createdAt
+          ) {
+            continue
+          }
+
+          if (
+            !enrollmentMap.has(studentId)
+          ) {
+            enrollmentMap.set(
+              studentId,
+              enrollment,
+            )
+          }
+        }
+
         const relevantRecords =
           attendanceRecords.filter((record) => {
             const recordStudentId = normalizeId(
@@ -513,6 +630,27 @@ export function DashboardAttendanceExport({
           const teacherName =
             teacherNames.join('، ') || 'غير محدد'
 
+          const enrollment =
+            enrollmentMap.get(studentId)
+
+          /*
+           * تاريخ الانضمام الرسمي.
+           *
+           * مثال:
+           * enrollment created_at =
+           * 2026-10-05 15:23
+           *
+           * إذن:
+           * 2026-10-04 = غير منضم
+           * 2026-10-05 = يبدأ فحص الحضور
+           */
+          const enrollmentDate =
+            enrollment?.createdAt
+              ? normalizeAttendanceDate(
+                  enrollment.createdAt,
+                )
+              : null
+
           const counts = {
             present: 0,
             absent: 0,
@@ -529,12 +667,29 @@ export function DashboardAttendanceExport({
 
             const record = recordMap.get(key)
 
-            const statusLabel = record
-              ? getStatusLabel(
-                  record.statusId,
-                  attendanceStatuses,
-                )
-              : 'لم يسجل'
+            let statusLabel: string
+
+            /*
+             * إذا لم يكن الطالب منضمًا في تاريخ الدرس،
+             * تكون الحالة "غير منضم".
+             *
+             * هذه الحالة لا تدخل في:
+             * - عدد الأيام المسجلة
+             * - نسبة الحضور
+             */
+            if (
+              !enrollmentDate ||
+              lessonDate < enrollmentDate
+            ) {
+              statusLabel = 'غير منضم'
+            } else if (record) {
+              statusLabel = getStatusLabel(
+                record.statusId,
+                attendanceStatuses,
+              )
+            } else {
+              statusLabel = 'لم يسجل'
+            }
 
             const statusKey =
               getStatusKey(statusLabel)
@@ -547,15 +702,14 @@ export function DashboardAttendanceExport({
               statusKey === 'notRecorded'
             ) {
               counts[statusKey] += 1
-            } else {
-              counts.notRecorded += 1
             }
 
             detailsRows.push({
               المعلم: teacherName,
               الدورة: course.name,
               'اسم الطالب': student.name,
-              'رقم الطالب': student.studentId ?? '',
+              'رقم الطالب':
+                student.studentId ?? '',
               'الرقم الشخصي':
                 student.personalId ?? '',
               التاريخ: lessonDate,
@@ -587,7 +741,8 @@ export function DashboardAttendanceExport({
             المعلم: teacherName,
             الدورة: course.name,
             'اسم الطالب': student.name,
-            'رقم الطالب': student.studentId ?? '',
+            'رقم الطالب':
+              student.studentId ?? '',
             'الرقم الشخصي':
               student.personalId ?? '',
             'من تاريخ': safeFromDate,
@@ -599,8 +754,16 @@ export function DashboardAttendanceExport({
             متأخر: counts.late,
             مستأذن: counts.excused,
             'لم يسجل': counts.notRecorded,
-            'الأيام المسجلة': recordedDays,
-            'أيام الحضور': attendanceDays,
+            'الأيام غير المنضمة':
+              lessonDates.filter(
+                (lessonDate) =>
+                  !enrollmentDate ||
+                  lessonDate < enrollmentDate,
+              ).length,
+            'الأيام المسجلة':
+              recordedDays,
+            'أيام الحضور':
+              attendanceDays,
             'نسبة الحضور':
               formatPercentage(
                 attendancePercentage,
@@ -647,6 +810,7 @@ export function DashboardAttendanceExport({
           { wch: 10 },
           { wch: 10 },
           { wch: 12 },
+          { wch: 18 },
           { wch: 16 },
           { wch: 16 },
           { wch: 18 },
@@ -694,6 +858,7 @@ export function DashboardAttendanceExport({
       }
     },
     [
+      academicYear?.id,
       academicYear?.startDate,
       assignments,
       attendanceRecords,
