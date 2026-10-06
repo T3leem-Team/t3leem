@@ -24,10 +24,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-/* =========================================================
-   TYPES
-========================================================= */
-
 type AcademicYear = {
   id: string
   name: string
@@ -126,15 +122,17 @@ type Props = {
   }
 }
 
-/* =========================================================
-   CONSTANTS
-========================================================= */
-
 const inputClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
+
+const columnFilterInputClass =
+  'h-8 w-full min-w-[110px] rounded-md border border-input bg-background px-2 text-xs'
+
+const columnFilterSelectClass =
+  'h-8 w-full min-w-[110px] rounded-md border border-input bg-background px-2 text-xs'
 
 const COURSE_COUNT_COLORS = [
   '#fca5a5',
@@ -152,10 +150,6 @@ const COURSE_COUNT_COLORS = [
 ]
 
 const ALL_COURSES_COLOR = '#86efac'
-
-/* =========================================================
-   HELPERS
-========================================================= */
 
 function formatPercentage(value: number | null) {
   if (value === null || !Number.isFinite(value)) {
@@ -306,14 +300,12 @@ function getRowColor(
 }
 
 function safeFilePart(value: string) {
-  return value
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .trim() || 'السنة'
+  return (
+    value
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .trim() || 'السنة'
+  )
 }
-
-/* =========================================================
-   COMPONENT
-========================================================= */
 
 export default function AttendanceAwardsResults({
   results,
@@ -326,7 +318,6 @@ export default function AttendanceAwardsResults({
   selectedYearName,
   minimumPercentage,
   requireAllCourses,
-  unregisteredCourse,
 }: Props) {
   const router = useRouter()
 
@@ -343,10 +334,6 @@ export default function AttendanceAwardsResults({
 
   const [saving, setSaving] = useState(false)
   const [exportingSaved, setExportingSaved] = useState(false)
-
-  /* =========================================================
-     FILTER HELPERS
-  ========================================================= */
 
   const updateFilter = (
     key:
@@ -390,10 +377,6 @@ export default function AttendanceAwardsResults({
       courses: {},
     })
   }
-
-  /* =========================================================
-     FILTERED RESULTS
-  ========================================================= */
 
   const filteredResults = useMemo(() => {
     return results.filter((student) => {
@@ -479,10 +462,6 @@ export default function AttendanceAwardsResults({
     selectedCourses,
   ])
 
-  /* =========================================================
-     SORTED RESULTS
-  ========================================================= */
-
   const sortedResults = useMemo(() => {
     return [...filteredResults].sort(
       (a, b) => {
@@ -503,10 +482,6 @@ export default function AttendanceAwardsResults({
       },
     )
   }, [filteredResults])
-
-  /* =========================================================
-     FILTER OPTIONS
-  ========================================================= */
 
   const grades = useMemo(() => {
     return Array.from(
@@ -562,10 +537,6 @@ export default function AttendanceAwardsResults({
     )
   }, [selectedCourses.length])
 
-  /* =========================================================
-     BUILD EXCEL
-========================================================= */
-
   const downloadExcel = (
     rows: Record<string, string | number>[],
     fileName: string,
@@ -593,10 +564,6 @@ export default function AttendanceAwardsResults({
       fileName,
     )
   }
-
-  /* =========================================================
-     EXPORT CURRENT FILTER
-  ========================================================= */
 
   const exportCurrentToExcel = () => {
     if (sortedResults.length === 0) {
@@ -700,14 +667,6 @@ export default function AttendanceAwardsResults({
     }
   }
 
-  /* =========================================================
-     SAVE FINAL RESULT
-     
-     مهم:
-     الحفظ يأخذ results كاملة، وليس sortedResults.
-     لذلك فلاتر الشاشة لا تؤثر على ما يتم حفظه.
-  ========================================================= */
-
   const saveFinalResult = async () => {
     if (!selectedYearId) {
       setError('لا توجد سنة دراسية محددة.')
@@ -736,10 +695,6 @@ export default function AttendanceAwardsResults({
     setError('')
 
     try {
-      /* -----------------------------------------------------
-         1. DELETE OLD RESULT
-      ----------------------------------------------------- */
-
       const {
         error: deleteError,
       } = await supabase
@@ -755,10 +710,6 @@ export default function AttendanceAwardsResults({
           `تعذر حذف النتيجة السابقة: ${deleteError.message}`,
         )
       }
-
-      /* -----------------------------------------------------
-         2. BUILD NEW SNAPSHOT
-      ----------------------------------------------------- */
 
       const rows = results.map((student) => {
         const courseResults =
@@ -813,10 +764,6 @@ export default function AttendanceAwardsResults({
         }
       })
 
-      /* -----------------------------------------------------
-         3. INSERT NEW RESULT
-      ----------------------------------------------------- */
-
       const {
         error: insertError,
       } = await supabase
@@ -845,10 +792,6 @@ export default function AttendanceAwardsResults({
       setSaving(false)
     }
   }
-
-  /* =========================================================
-     EXPORT SAVED RESULT FROM DATABASE
-  ========================================================= */
 
   const exportSavedToExcel = async () => {
     if (!selectedYearId) {
@@ -1054,30 +997,23 @@ export default function AttendanceAwardsResults({
     }
   }
 
-  /* =========================================================
-     RENDER
-  ========================================================= */
-
   return (
     <div className="space-y-4">
-      {/* =====================================================
-          BACK BUTTON
-      ===================================================== */}
-
-      <div className="flex justify-end">
+      {/* العودة أعلى الصفحة بالكامل جهة اليمين */}
+      <div
+        className="flex w-full justify-end"
+        dir="ltr"
+      >
         <Button
           variant="outline"
           onClick={() => router.back()}
           className="gap-2"
+          dir="rtl"
         >
           <ArrowRight className="size-4" />
           عودة
         </Button>
       </div>
-
-      {/* =====================================================
-          RESULTS CARD
-      ===================================================== */}
 
       <Card>
         <CardHeader>
@@ -1113,10 +1049,6 @@ export default function AttendanceAwardsResults({
         </CardHeader>
 
         <CardContent className="space-y-5">
-          {/* =====================================================
-              ACTIONS
-          ===================================================== */}
-
           <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:flex-wrap">
             <Button
               onClick={saveFinalResult}
@@ -1139,7 +1071,7 @@ export default function AttendanceAwardsResults({
               disabled={
                 sortedResults.length === 0
               }
-              className="gap-2"
+              className="gap-2 border-green-700 bg-green-700 text-white hover:bg-green-800 hover:text-white"
             >
               <Download className="size-4" />
               Excel — الفلترة الحالية
@@ -1149,7 +1081,7 @@ export default function AttendanceAwardsResults({
               variant="outline"
               onClick={exportSavedToExcel}
               disabled={exportingSaved}
-              className="gap-2"
+              className="gap-2 border-green-300 bg-green-100 text-green-800 hover:bg-green-200 hover:text-green-900"
             >
               <Database className="size-4" />
 
@@ -1164,10 +1096,6 @@ export default function AttendanceAwardsResults({
             الشاشة. أما Excel — الفلترة الحالية فيصدر الصفوف
             الظاهرة حاليًا فقط.
           </p>
-
-          {/* =====================================================
-              FILTERS
-          ===================================================== */}
 
           <div className="flex items-center gap-2 text-sm font-medium">
             <Filter className="size-4 text-primary" />
@@ -1352,10 +1280,6 @@ export default function AttendanceAwardsResults({
             </Button>
           )}
 
-          {/* =====================================================
-              COLOR LEGEND
-          ===================================================== */}
-
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
             <span className="font-medium">
               دليل الألوان:
@@ -1429,13 +1353,9 @@ export default function AttendanceAwardsResults({
         </CardContent>
       </Card>
 
-      {/* =====================================================
-          STUDENTS TABLE
-      ===================================================== */}
-
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <div>
               <CardTitle className="text-base">
                 جدول الطلبة
@@ -1447,7 +1367,10 @@ export default function AttendanceAwardsResults({
               </p>
             </div>
 
-            <Badge variant="neutral">
+            <Badge
+              variant="success"
+              className="border-emerald-600 bg-emerald-600 px-3 py-1 text-sm font-bold text-white hover:bg-emerald-600"
+            >
               {sortedResults.length} طالب
             </Badge>
           </div>
@@ -1462,24 +1385,29 @@ export default function AttendanceAwardsResults({
               ].join(' ')}
             >
               <thead>
+                {/* عناوين الأعمدة */}
                 <tr>
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 w-16 border-b bg-muted px-4 py-3 text-center font-medium">
+                    التسلسل
+                  </th>
+
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     الطالب
                   </th>
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     الرقم الشخصي
                   </th>
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     الصف
                   </th>
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     المعلم
                   </th>
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     عدد الدورات
                   </th>
 
@@ -1487,19 +1415,206 @@ export default function AttendanceAwardsResults({
                     (course) => (
                       <th
                         key={course.id}
-                        className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium"
+                        className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium"
                       >
                         {course.name}
                       </th>
                     ),
                   )}
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     النسبة الإجمالية
                   </th>
 
-                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
                     الحالة
+                  </th>
+                </tr>
+
+                {/* فلترة مرتبطة بكل عمود */}
+                <tr>
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <span className="block text-center text-[10px] text-muted-foreground">
+                      —
+                    </span>
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <input
+                      value={filters.name}
+                      onChange={(event) =>
+                        updateFilter(
+                          'name',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="بحث"
+                      className={columnFilterInputClass}
+                    />
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <input
+                      value={filters.personalId}
+                      onChange={(event) =>
+                        updateFilter(
+                          'personalId',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="بحث"
+                      className={columnFilterInputClass}
+                    />
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <select
+                      value={filters.grade}
+                      onChange={(event) =>
+                        updateFilter(
+                          'grade',
+                          event.target.value,
+                        )
+                      }
+                      className={columnFilterSelectClass}
+                    >
+                      <option value="">
+                        الكل
+                      </option>
+
+                      {grades.map(
+                        (grade) => (
+                          <option
+                            key={grade}
+                            value={grade}
+                          >
+                            {grade}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <select
+                      value={filters.teacher}
+                      onChange={(event) =>
+                        updateFilter(
+                          'teacher',
+                          event.target.value,
+                        )
+                      }
+                      className={columnFilterSelectClass}
+                    >
+                      <option value="">
+                        الكل
+                      </option>
+
+                      {teachers.map(
+                        (teacher) => (
+                          <option
+                            key={teacher}
+                            value={teacher}
+                          >
+                            {teacher}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <select
+                      value={filters.courseCount}
+                      onChange={(event) =>
+                        updateFilter(
+                          'courseCount',
+                          event.target.value,
+                        )
+                      }
+                      className={columnFilterSelectClass}
+                    >
+                      <option value="">
+                        الكل
+                      </option>
+
+                      {courseCountOptions.map(
+                        (count) => (
+                          <option
+                            key={count}
+                            value={count}
+                          >
+                            {count}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </th>
+
+                  {selectedCourses.map(
+                    (course) => (
+                      <th
+                        key={course.id}
+                        className="sticky top-[49px] z-30 border-b bg-background px-2 py-2"
+                      >
+                        <input
+                          value={
+                            filters.courses[
+                              course.id
+                            ] ?? ''
+                          }
+                          onChange={(event) =>
+                            updateCourseFilter(
+                              course.id,
+                              event.target.value,
+                            )
+                          }
+                          placeholder="%"
+                          className={columnFilterInputClass}
+                        />
+                      </th>
+                    ),
+                  )}
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <input
+                      value={
+                        filters.annualPercentage
+                      }
+                      onChange={(event) =>
+                        updateFilter(
+                          'annualPercentage',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="%"
+                      className={columnFilterInputClass}
+                    />
+                  </th>
+
+                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
+                    <select
+                      value={filters.status}
+                      onChange={(event) =>
+                        updateFilter(
+                          'status',
+                          event.target.value,
+                        )
+                      }
+                      className={columnFilterSelectClass}
+                    >
+                      <option value="">
+                        الكل
+                      </option>
+
+                      <option value="eligible">
+                        مستحق
+                      </option>
+
+                      <option value="not-eligible">
+                        غير مستحق
+                      </option>
+                    </select>
                   </th>
                 </tr>
               </thead>
@@ -1511,7 +1626,7 @@ export default function AttendanceAwardsResults({
                     <td
                       colSpan={
                         selectedCourses.length +
-                        7
+                        8
                       }
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
@@ -1520,7 +1635,7 @@ export default function AttendanceAwardsResults({
                   </tr>
                 ) : (
                   sortedResults.map(
-                    (student) => {
+                    (student, index) => {
                       const rowColor =
                         getRowColor(
                           student,
@@ -1540,6 +1655,11 @@ export default function AttendanceAwardsResults({
                               : undefined
                           }
                         >
+                          {/* التسلسل */}
+                          <td className="px-4 py-3 text-center font-bold">
+                            {index + 1}
+                          </td>
+
                           <td className="px-4 py-3">
                             <div>
                               <p className="font-medium">
