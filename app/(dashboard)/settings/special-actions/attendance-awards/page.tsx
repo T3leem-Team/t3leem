@@ -819,9 +819,6 @@ export default function AttendanceAwardsCalculator() {
 
       /* =====================================================
          11. CALCULATE EACH STUDENT
-         
-         مهم:
-         لم يتم تغيير قانون النسبة أو الاستحقاق.
       ===================================================== */
 
       const calculated: StudentResult[] =
@@ -845,10 +842,6 @@ export default function AttendanceAwardsCalculator() {
 
             const registered =
               (assignmentMap.get(key)?.length ?? 0) > 0
-
-            /* -----------------------------------------------
-               الطالب غير المسجل
-            ------------------------------------------------ */
 
             if (!registered) {
               if (
@@ -887,10 +880,6 @@ export default function AttendanceAwardsCalculator() {
 
               continue
             }
-
-            /* -----------------------------------------------
-               الطالب مسجل
-            ------------------------------------------------ */
 
             const rows =
               attendanceByStudentCourse.get(key) ?? []
@@ -958,10 +947,6 @@ export default function AttendanceAwardsCalculator() {
             (!requireAllCourses ||
               allSelectedCoursesHaveData)
 
-          /* -----------------------------------------------
-             المعلمون
-          ------------------------------------------------ */
-
           const teacherNames = new Set<string>()
 
           for (const course of selectedCourses) {
@@ -984,13 +969,6 @@ export default function AttendanceAwardsCalculator() {
               }
             }
           }
-
-          /* -----------------------------------------------
-             عدد الدورات
-
-             هذا العدد للعرض والفلترة والتلوين فقط.
-             لا يدخل في معادلة النسبة.
-          ------------------------------------------------ */
 
           const courseCount =
             selectedCourses.reduce(
@@ -1518,7 +1496,13 @@ export default function AttendanceAwardsCalculator() {
           toDate={toDate}
           error={error}
           setError={setError}
-          selectedYearName={selectedYear?.name ?? 'السنة الدراسية'}
+          selectedYearName={
+            selectedYear?.name ?? 'السنة الدراسية'
+          }
+          minimumPercentage={Number(minimumPercentage)}
+          requireAllCourses={requireAllCourses}
+          unregisteredCourse={unregisteredCourse}
+          presentCounts={presentCounts}
         />
       )}
     </div>
