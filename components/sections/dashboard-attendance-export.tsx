@@ -572,23 +572,23 @@ export function DashboardAttendanceExport({
           }
         }
 
-        const relevantRecords =
+       const relevantRecords =
           attendanceRecords.filter((record) => {
             const recordStudentId =
               normalizeId(
                 record.studentId,
               )
-
+        
             const recordCourseId =
               normalizeId(
                 record.courseId,
               )
-
+        
             const recordDate =
               normalizeAttendanceDate(
                 record.attendanceDate,
               )
-
+        
             return (
               recordCourseId ===
                 normalizeId(course.id) &&
