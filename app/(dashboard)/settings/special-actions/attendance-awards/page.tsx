@@ -1276,14 +1276,11 @@ export default function AttendanceAwardsCalculator() {
           العودة للصفحة السابقة
       ===================================================== */}
 
-      <div
-        className="flex w-full justify-end"
-        dir="ltr"
-      >
+      <div className="flex w-full justify-end">
         <Button
-          variant="outline"
+          type="button"
           onClick={() => router.back()}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
           dir="rtl"
         >
           <ArrowRight className="size-4" />
