@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  ArrowRight,
   Check,
   Clock3,
   Loader2,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import {
@@ -40,6 +42,8 @@ type TrustedDevice = {
 }
 
 export default function TrustedDevicesPage() {
+  const router = useRouter()
+
   const [devices, setDevices] = useState<TrustedDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] =
@@ -171,6 +175,18 @@ export default function TrustedDevicesPage() {
 
   return (
     <div className="space-y-6">
+      {/* العودة */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="الأجهزة الموثوقة"
         description="مراجعة الأجهزة الجديدة والموافقة عليها أو رفضها قبل السماح لها بالدخول إلى النظام."
