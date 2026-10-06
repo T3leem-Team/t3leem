@@ -4,12 +4,16 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
+  Database,
   Download,
   Filter,
   RotateCcw,
+  Save,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
+
+import { supabase } from '@/lib/supabase'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -77,6 +81,30 @@ type Filters = {
   courses: CourseFilterState
 }
 
+type SavedCourseResult = {
+  course_id: string
+  course_name: string
+  percentage: number | null
+  numerator: number
+  denominator: number
+  registered: boolean
+  status: string
+}
+
+type SavedAwardResult = {
+  id: string
+  academic_year_id: string
+  student_id: string
+  status: 'eligible' | 'not_eligible'
+  annual_percentage: number | null
+  course_count: number
+  minimum_percentage: number
+  require_all_courses: boolean
+  from_date: string
+  to_date: string
+  course_results: SavedCourseResult[]
+}
+
 type Props = {
   results: StudentResult[]
   selectedCourses: Course[]
@@ -87,6 +115,15 @@ type Props = {
   error: string
   setError: (value: string) => void
   selectedYearName: string
+  minimumPercentage: number
+  requireAllCourses: boolean
+  unregisteredCourse: 'exclude' | 'absence'
+  presentCounts: {
+    present: boolean
+    late: boolean
+    excused: boolean
+    absent: boolean
+  }
 }
 
 /* =========================================================
@@ -99,28 +136,19 @@ const inputClass =
 const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
-/*
-  ألوان عدد الدورات.
-
-  الأخضر لا يدخل هنا لأنه محجوز دائمًا
-  للطالب المسجل في جميع الدورات المختارة.
-
-  إذا زاد العدد عن هذه القائمة، يتم توليد لون
-  جديد تلقائيًا.
-*/
 const COURSE_COUNT_COLORS = [
-  '#fca5a5', // 1
-  '#93c5fd', // 2
-  '#fcd34d', // 3
-  '#c4b5fd', // 4
-  '#67e8f9', // 5
-  '#f9a8d4', // 6
-  '#fdba74', // 7
-  '#a7f3d0', // 8
-  '#d8b4fe', // 9
-  '#fde68a', // 10
-  '#86efac', // 11
-  '#f0abfc', // 12
+  '#fca5a5',
+  '#93c5fd',
+  '#fcd34d',
+  '#c4b5fd',
+  '#67e8f9',
+  '#f9a8d4',
+  '#fdba74',
+  '#a7f3d0',
+  '#d8b4fe',
+  '#fde68a',
+  '#86efac',
+  '#f0abfc',
 ]
 
 const ALL_COURSES_COLOR = '#86efac'
@@ -136,10 +164,6 @@ function formatPercentage(value: number | null) {
 
   return `${Number(value.toFixed(1))}%`
 }
-
-/* =========================================================
-   LEVEL ORDER
-========================================================= */
 
 function normalizeLevelName(value: string) {
   return value
@@ -251,10 +275,6 @@ function compareGrades(a: string, b: string) {
   return a.localeCompare(b, 'ar')
 }
 
-/* =========================================================
-   DYNAMIC ROW COLOR
-========================================================= */
-
 function getRowColor(
   student: StudentResult,
   selectedCourseCount: number,
@@ -285,6 +305,12 @@ function getRowColor(
   return `hsl(${hue.toFixed(0)} 70% 78%)`
 }
 
+function safeFilePart(value: string) {
+  return value
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .trim() || 'السنة'
+}
+
 /* =========================================================
    COMPONENT
 ========================================================= */
@@ -298,12 +324,11 @@ export default function AttendanceAwardsResults({
   toDate,
   setError,
   selectedYearName,
+  minimumPercentage,
+  requireAllCourses,
+  unregisteredCourse,
 }: Props) {
   const router = useRouter()
-
-  /* -------------------------------------------------------
-     Filters
-  ------------------------------------------------------- */
 
   const [filters, setFilters] = useState<Filters>({
     name: '',
@@ -315,6 +340,9 @@ export default function AttendanceAwardsResults({
     status: '',
     courses: {},
   })
+
+  const [saving, setSaving] = useState(false)
+  const [exportingSaved, setExportingSaved] = useState(false)
 
   /* =========================================================
      FILTER HELPERS
@@ -525,10 +553,6 @@ export default function AttendanceAwardsResults({
     Boolean(filters.status) ||
     Object.values(filters.courses).some(Boolean)
 
-  /* =========================================================
-     COURSE COUNT OPTIONS
-  ========================================================= */
-
   const courseCountOptions = useMemo(() => {
     const count = selectedCourses.length
 
@@ -539,13 +563,45 @@ export default function AttendanceAwardsResults({
   }, [selectedCourses.length])
 
   /* =========================================================
-     EXPORT
+     BUILD EXCEL
+========================================================= */
+
+  const downloadExcel = (
+    rows: Record<string, string | number>[],
+    fileName: string,
+  ) => {
+    const worksheet =
+      XLSX.utils.json_to_sheet(rows)
+
+    worksheet['!sheetViews'] = [
+      {
+        rightToLeft: true,
+      },
+    ]
+
+    const workbook =
+      XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      'نتائج الحضور',
+    )
+
+    XLSX.writeFile(
+      workbook,
+      fileName,
+    )
+  }
+
+  /* =========================================================
+     EXPORT CURRENT FILTER
   ========================================================= */
 
-  const exportToExcel = () => {
+  const exportCurrentToExcel = () => {
     if (sortedResults.length === 0) {
       setError(
-        'لا توجد نتائج لتصديرها إلى Excel.',
+        'لا توجد نتائج مطابقة للفلاتر لتصديرها إلى Excel.',
       )
       return
     }
@@ -588,7 +644,9 @@ export default function AttendanceAwardsResults({
               `${course.name} - الحالة`
             ] =
               courseResult?.registered
-                ? 'مسجل'
+                ? courseResult.denominator > 0
+                  ? 'لديه حضور'
+                  : 'غير حاضر'
                 : 'غير مسجل'
           }
 
@@ -609,65 +667,23 @@ export default function AttendanceAwardsResults({
           return row
         })
 
-      const worksheet =
-        XLSX.utils.json_to_sheet(
-          exportRows,
-        )
-
-      worksheet['!sheetViews'] = [
-        {
-          rightToLeft: true,
-        },
-      ]
-
-      worksheet['!cols'] = [
-        { wch: 28 },
-        { wch: 16 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 24 },
-        { wch: 16 },
-        ...selectedCourses.flatMap(() => [
-          { wch: 16 },
-          { wch: 18 },
-        ]),
-        { wch: 18 },
-        { wch: 16 },
-      ]
-
-      const workbook =
-        XLSX.utils.book_new()
-
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        'نتائج الحضور',
-      )
-
       const yearName =
         academicYears
           .find(
             (year) =>
               year.id === selectedYearId,
           )
-          ?.name
-          ?.replace(
-            /[\\/:*?"<>|]/g,
-            '-',
-          )
-          .trim() || 'السنة'
-
-      const safeFromDate =
-        fromDate || 'بدون-تاريخ'
-
-      const safeToDate =
-        toDate || 'بدون-تاريخ'
+          ?.name || selectedYearName
 
       const fileName =
-        `نتائج-الحضور-${yearName}-${safeFromDate}-${safeToDate}.xlsx`
+        `نتائج-الحضور-فلترة-${safeFilePart(
+          yearName,
+        )}-${fromDate || 'بدون-تاريخ'}-${
+          toDate || 'بدون-تاريخ'
+        }.xlsx`
 
-      XLSX.writeFile(
-        workbook,
+      downloadExcel(
+        exportRows,
         fileName,
       )
 
@@ -681,6 +697,360 @@ export default function AttendanceAwardsResults({
       setError(
         `تعذر تصدير ملف Excel: ${message}`,
       )
+    }
+  }
+
+  /* =========================================================
+     SAVE FINAL RESULT
+     
+     مهم:
+     الحفظ يأخذ results كاملة، وليس sortedResults.
+     لذلك فلاتر الشاشة لا تؤثر على ما يتم حفظه.
+  ========================================================= */
+
+  const saveFinalResult = async () => {
+    if (!selectedYearId) {
+      setError('لا توجد سنة دراسية محددة.')
+      return
+    }
+
+    if (results.length === 0) {
+      setError('لا توجد نتائج لحفظها.')
+      return
+    }
+
+    if (selectedCourses.length === 0) {
+      setError('لا توجد دورات محددة لحفظ النتيجة.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `سيتم استبدال نتيجة التكريم المحفوظة حاليًا للسنة "${selectedYearName}" بالكامل بالنتيجة الحالية.\n\nسيتم حفظ ${results.length} طالبًا، سواء كان مستحقًا أو غير مستحق.\n\nهل تريد المتابعة؟`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      /* -----------------------------------------------------
+         1. DELETE OLD RESULT
+      ----------------------------------------------------- */
+
+      const {
+        error: deleteError,
+      } = await supabase
+        .from('attendance_award_results')
+        .delete()
+        .eq(
+          'academic_year_id',
+          selectedYearId,
+        )
+
+      if (deleteError) {
+        throw new Error(
+          `تعذر حذف النتيجة السابقة: ${deleteError.message}`,
+        )
+      }
+
+      /* -----------------------------------------------------
+         2. BUILD NEW SNAPSHOT
+      ----------------------------------------------------- */
+
+      const rows = results.map((student) => {
+        const courseResults =
+          selectedCourses.map((course) => {
+            const result =
+              student.courses[course.id]
+
+            let status = 'غير مسجل'
+
+            if (result?.registered) {
+              status =
+                result.denominator > 0
+                  ? 'لديه حضور'
+                  : 'غير حاضر'
+            }
+
+            return {
+              course_id: course.id,
+              course_name: course.name,
+              percentage:
+                result?.percentage ?? null,
+              numerator:
+                result?.numerator ?? 0,
+              denominator:
+                result?.denominator ?? 0,
+              registered:
+                result?.registered ?? false,
+              status,
+            }
+          })
+
+        return {
+          academic_year_id:
+            selectedYearId,
+          student_id:
+            student.id,
+          status: student.eligible
+            ? 'eligible'
+            : 'not_eligible',
+          annual_percentage:
+            student.annualPercentage,
+          course_count:
+            student.courseCount,
+          minimum_percentage:
+            minimumPercentage,
+          require_all_courses:
+            requireAllCourses,
+          from_date: fromDate,
+          to_date: toDate,
+          course_results:
+            courseResults,
+        }
+      })
+
+      /* -----------------------------------------------------
+         3. INSERT NEW RESULT
+      ----------------------------------------------------- */
+
+      const {
+        error: insertError,
+      } = await supabase
+        .from('attendance_award_results')
+        .insert(rows)
+
+      if (insertError) {
+        throw new Error(
+          `تعذر حفظ النتيجة الجديدة: ${insertError.message}`,
+        )
+      }
+
+      setError(
+        `تم حفظ النتيجة السنوية بنجاح لـ ${rows.length} طالب.`,
+      )
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error
+          ? saveError.message
+          : 'حدث خطأ غير متوقع أثناء حفظ النتيجة.'
+
+      setError(
+        `تعذر حفظ النتيجة: ${message}`,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* =========================================================
+     EXPORT SAVED RESULT FROM DATABASE
+  ========================================================= */
+
+  const exportSavedToExcel = async () => {
+    if (!selectedYearId) {
+      setError('لا توجد سنة دراسية محددة.')
+      return
+    }
+
+    setExportingSaved(true)
+    setError('')
+
+    try {
+      const {
+        data,
+        error: queryError,
+      } = await supabase
+        .from('attendance_award_results')
+        .select(
+          'id, academic_year_id, student_id, status, annual_percentage, course_count, minimum_percentage, require_all_courses, from_date, to_date, course_results',
+        )
+        .eq(
+          'academic_year_id',
+          selectedYearId,
+        )
+
+      if (queryError) {
+        throw new Error(
+          `تعذر تحميل النتيجة المحفوظة: ${queryError.message}`,
+        )
+      }
+
+      const savedResults =
+        (data ?? []) as SavedAwardResult[]
+
+      if (savedResults.length === 0) {
+        setError(
+          'لا توجد نتيجة محفوظة لهذه السنة الدراسية.',
+        )
+        return
+      }
+
+      const studentIds = Array.from(
+        new Set(
+          savedResults.map(
+            (item) => item.student_id,
+          ),
+        ),
+      )
+
+      const {
+        data: studentData,
+        error: studentError,
+      } = await supabase
+        .from('students')
+        .select(
+          'id, student_id, name, personal_id',
+        )
+        .in('id', studentIds)
+
+      if (studentError) {
+        throw new Error(
+          `تعذر تحميل بيانات الطلاب: ${studentError.message}`,
+        )
+      }
+
+      const studentMap = new Map<
+        string,
+        {
+          student_id: string | null
+          name: string
+          personal_id: string | null
+        }
+      >(
+        (studentData ?? []).map(
+          (student) => [
+            student.id,
+            student,
+          ],
+        ),
+      )
+
+      const exportRows: Record<
+        string,
+        string | number
+      >[] = []
+
+      for (const saved of savedResults) {
+        const student =
+          studentMap.get(
+            saved.student_id,
+          )
+
+        const courseResults =
+          Array.isArray(
+            saved.course_results,
+          )
+            ? saved.course_results
+            : []
+
+        const row: Record<
+          string,
+          string | number
+        > = {
+          الطالب:
+            student?.name ?? '—',
+          'رقم الطالب':
+            student?.student_id ?? '',
+          'الرقم الشخصي':
+            student?.personal_id ?? '',
+          'عدد الدورات':
+            saved.course_count,
+        }
+
+        for (const courseResult of courseResults) {
+          const courseName =
+            courseResult.course_name ||
+            courseResult.course_id
+
+          row[courseName] =
+            courseResult.percentage !==
+              null &&
+            courseResult.percentage !==
+              undefined
+              ? Number(
+                  courseResult.percentage.toFixed(
+                    1,
+                  ),
+                )
+              : ''
+
+          row[
+            `${courseName} - الحالة`
+          ] =
+            courseResult.status ||
+            (courseResult.registered
+              ? 'لديه حضور'
+              : 'غير مسجل')
+        }
+
+        row['النسبة الإجمالية'] =
+          saved.annual_percentage !==
+          null
+            ? Number(
+                saved.annual_percentage.toFixed(
+                  1,
+                ),
+              )
+            : ''
+
+        row['الحالة'] =
+          saved.status === 'eligible'
+            ? 'مستحق'
+            : 'غير مستحق'
+
+        row['الحد الأدنى'] =
+          saved.minimum_percentage
+
+        row['من تاريخ'] =
+          saved.from_date
+
+        row['إلى تاريخ'] =
+          saved.to_date
+
+        exportRows.push(row)
+      }
+
+      exportRows.sort((a, b) =>
+        String(a['الطالب']).localeCompare(
+          String(b['الطالب']),
+          'ar',
+        ),
+      )
+
+      const yearName =
+        academicYears
+          .find(
+            (year) =>
+              year.id === selectedYearId,
+          )
+          ?.name || selectedYearName
+
+      const fileName =
+        `نتائج-الحضور-المحفوظة-${safeFilePart(
+          yearName,
+        )}.xlsx`
+
+      downloadExcel(
+        exportRows,
+        fileName,
+      )
+
+      setError('')
+    } catch (exportError) {
+      const message =
+        exportError instanceof Error
+          ? exportError.message
+          : 'حدث خطأ أثناء تصدير النتيجة المحفوظة.'
+
+      setError(
+        `تعذر تصدير النتيجة المحفوظة: ${message}`,
+      )
+    } finally {
+      setExportingSaved(false)
     }
   }
 
@@ -738,20 +1108,63 @@ export default function AttendanceAwardsResults({
                 إجمالي النتائج:{' '}
                 {sortedResults.length}
               </Badge>
-
-              <Button
-                variant="outline"
-                onClick={exportToExcel}
-                className="gap-2"
-              >
-                <Download className="size-4" />
-                تصدير Excel
-              </Button>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {/* =====================================================
+              ACTIONS
+          ===================================================== */}
+
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:flex-wrap">
+            <Button
+              onClick={saveFinalResult}
+              disabled={
+                saving ||
+                results.length === 0
+              }
+              className="gap-2"
+            >
+              <Save className="size-4" />
+
+              {saving
+                ? 'جاري حفظ النتيجة...'
+                : 'حفظ النتيجة النهائية'}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={exportCurrentToExcel}
+              disabled={
+                sortedResults.length === 0
+              }
+              className="gap-2"
+            >
+              <Download className="size-4" />
+              Excel — الفلترة الحالية
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={exportSavedToExcel}
+              disabled={exportingSaved}
+              className="gap-2"
+            >
+              <Database className="size-4" />
+
+              {exportingSaved
+                ? 'جاري تحميل المحفوظ...'
+                : 'Excel — النتيجة المحفوظة'}
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            زر الحفظ يحفظ جميع النتائج المحسوبة، ولا يتأثر بفلاتر
+            الشاشة. أما Excel — الفلترة الحالية فيصدر الصفوف
+            الظاهرة حاليًا فقط.
+          </p>
+
           {/* =====================================================
               FILTERS
           ===================================================== */}
@@ -1017,7 +1430,7 @@ export default function AttendanceAwardsResults({
       </Card>
 
       {/* =====================================================
-          STUDENTS TABLE - SEPARATE SECTION
+          STUDENTS TABLE
       ===================================================== */}
 
       <Card>
@@ -1127,8 +1540,6 @@ export default function AttendanceAwardsResults({
                               : undefined
                           }
                         >
-                          {/* الطالب */}
-
                           <td className="px-4 py-3">
                             <div>
                               <p className="font-medium">
@@ -1146,26 +1557,18 @@ export default function AttendanceAwardsResults({
                             </div>
                           </td>
 
-                          {/* الرقم الشخصي */}
-
                           <td className="px-4 py-3">
                             {student.personalId ||
                               '—'}
                           </td>
 
-                          {/* الصف */}
-
                           <td className="px-4 py-3">
                             {student.grade}
                           </td>
 
-                          {/* المعلم */}
-
                           <td className="px-4 py-3">
                             {student.teacher}
                           </td>
-
-                          {/* عدد الدورات */}
 
                           <td className="px-4 py-3">
                             <span className="font-semibold">
@@ -1181,8 +1584,6 @@ export default function AttendanceAwardsResults({
                               }
                             </span>
                           </td>
-
-                          {/* الدورات */}
 
                           {selectedCourses.map(
                             (course) => {
@@ -1210,21 +1611,25 @@ export default function AttendanceAwardsResults({
                                         غير مسجل
                                       </span>
                                     )}
+
+                                    {result?.registered &&
+                                      result.denominator ===
+                                        0 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          غير حاضر
+                                        </span>
+                                      )}
                                   </div>
                                 </td>
                               )
                             },
                           )}
 
-                          {/* الإجمالي */}
-
                           <td className="px-4 py-3 font-semibold">
                             {formatPercentage(
                               student.annualPercentage,
                             )}
                           </td>
-
-                          {/* الحالة */}
 
                           <td className="px-4 py-3">
                             <Badge
