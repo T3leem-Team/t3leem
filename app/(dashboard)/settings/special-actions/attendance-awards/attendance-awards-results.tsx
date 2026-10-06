@@ -6,7 +6,6 @@ import {
   ArrowRight,
   Database,
   Download,
-  Filter,
   RotateCcw,
   Save,
   SlidersHorizontal,
@@ -122,12 +121,6 @@ type Props = {
     absent: boolean
   }
 }
-
-const inputClass =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
-
-const selectClass =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 const columnFilterInputClass =
   'h-8 w-full rounded-md border border-input bg-background px-2 text-xs'
@@ -389,19 +382,6 @@ export default function AttendanceAwardsResults({
     }))
   }
 
-  const resetFilters = () => {
-    setFilters({
-      name: '',
-      personalId: '',
-      grade: '',
-      teacher: '',
-      annualPercentage: '',
-      courseCount: '',
-      status: '',
-      courses: {},
-    })
-  }
-
   const toggleColumn = (columnKey: string) => {
     setVisibleColumns((current) =>
       current.includes(columnKey)
@@ -560,16 +540,6 @@ export default function AttendanceAwardsResults({
       a.localeCompare(b, 'ar'),
     )
   }, [results])
-
-  const hasFilters =
-    Boolean(filters.name) ||
-    Boolean(filters.personalId) ||
-    Boolean(filters.grade) ||
-    Boolean(filters.teacher) ||
-    Boolean(filters.annualPercentage) ||
-    Boolean(filters.courseCount) ||
-    Boolean(filters.status) ||
-    Object.values(filters.courses).some(Boolean)
 
   const courseCountOptions = useMemo(() => {
     const count = selectedCourses.length
@@ -1093,9 +1063,8 @@ export default function AttendanceAwardsResults({
         dir="ltr"
       >
         <Button
-          variant="outline"
           onClick={() => router.back()}
-          className="gap-2"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
           dir="rtl"
         >
           <ArrowRight className="size-4" />
@@ -1184,189 +1153,6 @@ export default function AttendanceAwardsResults({
             الشاشة. أما Excel — الفلترة الحالية فيصدر الصفوف
             الظاهرة حاليًا فقط.
           </p>
-
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Filter className="size-4 text-primary" />
-            فلترة النتائج
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <input
-              placeholder="فلتر اسم الطالب / رقم الطالب"
-              value={filters.name}
-              onChange={(event) =>
-                updateFilter(
-                  'name',
-                  event.target.value,
-                )
-              }
-              className={inputClass}
-            />
-
-            <input
-              placeholder="فلتر الرقم الشخصي"
-              value={filters.personalId}
-              onChange={(event) =>
-                updateFilter(
-                  'personalId',
-                  event.target.value,
-                )
-              }
-              className={inputClass}
-            />
-
-            <select
-              className={selectClass}
-              value={filters.grade}
-              onChange={(event) =>
-                updateFilter(
-                  'grade',
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                جميع الصفوف
-              </option>
-
-              {grades.map(
-                (grade) => (
-                  <option
-                    key={grade}
-                    value={grade}
-                  >
-                    {grade}
-                  </option>
-                ),
-              )}
-            </select>
-
-            <select
-              className={selectClass}
-              value={filters.teacher}
-              onChange={(event) =>
-                updateFilter(
-                  'teacher',
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                جميع المعلمين
-              </option>
-
-              {teachers.map(
-                (teacher) => (
-                  <option
-                    key={teacher}
-                    value={teacher}
-                  >
-                    {teacher}
-                  </option>
-                ),
-              )}
-            </select>
-
-            <input
-              placeholder="فلتر النسبة الإجمالية"
-              value={filters.annualPercentage}
-              onChange={(event) =>
-                updateFilter(
-                  'annualPercentage',
-                  event.target.value,
-                )
-              }
-              className={inputClass}
-            />
-
-            <select
-              className={selectClass}
-              value={filters.courseCount}
-              onChange={(event) =>
-                updateFilter(
-                  'courseCount',
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                جميع أعداد الدورات
-              </option>
-
-              {courseCountOptions.map(
-                (count) => (
-                  <option
-                    key={count}
-                    value={count}
-                  >
-                    {count === 0
-                      ? '0 دورات'
-                      : count === 1
-                        ? 'دورة واحدة'
-                        : count === 2
-                          ? 'دورتان'
-                          : `${count} دورات`}
-                  </option>
-                ),
-              )}
-            </select>
-
-            {selectedCourses.map(
-              (course) => (
-                <input
-                  key={course.id}
-                  placeholder={`فلتر ${course.name}`}
-                  value={
-                    filters.courses[
-                      course.id
-                    ] ?? ''
-                  }
-                  onChange={(event) =>
-                    updateCourseFilter(
-                      course.id,
-                      event.target.value,
-                    )
-                  }
-                  className={inputClass}
-                />
-              ),
-            )}
-
-            <select
-              className={selectClass}
-              value={filters.status}
-              onChange={(event) =>
-                updateFilter(
-                  'status',
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                جميع الحالات
-              </option>
-
-              <option value="eligible">
-                مستحق
-              </option>
-
-              <option value="not-eligible">
-                غير مستحق
-              </option>
-            </select>
-          </div>
-
-          {hasFilters && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={resetFilters}
-              className="gap-2"
-            >
-              <RotateCcw className="size-4" />
-              مسح الفلاتر
-            </Button>
-          )}
 
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
             <span className="font-medium">
@@ -1536,8 +1322,8 @@ export default function AttendanceAwardsResults({
         </CardHeader>
 
         <CardContent>
-          {/* dir=ltr يجعل شريط التمرير العمودي في اليمين،
-              بينما الجدول نفسه يبقى RTL */}
+          {/* dir=ltr يضع شريط التمرير العمودي جهة اليمين،
+              والجدول نفسه يبقى RTL */}
           <div
             className="max-h-[600px] overflow-auto rounded-lg border"
             dir="ltr"
