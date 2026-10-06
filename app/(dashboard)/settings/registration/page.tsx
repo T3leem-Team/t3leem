@@ -1501,8 +1501,8 @@ export default function RegistrationSettingsPage() {
 
       <div>
         <Button
-          variant="outline"
           onClick={() => window.history.back()}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <ArrowRight className="ml-2 size-4" />
           العودة
