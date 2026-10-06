@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
+  ArrowRight,
   Download,
   Loader2,
 } from 'lucide-react'
@@ -18,6 +20,8 @@ import {
 } from '@/components/ui/card'
 
 export default function Page() {
+  const router = useRouter()
+
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null)
@@ -135,6 +139,17 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="النسخة الاحتياطية"
         description="تنزيل نسخة من بيانات السنة الدراسية الحالية."
