@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
+  Award,
   Loader2,
   Save,
   ShieldCheck,
@@ -17,6 +18,7 @@ import { supabase } from '@/lib/supabase'
 type Settings = {
   id: string
   is_enabled: boolean
+  show_attendance_award_result: boolean
   allow_trip_creation: boolean
   allow_direct_trip_publish: boolean
 }
@@ -44,7 +46,7 @@ export default function StudentStatusSettingsPage() {
     const { data, error } = await supabase
       .from('student_status_settings')
       .select(
-        'id, is_enabled, allow_trip_creation, allow_direct_trip_publish',
+        'id, is_enabled, show_attendance_award_result, allow_trip_creation, allow_direct_trip_publish',
       )
       .limit(1)
       .maybeSingle()
@@ -94,6 +96,8 @@ export default function StudentStatusSettingsPage() {
       .from('student_status_settings')
       .update({
         is_enabled: settings.is_enabled,
+        show_attendance_award_result:
+          settings.show_attendance_award_result,
         allow_trip_creation: settings.allow_trip_creation,
         allow_direct_trip_publish:
           settings.allow_direct_trip_publish,
@@ -304,6 +308,19 @@ export default function StudentStatusSettingsPage() {
           enabled={settings.is_enabled}
           onChange={(value) =>
             updateSetting('is_enabled', value)
+          }
+        />
+
+        <SettingCard
+          icon={<Award className="size-5" />}
+          title="إظهار نتيجة التكريم في صفحة متابعة الطالب"
+          description="السماح للطلاب برؤية نتيجة التكريم ونسب الحضور للدورات المشاركة فيها في صفحة متابعة الطالب."
+          enabled={settings.show_attendance_award_result}
+          onChange={(value) =>
+            updateSetting(
+              'show_attendance_award_result',
+              value,
+            )
           }
         />
 
