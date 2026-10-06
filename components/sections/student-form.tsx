@@ -1367,16 +1367,103 @@ export function StudentForm({
                     صلة القرابة
                   </label>
 
-                  <input
+                  <select
                     name="guardianRelation"
-                    type="text"
                     defaultValue={
-                      editingStudent?.guardianRelation ??
-                      ''
+                      editingStudent?.guardianRelation ===
+                        'الأب' ||
+                      editingStudent?.guardianRelation ===
+                        'الأم' ||
+                      editingStudent?.guardianRelation ===
+                        'الأخ' ||
+                      editingStudent?.guardianRelation ===
+                        'الأخت' ||
+                      editingStudent?.guardianRelation ===
+                        'الجد' ||
+                      editingStudent?.guardianRelation ===
+                        'الجدة'
+                        ? editingStudent.guardianRelation
+                        : editingStudent?.guardianRelation
+                          ? 'أخرى'
+                          : ''
                     }
-                    placeholder="مثال: الأب، الأم، الأخ"
+                    onChange={(event) => {
+                      const customInput =
+                        document.getElementById(
+                          'customGuardianRelation',
+                        ) as HTMLInputElement | null
+
+                      if (
+                        customInput
+                      ) {
+                        if (
+                          event.target.value ===
+                          'أخرى'
+                        ) {
+                          customInput.focus()
+                        } else {
+                          customInput.value =
+                            ''
+                        }
+                      }
+                    }}
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                  />
+                  >
+                    <option value="">
+                      اختر صلة القرابة
+                    </option>
+
+                    <option value="الأب">
+                      الأب
+                    </option>
+
+                    <option value="الأم">
+                      الأم
+                    </option>
+
+                    <option value="الأخ">
+                      الأخ
+                    </option>
+
+                    <option value="الأخت">
+                      الأخت
+                    </option>
+
+                    <option value="الجد">
+                      الجد
+                    </option>
+
+                    <option value="الجدة">
+                      الجدة
+                    </option>
+
+                    <option value="أخرى">
+                      أخرى
+                    </option>
+                  </select>
+
+                  {editingStudent?.guardianRelation &&
+                    ![
+                      'الأب',
+                      'الأم',
+                      'الأخ',
+                      'الأخت',
+                      'الجد',
+                      'الجدة',
+                    ].includes(
+                      editingStudent.guardianRelation,
+                    ) && (
+                      <input
+                        id="customGuardianRelation"
+                        name="customGuardianRelation"
+                        type="text"
+                        defaultValue={
+                          editingStudent.guardianRelation
+                        }
+                        placeholder="اكتب صلة القرابة"
+                        className="mt-3 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                      />
+                    )}
                 </div>
 
                 <div>
