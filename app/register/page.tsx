@@ -247,6 +247,29 @@ export default function RegisterPage() {
 
       setSettings(loadedSettings)
 
+      /*
+       * =====================================================
+       * التسجيل مغلق
+       * =====================================================
+       *
+       * لا نحتاج لتحميل:
+       * - السنة الدراسية
+       * - الدورة
+       * - المستويات
+       * - الحقول الإضافية
+       *
+       * لأن الصفحة لن تعرض نموذج التسجيل أصلًا.
+       */
+      if (!loadedSettings.registration_open) {
+        setAcademicYear(null)
+        setRegistrationCourse(null)
+        setLevels([])
+        setCustomFields([])
+        setCustomFieldValues({})
+
+        return
+      }
+
       const academicYearResult =
         await supabase
           .from('academic_years')
@@ -683,7 +706,7 @@ export default function RegisterPage() {
     }
 
     if (!registrationCourse) {
-      return 'لم يتم تحديد دورة التسجيل الحالية. يرجى التواصل مع إدارة التعليم.'
+      return 'لم يتم تحديد دورة التسجيل الحالية. يرجى التواصل مع إدارة إدارة التعليم.'
     }
 
     if (
@@ -1313,6 +1336,37 @@ export default function RegisterPage() {
     return null
   }
 
+  /*
+   * =====================================================
+   * التسجيل مغلق
+   * =====================================================
+   *
+   * يتم عرض هذه الرسالة بدل نموذج التسجيل.
+   */
+  if (!settings.registration_open) {
+    return (
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10"
+      >
+        <div className="w-full max-w-md rounded-2xl border bg-background p-8 text-center shadow-sm">
+          <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <AlertCircle className="size-8" />
+          </div>
+
+          <h1 className="text-xl font-bold">
+            التسجيل مغلق حاليًا
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            تم إيقاف استقبال طلبات التسجيل حاليًا.
+            يرجى المحاولة لاحقًا أو التواصل مع إدارة التعليم.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
   if (
     errorMessage &&
     (!academicYear ||
@@ -1341,87 +1395,6 @@ export default function RegisterPage() {
           </div>
         </div>
       </main>
-    )
-  }
-
-  if (
-    !settings.registration_open
-  ) {
-    return (
-      <RegistrationForm
-        settings={settings}
-        levels={levels}
-        customFields={customFields}
-        customFieldValues={
-          customFieldValues
-        }
-        updateCustomFieldValue={
-          updateCustomFieldValue
-        }
-        paymentMethods={
-          paymentMethods
-        }
-        name={name}
-        setName={setName}
-        personalId={personalId}
-        setPersonalId={setPersonalId}
-        gender={gender}
-        setGender={setGender}
-        age={age}
-        setAge={setAge}
-        phone={phone}
-        setPhone={setPhone}
-        guardianRelation={
-          guardianRelation
-        }
-        setGuardianRelation={
-          setGuardianRelation
-        }
-        customGuardianRelation={
-          customGuardianRelation
-        }
-        setCustomGuardianRelation={
-          setCustomGuardianRelation
-        }
-        whatsapp={whatsapp}
-        setWhatsapp={setWhatsapp}
-        studentPhone={studentPhone}
-        setStudentPhone={
-          setStudentPhone
-        }
-        levelId={levelId}
-        setLevelId={setLevelId}
-        notes={notes}
-        setNotes={setNotes}
-        healthNotes={healthNotes}
-        setHealthNotes={
-          setHealthNotes
-        }
-        paymentMethod={
-          paymentMethod
-        }
-        setPaymentMethod={
-          setPaymentMethod
-        }
-        paymentReference={
-          paymentReference
-        }
-        setPaymentReference={
-          setPaymentReference
-        }
-        paymentProof={
-          paymentProof
-        }
-        setPaymentProof={
-          setPaymentProof
-        }
-        submitting={false}
-        checkingPersonalId={false}
-        errorMessage=""
-        successMessage=""
-        submittedPersonalId=""
-        onSubmit={handleSubmit}
-      />
     )
   }
 
