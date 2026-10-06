@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   Download,
   Filter,
   RotateCcw,
@@ -107,18 +109,18 @@ const selectClass =
   جديد تلقائيًا.
 */
 const COURSE_COUNT_COLORS = [
-  '#fca5a5', // 1 - أحمر فاتح
-  '#93c5fd', // 2 - أزرق
-  '#fcd34d', // 3 - أصفر
-  '#c4b5fd', // 4 - بنفسجي
-  '#67e8f9', // 5 - سماوي
-  '#f9a8d4', // 6 - وردي
-  '#fdba74', // 7 - برتقالي
-  '#a7f3d0', // 8 - أخضر مزرق
-  '#d8b4fe', // 9 - بنفسجي فاتح
-  '#fde68a', // 10 - ذهبي
-  '#86efac', // 11 - أخضر مختلف
-  '#f0abfc', // 12 - فوشي
+  '#fca5a5', // 1
+  '#93c5fd', // 2
+  '#fcd34d', // 3
+  '#c4b5fd', // 4
+  '#67e8f9', // 5
+  '#f9a8d4', // 6
+  '#fdba74', // 7
+  '#a7f3d0', // 8
+  '#d8b4fe', // 9
+  '#fde68a', // 10
+  '#86efac', // 11
+  '#f0abfc', // 12
 ]
 
 const ALL_COURSES_COLOR = '#86efac'
@@ -253,19 +255,6 @@ function compareGrades(a: string, b: string) {
    DYNAMIC ROW COLOR
 ========================================================= */
 
-/*
-  الأخضر دائمًا للطالب المسجل في جميع الدورات المختارة.
-
-  أما الطالب المسجل في عدد أقل من الدورات:
-  1 = لون
-  2 = لون مختلف
-  3 = لون مختلف
-  4 = لون مختلف
-  ...
-  
-  وإذا تجاوز العدد الألوان الموجودة في القائمة،
-  يتم توليد لون جديد تلقائيًا.
-*/
 function getRowColor(
   student: StudentResult,
   selectedCourseCount: number,
@@ -290,12 +279,6 @@ function getRowColor(
     return predefinedColor
   }
 
-  /*
-    توليد لون ديناميكي للأعداد الكبيرة.
-
-    استخدام زاوية ذهبية تقريبية يساعد على إعطاء
-    ألوان متباعدة بدل أن تكون متشابهة جدًا.
-  */
   const hue =
     (student.courseCount * 137.508) % 360
 
@@ -316,6 +299,8 @@ export default function AttendanceAwardsResults({
   setError,
   selectedYearName,
 }: Props) {
+  const router = useRouter()
+
   /* -------------------------------------------------------
      Filters
   ------------------------------------------------------- */
@@ -704,522 +689,566 @@ export default function AttendanceAwardsResults({
   ========================================================= */
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <CardTitle>
-              الطلاب ونتائج التكريم
-            </CardTitle>
+    <div className="space-y-4">
+      {/* =====================================================
+          BACK BUTTON
+      ===================================================== */}
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              {selectedYearName} — من {fromDate} إلى{' '}
-              {toDate}
-            </p>
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          onClick={() => router.back()}
+          className="gap-2"
+        >
+          <ArrowRight className="size-4" />
+          عودة
+        </Button>
+      </div>
+
+      {/* =====================================================
+          RESULTS CARD
+      ===================================================== */}
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle>
+                الطلاب ونتائج التكريم
+              </CardTitle>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedYearName} — من {fromDate} إلى{' '}
+                {toDate}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="success">
+                مستحقون:{' '}
+                {
+                  sortedResults.filter(
+                    (student) =>
+                      student.eligible,
+                  ).length
+                }
+              </Badge>
+
+              <Badge variant="neutral">
+                إجمالي النتائج:{' '}
+                {sortedResults.length}
+              </Badge>
+
+              <Button
+                variant="outline"
+                onClick={exportToExcel}
+                className="gap-2"
+              >
+                <Download className="size-4" />
+                تصدير Excel
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* =====================================================
+              FILTERS
+          ===================================================== */}
+
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Filter className="size-4 text-primary" />
+            فلترة النتائج
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="success">
-              مستحقون:{' '}
-              {
-                sortedResults.filter(
-                  (student) =>
-                    student.eligible,
-                ).length
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <input
+              placeholder="فلتر اسم الطالب / رقم الطالب"
+              value={filters.name}
+              onChange={(event) =>
+                updateFilter(
+                  'name',
+                  event.target.value,
+                )
               }
-            </Badge>
+              className={inputClass}
+            />
 
-            <Badge variant="neutral">
-              إجمالي النتائج:{' '}
-              {sortedResults.length}
-            </Badge>
+            <input
+              placeholder="فلتر الرقم الشخصي"
+              value={filters.personalId}
+              onChange={(event) =>
+                updateFilter(
+                  'personalId',
+                  event.target.value,
+                )
+              }
+              className={inputClass}
+            />
 
+            <select
+              className={selectClass}
+              value={filters.grade}
+              onChange={(event) =>
+                updateFilter(
+                  'grade',
+                  event.target.value,
+                )
+              }
+            >
+              <option value="">
+                جميع الصفوف
+              </option>
+
+              {grades.map(
+                (grade) => (
+                  <option
+                    key={grade}
+                    value={grade}
+                  >
+                    {grade}
+                  </option>
+                ),
+              )}
+            </select>
+
+            <select
+              className={selectClass}
+              value={filters.teacher}
+              onChange={(event) =>
+                updateFilter(
+                  'teacher',
+                  event.target.value,
+                )
+              }
+            >
+              <option value="">
+                جميع المعلمين
+              </option>
+
+              {teachers.map(
+                (teacher) => (
+                  <option
+                    key={teacher}
+                    value={teacher}
+                  >
+                    {teacher}
+                  </option>
+                ),
+              )}
+            </select>
+
+            <input
+              placeholder="فلتر النسبة الإجمالية"
+              value={filters.annualPercentage}
+              onChange={(event) =>
+                updateFilter(
+                  'annualPercentage',
+                  event.target.value,
+                )
+              }
+              className={inputClass}
+            />
+
+            <select
+              className={selectClass}
+              value={filters.courseCount}
+              onChange={(event) =>
+                updateFilter(
+                  'courseCount',
+                  event.target.value,
+                )
+              }
+            >
+              <option value="">
+                جميع أعداد الدورات
+              </option>
+
+              {courseCountOptions.map(
+                (count) => (
+                  <option
+                    key={count}
+                    value={count}
+                  >
+                    {count === 0
+                      ? '0 دورات'
+                      : count === 1
+                        ? 'دورة واحدة'
+                        : count === 2
+                          ? 'دورتان'
+                          : `${count} دورات`}
+                  </option>
+                ),
+              )}
+            </select>
+
+            {selectedCourses.map(
+              (course) => (
+                <input
+                  key={course.id}
+                  placeholder={`فلتر ${course.name}`}
+                  value={
+                    filters.courses[
+                      course.id
+                    ] ?? ''
+                  }
+                  onChange={(event) =>
+                    updateCourseFilter(
+                      course.id,
+                      event.target.value,
+                    )
+                  }
+                  className={inputClass}
+                />
+              ),
+            )}
+
+            <select
+              className={selectClass}
+              value={filters.status}
+              onChange={(event) =>
+                updateFilter(
+                  'status',
+                  event.target.value,
+                )
+              }
+            >
+              <option value="">
+                جميع الحالات
+              </option>
+
+              <option value="eligible">
+                مستحق
+              </option>
+
+              <option value="not-eligible">
+                غير مستحق
+              </option>
+            </select>
+          </div>
+
+          {hasFilters && (
             <Button
-              variant="outline"
-              onClick={exportToExcel}
+              variant="ghost"
+              size="sm"
+              onClick={resetFilters}
               className="gap-2"
             >
-              <Download className="size-4" />
-              تصدير Excel
+              <RotateCcw className="size-4" />
+              مسح الفلاتر
             </Button>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        {/* =====================================================
-            FILTERS
-        ===================================================== */}
-
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Filter className="size-4 text-primary" />
-          فلترة النتائج
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <input
-            placeholder="فلتر اسم الطالب / رقم الطالب"
-            value={filters.name}
-            onChange={(event) =>
-              updateFilter(
-                'name',
-                event.target.value,
-              )
-            }
-            className={inputClass}
-          />
-
-          <input
-            placeholder="فلتر الرقم الشخصي"
-            value={filters.personalId}
-            onChange={(event) =>
-              updateFilter(
-                'personalId',
-                event.target.value,
-              )
-            }
-            className={inputClass}
-          />
-
-          <select
-            className={selectClass}
-            value={filters.grade}
-            onChange={(event) =>
-              updateFilter(
-                'grade',
-                event.target.value,
-              )
-            }
-          >
-            <option value="">
-              جميع الصفوف
-            </option>
-
-            {grades.map(
-              (grade) => (
-                <option
-                  key={grade}
-                  value={grade}
-                >
-                  {grade}
-                </option>
-              ),
-            )}
-          </select>
-
-          <select
-            className={selectClass}
-            value={filters.teacher}
-            onChange={(event) =>
-              updateFilter(
-                'teacher',
-                event.target.value,
-              )
-            }
-          >
-            <option value="">
-              جميع المعلمين
-            </option>
-
-            {teachers.map(
-              (teacher) => (
-                <option
-                  key={teacher}
-                  value={teacher}
-                >
-                  {teacher}
-                </option>
-              ),
-            )}
-          </select>
-
-          <input
-            placeholder="فلتر النسبة الإجمالية"
-            value={filters.annualPercentage}
-            onChange={(event) =>
-              updateFilter(
-                'annualPercentage',
-                event.target.value,
-              )
-            }
-            className={inputClass}
-          />
-
-          <select
-            className={selectClass}
-            value={filters.courseCount}
-            onChange={(event) =>
-              updateFilter(
-                'courseCount',
-                event.target.value,
-              )
-            }
-          >
-            <option value="">
-              جميع أعداد الدورات
-            </option>
-
-            {courseCountOptions.map(
-              (count) => (
-                <option
-                  key={count}
-                  value={count}
-                >
-                  {count === 0
-                    ? '0 دورات'
-                    : count === 1
-                      ? 'دورة واحدة'
-                      : count === 2
-                        ? 'دورتان'
-                        : `${count} دورات`}
-                </option>
-              ),
-            )}
-          </select>
-
-          {selectedCourses.map(
-            (course) => (
-              <input
-                key={course.id}
-                placeholder={`فلتر ${course.name}`}
-                value={
-                  filters.courses[
-                    course.id
-                  ] ?? ''
-                }
-                onChange={(event) =>
-                  updateCourseFilter(
-                    course.id,
-                    event.target.value,
-                  )
-                }
-                className={inputClass}
-              />
-            ),
           )}
 
-          <select
-            className={selectClass}
-            value={filters.status}
-            onChange={(event) =>
-              updateFilter(
-                'status',
-                event.target.value,
-              )
-            }
-          >
-            <option value="">
-              جميع الحالات
-            </option>
+          {/* =====================================================
+              COLOR LEGEND
+          ===================================================== */}
 
-            <option value="eligible">
-              مستحق
-            </option>
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
+            <span className="font-medium">
+              دليل الألوان:
+            </span>
 
-            <option value="not-eligible">
-              غير مستحق
-            </option>
-          </select>
-        </div>
-
-        {hasFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={resetFilters}
-            className="gap-2"
-          >
-            <RotateCcw className="size-4" />
-            مسح الفلاتر
-          </Button>
-        )}
-
-        {/* =====================================================
-            COLOR LEGEND
-        ===================================================== */}
-
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
-          <span className="font-medium">
-            دليل الألوان:
-          </span>
-
-          <span className="flex items-center gap-2">
-            <span
-              className="size-4 rounded border"
-              style={{
-                backgroundColor:
-                  ALL_COURSES_COLOR,
-              }}
-            />
-            مسجل في جميع الدورات
-          </span>
-
-          {selectedCourses.length > 1 &&
-            Array.from(
-              new Set(
-                results
-                  .map(
-                    (student) =>
-                      student.courseCount,
-                  )
-                  .filter(
-                    (count) =>
-                      count > 0 &&
-                      count <
-                        selectedCourses.length,
-                  )
-                  .sort(
-                    (a, b) => a - b,
-                  ),
-              ),
-            ).map((count) => (
+            <span className="flex items-center gap-2">
               <span
-                key={count}
-                className="flex items-center gap-2"
-              >
-                <span
-                  className="size-4 rounded border"
-                  style={{
-                    backgroundColor:
-                      getRowColor(
-                        {
-                          id: '',
-                          studentNumber: '',
-                          personalId: '',
-                          name: '',
-                          grade: '',
-                          teacher: '',
-                          courses: {},
-                          courseCount: count,
-                          annualPercentage:
-                            null,
-                          eligible: false,
-                        },
-                        selectedCourses.length,
-                      ),
-                  }}
-                />
+                className="size-4 rounded border"
+                style={{
+                  backgroundColor:
+                    ALL_COURSES_COLOR,
+                }}
+              />
+              مسجل في جميع الدورات
+            </span>
 
-                {count === 1
-                  ? 'دورة واحدة'
-                  : count === 2
-                    ? 'دورتان'
-                    : `${count} دورات`}
-              </span>
-            ))}
-        </div>
-
-        {/* =====================================================
-            TABLE
-        ===================================================== */}
-
-        <div className="overflow-x-auto rounded-lg border">
-          <table
-            className={[
-              'w-full text-sm',
-              'min-w-[1250px]',
-            ].join(' ')}
-          >
-            <thead>
-              <tr className="border-b bg-muted/40">
-                <th className="px-4 py-3 text-right font-medium">
-                  الطالب
-                </th>
-
-                <th className="px-4 py-3 text-right font-medium">
-                  الرقم الشخصي
-                </th>
-
-                <th className="px-4 py-3 text-right font-medium">
-                  الصف
-                </th>
-
-                <th className="px-4 py-3 text-right font-medium">
-                  المعلم
-                </th>
-
-                <th className="px-4 py-3 text-right font-medium">
-                  عدد الدورات
-                </th>
-
-                {selectedCourses.map(
-                  (course) => (
-                    <th
-                      key={course.id}
-                      className="px-4 py-3 text-right font-medium"
-                    >
-                      {course.name}
-                    </th>
-                  ),
-                )}
-
-                <th className="px-4 py-3 text-right font-medium">
-                  النسبة الإجمالية
-                </th>
-
-                <th className="px-4 py-3 text-right font-medium">
-                  الحالة
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {sortedResults.length ===
-              0 ? (
-                <tr>
-                  <td
-                    colSpan={
-                      selectedCourses.length +
-                      7
-                    }
-                    className="px-4 py-10 text-center text-muted-foreground"
-                  >
-                    لا توجد نتائج مطابقة للفلاتر.
-                  </td>
-                </tr>
-              ) : (
-                sortedResults.map(
-                  (student) => {
-                    const rowColor =
-                      getRowColor(
-                        student,
-                        selectedCourses.length,
-                      )
-
-                    return (
-                      <tr
-                        key={student.id}
-                        className="border-b last:border-0 transition-colors"
-                        style={
-                          rowColor
-                            ? {
-                                backgroundColor:
-                                  rowColor,
-                              }
-                            : undefined
-                        }
-                      >
-                        {/* الطالب */}
-
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium">
-                              {student.name}
-                            </p>
-
-                            {student.studentNumber && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                رقم الطالب:{' '}
-                                {
-                                  student.studentNumber
-                                }
-                              </p>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* الرقم الشخصي */}
-
-                        <td className="px-4 py-3">
-                          {student.personalId ||
-                            '—'}
-                        </td>
-
-                        {/* الصف */}
-
-                        <td className="px-4 py-3">
-                          {student.grade}
-                        </td>
-
-                        {/* المعلم */}
-
-                        <td className="px-4 py-3">
-                          {student.teacher}
-                        </td>
-
-                        {/* عدد الدورات */}
-
-                        <td className="px-4 py-3">
-                          <span className="font-semibold">
-                            {
-                              student.courseCount
-                            }
-                          </span>
-
-                          <span className="mr-1 text-xs text-muted-foreground">
-                            /{' '}
-                            {
-                              selectedCourses.length
-                            }
-                          </span>
-                        </td>
-
-                        {/* الدورات */}
-
-                        {selectedCourses.map(
-                          (course) => {
-                            const result =
-                              student
-                                .courses[
-                                course.id
-                              ]
-
-                            return (
-                              <td
-                                key={course.id}
-                                className="px-4 py-3"
-                              >
-                                <div className="flex flex-col gap-1">
-                                  <span>
-                                    {formatPercentage(
-                                      result?.percentage ??
-                                        null,
-                                    )}
-                                  </span>
-
-                                  {!result?.registered && (
-                                    <span className="text-xs text-muted-foreground">
-                                      غير مسجل
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                            )
-                          },
-                        )}
-
-                        {/* الإجمالي */}
-
-                        <td className="px-4 py-3 font-semibold">
-                          {formatPercentage(
-                            student.annualPercentage,
-                          )}
-                        </td>
-
-                        {/* الحالة */}
-
-                        <td className="px-4 py-3">
-                          <Badge
-                            variant={
-                              student.eligible
-                                ? 'success'
-                                : 'neutral'
-                            }
-                          >
-                            {student.eligible
-                              ? 'مستحق'
-                              : 'غير مستحق'}
-                          </Badge>
-                        </td>
-                      </tr>
+            {selectedCourses.length > 1 &&
+              Array.from(
+                new Set(
+                  results
+                    .map(
+                      (student) =>
+                        student.courseCount,
                     )
-                  },
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+                    .filter(
+                      (count) =>
+                        count > 0 &&
+                        count <
+                          selectedCourses.length,
+                    )
+                    .sort(
+                      (a, b) => a - b,
+                    ),
+                ),
+              ).map((count) => (
+                <span
+                  key={count}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className="size-4 rounded border"
+                    style={{
+                      backgroundColor:
+                        getRowColor(
+                          {
+                            id: '',
+                            studentNumber: '',
+                            personalId: '',
+                            name: '',
+                            grade: '',
+                            teacher: '',
+                            courses: {},
+                            courseCount: count,
+                            annualPercentage:
+                              null,
+                            eligible: false,
+                          },
+                          selectedCourses.length,
+                        ),
+                    }}
+                  />
+
+                  {count === 1
+                    ? 'دورة واحدة'
+                    : count === 2
+                      ? 'دورتان'
+                      : `${count} دورات`}
+                </span>
+              ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* =====================================================
+          STUDENTS TABLE - SEPARATE SECTION
+      ===================================================== */}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">
+                جدول الطلبة
+              </CardTitle>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                يعرض أول مجموعة من الطلبة، ويمكن تمرير الجدول
+                للأسفل لعرض بقية النتائج.
+              </p>
+            </div>
+
+            <Badge variant="neutral">
+              {sortedResults.length} طالب
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="max-h-[600px] overflow-auto rounded-lg border">
+            <table
+              className={[
+                'w-full text-sm',
+                'min-w-[1250px]',
+              ].join(' ')}
+            >
+              <thead>
+                <tr>
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    الطالب
+                  </th>
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    الرقم الشخصي
+                  </th>
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    الصف
+                  </th>
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    المعلم
+                  </th>
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    عدد الدورات
+                  </th>
+
+                  {selectedCourses.map(
+                    (course) => (
+                      <th
+                        key={course.id}
+                        className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium"
+                      >
+                        {course.name}
+                      </th>
+                    ),
+                  )}
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    النسبة الإجمالية
+                  </th>
+
+                  <th className="sticky top-0 z-20 border-b bg-muted px-4 py-3 text-right font-medium">
+                    الحالة
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {sortedResults.length ===
+                0 ? (
+                  <tr>
+                    <td
+                      colSpan={
+                        selectedCourses.length +
+                        7
+                      }
+                      className="px-4 py-10 text-center text-muted-foreground"
+                    >
+                      لا توجد نتائج مطابقة للفلاتر.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedResults.map(
+                    (student) => {
+                      const rowColor =
+                        getRowColor(
+                          student,
+                          selectedCourses.length,
+                        )
+
+                      return (
+                        <tr
+                          key={student.id}
+                          className="border-b last:border-0 transition-colors"
+                          style={
+                            rowColor
+                              ? {
+                                  backgroundColor:
+                                    rowColor,
+                                }
+                              : undefined
+                          }
+                        >
+                          {/* الطالب */}
+
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="font-medium">
+                                {student.name}
+                              </p>
+
+                              {student.studentNumber && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  رقم الطالب:{' '}
+                                  {
+                                    student.studentNumber
+                                  }
+                                </p>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* الرقم الشخصي */}
+
+                          <td className="px-4 py-3">
+                            {student.personalId ||
+                              '—'}
+                          </td>
+
+                          {/* الصف */}
+
+                          <td className="px-4 py-3">
+                            {student.grade}
+                          </td>
+
+                          {/* المعلم */}
+
+                          <td className="px-4 py-3">
+                            {student.teacher}
+                          </td>
+
+                          {/* عدد الدورات */}
+
+                          <td className="px-4 py-3">
+                            <span className="font-semibold">
+                              {
+                                student.courseCount
+                              }
+                            </span>
+
+                            <span className="mr-1 text-xs text-muted-foreground">
+                              /{' '}
+                              {
+                                selectedCourses.length
+                              }
+                            </span>
+                          </td>
+
+                          {/* الدورات */}
+
+                          {selectedCourses.map(
+                            (course) => {
+                              const result =
+                                student
+                                  .courses[
+                                  course.id
+                                ]
+
+                              return (
+                                <td
+                                  key={course.id}
+                                  className="px-4 py-3"
+                                >
+                                  <div className="flex flex-col gap-1">
+                                    <span>
+                                      {formatPercentage(
+                                        result?.percentage ??
+                                          null,
+                                      )}
+                                    </span>
+
+                                    {!result?.registered && (
+                                      <span className="text-xs text-muted-foreground">
+                                        غير مسجل
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              )
+                            },
+                          )}
+
+                          {/* الإجمالي */}
+
+                          <td className="px-4 py-3 font-semibold">
+                            {formatPercentage(
+                              student.annualPercentage,
+                            )}
+                          </td>
+
+                          {/* الحالة */}
+
+                          <td className="px-4 py-3">
+                            <Badge
+                              variant={
+                                student.eligible
+                                  ? 'success'
+                                  : 'neutral'
+                              }
+                            >
+                              {student.eligible
+                                ? 'مستحق'
+                                : 'غير مستحق'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    },
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
