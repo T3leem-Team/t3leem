@@ -129,10 +129,10 @@ const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 const columnFilterInputClass =
-  'h-8 w-full min-w-[110px] rounded-md border border-input bg-background px-2 text-xs'
+  'h-8 w-full min-w-[100px] rounded-md border border-input bg-background px-2 text-xs'
 
 const columnFilterSelectClass =
-  'h-8 w-full min-w-[110px] rounded-md border border-input bg-background px-2 text-xs'
+  'h-8 w-full min-w-[105px] rounded-md border border-input bg-background px-2 text-xs'
 
 const COURSE_COUNT_COLORS = [
   '#fca5a5',
@@ -273,6 +273,11 @@ function getRowColor(
   student: StudentResult,
   selectedCourseCount: number,
 ) {
+  // التلوين للمستحقين فقط
+  if (!student.eligible) {
+    return undefined
+  }
+
   if (
     selectedCourseCount > 0 &&
     student.courseCount === selectedCourseCount
@@ -575,11 +580,12 @@ export default function AttendanceAwardsResults({
 
     try {
       const exportRows =
-        sortedResults.map((student) => {
+        sortedResults.map((student, index) => {
           const row: Record<
             string,
             string | number
           > = {
+            التسلسل: index + 1,
             الطالب: student.name,
             'رقم الطالب':
               student.studentNumber || '',
@@ -1293,7 +1299,7 @@ export default function AttendanceAwardsResults({
                     ALL_COURSES_COLOR,
                 }}
               />
-              مسجل في جميع الدورات
+              مستحق ومسجل في جميع الدورات
             </span>
 
             {selectedCourses.length > 1 &&
@@ -1335,13 +1341,14 @@ export default function AttendanceAwardsResults({
                             courseCount: count,
                             annualPercentage:
                               null,
-                            eligible: false,
+                            eligible: true,
                           },
                           selectedCourses.length,
                         ),
                     }}
                   />
 
+                  مستحق —
                   {count === 1
                     ? 'دورة واحدة'
                     : count === 2
@@ -1355,24 +1362,26 @@ export default function AttendanceAwardsResults({
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3">
             <div>
-              <CardTitle className="text-base">
-                جدول الطلبة
-              </CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">
+                  جدول الطلبة
+                </CardTitle>
+
+                <Badge
+                  variant="success"
+                  className="border-emerald-600 bg-emerald-600 px-3 py-1 text-sm font-bold text-white hover:bg-emerald-600"
+                >
+                  {sortedResults.length} طالب
+                </Badge>
+              </div>
 
               <p className="mt-1 text-xs text-muted-foreground">
                 يعرض أول مجموعة من الطلبة، ويمكن تمرير الجدول
                 للأسفل لعرض بقية النتائج.
               </p>
             </div>
-
-            <Badge
-              variant="success"
-              className="border-emerald-600 bg-emerald-600 px-3 py-1 text-sm font-bold text-white hover:bg-emerald-600"
-            >
-              {sortedResults.length} طالب
-            </Badge>
           </div>
         </CardHeader>
 
@@ -1381,240 +1390,247 @@ export default function AttendanceAwardsResults({
             <table
               className={[
                 'w-full text-sm',
-                'min-w-[1250px]',
+                'min-w-[1500px]',
               ].join(' ')}
             >
               <thead>
-                {/* عناوين الأعمدة */}
                 <tr>
-                  <th className="sticky top-0 z-30 w-16 border-b bg-muted px-4 py-3 text-center font-medium">
-                    التسلسل
+                  <th className="sticky top-0 z-30 w-16 border-b bg-muted px-2 py-2 text-center font-medium align-top">
+                    <div className="flex min-h-[64px] flex-col items-center justify-between gap-2">
+                      <span className="whitespace-nowrap">
+                        التسلسل
+                      </span>
+
+                      <span className="text-[10px] text-muted-foreground">
+                        —
+                      </span>
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    الطالب
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[230px] flex-col gap-2">
+                      <span>
+                        الطالب
+                      </span>
+
+                      <input
+                        value={filters.name}
+                        onChange={(event) =>
+                          updateFilter(
+                            'name',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث..."
+                        className={columnFilterInputClass}
+                      />
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    الرقم الشخصي
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[170px] flex-col gap-2">
+                      <span>
+                        الرقم الشخصي
+                      </span>
+
+                      <input
+                        value={filters.personalId}
+                        onChange={(event) =>
+                          updateFilter(
+                            'personalId',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="بحث..."
+                        className={columnFilterInputClass}
+                      />
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    الصف
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[160px] flex-col gap-2">
+                      <span>
+                        الصف
+                      </span>
+
+                      <select
+                        value={filters.grade}
+                        onChange={(event) =>
+                          updateFilter(
+                            'grade',
+                            event.target.value,
+                          )
+                        }
+                        className={columnFilterSelectClass}
+                      >
+                        <option value="">
+                          جميع الصفوف
+                        </option>
+
+                        {grades.map(
+                          (grade) => (
+                            <option
+                              key={grade}
+                              value={grade}
+                            >
+                              {grade}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    المعلم
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[180px] flex-col gap-2">
+                      <span>
+                        المعلم
+                      </span>
+
+                      <select
+                        value={filters.teacher}
+                        onChange={(event) =>
+                          updateFilter(
+                            'teacher',
+                            event.target.value,
+                          )
+                        }
+                        className={columnFilterSelectClass}
+                      >
+                        <option value="">
+                          جميع المعلمين
+                        </option>
+
+                        {teachers.map(
+                          (teacher) => (
+                            <option
+                              key={teacher}
+                              value={teacher}
+                            >
+                              {teacher}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    عدد الدورات
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[170px] flex-col gap-2">
+                      <span>
+                        عدد الدورات
+                      </span>
+
+                      <select
+                        value={filters.courseCount}
+                        onChange={(event) =>
+                          updateFilter(
+                            'courseCount',
+                            event.target.value,
+                          )
+                        }
+                        className={columnFilterSelectClass}
+                      >
+                        <option value="">
+                          الكل
+                        </option>
+
+                        {courseCountOptions.map(
+                          (count) => (
+                            <option
+                              key={count}
+                              value={count}
+                            >
+                              {count}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </th>
 
                   {selectedCourses.map(
                     (course) => (
                       <th
                         key={course.id}
-                        className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium"
+                        className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top"
                       >
-                        {course.name}
+                        <div className="flex min-w-[160px] flex-col gap-2">
+                          <span>
+                            {course.name}
+                          </span>
+
+                          <input
+                            value={
+                              filters.courses[
+                                course.id
+                              ] ?? ''
+                            }
+                            onChange={(event) =>
+                              updateCourseFilter(
+                                course.id,
+                                event.target.value,
+                              )
+                            }
+                            placeholder="%"
+                            className={columnFilterInputClass}
+                          />
+                        </div>
                       </th>
                     ),
                   )}
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    النسبة الإجمالية
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[175px] flex-col gap-2">
+                      <span>
+                        النسبة الإجمالية
+                      </span>
+
+                      <input
+                        value={
+                          filters.annualPercentage
+                        }
+                        onChange={(event) =>
+                          updateFilter(
+                            'annualPercentage',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="%"
+                        className={columnFilterInputClass}
+                      />
+                    </div>
                   </th>
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-4 py-3 text-right font-medium">
-                    الحالة
-                  </th>
-                </tr>
+                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                    <div className="flex min-w-[170px] flex-col gap-2">
+                      <span>
+                        الحالة
+                      </span>
 
-                {/* فلترة مرتبطة بكل عمود */}
-                <tr>
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <span className="block text-center text-[10px] text-muted-foreground">
-                      —
-                    </span>
-                  </th>
-
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <input
-                      value={filters.name}
-                      onChange={(event) =>
-                        updateFilter(
-                          'name',
-                          event.target.value,
-                        )
-                      }
-                      placeholder="بحث"
-                      className={columnFilterInputClass}
-                    />
-                  </th>
-
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <input
-                      value={filters.personalId}
-                      onChange={(event) =>
-                        updateFilter(
-                          'personalId',
-                          event.target.value,
-                        )
-                      }
-                      placeholder="بحث"
-                      className={columnFilterInputClass}
-                    />
-                  </th>
-
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <select
-                      value={filters.grade}
-                      onChange={(event) =>
-                        updateFilter(
-                          'grade',
-                          event.target.value,
-                        )
-                      }
-                      className={columnFilterSelectClass}
-                    >
-                      <option value="">
-                        الكل
-                      </option>
-
-                      {grades.map(
-                        (grade) => (
-                          <option
-                            key={grade}
-                            value={grade}
-                          >
-                            {grade}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </th>
-
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <select
-                      value={filters.teacher}
-                      onChange={(event) =>
-                        updateFilter(
-                          'teacher',
-                          event.target.value,
-                        )
-                      }
-                      className={columnFilterSelectClass}
-                    >
-                      <option value="">
-                        الكل
-                      </option>
-
-                      {teachers.map(
-                        (teacher) => (
-                          <option
-                            key={teacher}
-                            value={teacher}
-                          >
-                            {teacher}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </th>
-
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <select
-                      value={filters.courseCount}
-                      onChange={(event) =>
-                        updateFilter(
-                          'courseCount',
-                          event.target.value,
-                        )
-                      }
-                      className={columnFilterSelectClass}
-                    >
-                      <option value="">
-                        الكل
-                      </option>
-
-                      {courseCountOptions.map(
-                        (count) => (
-                          <option
-                            key={count}
-                            value={count}
-                          >
-                            {count}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </th>
-
-                  {selectedCourses.map(
-                    (course) => (
-                      <th
-                        key={course.id}
-                        className="sticky top-[49px] z-30 border-b bg-background px-2 py-2"
+                      <select
+                        value={filters.status}
+                        onChange={(event) =>
+                          updateFilter(
+                            'status',
+                            event.target.value,
+                          )
+                        }
+                        className={columnFilterSelectClass}
                       >
-                        <input
-                          value={
-                            filters.courses[
-                              course.id
-                            ] ?? ''
-                          }
-                          onChange={(event) =>
-                            updateCourseFilter(
-                              course.id,
-                              event.target.value,
-                            )
-                          }
-                          placeholder="%"
-                          className={columnFilterInputClass}
-                        />
-                      </th>
-                    ),
-                  )}
+                        <option value="">
+                          جميع الحالات
+                        </option>
 
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <input
-                      value={
-                        filters.annualPercentage
-                      }
-                      onChange={(event) =>
-                        updateFilter(
-                          'annualPercentage',
-                          event.target.value,
-                        )
-                      }
-                      placeholder="%"
-                      className={columnFilterInputClass}
-                    />
-                  </th>
+                        <option value="eligible">
+                          مستحق
+                        </option>
 
-                  <th className="sticky top-[49px] z-30 border-b bg-background px-2 py-2">
-                    <select
-                      value={filters.status}
-                      onChange={(event) =>
-                        updateFilter(
-                          'status',
-                          event.target.value,
-                        )
-                      }
-                      className={columnFilterSelectClass}
-                    >
-                      <option value="">
-                        الكل
-                      </option>
-
-                      <option value="eligible">
-                        مستحق
-                      </option>
-
-                      <option value="not-eligible">
-                        غير مستحق
-                      </option>
-                    </select>
+                        <option value="not-eligible">
+                          غير مستحق
+                        </option>
+                      </select>
+                    </div>
                   </th>
                 </tr>
               </thead>
@@ -1655,7 +1671,6 @@ export default function AttendanceAwardsResults({
                               : undefined
                           }
                         >
-                          {/* التسلسل */}
                           <td className="px-4 py-3 text-center font-bold">
                             {index + 1}
                           </td>
