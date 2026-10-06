@@ -47,6 +47,7 @@ type FilterType =
   | 'payment'
   | 'not_assigned_current_course'
   | 'invalid_personal_id'
+  | 'attendance_award'
 
 type Student = {
   id: string
@@ -172,6 +173,7 @@ type CommunicationCache = {
   attendanceStatuses: AttendanceStatus[]
   payments: Payment[]
   messageTemplates: MessageTemplate[]
+  attendanceAwardEligibleStudentIds: string[]
 }
 
 let communicationCache:
@@ -246,6 +248,13 @@ export function CommunicationView() {
     setMessageTemplates,
   ] = useState<MessageTemplate[]>(
     communicationCache?.messageTemplates ?? []
+  )
+
+  const [
+    attendanceAwardEligibleStudentIds,
+    setAttendanceAwardEligibleStudentIds,
+  ] = useState<string[]>(
+    communicationCache?.attendanceAwardEligibleStudentIds ?? []
   )
 
   const [
@@ -408,6 +417,7 @@ export function CommunicationView() {
             attendanceStatuses: [],
             payments: [],
             messageTemplates: [],
+            attendanceAwardEligibleStudentIds: [],
           }
 
           return
@@ -428,6 +438,7 @@ export function CommunicationView() {
           statusesResult,
           paymentsResult,
           templatesResult,
+          attendanceAwardResult,
         ] = await Promise.all([
           supabase
             .from('students')
@@ -507,12 +518,31 @@ export function CommunicationView() {
             .order('created_at', {
               ascending: false,
             }),
+
+          supabase
+            .from('attendance_award_results')
+            .select('student_id')
+            .eq(
+              'academic_year_id',
+              yearData.id
+            )
+            .eq(
+              'status',
+              'eligible'
+            ),
         ])
 
         if (templatesResult.error) {
           console.error(
             'Message templates load error:',
             templatesResult.error
+          )
+        }
+
+        if (attendanceAwardResult.error) {
+          console.error(
+            'Attendance award results load error:',
+            attendanceAwardResult.error
           )
         }
 
@@ -649,6 +679,26 @@ export function CommunicationView() {
             })
           )
 
+        const nextAttendanceAwardEligibleStudentIds =
+          Array.from(
+            new Set(
+              (
+                attendanceAwardResult.data ??
+                []
+              )
+                .map(
+                  (item) =>
+                    item.student_id
+                )
+                .filter(
+                  (
+                    id
+                  ): id is string =>
+                    Boolean(id)
+                )
+            )
+          )
+
         communicationCache = {
           academicYear:
             currentAcademicYear,
@@ -664,6 +714,8 @@ export function CommunicationView() {
           payments: nextPayments,
           messageTemplates:
             nextMessageTemplates,
+          attendanceAwardEligibleStudentIds:
+            nextAttendanceAwardEligibleStudentIds,
         }
 
         if (cancelled) {
@@ -689,6 +741,9 @@ export function CommunicationView() {
         setPayments(nextPayments)
         setMessageTemplates(
           nextMessageTemplates
+        )
+        setAttendanceAwardEligibleStudentIds(
+          nextAttendanceAwardEligibleStudentIds
         )
       } catch (error) {
         console.error(
@@ -834,6 +889,34 @@ export function CommunicationView() {
           result.filter(
             (student) =>
               !assignedStudentIds.has(
+                student.id
+              )
+          )
+      }
+
+      /*
+       * =====================================================
+       * مستحق للتكريم
+       * =====================================================
+       *
+       * يعتمد فقط على النتائج المحفوظة
+       * في attendance_award_results
+       * للسنة الدراسية الحالية وحالة eligible.
+       */
+
+      if (
+        filterType ===
+        'attendance_award'
+      ) {
+        const eligibleIds =
+          new Set(
+            attendanceAwardEligibleStudentIds
+          )
+
+        result =
+          result.filter(
+            (student) =>
+              eligibleIds.has(
                 student.id
               )
           )
@@ -1038,6 +1121,7 @@ export function CommunicationView() {
       attendance,
       payments,
       academicYear,
+      attendanceAwardEligibleStudentIds,
       filterType,
       selectedTeacherIds,
       selectedCourseId,
@@ -1851,6 +1935,10 @@ export function CommunicationView() {
 
                 <option value="payment">
                   حسب حالة الدفع
+                </option>
+
+                <option value="attendance_award">
+                  مستحق للتكريم
                 </option>
 
                 <option value="not_assigned_current_course">
