@@ -5,6 +5,7 @@ import {
   Download,
   Filter,
   RotateCcw,
+  Palette,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -22,7 +23,7 @@ import {
    TYPES
 ========================================================= */
 
-export type AcademicYear = {
+type AcademicYear = {
   id: string
   name: string
   start_date: string | null
@@ -32,7 +33,7 @@ export type AcademicYear = {
   is_active?: boolean
 }
 
-export type Course = {
+type Course = {
   id: string
   academic_year_id: string
   name: string
@@ -41,59 +42,7 @@ export type Course = {
   days: unknown
 }
 
-export type Student = {
-  id: string
-  student_id: string | null
-  name: string
-  personal_id: string | null
-  phone?: string | null
-  whatsapp?: string | null
-}
-
-export type Enrollment = {
-  id: string
-  student_id: string
-  academic_year_id: string
-  level_id: string | null
-  class_id: string | null
-  status: string | null
-}
-
-export type Level = {
-  id: string
-  name: string
-}
-
-export type Teacher = {
-  id: string
-  name: string
-}
-
-export type TeacherAssignment = {
-  id: string
-  course_id: string
-  teacher_id: string
-  student_id: string
-}
-
-export type AttendanceStatus = {
-  id: string
-  name: string
-  is_active: boolean
-  sort_order: number
-}
-
-export type AttendanceRow = {
-  id: string
-  student_id: string
-  enrollment_id: string | null
-  attendance_date: string
-  status_id: string
-  note: string | null
-  course_id: string
-}
-
-export type CourseResult = {
+type CourseResult = {
   courseId: string
   percentage: number | null
   numerator: number
@@ -109,28 +58,20 @@ export type StudentResult = {
   grade: string
   teacher: string
   courses: Record<string, CourseResult>
-
-  /*
-   * عدد الدورات المسجل فيها الطالب
-   * لا يدخل في احتساب النسبة.
-   */
   courseCount: number
-
   annualPercentage: number | null
   eligible: boolean
 }
 
-type CourseFilterState = Record<
-  string,
-  string
->
+type CourseFilterState = Record<string, string>
 
 type Filters = {
   name: string
+  personalId: string
   grade: string
   teacher: string
-  courseCount: string
   annualPercentage: string
+  courseCount: string
   status: string
   courses: CourseFilterState
 }
@@ -142,11 +83,13 @@ type Props = {
   selectedYearId: string
   fromDate: string
   toDate: string
-  onError: (message: string) => void
+  error: string
+  setError: (value: string) => void
+  selectedYearName: string
 }
 
 /* =========================================================
-   HELPERS
+   CONSTANTS
 ========================================================= */
 
 const inputClass =
@@ -155,120 +98,138 @@ const inputClass =
 const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
-function normalizeText(value: string) {
+/*
+  الألوان الافتراضية فقط.
+  المستخدم يستطيع تغييرها من الواجهة.
+*/
+
+const DEFAULT_COLORS = {
+  all: '#dcfce7',
+  two: '#dbeafe',
+  one: '#fef3c7',
+}
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function formatPercentage(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return '—'
+  }
+
+  return `${Number(value.toFixed(1))}%`
+}
+
+/* =========================================================
+   LEVEL ORDER
+========================================================= */
+
+function normalizeLevelName(value: string) {
   return value
     .trim()
     .replace(/\s+/g, ' ')
     .replace(/أ|إ|آ/g, 'ا')
+    .replace(/ى/g, 'ي')
 }
 
-function getArabicNumberOrder(value: string) {
-  const text = normalizeText(value)
+function getArabicNumber(value: string) {
+  const normalized = normalizeLevelName(value)
 
   if (
-    text.includes('الاول') ||
-    text.includes('اول') ||
-    text === '1' ||
-    text.startsWith('1 ')
+    normalized.includes('الاول') ||
+    normalized.includes('الأول') ||
+    normalized.includes('1')
   ) {
     return 1
   }
 
   if (
-    text.includes('الثاني') ||
-    text.includes('ثاني') ||
-    text === '2' ||
-    text.startsWith('2 ')
+    normalized.includes('الثاني') ||
+    normalized.includes('2')
   ) {
     return 2
   }
 
   if (
-    text.includes('الثالث') ||
-    text.includes('ثالث') ||
-    text === '3' ||
-    text.startsWith('3 ')
+    normalized.includes('الثالث') ||
+    normalized.includes('3')
   ) {
     return 3
   }
 
   if (
-    text.includes('الرابع') ||
-    text.includes('رابع') ||
-    text === '4' ||
-    text.startsWith('4 ')
+    normalized.includes('الرابع') ||
+    normalized.includes('4')
   ) {
     return 4
   }
 
   if (
-    text.includes('الخامس') ||
-    text.includes('خامس') ||
-    text === '5' ||
-    text.startsWith('5 ')
+    normalized.includes('الخامس') ||
+    normalized.includes('5')
   ) {
     return 5
   }
 
   if (
-    text.includes('السادس') ||
-    text.includes('سادس') ||
-    text === '6' ||
-    text.startsWith('6 ')
+    normalized.includes('السادس') ||
+    normalized.includes('6')
   ) {
     return 6
   }
 
-  return 99
+  return 999
 }
 
-function getLevelCategoryOrder(value: string) {
-  const text = normalizeText(value)
+function getLevelStage(value: string) {
+  const normalized = normalizeLevelName(value)
 
   if (
-    text.includes('ابتدائي') ||
-    text.includes('ابتداي')
+    normalized.includes('ابتدائي') ||
+    normalized.includes('ابتدايي') ||
+    normalized.includes('ابتدائي')
   ) {
     return 1
   }
 
   if (
-    text.includes('اعدادي') ||
-    text.includes('متوسط')
+    normalized.includes('اعدادي') ||
+    normalized.includes('إعدادي') ||
+    normalized.includes('متوسط') ||
+    normalized.includes('المتوسط')
   ) {
     return 2
   }
 
-  if (text.includes('ثانوي')) {
+  if (
+    normalized.includes('ثانوي') ||
+    normalized.includes('الثانوي')
+  ) {
     return 3
   }
 
-  return 99
+  return 999
 }
 
-function compareLevels(
-  a: string,
-  b: string,
-) {
-  if (a === b) {
-    return 0
+function compareGrades(a: string, b: string) {
+  if (a === '—' && b !== '—') {
+    return 1
   }
 
-  const categoryA =
-    getLevelCategoryOrder(a)
-
-  const categoryB =
-    getLevelCategoryOrder(b)
-
-  if (categoryA !== categoryB) {
-    return categoryA - categoryB
+  if (a !== '—' && b === '—') {
+    return -1
   }
 
-  const numberA =
-    getArabicNumberOrder(a)
+  const stageA = getLevelStage(a)
+  const stageB = getLevelStage(b)
 
-  const numberB =
-    getArabicNumberOrder(b)
+  if (stageA !== stageB) {
+    return stageA - stageB
+  }
+
+  const numberA = getArabicNumber(a)
+  const numberB = getArabicNumber(b)
 
   if (numberA !== numberB) {
     return numberA - numberB
@@ -277,80 +238,36 @@ function compareLevels(
   return a.localeCompare(b, 'ar')
 }
 
-function formatPercentage(
-  value: number | null,
-) {
-  if (
-    value === null ||
-    !Number.isFinite(value)
-  ) {
-    return '—'
-  }
-
-  return `${Number(
-    value.toFixed(1),
-  )}%`
-}
-
-function getCourseCountLabel(
-  count: number,
-) {
-  if (count === 0) {
-    return 'لا توجد دورات'
-  }
-
-  if (count === 1) {
-    return 'دورة واحدة'
-  }
-
-  if (count === 2) {
-    return 'دورتان'
-  }
-
-  return `${count} دورات`
-}
-
 /* =========================================================
    ROW COLOR
 ========================================================= */
 
-function getRowClass(
+function getRowColor(
   student: StudentResult,
   selectedCourseCount: number,
+  colorsEnabled: boolean,
+  colors: typeof DEFAULT_COLORS,
 ) {
-  /*
-   * الأولوية:
-   * 1. جميع الدورات المختارة
-   * 2. دورتان
-   * 3. دورة واحدة
-   */
+  if (!colorsEnabled) {
+    return undefined
+  }
 
   if (
     selectedCourseCount > 0 &&
-    student.courseCount ===
-      selectedCourseCount
+    student.courseCount === selectedCourseCount
   ) {
-    return [
-      'bg-emerald-50/70',
-      'dark:bg-emerald-950/20',
-    ].join(' ')
+    return colors.all
   }
 
   if (student.courseCount === 2) {
-    return [
-      'bg-blue-50/70',
-      'dark:bg-blue-950/20',
-    ].join(' ')
+    return colors.two
   }
 
   if (student.courseCount === 1) {
-    return [
-      'bg-amber-50/70',
-      'dark:bg-amber-950/20',
-    ].join(' ')
+    return colors.one
   }
 
-  return ''
+  return undefined
 }
 
 /* =========================================================
@@ -364,22 +281,34 @@ export default function AttendanceAwardsResults({
   selectedYearId,
   fromDate,
   toDate,
-  onError,
+  setError,
+  selectedYearName,
 }: Props) {
   /* -------------------------------------------------------
      Filters
   ------------------------------------------------------- */
 
-  const [filters, setFilters] =
-    useState<Filters>({
-      name: '',
-      grade: '',
-      teacher: '',
-      courseCount: '',
-      annualPercentage: '',
-      status: '',
-      courses: {},
-    })
+  const [filters, setFilters] = useState<Filters>({
+    name: '',
+    personalId: '',
+    grade: '',
+    teacher: '',
+    annualPercentage: '',
+    courseCount: '',
+    status: '',
+    courses: {},
+  })
+
+  /* -------------------------------------------------------
+     Colors
+  ------------------------------------------------------- */
+
+  const [colorsEnabled, setColorsEnabled] =
+    useState(true)
+
+  const [colors, setColors] = useState(
+    DEFAULT_COLORS,
+  )
 
   /* =========================================================
      FILTER HELPERS
@@ -388,10 +317,11 @@ export default function AttendanceAwardsResults({
   const updateFilter = (
     key:
       | 'name'
+      | 'personalId'
       | 'grade'
       | 'teacher'
-      | 'courseCount'
       | 'annualPercentage'
+      | 'courseCount'
       | 'status',
     value: string,
   ) => {
@@ -417,14 +347,128 @@ export default function AttendanceAwardsResults({
   const resetFilters = () => {
     setFilters({
       name: '',
+      personalId: '',
       grade: '',
       teacher: '',
-      courseCount: '',
       annualPercentage: '',
+      courseCount: '',
       status: '',
       courses: {},
     })
   }
+
+  /* =========================================================
+     FILTERED RESULTS
+  ========================================================= */
+
+  const filteredResults = useMemo(() => {
+    return results.filter((student) => {
+      const searchName =
+        filters.name.trim().toLowerCase()
+
+      const searchPersonalId =
+        filters.personalId.trim().toLowerCase()
+
+      const matchesName =
+        !searchName ||
+        student.name
+          .toLowerCase()
+          .includes(searchName) ||
+        student.studentNumber
+          .toLowerCase()
+          .includes(searchName)
+
+      const matchesPersonalId =
+        !searchPersonalId ||
+        student.personalId
+          .toLowerCase()
+          .includes(searchPersonalId)
+
+      const matchesGrade =
+        !filters.grade ||
+        student.grade === filters.grade
+
+      const matchesTeacher =
+        !filters.teacher ||
+        student.teacher === filters.teacher
+
+      const matchesAnnual =
+        !filters.annualPercentage ||
+        String(
+          student.annualPercentage ?? '',
+        ).includes(
+          filters.annualPercentage,
+        )
+
+      const matchesCourseCount =
+        !filters.courseCount ||
+        student.courseCount ===
+          Number(filters.courseCount)
+
+      const matchesStatus =
+        !filters.status ||
+        (filters.status === 'eligible'
+          ? student.eligible
+          : !student.eligible)
+
+      const matchesCourses =
+        selectedCourses.every((course) => {
+          const filterValue =
+            filters.courses[course.id] ?? ''
+
+          if (!filterValue) {
+            return true
+          }
+
+          const percentage =
+            student.courses[course.id]?.percentage
+
+          return String(
+            percentage ?? '',
+          ).includes(filterValue)
+        })
+
+      return (
+        matchesName &&
+        matchesPersonalId &&
+        matchesGrade &&
+        matchesTeacher &&
+        matchesAnnual &&
+        matchesCourseCount &&
+        matchesStatus &&
+        matchesCourses
+      )
+    })
+  }, [
+    results,
+    filters,
+    selectedCourses,
+  ])
+
+  /* =========================================================
+     SORTED RESULTS
+  ========================================================= */
+
+  const sortedResults = useMemo(() => {
+    return [...filteredResults].sort(
+      (a, b) => {
+        const gradeOrder =
+          compareGrades(
+            a.grade,
+            b.grade,
+          )
+
+        if (gradeOrder !== 0) {
+          return gradeOrder
+        }
+
+        return a.name.localeCompare(
+          b.name,
+          'ar',
+        )
+      },
+    )
+  }, [filteredResults])
 
   /* =========================================================
      FILTER OPTIONS
@@ -434,16 +478,13 @@ export default function AttendanceAwardsResults({
     return Array.from(
       new Set(
         results
-          .map(
-            (student) =>
-              student.grade,
-          )
+          .map((student) => student.grade)
           .filter(
             (grade) =>
               grade && grade !== '—',
           ),
       ),
-    ).sort(compareLevels)
+    ).sort(compareGrades)
   }, [results])
 
   const teachers = useMemo(() => {
@@ -468,212 +509,102 @@ export default function AttendanceAwardsResults({
     )
   }, [results])
 
-  /* =========================================================
-     FILTERED RESULTS
-  ========================================================= */
-
-  const filteredResults =
-    useMemo(() => {
-      return results.filter(
-        (student) => {
-          const searchName =
-            filters.name
-              .trim()
-              .toLowerCase()
-
-          const matchesName =
-            !searchName ||
-            student.name
-              .toLowerCase()
-              .includes(searchName) ||
-            student.studentNumber
-              .toLowerCase()
-              .includes(searchName) ||
-            student.personalId
-              .toLowerCase()
-              .includes(searchName)
-
-          const matchesGrade =
-            !filters.grade ||
-            student.grade ===
-              filters.grade
-
-          const matchesTeacher =
-            !filters.teacher ||
-            student.teacher ===
-              filters.teacher
-
-          const matchesCourseCount =
-            !filters.courseCount ||
-            student.courseCount ===
-              Number(
-                filters.courseCount,
-              )
-
-          const matchesAnnual =
-            !filters.annualPercentage ||
-            String(
-              student.annualPercentage ??
-                '',
-            ).includes(
-              filters.annualPercentage,
-            )
-
-          const matchesStatus =
-            !filters.status ||
-            (filters.status ===
-            'eligible'
-              ? student.eligible
-              : !student.eligible)
-
-          const matchesCourses =
-            selectedCourses.every(
-              (course) => {
-                const filterValue =
-                  filters.courses[
-                    course.id
-                  ] ?? ''
-
-                if (!filterValue) {
-                  return true
-                }
-
-                const percentage =
-                  student.courses[
-                    course.id
-                  ]?.percentage
-
-                return String(
-                  percentage ?? '',
-                ).includes(
-                  filterValue,
-                )
-              },
-            )
-
-          return (
-            matchesName &&
-            matchesGrade &&
-            matchesTeacher &&
-            matchesCourseCount &&
-            matchesAnnual &&
-            matchesStatus &&
-            matchesCourses
-          )
-        },
-      )
-    }, [
-      results,
-      filters,
-      selectedCourses,
-    ])
-
-  /* =========================================================
-     HAS FILTERS
-  ========================================================= */
-
   const hasFilters =
     Boolean(filters.name) ||
+    Boolean(filters.personalId) ||
     Boolean(filters.grade) ||
     Boolean(filters.teacher) ||
-    Boolean(filters.courseCount) ||
     Boolean(filters.annualPercentage) ||
+    Boolean(filters.courseCount) ||
     Boolean(filters.status) ||
-    Object.values(
-      filters.courses,
-    ).some(Boolean)
+    Object.values(filters.courses).some(Boolean)
 
   /* =========================================================
-     EXPORT TO EXCEL
+     COURSE COUNT OPTIONS
+  ========================================================= */
+
+  const courseCountOptions = useMemo(() => {
+    const count = selectedCourses.length
+
+    return Array.from(
+      { length: count + 1 },
+      (_, index) => index,
+    )
+  }, [selectedCourses.length])
+
+  /* =========================================================
+     EXPORT
   ========================================================= */
 
   const exportToExcel = () => {
-    if (
-      filteredResults.length === 0
-    ) {
-      onError(
-        'لا توجد نتائج لتصديرها إلى Excel.',
-      )
+    if (sortedResults.length === 0) {
+      setError('لا توجد نتائج لتصديرها إلى Excel.')
       return
     }
 
     try {
       const exportRows =
-        filteredResults.map(
-          (student) => {
-            const row: Record<
-              string,
-              string | number
-            > = {
-              الطالب: student.name,
-              'رقم الطالب':
-                student.studentNumber ||
-                '',
-              الهوية:
-                student.personalId ||
-                '',
-              الصف:
-                student.grade || '',
-              المعلم:
-                student.teacher || '',
+        sortedResults.map((student) => {
+          const row: Record<
+            string,
+            string | number
+          > = {
+            الطالب: student.name,
+            'رقم الطالب':
+              student.studentNumber || '',
+            'الرقم الشخصي':
+              student.personalId || '',
+            الصف: student.grade || '',
+            المعلم: student.teacher || '',
+            'عدد الدورات':
+              student.courseCount,
+          }
 
-              'عدد الدورات':
-                student.courseCount,
-            }
+          for (const course of selectedCourses) {
+            const courseResult =
+              student.courses[course.id]
 
-            for (const course of selectedCourses) {
-              const courseResult =
-                student.courses[
-                  course.id
-                ]
-
-              row[course.name] =
-                courseResult?.percentage !==
-                  null &&
-                courseResult?.percentage !==
-                  undefined
-                  ? Number(
-                      courseResult.percentage.toFixed(
-                        1,
-                      ),
-                    )
-                  : ''
-
-              row[
-                `${course.name} - الحالة`
-              ] =
-                courseResult?.registered
-                  ? 'مسجل'
-                  : 'غير مسجل'
-            }
-
-            row['النسبة الإجمالية'] =
-              student.annualPercentage !==
-              null
+            row[course.name] =
+              courseResult?.percentage !==
+                null &&
+              courseResult?.percentage !==
+                undefined
                 ? Number(
-                    student.annualPercentage.toFixed(
+                    courseResult.percentage.toFixed(
                       1,
                     ),
                   )
                 : ''
 
-            row['الحالة'] =
-              student.eligible
-                ? 'مستحق'
-                : 'غير مستحق'
+            row[
+              `${course.name} - الحالة`
+            ] =
+              courseResult?.registered
+                ? 'مسجل'
+                : 'غير مسجل'
+          }
 
-            return row
-          },
-        )
+          row['النسبة الإجمالية'] =
+            student.annualPercentage !==
+            null
+              ? Number(
+                  student.annualPercentage.toFixed(
+                    1,
+                  ),
+                )
+              : ''
+
+          row['الحالة'] = student.eligible
+            ? 'مستحق'
+            : 'غير مستحق'
+
+          return row
+        })
 
       const worksheet =
         XLSX.utils.json_to_sheet(
           exportRows,
         )
-
-      /* -----------------------------------------------------
-         Excel RTL
-      ----------------------------------------------------- */
 
       worksheet['!sheetViews'] = [
         {
@@ -688,12 +619,10 @@ export default function AttendanceAwardsResults({
         { wch: 18 },
         { wch: 24 },
         { wch: 16 },
-        ...selectedCourses.flatMap(
-          () => [
-            { wch: 16 },
-            { wch: 18 },
-          ],
-        ),
+        ...selectedCourses.flatMap(() => [
+          { wch: 16 },
+          { wch: 18 },
+        ]),
         { wch: 18 },
         { wch: 16 },
       ]
@@ -711,8 +640,7 @@ export default function AttendanceAwardsResults({
         academicYears
           .find(
             (year) =>
-              year.id ===
-              selectedYearId,
+              year.id === selectedYearId,
           )
           ?.name
           ?.replace(
@@ -735,28 +663,18 @@ export default function AttendanceAwardsResults({
         fileName,
       )
 
-      onError('')
+      setError('')
     } catch (exportError) {
       const message =
         exportError instanceof Error
           ? exportError.message
           : 'حدث خطأ أثناء إنشاء ملف Excel.'
 
-      onError(
+      setError(
         `تعذر تصدير ملف Excel: ${message}`,
       )
     }
   }
-
-  /* =========================================================
-     SELECTED YEAR
-  ========================================================= */
-
-  const selectedYear =
-    academicYears.find(
-      (year) =>
-        year.id === selectedYearId,
-    )
 
   /* =========================================================
      RENDER
@@ -772,9 +690,7 @@ export default function AttendanceAwardsResults({
             </CardTitle>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              {selectedYear?.name ??
-                'السنة الدراسية'}{' '}
-              — من {fromDate} إلى{' '}
+              {selectedYearName} — من {fromDate} إلى{' '}
               {toDate}
             </p>
           </div>
@@ -783,7 +699,7 @@ export default function AttendanceAwardsResults({
             <Badge variant="success">
               مستحقون:{' '}
               {
-                filteredResults.filter(
+                sortedResults.filter(
                   (student) =>
                     student.eligible,
                 ).length
@@ -792,14 +708,12 @@ export default function AttendanceAwardsResults({
 
             <Badge variant="neutral">
               إجمالي النتائج:{' '}
-              {filteredResults.length}
+              {sortedResults.length}
             </Badge>
 
             <Button
               variant="outline"
-              onClick={
-                exportToExcel
-              }
+              onClick={exportToExcel}
               className="gap-2"
             >
               <Download className="size-4" />
@@ -809,27 +723,35 @@ export default function AttendanceAwardsResults({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {/* ===================================================
-            FILTER HEADER
-        =================================================== */}
+      <CardContent className="space-y-5">
+        {/* =====================================================
+            FILTERS
+        ===================================================== */}
 
         <div className="flex items-center gap-2 text-sm font-medium">
           <Filter className="size-4 text-primary" />
           فلترة النتائج
         </div>
 
-        {/* ===================================================
-            FILTERS
-        =================================================== */}
-
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <input
-            placeholder="فلتر الطالب / الرقم / الهوية"
+            placeholder="فلتر اسم الطالب / رقم الطالب"
             value={filters.name}
             onChange={(event) =>
               updateFilter(
                 'name',
+                event.target.value,
+              )
+            }
+            className={inputClass}
+          />
+
+          <input
+            placeholder="فلتر الرقم الشخصي"
+            value={filters.personalId}
+            onChange={(event) =>
+              updateFilter(
+                'personalId',
                 event.target.value,
               )
             }
@@ -850,14 +772,16 @@ export default function AttendanceAwardsResults({
               جميع الصفوف
             </option>
 
-            {grades.map((grade) => (
-              <option
-                key={grade}
-                value={grade}
-              >
-                {grade}
-              </option>
-            ))}
+            {grades.map(
+              (grade) => (
+                <option
+                  key={grade}
+                  value={grade}
+                >
+                  {grade}
+                </option>
+              ),
+            )}
           </select>
 
           <select
@@ -886,15 +810,21 @@ export default function AttendanceAwardsResults({
             )}
           </select>
 
-          {/* =================================================
-              COURSE COUNT FILTER
-          ================================================= */}
+          <input
+            placeholder="فلتر النسبة الإجمالية"
+            value={filters.annualPercentage}
+            onChange={(event) =>
+              updateFilter(
+                'annualPercentage',
+                event.target.value,
+              )
+            }
+            className={inputClass}
+          />
 
           <select
             className={selectClass}
-            value={
-              filters.courseCount
-            }
+            value={filters.courseCount}
             onChange={(event) =>
               updateFilter(
                 'courseCount',
@@ -906,38 +836,23 @@ export default function AttendanceAwardsResults({
               جميع أعداد الدورات
             </option>
 
-            {Array.from(
-              {
-                length:
-                  selectedCourses.length +
-                  1,
-              },
-              (_, index) => (
+            {courseCountOptions.map(
+              (count) => (
                 <option
-                  key={index}
-                  value={index}
+                  key={count}
+                  value={count}
                 >
-                  {getCourseCountLabel(
-                    index,
-                  )}
+                  {count === 0
+                    ? '0 دورات'
+                    : count === 1
+                      ? 'دورة واحدة'
+                      : count === 2
+                        ? 'دورتان'
+                        : `${count} دورات`}
                 </option>
               ),
             )}
           </select>
-
-          <input
-            placeholder="فلتر النسبة الإجمالية"
-            value={
-              filters.annualPercentage
-            }
-            onChange={(event) =>
-              updateFilter(
-                'annualPercentage',
-                event.target.value,
-              )
-            }
-            className={inputClass}
-          />
 
           {selectedCourses.map(
             (course) => (
@@ -952,13 +867,10 @@ export default function AttendanceAwardsResults({
                 onChange={(event) =>
                   updateCourseFilter(
                     course.id,
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
-                className={
-                  inputClass
-                }
+                className={inputClass}
               />
             ),
           )}
@@ -987,42 +899,11 @@ export default function AttendanceAwardsResults({
           </select>
         </div>
 
-        {/* ===================================================
-            LEGEND
-        =================================================== */}
-
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
-          <span className="font-medium">
-            ألوان عدد الدورات:
-          </span>
-
-          <span className="flex items-center gap-2">
-            <span className="size-3 rounded-sm border bg-emerald-50 dark:bg-emerald-950/20" />
-            جميع الدورات المختارة
-          </span>
-
-          <span className="flex items-center gap-2">
-            <span className="size-3 rounded-sm border bg-blue-50 dark:bg-blue-950/20" />
-            دورتان
-          </span>
-
-          <span className="flex items-center gap-2">
-            <span className="size-3 rounded-sm border bg-amber-50 dark:bg-amber-950/20" />
-            دورة واحدة
-          </span>
-        </div>
-
-        {/* ===================================================
-            RESET FILTERS
-        =================================================== */}
-
         {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={
-              resetFilters
-            }
+            onClick={resetFilters}
             className="gap-2"
           >
             <RotateCcw className="size-4" />
@@ -1030,9 +911,173 @@ export default function AttendanceAwardsResults({
           </Button>
         )}
 
-        {/* ===================================================
+        {/* =====================================================
+            COLORS
+        ===================================================== */}
+
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Palette className="size-4 text-primary" />
+
+                <p className="text-sm font-medium">
+                  تلوين النتائج
+                </p>
+              </div>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                يمكنك تشغيل أو إيقاف التلوين واختيار لون كل تقسيم بنفسك.
+              </p>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={colorsEnabled}
+                onChange={(event) =>
+                  setColorsEnabled(
+                    event.target.checked,
+                  )
+                }
+                className="size-4"
+              />
+
+              تفعيل التلوين
+            </label>
+          </div>
+
+          {colorsEnabled && (
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {/* جميع الدورات */}
+
+              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    جميع الدورات المختارة
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    الطالب مسجل في كل الدورات
+                  </p>
+                </div>
+
+                <input
+                  type="color"
+                  value={colors.all}
+                  onChange={(event) =>
+                    setColors((current) => ({
+                      ...current,
+                      all: event.target.value,
+                    }))
+                  }
+                  className="size-10 cursor-pointer rounded-md border p-1"
+                  title="لون جميع الدورات"
+                />
+              </label>
+
+              {/* دورتان */}
+
+              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    دورتان
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    الطالب مسجل في دورتين فقط
+                  </p>
+                </div>
+
+                <input
+                  type="color"
+                  value={colors.two}
+                  onChange={(event) =>
+                    setColors((current) => ({
+                      ...current,
+                      two: event.target.value,
+                    }))
+                  }
+                  className="size-10 cursor-pointer rounded-md border p-1"
+                  title="لون دورتين"
+                />
+              </label>
+
+              {/* دورة واحدة */}
+
+              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    دورة واحدة
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    الطالب مسجل في دورة واحدة فقط
+                  </p>
+                </div>
+
+                <input
+                  type="color"
+                  value={colors.one}
+                  onChange={(event) =>
+                    setColors((current) => ({
+                      ...current,
+                      one: event.target.value,
+                    }))
+                  }
+                  className="size-10 cursor-pointer rounded-md border p-1"
+                  title="لون دورة واحدة"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* =====================================================
+            LEGEND
+        ===================================================== */}
+
+        {colorsEnabled && (
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-medium">
+              دليل الألوان:
+            </span>
+
+            <span
+              className="rounded-md border px-3 py-1.5"
+              style={{
+                backgroundColor:
+                  colors.all,
+              }}
+            >
+              جميع الدورات
+            </span>
+
+            <span
+              className="rounded-md border px-3 py-1.5"
+              style={{
+                backgroundColor:
+                  colors.two,
+              }}
+            >
+              دورتان
+            </span>
+
+            <span
+              className="rounded-md border px-3 py-1.5"
+              style={{
+                backgroundColor:
+                  colors.one,
+              }}
+            >
+              دورة واحدة
+            </span>
+          </div>
+        )}
+
+        {/* =====================================================
             TABLE
-        =================================================== */}
+        ===================================================== */}
 
         <div className="overflow-x-auto rounded-lg border">
           <table
@@ -1045,6 +1090,10 @@ export default function AttendanceAwardsResults({
               <tr className="border-b bg-muted/40">
                 <th className="px-4 py-3 text-right font-medium">
                   الطالب
+                </th>
+
+                <th className="px-4 py-3 text-right font-medium">
+                  الرقم الشخصي
                 </th>
 
                 <th className="px-4 py-3 text-right font-medium">
@@ -1062,9 +1111,7 @@ export default function AttendanceAwardsResults({
                 {selectedCourses.map(
                   (course) => (
                     <th
-                      key={
-                        course.id
-                      }
+                      key={course.id}
                       className="px-4 py-3 text-right font-medium"
                     >
                       {course.name}
@@ -1083,13 +1130,13 @@ export default function AttendanceAwardsResults({
             </thead>
 
             <tbody>
-              {filteredResults.length ===
+              {sortedResults.length ===
               0 ? (
                 <tr>
                   <td
                     colSpan={
                       selectedCourses.length +
-                      6
+                      7
                     }
                     className="px-4 py-10 text-center text-muted-foreground"
                   >
@@ -1097,160 +1144,143 @@ export default function AttendanceAwardsResults({
                   </td>
                 </tr>
               ) : (
-                filteredResults.map(
-                  (student) => (
-                    <tr
-                      key={
-                        student.id
-                      }
-                      className={[
-                        'border-b last:border-0',
-                        getRowClass(
-                          student,
-                          selectedCourses.length,
-                        ),
-                      ].join(' ')}
-                    >
-                      {/* =====================================
-                          STUDENT
-                      ====================================== */}
+                sortedResults.map(
+                  (student) => {
+                    const rowColor =
+                      getRowColor(
+                        student,
+                        selectedCourses.length,
+                        colorsEnabled,
+                        colors,
+                      )
 
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium">
+                    return (
+                      <tr
+                        key={student.id}
+                        className="border-b last:border-0 transition-colors"
+                        style={
+                          rowColor
+                            ? {
+                                backgroundColor:
+                                  rowColor,
+                              }
+                            : undefined
+                        }
+                      >
+                        {/* الطالب */}
+
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-medium">
+                              {student.name}
+                            </p>
+
+                            {student.studentNumber && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                رقم الطالب:{' '}
+                                {
+                                  student.studentNumber
+                                }
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* الرقم الشخصي */}
+
+                        <td className="px-4 py-3">
+                          {student.personalId ||
+                            '—'}
+                        </td>
+
+                        {/* الصف */}
+
+                        <td className="px-4 py-3">
+                          {student.grade}
+                        </td>
+
+                        {/* المعلم */}
+
+                        <td className="px-4 py-3">
+                          {student.teacher}
+                        </td>
+
+                        {/* عدد الدورات */}
+
+                        <td className="px-4 py-3">
+                          <span className="font-semibold">
                             {
-                              student.name
+                              student.courseCount
                             }
-                          </p>
+                          </span>
+                          <span className="mr-1 text-xs text-muted-foreground">
+                            /{' '}
+                            {
+                              selectedCourses.length
+                            }
+                          </span>
+                        </td>
 
-                          {student.studentNumber && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              رقم الطالب:{' '}
-                              {
-                                student.studentNumber
-                              }
-                            </p>
-                          )}
+                        {/* الدورات */}
 
-                          {student.personalId && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              الهوية:{' '}
-                              {
-                                student.personalId
-                              }
-                            </p>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* =====================================
-                          GRADE
-                      ====================================== */}
-
-                      <td className="px-4 py-3">
-                        {
-                          student.grade
-                        }
-                      </td>
-
-                      {/* =====================================
-                          TEACHER
-                      ====================================== */}
-
-                      <td className="px-4 py-3">
-                        {
-                          student.teacher
-                        }
-                      </td>
-
-                      {/* =====================================
-                          COURSE COUNT
-                      ====================================== */}
-
-                      <td className="px-4 py-3">
-                        <span className="font-semibold">
-                          {
-                            student.courseCount
-                          }
-                        </span>
-
-                        <span className="mr-1 text-xs text-muted-foreground">
-                          من{' '}
-                          {
-                            selectedCourses.length
-                          }
-                        </span>
-                      </td>
-
-                      {/* =====================================
-                          COURSES
-                      ====================================== */}
-
-                      {selectedCourses.map(
-                        (course) => {
-                          const result =
-                            student
-                              .courses[
-                              course.id
-                            ]
-
-                          return (
-                            <td
-                              key={
+                        {selectedCourses.map(
+                          (course) => {
+                            const result =
+                              student
+                                .courses[
                                 course.id
-                              }
-                              className="px-4 py-3"
-                            >
-                              <div className="flex flex-col gap-1">
-                                <span>
-                                  {formatPercentage(
-                                    result
-                                      ?.percentage ??
-                                      null,
-                                  )}
-                                </span>
+                              ]
 
-                                {!result
-                                  ?.registered && (
-                                  <span className="text-xs text-muted-foreground">
-                                    غير مسجل
+                            return (
+                              <td
+                                key={course.id}
+                                className="px-4 py-3"
+                              >
+                                <div className="flex flex-col gap-1">
+                                  <span>
+                                    {formatPercentage(
+                                      result?.percentage ??
+                                        null,
+                                    )}
                                   </span>
-                                )}
-                              </div>
-                            </td>
-                          )
-                        },
-                      )}
 
-                      {/* =====================================
-                          TOTAL
-                      ====================================== */}
-
-                      <td className="px-4 py-3 font-semibold">
-                        {formatPercentage(
-                          student.annualPercentage,
+                                  {!result?.registered && (
+                                    <span className="text-xs text-muted-foreground">
+                                      غير مسجل
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            )
+                          },
                         )}
-                      </td>
 
-                      {/* =====================================
-                          STATUS
-                      ====================================== */}
+                        {/* الإجمالي */}
 
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant={
-                            student.eligible
-                              ? 'success'
-                              : 'neutral'
-                          }
-                        >
-                          {student.eligible
-                            ? 'مستحق'
-                            : 'غير مستحق'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ),
+                        <td className="px-4 py-3 font-semibold">
+                          {formatPercentage(
+                            student.annualPercentage,
+                          )}
+                        </td>
+
+                        {/* الحالة */}
+
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant={
+                              student.eligible
+                                ? 'success'
+                                : 'neutral'
+                            }
+                          >
+                            {student.eligible
+                              ? 'مستحق'
+                              : 'غير مستحق'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    )
+                  },
                 )
               )}
             </tbody>
