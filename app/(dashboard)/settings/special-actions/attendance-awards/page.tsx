@@ -18,18 +18,103 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-import AttendanceAwardsResults, {
-  type AcademicYear,
-  type Course,
-  type Enrollment,
-  type Level,
-  type Student,
-  type StudentResult,
-  type Teacher,
-  type TeacherAssignment,
-  type AttendanceStatus,
-  type AttendanceRow,
-} from './attendance-awards-results'
+import AttendanceAwardsResults from './attendance-awards-results'
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type AcademicYear = {
+  id: string
+  name: string
+  start_date: string | null
+  end_date: string | null
+  annual_fee?: number | null
+  is_current?: boolean
+  is_active?: boolean
+}
+
+type Course = {
+  id: string
+  academic_year_id: string
+  name: string
+  start_date: string | null
+  end_date: string | null
+  days: unknown
+}
+
+type Student = {
+  id: string
+  student_id: string | null
+  name: string
+  personal_id: string | null
+  phone?: string | null
+  whatsapp?: string | null
+}
+
+type Enrollment = {
+  id: string
+  student_id: string
+  academic_year_id: string
+  level_id: string | null
+  class_id: string | null
+  status: string | null
+}
+
+type Level = {
+  id: string
+  name: string
+}
+
+type Teacher = {
+  id: string
+  name: string
+}
+
+type TeacherAssignment = {
+  id: string
+  course_id: string
+  teacher_id: string
+  student_id: string
+}
+
+type AttendanceStatus = {
+  id: string
+  name: string
+  is_active: boolean
+  sort_order: number
+}
+
+type AttendanceRow = {
+  id: string
+  student_id: string
+  enrollment_id: string | null
+  attendance_date: string
+  status_id: string
+  note: string | null
+  course_id: string
+}
+
+type CourseResult = {
+  courseId: string
+  percentage: number | null
+  numerator: number
+  denominator: number
+  registered: boolean
+}
+
+export type StudentResult = {
+  id: string
+  studentNumber: string
+  personalId: string
+  name: string
+  grade: string
+  teacher: string
+  courses: Record<string, CourseResult>
+  courseCount: number
+  annualPercentage: number | null
+  eligible: boolean
+}
 
 /* =========================================================
    HELPERS
@@ -121,122 +206,6 @@ function isStatusCounted(
 }
 
 /* =========================================================
-   LEVEL ORDER
-
-   أسماء المستويات نفسها تأتي من Supabase.
-   هذا الجزء فقط يحدد ترتيب العرض الدراسي.
-========================================================= */
-
-function getArabicNumberOrder(value: string) {
-  const text = normalizeText(value)
-
-  if (
-    text.includes('الاول') ||
-    text.includes('اول') ||
-    text === '1' ||
-    text.startsWith('1 ')
-  ) {
-    return 1
-  }
-
-  if (
-    text.includes('الثاني') ||
-    text.includes('ثاني') ||
-    text === '2' ||
-    text.startsWith('2 ')
-  ) {
-    return 2
-  }
-
-  if (
-    text.includes('الثالث') ||
-    text.includes('ثالث') ||
-    text === '3' ||
-    text.startsWith('3 ')
-  ) {
-    return 3
-  }
-
-  if (
-    text.includes('الرابع') ||
-    text.includes('رابع') ||
-    text === '4' ||
-    text.startsWith('4 ')
-  ) {
-    return 4
-  }
-
-  if (
-    text.includes('الخامس') ||
-    text.includes('خامس') ||
-    text === '5' ||
-    text.startsWith('5 ')
-  ) {
-    return 5
-  }
-
-  if (
-    text.includes('السادس') ||
-    text.includes('سادس') ||
-    text === '6' ||
-    text.startsWith('6 ')
-  ) {
-    return 6
-  }
-
-  return 99
-}
-
-function getLevelCategoryOrder(value: string) {
-  const text = normalizeText(value)
-
-  if (
-    text.includes('ابتدائي') ||
-    text.includes('ابتداي')
-  ) {
-    return 1
-  }
-
-  if (
-    text.includes('اعدادي') ||
-    text.includes('إعدادي') ||
-    text.includes('متوسط')
-  ) {
-    return 2
-  }
-
-  if (
-    text.includes('ثانوي')
-  ) {
-    return 3
-  }
-
-  return 99
-}
-
-function compareLevels(a: string, b: string) {
-  if (a === b) {
-    return 0
-  }
-
-  const categoryA = getLevelCategoryOrder(a)
-  const categoryB = getLevelCategoryOrder(b)
-
-  if (categoryA !== categoryB) {
-    return categoryA - categoryB
-  }
-
-  const numberA = getArabicNumberOrder(a)
-  const numberB = getArabicNumberOrder(b)
-
-  if (numberA !== numberB) {
-    return numberA - numberB
-  }
-
-  return a.localeCompare(b, 'ar')
-}
-
-/* =========================================================
    COMPONENT
 ========================================================= */
 
@@ -245,10 +214,7 @@ export default function AttendanceAwardsCalculator() {
      Academic years
   ------------------------------------------------------- */
 
-  const [academicYears, setAcademicYears] = useState<
-    AcademicYear[]
-  >([])
-
+  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([])
   const [selectedYearId, setSelectedYearId] = useState('')
 
   /* -------------------------------------------------------
@@ -256,8 +222,7 @@ export default function AttendanceAwardsCalculator() {
   ------------------------------------------------------- */
 
   const [courses, setCourses] = useState<Course[]>([])
-  const [selectedCourseIds, setSelectedCourseIds] =
-    useState<string[]>([])
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
 
   /* -------------------------------------------------------
      Dates
@@ -283,31 +248,23 @@ export default function AttendanceAwardsCalculator() {
   const [cancelledCounts, setCancelledCounts] =
     useState<'exclude' | 'include'>('exclude')
 
-  const [minimumPercentage, setMinimumPercentage] =
-    useState('90')
+  const [minimumPercentage, setMinimumPercentage] = useState('90')
 
-  const [requireAllCourses, setRequireAllCourses] =
-    useState(false)
+  const [requireAllCourses, setRequireAllCourses] = useState(false)
 
   /* -------------------------------------------------------
      Results
   ------------------------------------------------------- */
 
-  const [results, setResults] = useState<StudentResult[]>(
-    [],
-  )
-
-  const [hasCalculated, setHasCalculated] =
-    useState(false)
+  const [results, setResults] = useState<StudentResult[]>([])
+  const [hasCalculated, setHasCalculated] = useState(false)
 
   /* -------------------------------------------------------
      Loading / errors
   ------------------------------------------------------- */
 
   const [loadingYears, setLoadingYears] = useState(true)
-  const [loadingCourses, setLoadingCourses] =
-    useState(false)
-
+  const [loadingCourses, setLoadingCourses] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState('')
 
@@ -322,16 +279,15 @@ export default function AttendanceAwardsCalculator() {
       setLoadingYears(true)
       setError('')
 
-      const { data, error: queryError } =
-        await supabase
-          .from('academic_years')
-          .select(
-            'id, name, start_date, end_date, annual_fee, is_current, is_active',
-          )
-          .eq('is_active', true)
-          .order('start_date', {
-            ascending: false,
-          })
+      const { data, error: queryError } = await supabase
+        .from('academic_years')
+        .select(
+          'id, name, start_date, end_date, annual_fee, is_current, is_active',
+        )
+        .eq('is_active', true)
+        .order('start_date', {
+          ascending: false,
+        })
 
       if (cancelled) {
         return
@@ -350,20 +306,17 @@ export default function AttendanceAwardsCalculator() {
       setAcademicYears(years)
 
       const currentYear =
-        years.find((year) => year.is_current) ??
-        years[0]
+        years.find((year) => year.is_current) ?? years[0]
 
       if (currentYear) {
         setSelectedYearId(currentYear.id)
 
         setFromDate(
-          currentYear.start_date ??
-            getLocalDateString(),
+          currentYear.start_date ?? getLocalDateString(),
         )
 
         setToDate(
-          currentYear.end_date ??
-            getLocalDateString(),
+          currentYear.end_date ?? getLocalDateString(),
         )
       }
 
@@ -378,7 +331,7 @@ export default function AttendanceAwardsCalculator() {
   }, [])
 
   /* =========================================================
-     LOAD COURSES FOR SELECTED YEAR
+     LOAD COURSES
   ========================================================= */
 
   useEffect(() => {
@@ -394,22 +347,18 @@ export default function AttendanceAwardsCalculator() {
       setLoadingCourses(true)
       setError('')
 
-      const { data, error: queryError } =
-        await supabase
-          .from('courses')
-          .select(
-            'id, academic_year_id, name, start_date, end_date, days',
-          )
-          .eq(
-            'academic_year_id',
-            selectedYearId,
-          )
-          .order('start_date', {
-            ascending: true,
-          })
-          .order('name', {
-            ascending: true,
-          })
+      const { data, error: queryError } = await supabase
+        .from('courses')
+        .select(
+          'id, academic_year_id, name, start_date, end_date, days',
+        )
+        .eq('academic_year_id', selectedYearId)
+        .order('start_date', {
+          ascending: true,
+        })
+        .order('name', {
+          ascending: true,
+        })
 
       if (cancelled) {
         return
@@ -425,27 +374,22 @@ export default function AttendanceAwardsCalculator() {
         return
       }
 
-      const loadedCourses =
-        (data ?? []) as Course[]
+      const loadedCourses = (data ?? []) as Course[]
 
       setCourses(loadedCourses)
       setSelectedCourseIds([])
 
-      const selectedYear =
-        academicYears.find(
-          (year) =>
-            year.id === selectedYearId,
-        )
+      const selectedYear = academicYears.find(
+        (year) => year.id === selectedYearId,
+      )
 
       if (selectedYear) {
         setFromDate(
-          selectedYear.start_date ??
-            getLocalDateString(),
+          selectedYear.start_date ?? getLocalDateString(),
         )
 
         setToDate(
-          selectedYear.end_date ??
-            getLocalDateString(),
+          selectedYear.end_date ?? getLocalDateString(),
         )
       }
 
@@ -476,9 +420,7 @@ export default function AttendanceAwardsCalculator() {
   const toggleCourse = (courseId: string) => {
     setSelectedCourseIds((current) => {
       if (current.includes(courseId)) {
-        return current.filter(
-          (id) => id !== courseId,
-        )
+        return current.filter((id) => id !== courseId)
       }
 
       return [...current, courseId]
@@ -488,10 +430,7 @@ export default function AttendanceAwardsCalculator() {
   }
 
   const selectAllCourses = () => {
-    setSelectedCourseIds(
-      courses.map((course) => course.id),
-    )
-
+    setSelectedCourseIds(courses.map((course) => course.id))
     setHasCalculated(false)
   }
 
@@ -513,16 +452,12 @@ export default function AttendanceAwardsCalculator() {
     }
 
     if (selectedCourseIds.length === 0) {
-      setError(
-        'يرجى اختيار دورة واحدة على الأقل.',
-      )
+      setError('يرجى اختيار دورة واحدة على الأقل.')
       return
     }
 
     if (!fromDate || !toDate) {
-      setError(
-        'يرجى تحديد فترة الاحتساب.',
-      )
+      setError('يرجى تحديد فترة الاحتساب.')
       return
     }
 
@@ -533,9 +468,7 @@ export default function AttendanceAwardsCalculator() {
       return
     }
 
-    const minimum = Number(
-      minimumPercentage,
-    )
+    const minimum = Number(minimumPercentage)
 
     if (
       !Number.isFinite(minimum) ||
@@ -553,7 +486,7 @@ export default function AttendanceAwardsCalculator() {
 
     try {
       /* =====================================================
-         1. STUDENTS / ENROLLMENTS
+         1. ENROLLMENTS
       ===================================================== */
 
       const {
@@ -564,10 +497,7 @@ export default function AttendanceAwardsCalculator() {
         .select(
           'id, student_id, academic_year_id, level_id, class_id, status',
         )
-        .eq(
-          'academic_year_id',
-          selectedYearId,
-        )
+        .eq('academic_year_id', selectedYearId)
 
       if (enrollmentError) {
         throw new Error(
@@ -576,8 +506,7 @@ export default function AttendanceAwardsCalculator() {
       }
 
       const enrollments =
-        (enrollmentData ??
-          []) as Enrollment[]
+        (enrollmentData ?? []) as Enrollment[]
 
       if (enrollments.length === 0) {
         setResults([])
@@ -588,8 +517,7 @@ export default function AttendanceAwardsCalculator() {
       const studentIds = Array.from(
         new Set(
           enrollments.map(
-            (enrollment) =>
-              enrollment.student_id,
+            (enrollment) => enrollment.student_id,
           ),
         ),
       )
@@ -617,8 +545,7 @@ export default function AttendanceAwardsCalculator() {
         )
       }
 
-      const students =
-        (studentData ?? []) as Student[]
+      const students = (studentData ?? []) as Student[]
 
       /* =====================================================
          3. LEVELS
@@ -627,13 +554,9 @@ export default function AttendanceAwardsCalculator() {
       const levelIds = Array.from(
         new Set(
           enrollments
-            .map(
-              (enrollment) =>
-                enrollment.level_id,
-            )
+            .map((enrollment) => enrollment.level_id)
             .filter(
-              (id): id is string =>
-                Boolean(id),
+              (id): id is string => Boolean(id),
             ),
         ),
       )
@@ -655,8 +578,7 @@ export default function AttendanceAwardsCalculator() {
           )
         }
 
-        levels =
-          (levelData ?? []) as Level[]
+        levels = (levelData ?? []) as Level[]
       }
 
       const levelMap = new Map(
@@ -667,27 +589,19 @@ export default function AttendanceAwardsCalculator() {
       )
 
       /* =====================================================
-         4. TEACHER / STUDENT ASSIGNMENTS
+         4. ASSIGNMENTS
       ===================================================== */
 
       const {
         data: assignmentData,
         error: assignmentError,
       } = await supabase
-        .from(
-          'teacher_student_assignments',
-        )
+        .from('teacher_student_assignments')
         .select(
           'id, course_id, teacher_id, student_id',
         )
-        .in(
-          'course_id',
-          selectedCourseIds,
-        )
-        .in(
-          'student_id',
-          studentIds,
-        )
+        .in('course_id', selectedCourseIds)
+        .in('student_id', studentIds)
 
       if (assignmentError) {
         throw new Error(
@@ -696,8 +610,7 @@ export default function AttendanceAwardsCalculator() {
       }
 
       const assignments =
-        (assignmentData ??
-          []) as TeacherAssignment[]
+        (assignmentData ?? []) as TeacherAssignment[]
 
       /* =====================================================
          5. TEACHERS
@@ -706,8 +619,7 @@ export default function AttendanceAwardsCalculator() {
       const teacherIds = Array.from(
         new Set(
           assignments.map(
-            (assignment) =>
-              assignment.teacher_id,
+            (assignment) => assignment.teacher_id,
           ),
         ),
       )
@@ -732,8 +644,7 @@ export default function AttendanceAwardsCalculator() {
           )
         }
 
-        teachers =
-          (teacherData ?? []) as Teacher[]
+        teachers = (teacherData ?? []) as Teacher[]
       }
 
       const teacherMap = new Map(
@@ -766,8 +677,7 @@ export default function AttendanceAwardsCalculator() {
       }
 
       const statuses =
-        (statusData ??
-          []) as AttendanceStatus[]
+        (statusData ?? []) as AttendanceStatus[]
 
       const statusMap = new Map(
         statuses.map((status) => [
@@ -788,22 +698,10 @@ export default function AttendanceAwardsCalculator() {
         .select(
           'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
         )
-        .in(
-          'course_id',
-          selectedCourseIds,
-        )
-        .in(
-          'student_id',
-          studentIds,
-        )
-        .gte(
-          'attendance_date',
-          fromDate,
-        )
-        .lte(
-          'attendance_date',
-          toDate,
-        )
+        .in('course_id', selectedCourseIds)
+        .in('student_id', studentIds)
+        .gte('attendance_date', fromDate)
+        .lte('attendance_date', toDate)
 
       if (attendanceError) {
         throw new Error(
@@ -812,18 +710,14 @@ export default function AttendanceAwardsCalculator() {
       }
 
       const attendance =
-        (attendanceData ??
-          []) as AttendanceRow[]
+        (attendanceData ?? []) as AttendanceRow[]
 
       /* =====================================================
-         8. DEDUPLICATE ATTENDANCE
+         8. DEDUPLICATE
       ===================================================== */
 
       const attendanceMap =
-        new Map<
-          string,
-          AttendanceRow
-        >()
+        new Map<string, AttendanceRow>()
 
       for (const row of attendance) {
         const key =
@@ -831,34 +725,22 @@ export default function AttendanceAwardsCalculator() {
           `${row.course_id}__` +
           `${row.attendance_date}`
 
-        const existing =
-          attendanceMap.get(key)
+        const existing = attendanceMap.get(key)
 
-        if (
-          !existing ||
-          row.id > existing.id
-        ) {
-          attendanceMap.set(
-            key,
-            row,
-          )
+        if (!existing || row.id > existing.id) {
+          attendanceMap.set(key, row)
         }
       }
 
       const uniqueAttendance =
-        Array.from(
-          attendanceMap.values(),
-        )
+        Array.from(attendanceMap.values())
 
       /* =====================================================
          9. COURSE ATTENDANCE DAYS
       ===================================================== */
 
       const courseAttendanceDays =
-        new Map<
-          string,
-          Set<string>
-        >()
+        new Map<string, Set<string>>()
 
       for (const courseId of selectedCourseIds) {
         courseAttendanceDays.set(
@@ -870,9 +752,7 @@ export default function AttendanceAwardsCalculator() {
       for (const row of uniqueAttendance) {
         courseAttendanceDays
           .get(row.course_id)
-          ?.add(
-            row.attendance_date,
-          )
+          ?.add(row.attendance_date)
       }
 
       /* =====================================================
@@ -880,10 +760,7 @@ export default function AttendanceAwardsCalculator() {
       ===================================================== */
 
       const enrollmentByStudent =
-        new Map<
-          string,
-          Enrollment
-        >()
+        new Map<string, Enrollment>()
 
       for (const enrollment of enrollments) {
         if (
@@ -901,51 +778,36 @@ export default function AttendanceAwardsCalculator() {
       const assignmentKey = (
         studentId: string,
         courseId: string,
-      ) =>
-        `${studentId}__${courseId}`
+      ) => `${studentId}__${courseId}`
 
       const assignmentMap =
-        new Map<
-          string,
-          TeacherAssignment[]
-        >()
+        new Map<string, TeacherAssignment[]>()
 
       for (const assignment of assignments) {
-        const key =
-          assignmentKey(
-            assignment.student_id,
-            assignment.course_id,
-          )
+        const key = assignmentKey(
+          assignment.student_id,
+          assignment.course_id,
+        )
 
         const existing =
-          assignmentMap.get(key) ??
-          []
+          assignmentMap.get(key) ?? []
 
         existing.push(assignment)
 
-        assignmentMap.set(
-          key,
-          existing,
-        )
+        assignmentMap.set(key, existing)
       }
 
       const attendanceByStudentCourse =
-        new Map<
-          string,
-          AttendanceRow[]
-        >()
+        new Map<string, AttendanceRow[]>()
 
       for (const row of uniqueAttendance) {
-        const key =
-          assignmentKey(
-            row.student_id,
-            row.course_id,
-          )
+        const key = assignmentKey(
+          row.student_id,
+          row.course_id,
+        )
 
         const existing =
-          attendanceByStudentCourse.get(
-            key,
-          ) ?? []
+          attendanceByStudentCourse.get(key) ?? []
 
         existing.push(row)
 
@@ -959,41 +821,30 @@ export default function AttendanceAwardsCalculator() {
          11. CALCULATE EACH STUDENT
          
          مهم:
-         لا نغير قوانين نسبة الحضور الحالية.
-         courseCount للعرض/الفلترة/التلوين فقط.
+         لم يتم تغيير قانون النسبة أو الاستحقاق.
       ===================================================== */
 
       const calculated: StudentResult[] =
         students.map((student) => {
           const enrollment =
-            enrollmentByStudent.get(
-              student.id,
-            )
+            enrollmentByStudent.get(student.id)
 
           const courseResults: Record<
             string,
-            {
-              courseId: string
-              percentage: number | null
-              numerator: number
-              denominator: number
-              registered: boolean
-            }
+            CourseResult
           > = {}
 
           let totalNumerator = 0
           let totalDenominator = 0
 
           for (const course of selectedCourses) {
-            const key =
-              assignmentKey(
-                student.id,
-                course.id,
-              )
+            const key = assignmentKey(
+              student.id,
+              course.id,
+            )
 
             const registered =
-              (assignmentMap.get(key)
-                ?.length ?? 0) > 0
+              (assignmentMap.get(key)?.length ?? 0) > 0
 
             /* -----------------------------------------------
                الطالب غير المسجل
@@ -1004,11 +855,8 @@ export default function AttendanceAwardsCalculator() {
                 unregisteredCourse ===
                 'exclude'
               ) {
-                courseResults[
-                  course.id
-                ] = {
-                  courseId:
-                    course.id,
+                courseResults[course.id] = {
+                  courseId: course.id,
                   percentage: null,
                   numerator: 0,
                   denominator: 0,
@@ -1023,19 +871,14 @@ export default function AttendanceAwardsCalculator() {
                   course.id,
                 )?.size ?? 0
 
-              courseResults[
-                course.id
-              ] = {
-                courseId:
-                  course.id,
+              courseResults[course.id] = {
+                courseId: course.id,
                 percentage:
-                  opportunityCount >
-                  0
+                  opportunityCount > 0
                     ? 0
                     : null,
                 numerator: 0,
-                denominator:
-                  opportunityCount,
+                denominator: opportunityCount,
                 registered: false,
               }
 
@@ -1050,18 +893,15 @@ export default function AttendanceAwardsCalculator() {
             ------------------------------------------------ */
 
             const rows =
-              attendanceByStudentCourse.get(
-                key,
-              ) ?? []
+              attendanceByStudentCourse.get(key) ?? []
 
             let numerator = 0
             let denominator = 0
 
             for (const row of rows) {
-              const status =
-                statusMap.get(
-                  row.status_id,
-                )
+              const status = statusMap.get(
+                row.status_id,
+              )
 
               if (!status) {
                 continue
@@ -1081,83 +921,40 @@ export default function AttendanceAwardsCalculator() {
 
             const percentage =
               denominator > 0
-                ? (numerator /
-                    denominator) *
-                  100
+                ? (numerator / denominator) * 100
                 : null
 
-            courseResults[
-              course.id
-            ] = {
-              courseId:
-                course.id,
+            courseResults[course.id] = {
+              courseId: course.id,
               percentage,
               numerator,
               denominator,
               registered: true,
             }
 
-            totalNumerator +=
-              numerator
-
-            totalDenominator +=
-              denominator
+            totalNumerator += numerator
+            totalDenominator += denominator
           }
-
-          /* -----------------------------------------------
-             عدد الدورات المسجل فيها الطالب
-
-             هذا لا يدخل إطلاقاً في معادلة النسبة.
-          ------------------------------------------------ */
-
-          const courseCount =
-            selectedCourses.reduce(
-              (count, course) => {
-                return (
-                  count +
-                  (courseResults[
-                    course.id
-                  ]?.registered
-                    ? 1
-                    : 0)
-                )
-              },
-              0,
-            )
-
-          /* -----------------------------------------------
-             النسبة الإجمالية
-             نفس القانون السابق بدون تغيير
-          ------------------------------------------------ */
 
           const annualPercentage =
             totalDenominator > 0
-              ? (totalNumerator /
-                  totalDenominator) *
-                100
+              ? (totalNumerator / totalDenominator) * 100
               : null
 
           const allSelectedCoursesHaveData =
-            selectedCourses.every(
-              (course) => {
-                const result =
-                  courseResults[
-                    course.id
-                  ]
+            selectedCourses.every((course) => {
+              const result =
+                courseResults[course.id]
 
-                return (
-                  result &&
-                  result.percentage !==
-                    null
-                )
-              },
-            )
+              return (
+                result &&
+                result.percentage !== null
+              )
+            })
 
           const eligible =
-            annualPercentage !==
-              null &&
-            annualPercentage >=
-              minimum &&
+            annualPercentage !== null &&
+            annualPercentage >= minimum &&
             (!requireAllCourses ||
               allSelectedCoursesHaveData)
 
@@ -1165,8 +962,7 @@ export default function AttendanceAwardsCalculator() {
              المعلمون
           ------------------------------------------------ */
 
-          const teacherNames =
-            new Set<string>()
+          const teacherNames = new Set<string>()
 
           for (const course of selectedCourses) {
             const courseAssignments =
@@ -1184,12 +980,27 @@ export default function AttendanceAwardsCalculator() {
                 )
 
               if (teacherName) {
-                teacherNames.add(
-                  teacherName,
-                )
+                teacherNames.add(teacherName)
               }
             }
           }
+
+          /* -----------------------------------------------
+             عدد الدورات
+
+             هذا العدد للعرض والفلترة والتلوين فقط.
+             لا يدخل في معادلة النسبة.
+          ------------------------------------------------ */
+
+          const courseCount =
+            selectedCourses.reduce(
+              (count, course) =>
+                count +
+                (courseResults[course.id]?.registered
+                  ? 1
+                  : 0),
+              0,
+            )
 
           return {
             id: student.id,
@@ -1205,38 +1016,13 @@ export default function AttendanceAwardsCalculator() {
                   ) ?? '—'
                 : '—',
             teacher:
-              Array.from(
-                teacherNames,
-              ).join('، ') || '—',
-            courses:
-              courseResults,
+              Array.from(teacherNames).join('، ') || '—',
+            courses: courseResults,
             courseCount,
             annualPercentage,
             eligible,
           }
         })
-
-      /* =====================================================
-         ترتيب الطلاب حسب المستوى الدراسي
-         ثم الاسم داخل نفس المستوى
-      ===================================================== */
-
-      calculated.sort((a, b) => {
-        const levelCompare =
-          compareLevels(
-            a.grade,
-            b.grade,
-          )
-
-        if (levelCompare !== 0) {
-          return levelCompare
-        }
-
-        return a.name.localeCompare(
-          b.name,
-          'ar',
-        )
-      })
 
       setResults(calculated)
       setHasCalculated(true)
@@ -1381,8 +1167,7 @@ export default function AttendanceAwardsCalculator() {
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  اختر دورة واحدة أو أكثر من الدورات
-                  التابعة للسنة الدراسية المحددة.
+                  اختر دورة واحدة أو أكثر من الدورات التابعة للسنة الدراسية المحددة.
                 </p>
               </div>
 
@@ -1392,12 +1177,8 @@ export default function AttendanceAwardsCalculator() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={
-                      selectAllCourses
-                    }
-                    disabled={
-                      calculating
-                    }
+                    onClick={selectAllCourses}
+                    disabled={calculating}
                   >
                     تحديد الكل
                   </Button>
@@ -1406,12 +1187,8 @@ export default function AttendanceAwardsCalculator() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={
-                      clearCourseSelection
-                    }
-                    disabled={
-                      calculating
-                    }
+                    onClick={clearCourseSelection}
+                    disabled={calculating}
                   >
                     إلغاء الكل
                   </Button>
@@ -1425,8 +1202,7 @@ export default function AttendanceAwardsCalculator() {
               </div>
             ) : courses.length === 0 ? (
               <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-                لا توجد دورات مرتبطة بالسنة الدراسية
-                المحددة.
+                لا توجد دورات مرتبطة بالسنة الدراسية المحددة.
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1456,9 +1232,7 @@ export default function AttendanceAwardsCalculator() {
                             )
                           }
                           className="mt-1 size-4"
-                          disabled={
-                            calculating
-                          }
+                          disabled={calculating}
                         />
 
                         <div className="min-w-0">
@@ -1484,8 +1258,7 @@ export default function AttendanceAwardsCalculator() {
               </div>
             )}
 
-            {selectedCourseIds.length >
-              0 && (
+            {selectedCourseIds.length > 0 && (
               <div className="text-sm text-muted-foreground">
                 تم اختيار{' '}
                 <span className="font-semibold text-foreground">
@@ -1499,7 +1272,7 @@ export default function AttendanceAwardsCalculator() {
       </Card>
 
       {/* =====================================================
-          سياسة الحضور
+          سياسة الاحتساب
       ===================================================== */}
 
       <Card>
@@ -1518,9 +1291,7 @@ export default function AttendanceAwardsCalculator() {
 
             <select
               className={`${selectClass} max-w-md`}
-              value={
-                unregisteredCourse
-              }
+              value={unregisteredCourse}
               onChange={(event) => {
                 setUnregisteredCourse(
                   event.target.value as
@@ -1566,20 +1337,13 @@ export default function AttendanceAwardsCalculator() {
                       }
                       onChange={(event) => {
                         setPresentCounts(
-                          (
-                            current,
-                          ) => ({
+                          (current) => ({
                             ...current,
                             [key]:
-                              event
-                                .target
-                                .checked,
+                              event.target.checked,
                           }),
                         )
-
-                        setHasCalculated(
-                          false,
-                        )
+                        setHasCalculated(false)
                       }}
                       className="size-4"
                     />
@@ -1600,13 +1364,10 @@ export default function AttendanceAwardsCalculator() {
 
             <select
               className={`${selectClass} max-w-md`}
-              value={
-                cancelledCounts
-              }
+              value={cancelledCounts}
               onChange={(event) => {
                 setCancelledCounts(
-                  event.target
-                    .value as
+                  event.target.value as
                     | 'exclude'
                     | 'include',
                 )
@@ -1623,10 +1384,7 @@ export default function AttendanceAwardsCalculator() {
             </select>
 
             <p className="text-xs text-muted-foreground">
-              ملاحظة: لا يوجد حالياً في قاعدة البيانات
-              مصدر مستقل مؤكد للأيام الملغاة، لذلك هذا
-              الخيار محفوظ في الواجهة ولن يغيّر الحساب
-              إلى أن يتم ربط مصدر الإلغاء الفعلي.
+              ملاحظة: لا يوجد حالياً في قاعدة البيانات مصدر مستقل مؤكد للأيام الملغاة، لذلك هذا الخيار محفوظ في الواجهة ولن يغيّر الحساب إلى أن يتم ربط مصدر الإلغاء الفعلي.
             </p>
           </div>
         </CardContent>
@@ -1661,17 +1419,12 @@ export default function AttendanceAwardsCalculator() {
                   min="0"
                   max="100"
                   step="0.1"
-                  value={
-                    minimumPercentage
-                  }
+                  value={minimumPercentage}
                   onChange={(event) => {
                     setMinimumPercentage(
-                      event.target
-                        .value,
+                      event.target.value,
                     )
-                    setHasCalculated(
-                      false,
-                    )
+                    setHasCalculated(false)
                   }}
                   className={`${inputClass} pl-10`}
                 />
@@ -1686,34 +1439,24 @@ export default function AttendanceAwardsCalculator() {
               <label className="flex w-full max-w-md cursor-pointer items-center gap-3 rounded-lg border p-3">
                 <input
                   type="checkbox"
-                  checked={
-                    requireAllCourses
-                  }
+                  checked={requireAllCourses}
                   onChange={(event) => {
                     setRequireAllCourses(
-                      event.target
-                        .checked,
+                      event.target.checked,
                     )
-                    setHasCalculated(
-                      false,
-                    )
+                    setHasCalculated(false)
                   }}
                   className="size-4"
                 />
 
                 <span className="text-sm">
-                  يشترط تسجيل الطالب في جميع الدورات
-                  المختارة
+                  يشترط تسجيل الطالب في جميع الدورات المختارة
                 </span>
               </label>
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* =====================================================
-          ERROR
-      ===================================================== */}
 
       {error && (
         <Card className="border-destructive/40">
@@ -1737,17 +1480,14 @@ export default function AttendanceAwardsCalculator() {
             </p>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              {selectedCourseIds.length ===
-              0
+              {selectedCourseIds.length === 0
                 ? 'اختر الدورات أولاً ثم ابدأ الاحتساب.'
                 : `سيتم احتساب ${selectedCourseIds.length} دورة حسب الفترة والسياسات المحددة.`}
             </p>
           </div>
 
           <Button
-            onClick={
-              calculateResults
-            }
+            onClick={calculateResults}
             className="gap-2"
             disabled={
               calculating ||
@@ -1776,7 +1516,9 @@ export default function AttendanceAwardsCalculator() {
           selectedYearId={selectedYearId}
           fromDate={fromDate}
           toDate={toDate}
-          onError={setError}
+          error={error}
+          setError={setError}
+          selectedYearName={selectedYear?.name ?? 'السنة الدراسية'}
         />
       )}
     </div>
