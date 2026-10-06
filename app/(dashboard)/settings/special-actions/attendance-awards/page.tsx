@@ -1129,6 +1129,7 @@ export default function AttendanceAwardsCalculator() {
 
                 totalNumerator +=
                   numerator
+
                 totalDenominator +=
                   denominator
               }
@@ -1282,7 +1283,7 @@ export default function AttendanceAwardsCalculator() {
         <Button
           variant="outline"
           onClick={() => router.back()}
-          className="gap-2"
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
           dir="rtl"
         >
           <ArrowRight className="size-4" />
@@ -1316,7 +1317,9 @@ export default function AttendanceAwardsCalculator() {
 
               <select
                 className={selectClass}
-                value={selectedYearId}
+                value={
+                  selectedYearId
+                }
                 onChange={(
                   event,
                 ) => {
@@ -1365,7 +1368,9 @@ export default function AttendanceAwardsCalculator() {
               <input
                 id="from-date"
                 type="date"
-                value={fromDate}
+                value={
+                  fromDate
+                }
                 onChange={(
                   event,
                 ) => {
@@ -1376,7 +1381,9 @@ export default function AttendanceAwardsCalculator() {
                     false,
                   )
                 }}
-                className={inputClass}
+                className={
+                  inputClass
+                }
                 disabled={
                   calculating
                 }
@@ -1394,7 +1401,9 @@ export default function AttendanceAwardsCalculator() {
               <input
                 id="to-date"
                 type="date"
-                value={toDate}
+                value={
+                  toDate
+                }
                 onChange={(
                   event,
                 ) => {
@@ -1405,7 +1414,9 @@ export default function AttendanceAwardsCalculator() {
                     false,
                   )
                 }}
-                className={inputClass}
+                className={
+                  inputClass
+                }
                 disabled={
                   calculating
                 }
