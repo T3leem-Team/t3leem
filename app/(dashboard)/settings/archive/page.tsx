@@ -69,21 +69,23 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="الأرشيف"
         description="استعراض السنوات الدراسية المؤرشفة وبياناتها للقراءة والمراجعة."
       />
 
-      <div className="flex items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push('/settings')}
-        >
-          <ArrowRight className="ml-2 h-4 w-4" />
-          العودة للإدارة
-        </Button>
-
+      <div className="flex items-center justify-end gap-2">
         <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           <Archive className="h-4 w-4" />
           قراءة فقط
