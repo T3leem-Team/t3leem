@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
+  ArrowRight,
   Download,
   Loader2,
   Power,
@@ -26,6 +28,8 @@ type Step =
   | 'disabling'
 
 export default function Page() {
+  const router = useRouter()
+
   const [step, setStep] = useState<Step>('idle')
   const [countdown, setCountdown] = useState(10)
   const [loadingBackup, setLoadingBackup] = useState(false)
@@ -128,6 +132,17 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          onClick={() => router.back()}
+          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </Button>
+      </div>
+
       <PageHeader
         title="تعطيل النظام"
         description="تعطيل الوصول إلى النظام بالكامل."
