@@ -9,6 +9,7 @@ import {
   Filter,
   RotateCcw,
   Save,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -129,10 +130,10 @@ const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 const columnFilterInputClass =
-  'h-8 w-full min-w-[100px] rounded-md border border-input bg-background px-2 text-xs'
+  'h-8 w-full rounded-md border border-input bg-background px-2 text-xs'
 
 const columnFilterSelectClass =
-  'h-8 w-full min-w-[105px] rounded-md border border-input bg-background px-2 text-xs'
+  'h-8 w-full rounded-md border border-input bg-background px-2 text-xs'
 
 const COURSE_COUNT_COLORS = [
   '#fca5a5',
@@ -150,6 +151,15 @@ const COURSE_COUNT_COLORS = [
 ]
 
 const ALL_COURSES_COLOR = '#86efac'
+
+const DEFAULT_VISIBLE_COLUMNS = [
+  'sequence',
+  'student',
+  'grade',
+  'courseCount',
+  'annualPercentage',
+  'status',
+] as const
 
 function formatPercentage(value: number | null) {
   if (value === null || !Number.isFinite(value)) {
@@ -338,7 +348,16 @@ export default function AttendanceAwardsResults({
   })
 
   const [saving, setSaving] = useState(false)
-  const [exportingSaved, setExportingSaved] = useState(false)
+  const [exportingSaved, setExportingSaved] =
+    useState(false)
+
+  const [visibleColumns, setVisibleColumns] =
+    useState<string[]>([
+      ...DEFAULT_VISIBLE_COLUMNS,
+    ])
+
+  const [customizeColumnsOpen, setCustomizeColumnsOpen] =
+    useState(false)
 
   const updateFilter = (
     key:
@@ -382,6 +401,25 @@ export default function AttendanceAwardsResults({
       courses: {},
     })
   }
+
+  const toggleColumn = (columnKey: string) => {
+    setVisibleColumns((current) =>
+      current.includes(columnKey)
+        ? current.filter(
+            (key) => key !== columnKey,
+          )
+        : [...current, columnKey],
+    )
+  }
+
+  const resetColumns = () => {
+    setVisibleColumns([
+      ...DEFAULT_VISIBLE_COLUMNS,
+    ])
+  }
+
+  const isColumnVisible = (columnKey: string) =>
+    visibleColumns.includes(columnKey)
 
   const filteredResults = useMemo(() => {
     return results.filter((student) => {
@@ -633,9 +671,10 @@ export default function AttendanceAwardsResults({
                 )
               : ''
 
-          row['الحالة'] = student.eligible
-            ? 'مستحق'
-            : 'غير مستحق'
+          row['الحالة'] =
+            student.eligible
+              ? 'مستحق'
+              : 'غير مستحق'
 
           return row
         })
@@ -685,7 +724,9 @@ export default function AttendanceAwardsResults({
     }
 
     if (selectedCourses.length === 0) {
-      setError('لا توجد دورات محددة لحفظ النتيجة.')
+      setError(
+        'لا توجد دورات محددة لحفظ النتيجة.',
+      )
       return
     }
 
@@ -1003,9 +1044,50 @@ export default function AttendanceAwardsResults({
     }
   }
 
+  const columnOptions = [
+    {
+      key: 'sequence',
+      label: 'التسلسل',
+    },
+    {
+      key: 'student',
+      label: 'الطالب',
+    },
+    {
+      key: 'personalId',
+      label: 'الرقم الشخصي',
+    },
+    {
+      key: 'grade',
+      label: 'الصف',
+    },
+    {
+      key: 'teacher',
+      label: 'المعلم',
+    },
+    {
+      key: 'courseCount',
+      label: 'عدد الدورات',
+    },
+    ...selectedCourses.map(
+      (course) => ({
+        key: `course:${course.id}`,
+        label: course.name,
+      }),
+    ),
+    {
+      key: 'annualPercentage',
+      label: 'النسبة الإجمالية',
+    },
+    {
+      key: 'status',
+      label: 'الحالة',
+    },
+  ]
+
   return (
     <div className="space-y-4">
-      {/* العودة أعلى الصفحة بالكامل جهة اليمين */}
+      {/* العودة أعلى الصفحة جهة اليمين */}
       <div
         className="flex w-full justify-end"
         dir="ltr"
@@ -1362,7 +1444,7 @@ export default function AttendanceAwardsResults({
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-start gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-3">
                 <CardTitle className="text-base">
@@ -1382,256 +1464,399 @@ export default function AttendanceAwardsResults({
                 للأسفل لعرض بقية النتائج.
               </p>
             </div>
+
+            <div className="relative">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setCustomizeColumnsOpen(
+                    (current) => !current,
+                  )
+                }
+                className="gap-2"
+              >
+                <SlidersHorizontal className="size-4" />
+                تخصيص الأعمدة
+              </Button>
+
+              {customizeColumnsOpen && (
+                <div className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-lg border bg-background p-3 shadow-lg">
+                  <div className="mb-3 flex items-center justify-between gap-2 border-b pb-3">
+                    <span className="text-sm font-semibold">
+                      تخصيص الأعمدة
+                    </span>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={resetColumns}
+                      className="h-8 gap-1 text-xs"
+                    >
+                      <RotateCcw className="size-3.5" />
+                      افتراضي
+                    </Button>
+                  </div>
+
+                  <div className="max-h-[360px] space-y-1 overflow-y-auto">
+                    {columnOptions.map(
+                      (column) => {
+                        const checked =
+                          isColumnVisible(
+                            column.key,
+                          )
+
+                        return (
+                          <label
+                            key={column.key}
+                            className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                toggleColumn(
+                                  column.key,
+                                )
+                              }
+                              className="size-4 accent-primary"
+                            />
+
+                            <span className="flex-1">
+                              {column.label}
+                            </span>
+                          </label>
+                        )
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </CardHeader>
 
         <CardContent>
-          <div className="max-h-[600px] overflow-auto rounded-lg border">
+          {/* dir=ltr يجعل شريط التمرير العمودي في اليمين،
+              بينما الجدول نفسه يبقى RTL */}
+          <div
+            className="max-h-[600px] overflow-auto rounded-lg border"
+            dir="ltr"
+          >
             <table
+              dir="rtl"
               className={[
                 'w-full text-sm',
-                'min-w-[1500px]',
+                'min-w-[900px]',
               ].join(' ')}
             >
               <thead>
                 <tr>
-                  <th className="sticky top-0 z-30 w-16 border-b bg-muted px-2 py-2 text-center font-medium align-top">
-                    <div className="flex min-h-[64px] flex-col items-center justify-between gap-2">
-                      <span className="whitespace-nowrap">
-                        التسلسل
-                      </span>
+                  {isColumnVisible(
+                    'sequence',
+                  ) && (
+                    <th className="sticky top-0 z-30 w-16 border-b bg-muted px-2 py-2 text-center font-medium align-top">
+                      <div className="flex min-h-[64px] flex-col items-center justify-between gap-2">
+                        <span className="whitespace-nowrap">
+                          التسلسل
+                        </span>
 
-                      <span className="text-[10px] text-muted-foreground">
-                        —
-                      </span>
-                    </div>
-                  </th>
-
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[230px] flex-col gap-2">
-                      <span>
-                        الطالب
-                      </span>
-
-                      <input
-                        value={filters.name}
-                        onChange={(event) =>
-                          updateFilter(
-                            'name',
-                            event.target.value,
-                          )
-                        }
-                        placeholder="بحث..."
-                        className={columnFilterInputClass}
-                      />
-                    </div>
-                  </th>
-
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[170px] flex-col gap-2">
-                      <span>
-                        الرقم الشخصي
-                      </span>
-
-                      <input
-                        value={filters.personalId}
-                        onChange={(event) =>
-                          updateFilter(
-                            'personalId',
-                            event.target.value,
-                          )
-                        }
-                        placeholder="بحث..."
-                        className={columnFilterInputClass}
-                      />
-                    </div>
-                  </th>
-
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[160px] flex-col gap-2">
-                      <span>
-                        الصف
-                      </span>
-
-                      <select
-                        value={filters.grade}
-                        onChange={(event) =>
-                          updateFilter(
-                            'grade',
-                            event.target.value,
-                          )
-                        }
-                        className={columnFilterSelectClass}
-                      >
-                        <option value="">
-                          جميع الصفوف
-                        </option>
-
-                        {grades.map(
-                          (grade) => (
-                            <option
-                              key={grade}
-                              value={grade}
-                            >
-                              {grade}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  </th>
-
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[180px] flex-col gap-2">
-                      <span>
-                        المعلم
-                      </span>
-
-                      <select
-                        value={filters.teacher}
-                        onChange={(event) =>
-                          updateFilter(
-                            'teacher',
-                            event.target.value,
-                          )
-                        }
-                        className={columnFilterSelectClass}
-                      >
-                        <option value="">
-                          جميع المعلمين
-                        </option>
-
-                        {teachers.map(
-                          (teacher) => (
-                            <option
-                              key={teacher}
-                              value={teacher}
-                            >
-                              {teacher}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  </th>
-
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[170px] flex-col gap-2">
-                      <span>
-                        عدد الدورات
-                      </span>
-
-                      <select
-                        value={filters.courseCount}
-                        onChange={(event) =>
-                          updateFilter(
-                            'courseCount',
-                            event.target.value,
-                          )
-                        }
-                        className={columnFilterSelectClass}
-                      >
-                        <option value="">
-                          الكل
-                        </option>
-
-                        {courseCountOptions.map(
-                          (count) => (
-                            <option
-                              key={count}
-                              value={count}
-                            >
-                              {count}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-                  </th>
-
-                  {selectedCourses.map(
-                    (course) => (
-                      <th
-                        key={course.id}
-                        className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top"
-                      >
-                        <div className="flex min-w-[160px] flex-col gap-2">
-                          <span>
-                            {course.name}
-                          </span>
-
-                          <input
-                            value={
-                              filters.courses[
-                                course.id
-                              ] ?? ''
-                            }
-                            onChange={(event) =>
-                              updateCourseFilter(
-                                course.id,
-                                event.target.value,
-                              )
-                            }
-                            placeholder="%"
-                            className={columnFilterInputClass}
-                          />
-                        </div>
-                      </th>
-                    ),
+                        <span className="text-[10px] text-muted-foreground">
+                          —
+                        </span>
+                      </div>
+                    </th>
                   )}
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[175px] flex-col gap-2">
-                      <span>
-                        النسبة الإجمالية
-                      </span>
+                  {isColumnVisible(
+                    'student',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[230px] flex-col gap-2">
+                        <span>
+                          الطالب
+                        </span>
 
-                      <input
-                        value={
-                          filters.annualPercentage
-                        }
-                        onChange={(event) =>
-                          updateFilter(
-                            'annualPercentage',
-                            event.target.value,
-                          )
-                        }
-                        placeholder="%"
-                        className={columnFilterInputClass}
-                      />
-                    </div>
-                  </th>
+                        <input
+                          value={filters.name}
+                          onChange={(event) =>
+                            updateFilter(
+                              'name',
+                              event.target.value,
+                            )
+                          }
+                          placeholder="بحث..."
+                          className={
+                            columnFilterInputClass
+                          }
+                        />
+                      </div>
+                    </th>
+                  )}
 
-                  <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
-                    <div className="flex min-w-[170px] flex-col gap-2">
-                      <span>
-                        الحالة
-                      </span>
+                  {isColumnVisible(
+                    'personalId',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[170px] flex-col gap-2">
+                        <span>
+                          الرقم الشخصي
+                        </span>
 
-                      <select
-                        value={filters.status}
-                        onChange={(event) =>
-                          updateFilter(
-                            'status',
-                            event.target.value,
-                          )
-                        }
-                        className={columnFilterSelectClass}
-                      >
-                        <option value="">
-                          جميع الحالات
-                        </option>
+                        <input
+                          value={
+                            filters.personalId
+                          }
+                          onChange={(event) =>
+                            updateFilter(
+                              'personalId',
+                              event.target.value,
+                            )
+                          }
+                          placeholder="بحث..."
+                          className={
+                            columnFilterInputClass
+                          }
+                        />
+                      </div>
+                    </th>
+                  )}
 
-                        <option value="eligible">
-                          مستحق
-                        </option>
+                  {isColumnVisible(
+                    'grade',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[160px] flex-col gap-2">
+                        <span>
+                          الصف
+                        </span>
 
-                        <option value="not-eligible">
-                          غير مستحق
-                        </option>
-                      </select>
-                    </div>
-                  </th>
+                        <select
+                          value={filters.grade}
+                          onChange={(event) =>
+                            updateFilter(
+                              'grade',
+                              event.target.value,
+                            )
+                          }
+                          className={
+                            columnFilterSelectClass
+                          }
+                        >
+                          <option value="">
+                            جميع الصفوف
+                          </option>
+
+                          {grades.map(
+                            (grade) => (
+                              <option
+                                key={grade}
+                                value={grade}
+                              >
+                                {grade}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </div>
+                    </th>
+                  )}
+
+                  {isColumnVisible(
+                    'teacher',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[180px] flex-col gap-2">
+                        <span>
+                          المعلم
+                        </span>
+
+                        <select
+                          value={
+                            filters.teacher
+                          }
+                          onChange={(event) =>
+                            updateFilter(
+                              'teacher',
+                              event.target.value,
+                            )
+                          }
+                          className={
+                            columnFilterSelectClass
+                          }
+                        >
+                          <option value="">
+                            جميع المعلمين
+                          </option>
+
+                          {teachers.map(
+                            (teacher) => (
+                              <option
+                                key={teacher}
+                                value={teacher}
+                              >
+                                {teacher}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </div>
+                    </th>
+                  )}
+
+                  {isColumnVisible(
+                    'courseCount',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[170px] flex-col gap-2">
+                        <span>
+                          عدد الدورات
+                        </span>
+
+                        <select
+                          value={
+                            filters.courseCount
+                          }
+                          onChange={(event) =>
+                            updateFilter(
+                              'courseCount',
+                              event.target.value,
+                            )
+                          }
+                          className={
+                            columnFilterSelectClass
+                          }
+                        >
+                          <option value="">
+                            الكل
+                          </option>
+
+                          {courseCountOptions.map(
+                            (count) => (
+                              <option
+                                key={count}
+                                value={count}
+                              >
+                                {count}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </div>
+                    </th>
+                  )}
+
+                  {selectedCourses.map(
+                    (course) => {
+                      const columnKey =
+                        `course:${course.id}`
+
+                      if (
+                        !isColumnVisible(
+                          columnKey,
+                        )
+                      ) {
+                        return null
+                      }
+
+                      return (
+                        <th
+                          key={course.id}
+                          className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top"
+                        >
+                          <div className="flex min-w-[160px] flex-col gap-2">
+                            <span>
+                              {course.name}
+                            </span>
+
+                            <input
+                              value={
+                                filters.courses[
+                                  course.id
+                                ] ?? ''
+                              }
+                              onChange={(event) =>
+                                updateCourseFilter(
+                                  course.id,
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="%"
+                              className={
+                                columnFilterInputClass
+                              }
+                            />
+                          </div>
+                        </th>
+                      )
+                    },
+                  )}
+
+                  {isColumnVisible(
+                    'annualPercentage',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[175px] flex-col gap-2">
+                        <span>
+                          النسبة الإجمالية
+                        </span>
+
+                        <input
+                          value={
+                            filters.annualPercentage
+                          }
+                          onChange={(event) =>
+                            updateFilter(
+                              'annualPercentage',
+                              event.target.value,
+                            )
+                          }
+                          placeholder="%"
+                          className={
+                            columnFilterInputClass
+                          }
+                        />
+                      </div>
+                    </th>
+                  )}
+
+                  {isColumnVisible(
+                    'status',
+                  ) && (
+                    <th className="sticky top-0 z-30 border-b bg-muted px-2 py-2 text-right font-medium align-top">
+                      <div className="flex min-w-[170px] flex-col gap-2">
+                        <span>
+                          الحالة
+                        </span>
+
+                        <select
+                          value={
+                            filters.status
+                          }
+                          onChange={(event) =>
+                            updateFilter(
+                              'status',
+                              event.target.value,
+                            )
+                          }
+                          className={
+                            columnFilterSelectClass
+                          }
+                        >
+                          <option value="">
+                            جميع الحالات
+                          </option>
+
+                          <option value="eligible">
+                            مستحق
+                          </option>
+
+                          <option value="not-eligible">
+                            غير مستحق
+                          </option>
+                        </select>
+                      </div>
+                    </th>
+                  )}
                 </tr>
               </thead>
 
@@ -1641,8 +1866,16 @@ export default function AttendanceAwardsResults({
                   <tr>
                     <td
                       colSpan={
-                        selectedCourses.length +
-                        8
+                        Math.max(
+                          visibleColumns.length,
+                          1,
+                        ) +
+                        selectedCourses.filter(
+                          (course) =>
+                            isColumnVisible(
+                              `course:${course.id}`,
+                            ),
+                        ).length
                       }
                       className="px-4 py-10 text-center text-muted-foreground"
                     >
@@ -1671,57 +1904,92 @@ export default function AttendanceAwardsResults({
                               : undefined
                           }
                         >
-                          <td className="px-4 py-3 text-center font-bold">
-                            {index + 1}
-                          </td>
+                          {isColumnVisible(
+                            'sequence',
+                          ) && (
+                            <td className="px-4 py-3 text-center font-bold">
+                              {index + 1}
+                            </td>
+                          )}
 
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium">
-                                {student.name}
-                              </p>
-
-                              {student.studentNumber && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  رقم الطالب:{' '}
-                                  {
-                                    student.studentNumber
-                                  }
+                          {isColumnVisible(
+                            'student',
+                          ) && (
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-medium">
+                                  {student.name}
                                 </p>
-                              )}
-                            </div>
-                          </td>
 
-                          <td className="px-4 py-3">
-                            {student.personalId ||
-                              '—'}
-                          </td>
+                                {student.studentNumber && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    رقم الطالب:{' '}
+                                    {
+                                      student.studentNumber
+                                    }
+                                  </p>
+                                )}
+                              </div>
+                            </td>
+                          )}
 
-                          <td className="px-4 py-3">
-                            {student.grade}
-                          </td>
+                          {isColumnVisible(
+                            'personalId',
+                          ) && (
+                            <td className="px-4 py-3">
+                              {student.personalId ||
+                                '—'}
+                            </td>
+                          )}
 
-                          <td className="px-4 py-3">
-                            {student.teacher}
-                          </td>
+                          {isColumnVisible(
+                            'grade',
+                          ) && (
+                            <td className="px-4 py-3">
+                              {student.grade}
+                            </td>
+                          )}
 
-                          <td className="px-4 py-3">
-                            <span className="font-semibold">
-                              {
-                                student.courseCount
-                              }
-                            </span>
+                          {isColumnVisible(
+                            'teacher',
+                          ) && (
+                            <td className="px-4 py-3">
+                              {student.teacher}
+                            </td>
+                          )}
 
-                            <span className="mr-1 text-xs text-muted-foreground">
-                              /{' '}
-                              {
-                                selectedCourses.length
-                              }
-                            </span>
-                          </td>
+                          {isColumnVisible(
+                            'courseCount',
+                          ) && (
+                            <td className="px-4 py-3">
+                              <span className="font-semibold">
+                                {
+                                  student.courseCount
+                                }
+                              </span>
+
+                              <span className="mr-1 text-xs text-muted-foreground">
+                                /{' '}
+                                {
+                                  selectedCourses.length
+                                }
+                              </span>
+                            </td>
+                          )}
 
                           {selectedCourses.map(
                             (course) => {
+                              const columnKey =
+                                `course:${course.id}`
+
+                              if (
+                                !isColumnVisible(
+                                  columnKey,
+                                )
+                              ) {
+                                return null
+                              }
+
                               const result =
                                 student
                                   .courses[
@@ -1760,25 +2028,33 @@ export default function AttendanceAwardsResults({
                             },
                           )}
 
-                          <td className="px-4 py-3 font-semibold">
-                            {formatPercentage(
-                              student.annualPercentage,
-                            )}
-                          </td>
+                          {isColumnVisible(
+                            'annualPercentage',
+                          ) && (
+                            <td className="px-4 py-3 font-semibold">
+                              {formatPercentage(
+                                student.annualPercentage,
+                              )}
+                            </td>
+                          )}
 
-                          <td className="px-4 py-3">
-                            <Badge
-                              variant={
-                                student.eligible
-                                  ? 'success'
-                                  : 'neutral'
-                              }
-                            >
-                              {student.eligible
-                                ? 'مستحق'
-                                : 'غير مستحق'}
-                            </Badge>
-                          </td>
+                          {isColumnVisible(
+                            'status',
+                          ) && (
+                            <td className="px-4 py-3">
+                              <Badge
+                                variant={
+                                  student.eligible
+                                    ? 'success'
+                                    : 'neutral'
+                                }
+                              >
+                                {student.eligible
+                                  ? 'مستحق'
+                                  : 'غير مستحق'}
+                              </Badge>
+                            </td>
+                          )}
                         </tr>
                       )
                     },
