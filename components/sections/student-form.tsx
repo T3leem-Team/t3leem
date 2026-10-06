@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  useEffect,
   useState,
 } from 'react'
 
@@ -65,6 +66,15 @@ type StudentFormProps = {
     React.SetStateAction<any[]>
   >
 }
+
+const GUARDIAN_RELATIONS = [
+  'الأب',
+  'الأم',
+  'الأخ',
+  'الأخت',
+  'الجد',
+  'الجدة',
+] as const
 
 function getTodayString() {
   const today = new Date()
@@ -343,6 +353,56 @@ export function StudentForm({
   const [isErrorOpen, setIsErrorOpen] =
     useState(false)
 
+  const [
+    selectedGuardianRelation,
+    setSelectedGuardianRelation,
+  ] = useState('')
+
+  const [
+    customGuardianRelation,
+    setCustomGuardianRelation,
+  ] = useState('')
+
+  /*
+   * ============================================================
+   * تهيئة صلة القرابة عند فتح طالب للتعديل
+   *
+   * إذا كانت القيمة موجودة ضمن الخيارات المعروفة:
+   * نعرضها مباشرة.
+   *
+   * وإذا كانت قيمة مخصصة مثل "العم":
+   * نختار "أخرى" ونضع القيمة داخل خانة الإدخال.
+   * ============================================================
+   */
+  useEffect(() => {
+    const relation =
+      editingStudent?.guardianRelation?.trim() ??
+      ''
+
+    if (!relation) {
+      setSelectedGuardianRelation('')
+      setCustomGuardianRelation('')
+      return
+    }
+
+    if (
+      GUARDIAN_RELATIONS.includes(
+        relation as (typeof GUARDIAN_RELATIONS)[number],
+      )
+    ) {
+      setSelectedGuardianRelation(
+        relation,
+      )
+      setCustomGuardianRelation('')
+      return
+    }
+
+    setSelectedGuardianRelation('أخرى')
+    setCustomGuardianRelation(
+      relation,
+    )
+  }, [editingStudent])
+
   /*
    * ============================================================
    * نافذة الخطأ
@@ -533,11 +593,25 @@ export function StudentForm({
         data.get('personalId') || '',
       ).trim()
 
-    const guardianRelation =
+    const guardianRelationSelection =
       String(
-        data.get('guardianRelation') ||
-          '',
+        data.get(
+          'guardianRelation',
+        ) || '',
       ).trim()
+
+    const customGuardianRelationValue =
+      String(
+        data.get(
+          'customGuardianRelation',
+        ) || '',
+      ).trim()
+
+    const guardianRelation =
+      guardianRelationSelection ===
+      'أخرى'
+        ? customGuardianRelationValue
+        : guardianRelationSelection
 
     const grade = String(
       data.get('grade') || '',
@@ -567,6 +641,63 @@ export function StudentForm({
     const notes = String(
       data.get('notes') || '',
     ).trim()
+
+    /*
+     * ============================================================
+     * التحقق من أرقام الهاتف والرقم الشخصي
+     * ============================================================
+     */
+
+    if (
+      personalId &&
+      !/^\d{1,9}$/.test(
+        personalId,
+      )
+    ) {
+      showError(
+        'الرقم الشخصي غير صحيح.\n\nيسمح بإدخال أرقام فقط وبحد أقصى 9 أرقام.',
+      )
+      return
+    }
+
+    if (
+      phone &&
+      !/^\d{1,8}$/.test(phone)
+    ) {
+      showError(
+        'رقم الهاتف غير صحيح.\n\nيسمح بإدخال أرقام فقط وبحد أقصى 8 أرقام.',
+      )
+      return
+    }
+
+    if (
+      whatsapp &&
+      !/^\d{1,8}$/.test(
+        whatsapp,
+      )
+    ) {
+      showError(
+        'رقم الواتساب غير صحيح.\n\nيسمح بإدخال أرقام فقط وبحد أقصى 8 أرقام.',
+      )
+      return
+    }
+
+    /*
+     * ============================================================
+     * التحقق من "أخرى"
+     * ============================================================
+     */
+
+    if (
+      guardianRelationSelection ===
+        'أخرى' &&
+      !customGuardianRelationValue
+    ) {
+      showError(
+        'يرجى كتابة صلة القرابة عند اختيار "أخرى".',
+      )
+      return
+    }
 
     /*
      * ============================================================
@@ -1353,12 +1484,20 @@ export function StudentForm({
                       ''
                     }
                     placeholder="أدخل الرقم الشخصي"
+                    maxLength={9}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 9)
+                    }}
+                    dir="ltr"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                   />
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    يجب أن يكون الرقم الشخصي
-                    غير مستخدم لطالب آخر.
+                    أرقام فقط، بحد أقصى 9 أرقام.
                   </p>
                 </div>
 
@@ -1369,42 +1508,27 @@ export function StudentForm({
 
                   <select
                     name="guardianRelation"
-                    defaultValue={
-                      editingStudent?.guardianRelation ===
-                        'الأب' ||
-                      editingStudent?.guardianRelation ===
-                        'الأم' ||
-                      editingStudent?.guardianRelation ===
-                        'الأخ' ||
-                      editingStudent?.guardianRelation ===
-                        'الأخت' ||
-                      editingStudent?.guardianRelation ===
-                        'الجد' ||
-                      editingStudent?.guardianRelation ===
-                        'الجدة'
-                        ? editingStudent.guardianRelation
-                        : editingStudent?.guardianRelation
-                          ? 'أخرى'
-                          : ''
+                    value={
+                      selectedGuardianRelation
                     }
-                    onChange={(event) => {
-                      const customInput =
-                        document.getElementById(
-                          'customGuardianRelation',
-                        ) as HTMLInputElement | null
+                    onChange={(
+                      event,
+                    ) => {
+                      const value =
+                        event.target
+                          .value
+
+                      setSelectedGuardianRelation(
+                        value,
+                      )
 
                       if (
-                        customInput
+                        value !==
+                        'أخرى'
                       ) {
-                        if (
-                          event.target.value ===
-                          'أخرى'
-                        ) {
-                          customInput.focus()
-                        } else {
-                          customInput.value =
-                            ''
-                        }
+                        setCustomGuardianRelation(
+                          '',
+                        )
                       }
                     }}
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -1442,28 +1566,29 @@ export function StudentForm({
                     </option>
                   </select>
 
-                  {editingStudent?.guardianRelation &&
-                    ![
-                      'الأب',
-                      'الأم',
-                      'الأخ',
-                      'الأخت',
-                      'الجد',
-                      'الجدة',
-                    ].includes(
-                      editingStudent.guardianRelation,
-                    ) && (
-                      <input
-                        id="customGuardianRelation"
-                        name="customGuardianRelation"
-                        type="text"
-                        defaultValue={
-                          editingStudent.guardianRelation
-                        }
-                        placeholder="اكتب صلة القرابة"
-                        className="mt-3 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-                    )}
+                  {selectedGuardianRelation ===
+                    'أخرى' && (
+                    <input
+                      id="customGuardianRelation"
+                      name="customGuardianRelation"
+                      type="text"
+                      value={
+                        customGuardianRelation
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setCustomGuardianRelation(
+                          event.target
+                            .value,
+                        )
+                      }
+                      placeholder="اكتب صلة القرابة"
+                      required
+                      autoFocus
+                      className="mt-3 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1516,9 +1641,21 @@ export function StudentForm({
                       ''
                     }
                     placeholder="مثال: 33xxxxxx"
+                    maxLength={8}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 8)
+                    }}
                     dir="ltr"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                   />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    أرقام فقط، بحد أقصى 8 أرقام.
+                  </p>
                 </div>
 
                 <div>
@@ -1534,9 +1671,21 @@ export function StudentForm({
                       ''
                     }
                     placeholder="مثال: 33xxxxxx"
+                    maxLength={8}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 8)
+                    }}
                     dir="ltr"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                   />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    أرقام فقط، بحد أقصى 8 أرقام.
+                  </p>
                 </div>
               </div>
 
