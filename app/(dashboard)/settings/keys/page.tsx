@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+import { ArrowRight } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -45,6 +48,8 @@ function getSupabaseError(error: unknown) {
 }
 
 export default function KeysPage() {
+  const router = useRouter()
+
   const [settings, setSettings] = useState<KeysState>({
     allowAddToCurrentYear: true,
     allowAddToArchive: true,
@@ -315,6 +320,18 @@ export default function KeysPage() {
 
   return (
     <div className="space-y-6">
+      {/* العودة */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="إعدادات المفاتيح"
         description="التحكم في صلاحيات الاستيراد داخل الطلبات."
