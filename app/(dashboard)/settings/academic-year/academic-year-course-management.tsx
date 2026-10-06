@@ -3,6 +3,7 @@
 import {
   Dispatch,
   SetStateAction,
+  useState,
 } from 'react'
 
 import {
@@ -25,7 +26,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 import CourseEditor from './course-editor'
-
 export type DayOfWeek =
   | 'sunday'
   | 'monday'
