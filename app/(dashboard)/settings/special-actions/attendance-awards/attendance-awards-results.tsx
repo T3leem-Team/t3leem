@@ -5,7 +5,6 @@ import {
   Download,
   Filter,
   RotateCcw,
-  Palette,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -99,15 +98,30 @@ const selectClass =
   'h-10 w-full rounded-md border border-input bg-background px-3 text-sm'
 
 /*
-  الألوان الافتراضية فقط.
-  المستخدم يستطيع تغييرها من الواجهة.
-*/
+  ألوان عدد الدورات.
 
-const DEFAULT_COLORS = {
-  all: '#dcfce7',
-  two: '#dbeafe',
-  one: '#fef3c7',
-}
+  الأخضر لا يدخل هنا لأنه محجوز دائمًا
+  للطالب المسجل في جميع الدورات المختارة.
+
+  إذا زاد العدد عن هذه القائمة، يتم توليد لون
+  جديد تلقائيًا.
+*/
+const COURSE_COUNT_COLORS = [
+  '#fca5a5', // 1 - أحمر فاتح
+  '#93c5fd', // 2 - أزرق
+  '#fcd34d', // 3 - أصفر
+  '#c4b5fd', // 4 - بنفسجي
+  '#67e8f9', // 5 - سماوي
+  '#f9a8d4', // 6 - وردي
+  '#fdba74', // 7 - برتقالي
+  '#a7f3d0', // 8 - أخضر مزرق
+  '#d8b4fe', // 9 - بنفسجي فاتح
+  '#fde68a', // 10 - ذهبي
+  '#86efac', // 11 - أخضر مختلف
+  '#f0abfc', // 12 - فوشي
+]
+
+const ALL_COURSES_COLOR = '#86efac'
 
 /* =========================================================
    HELPERS
@@ -138,7 +152,6 @@ function getArabicNumber(value: string) {
 
   if (
     normalized.includes('الاول') ||
-    normalized.includes('الأول') ||
     normalized.includes('1')
   ) {
     return 1
@@ -187,15 +200,13 @@ function getLevelStage(value: string) {
 
   if (
     normalized.includes('ابتدائي') ||
-    normalized.includes('ابتدايي') ||
-    normalized.includes('ابتدائي')
+    normalized.includes('ابتدايي')
   ) {
     return 1
   }
 
   if (
     normalized.includes('اعدادي') ||
-    normalized.includes('إعدادي') ||
     normalized.includes('متوسط') ||
     normalized.includes('المتوسط')
   ) {
@@ -239,35 +250,56 @@ function compareGrades(a: string, b: string) {
 }
 
 /* =========================================================
-   ROW COLOR
+   DYNAMIC ROW COLOR
 ========================================================= */
 
+/*
+  الأخضر دائمًا للطالب المسجل في جميع الدورات المختارة.
+
+  أما الطالب المسجل في عدد أقل من الدورات:
+  1 = لون
+  2 = لون مختلف
+  3 = لون مختلف
+  4 = لون مختلف
+  ...
+  
+  وإذا تجاوز العدد الألوان الموجودة في القائمة،
+  يتم توليد لون جديد تلقائيًا.
+*/
 function getRowColor(
   student: StudentResult,
   selectedCourseCount: number,
-  colorsEnabled: boolean,
-  colors: typeof DEFAULT_COLORS,
 ) {
-  if (!colorsEnabled) {
-    return undefined
-  }
-
   if (
     selectedCourseCount > 0 &&
     student.courseCount === selectedCourseCount
   ) {
-    return colors.all
+    return ALL_COURSES_COLOR
   }
 
-  if (student.courseCount === 2) {
-    return colors.two
+  if (student.courseCount <= 0) {
+    return undefined
   }
 
-  if (student.courseCount === 1) {
-    return colors.one
+  const predefinedColor =
+    COURSE_COUNT_COLORS[
+      student.courseCount - 1
+    ]
+
+  if (predefinedColor) {
+    return predefinedColor
   }
 
-  return undefined
+  /*
+    توليد لون ديناميكي للأعداد الكبيرة.
+
+    استخدام زاوية ذهبية تقريبية يساعد على إعطاء
+    ألوان متباعدة بدل أن تكون متشابهة جدًا.
+  */
+  const hue =
+    (student.courseCount * 137.508) % 360
+
+  return `hsl(${hue.toFixed(0)} 70% 78%)`
 }
 
 /* =========================================================
@@ -298,17 +330,6 @@ export default function AttendanceAwardsResults({
     status: '',
     courses: {},
   })
-
-  /* -------------------------------------------------------
-     Colors
-  ------------------------------------------------------- */
-
-  const [colorsEnabled, setColorsEnabled] =
-    useState(true)
-
-  const [colors, setColors] = useState(
-    DEFAULT_COLORS,
-  )
 
   /* =========================================================
      FILTER HELPERS
@@ -538,7 +559,9 @@ export default function AttendanceAwardsResults({
 
   const exportToExcel = () => {
     if (sortedResults.length === 0) {
-      setError('لا توجد نتائج لتصديرها إلى Excel.')
+      setError(
+        'لا توجد نتائج لتصديرها إلى Excel.',
+      )
       return
     }
 
@@ -912,168 +935,79 @@ export default function AttendanceAwardsResults({
         )}
 
         {/* =====================================================
-            COLORS
+            COLOR LEGEND
         ===================================================== */}
 
-        <div className="rounded-lg border bg-muted/20 p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <Palette className="size-4 text-primary" />
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-3 text-xs">
+          <span className="font-medium">
+            دليل الألوان:
+          </span>
 
-                <p className="text-sm font-medium">
-                  تلوين النتائج
-                </p>
-              </div>
+          <span className="flex items-center gap-2">
+            <span
+              className="size-4 rounded border"
+              style={{
+                backgroundColor:
+                  ALL_COURSES_COLOR,
+              }}
+            />
+            مسجل في جميع الدورات
+          </span>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                يمكنك تشغيل أو إيقاف التلوين واختيار لون كل تقسيم بنفسك.
-              </p>
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={colorsEnabled}
-                onChange={(event) =>
-                  setColorsEnabled(
-                    event.target.checked,
+          {selectedCourses.length > 1 &&
+            Array.from(
+              new Set(
+                results
+                  .map(
+                    (student) =>
+                      student.courseCount,
                   )
-                }
-                className="size-4"
-              />
-
-              تفعيل التلوين
-            </label>
-          </div>
-
-          {colorsEnabled && (
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {/* جميع الدورات */}
-
-              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
-                <div>
-                  <p className="text-sm font-medium">
-                    جميع الدورات المختارة
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    الطالب مسجل في كل الدورات
-                  </p>
-                </div>
-
-                <input
-                  type="color"
-                  value={colors.all}
-                  onChange={(event) =>
-                    setColors((current) => ({
-                      ...current,
-                      all: event.target.value,
-                    }))
-                  }
-                  className="size-10 cursor-pointer rounded-md border p-1"
-                  title="لون جميع الدورات"
+                  .filter(
+                    (count) =>
+                      count > 0 &&
+                      count <
+                        selectedCourses.length,
+                  )
+                  .sort(
+                    (a, b) => a - b,
+                  ),
+              ),
+            ).map((count) => (
+              <span
+                key={count}
+                className="flex items-center gap-2"
+              >
+                <span
+                  className="size-4 rounded border"
+                  style={{
+                    backgroundColor:
+                      getRowColor(
+                        {
+                          id: '',
+                          studentNumber: '',
+                          personalId: '',
+                          name: '',
+                          grade: '',
+                          teacher: '',
+                          courses: {},
+                          courseCount: count,
+                          annualPercentage:
+                            null,
+                          eligible: false,
+                        },
+                        selectedCourses.length,
+                      ),
+                  }}
                 />
-              </label>
 
-              {/* دورتان */}
-
-              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
-                <div>
-                  <p className="text-sm font-medium">
-                    دورتان
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    الطالب مسجل في دورتين فقط
-                  </p>
-                </div>
-
-                <input
-                  type="color"
-                  value={colors.two}
-                  onChange={(event) =>
-                    setColors((current) => ({
-                      ...current,
-                      two: event.target.value,
-                    }))
-                  }
-                  className="size-10 cursor-pointer rounded-md border p-1"
-                  title="لون دورتين"
-                />
-              </label>
-
-              {/* دورة واحدة */}
-
-              <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
-                <div>
-                  <p className="text-sm font-medium">
-                    دورة واحدة
-                  </p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    الطالب مسجل في دورة واحدة فقط
-                  </p>
-                </div>
-
-                <input
-                  type="color"
-                  value={colors.one}
-                  onChange={(event) =>
-                    setColors((current) => ({
-                      ...current,
-                      one: event.target.value,
-                    }))
-                  }
-                  className="size-10 cursor-pointer rounded-md border p-1"
-                  title="لون دورة واحدة"
-                />
-              </label>
-            </div>
-          )}
+                {count === 1
+                  ? 'دورة واحدة'
+                  : count === 2
+                    ? 'دورتان'
+                    : `${count} دورات`}
+              </span>
+            ))}
         </div>
-
-        {/* =====================================================
-            LEGEND
-        ===================================================== */}
-
-        {colorsEnabled && (
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <span className="font-medium">
-              دليل الألوان:
-            </span>
-
-            <span
-              className="rounded-md border px-3 py-1.5"
-              style={{
-                backgroundColor:
-                  colors.all,
-              }}
-            >
-              جميع الدورات
-            </span>
-
-            <span
-              className="rounded-md border px-3 py-1.5"
-              style={{
-                backgroundColor:
-                  colors.two,
-              }}
-            >
-              دورتان
-            </span>
-
-            <span
-              className="rounded-md border px-3 py-1.5"
-              style={{
-                backgroundColor:
-                  colors.one,
-              }}
-            >
-              دورة واحدة
-            </span>
-          </div>
-        )}
 
         {/* =====================================================
             TABLE
@@ -1150,8 +1084,6 @@ export default function AttendanceAwardsResults({
                       getRowColor(
                         student,
                         selectedCourses.length,
-                        colorsEnabled,
-                        colors,
                       )
 
                     return (
@@ -1213,6 +1145,7 @@ export default function AttendanceAwardsResults({
                               student.courseCount
                             }
                           </span>
+
                           <span className="mr-1 text-xs text-muted-foreground">
                             /{' '}
                             {
