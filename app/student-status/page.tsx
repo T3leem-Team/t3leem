@@ -392,38 +392,20 @@ export default function StudentStatusPage() {
   const visitRecordedRef = useRef(false)
   const realTrackingRecordedRef = useRef(false)
 
-  useEffect(() => {
-    if (visitRecordedRef.current) {
-      return
-    }
+  /*
+   * =====================================================
+   * حالة تفعيل صفحة متابعة الطالب
+   * =====================================================
+   *
+   * null   = جاري التحقق
+   * true   = الصفحة مفعلة
+   * false  = الصفحة مغلقة
+   */
+  const [pageEnabled, setPageEnabled] =
+    useState<boolean | null>(null)
 
-    visitRecordedRef.current = true
-
-    const recordVisit = async () => {
-      try {
-        const { error } = await supabase.rpc(
-          'record_student_tracking_analytics',
-          {
-            p_type: 'visit',
-          },
-        )
-
-        if (error) {
-          console.error(
-            'Student tracking visit analytics error:',
-            error,
-          )
-        }
-      } catch (err) {
-        console.error(
-          'Student tracking visit analytics exception:',
-          err,
-        )
-      }
-    }
-
-    void recordVisit()
-  }, [])
+  const [pageAccessError, setPageAccessError] =
+    useState('')
 
   const [searchValue, setSearchValue] = useState('')
   const [loading, setLoading] = useState(false)
@@ -463,6 +445,109 @@ export default function StudentStatusPage() {
   const [activePersonalId, setActivePersonalId] =
     useState('')
 
+  /*
+   * =====================================================
+   * فحص تفعيل الصفحة
+   * =====================================================
+   *
+   * إذا كانت is_enabled = false:
+   * - لا نعرض صفحة البحث
+   * - لا نسجل زيارة
+   * - لا نستدعي بيانات الطالب
+   */
+  useEffect(() => {
+    let mounted = true
+
+    const checkPageStatus = async () => {
+      try {
+        const {
+          data,
+          error: settingsError,
+        } = await supabase
+          .from('student_status_settings')
+          .select('is_enabled')
+          .limit(1)
+          .maybeSingle()
+
+        if (!mounted) {
+          return
+        }
+
+        if (settingsError) {
+          console.error(
+            'Student status settings error:',
+            settingsError,
+          )
+
+          /*
+           * Fail closed:
+           * في حال تعذر التحقق من الإعدادات لا نفتح
+           * الصفحة العامة.
+           */
+          setPageEnabled(false)
+          setPageAccessError(
+            'تعذر التحقق من حالة صفحة متابعة الطالب حاليًا.',
+          )
+          return
+        }
+
+        const enabled =
+          data?.is_enabled === true
+
+        setPageEnabled(enabled)
+
+        /*
+         * نسجل الزيارة فقط إذا كانت الصفحة مفعلة.
+         */
+        if (enabled && !visitRecordedRef.current) {
+          visitRecordedRef.current = true
+
+          try {
+            const { error: analyticsError } =
+              await supabase.rpc(
+                'record_student_tracking_analytics',
+                {
+                  p_type: 'visit',
+                },
+              )
+
+            if (analyticsError) {
+              console.error(
+                'Student tracking visit analytics error:',
+                analyticsError,
+              )
+            }
+          } catch (analyticsException) {
+            console.error(
+              'Student tracking visit analytics exception:',
+              analyticsException,
+            )
+          }
+        }
+      } catch (err) {
+        console.error(
+          'Student status access check exception:',
+          err,
+        )
+
+        if (!mounted) {
+          return
+        }
+
+        setPageEnabled(false)
+        setPageAccessError(
+          'تعذر التحقق من حالة صفحة متابعة الطالب حاليًا.',
+        )
+      }
+    }
+
+    void checkPageStatus()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const recordRealTrackingOpen = () => {
     if (realTrackingRecordedRef.current) {
       return
@@ -496,6 +581,15 @@ export default function StudentStatusPage() {
   }
 
   const handleSearch = async () => {
+    /*
+     * حماية إضافية:
+     * حتى لو تم استدعاء الدالة بطريقة غير متوقعة
+     * لا نسمح بالبحث إذا الصفحة مقفلة.
+     */
+    if (pageEnabled !== true) {
+      return
+    }
+
     const personalId = searchValue.trim()
 
     if (!/^\d{9}$/.test(personalId)) {
@@ -790,7 +884,7 @@ export default function StudentStatusPage() {
     tripId: string,
     response: TripResponse,
   ) => {
-    if (!activePersonalId) {
+    if (!activePersonalId || pageEnabled !== true) {
       return
     }
 
@@ -839,6 +933,63 @@ export default function StudentStatusPage() {
     } finally {
       setRespondingTripId(null)
     }
+  }
+
+  /*
+   * =====================================================
+   * جاري التحقق من حالة الصفحة
+   * =====================================================
+   */
+  if (pageEnabled === null) {
+    return (
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10"
+      >
+        <div className="w-full max-w-md rounded-2xl border bg-background p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Clock3 className="size-7 animate-spin" />
+          </div>
+
+          <h1 className="text-xl font-bold">
+            جاري التحقق
+          </h1>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            جاري التحقق من حالة صفحة متابعة الطالب...
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  /*
+   * =====================================================
+   * الصفحة غير مفعلة
+   * =====================================================
+   */
+  if (!pageEnabled) {
+    return (
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10"
+      >
+        <div className="w-full max-w-md rounded-2xl border bg-background p-8 text-center shadow-sm">
+          <div className="mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <X className="size-8" />
+          </div>
+
+          <h1 className="text-xl font-bold">
+            صفحة متابعة الطالب غير مفعلة حاليًا
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {pageAccessError ||
+              'تم إيقاف الوصول إلى صفحة متابعة الطالب حاليًا. يرجى المحاولة لاحقًا.'}
+          </p>
+        </div>
+      </main>
+    )
   }
 
   return (
@@ -970,11 +1121,6 @@ export default function StudentStatusPage() {
           trackingStarted &&
           student && (
             <div className="mt-5 space-y-5">
-              <StudentInfoCard
-                student={student}
-                level={level}
-              />
-
               {trips.length > 0 && (
                 <div className="overflow-hidden rounded-2xl border border-blue-200 bg-blue-50/40 shadow-sm">
                   <div className="border-b border-blue-200 bg-blue-100/60 px-5 py-4">
