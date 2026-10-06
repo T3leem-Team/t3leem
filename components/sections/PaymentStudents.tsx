@@ -11,6 +11,7 @@ import {
   Plus,
   X,
   Eye,
+  Pencil,
 } from 'lucide-react'
 
 import { StatusBadge } from '@/components/dashboard/status-badge'
@@ -102,14 +103,6 @@ export function PaymentStudents() {
       initialCache?.studentList ?? [],
     )
 
-  /*
-   * مستويات السنة الحالية.
-   *
-   * الترتيب يأتي من:
-   * levels.sort_order
-   *
-   * الموجود داخل payments-cache.
-   */
   const [levels, setLevels] =
     useState<PaymentLevel[]>(
       initialCache?.levels ?? [],
@@ -169,6 +162,21 @@ export function PaymentStudents() {
   const [
     savingPayment,
     setSavingPayment,
+  ] = useState(false)
+
+  /*
+   * الدفعة التي يتم تعديلها حالياً.
+   */
+  const [
+    editingPayment,
+    setEditingPayment,
+  ] = useState<PaymentRecord | null>(
+    null,
+  )
+
+  const [
+    savingEdit,
+    setSavingEdit,
   ] = useState(false)
 
   useEffect(() => {
@@ -328,10 +336,6 @@ export function PaymentStudents() {
           },
         )
 
-      /*
-       * لا توجد مستويات من الـ API
-       * في حالة الـ fallback.
-       */
       setLevels([])
 
       setStudentList(
@@ -405,17 +409,6 @@ export function PaymentStudents() {
     }))
   }
 
-  /*
-   * ترتيب المستويات من قاعدة البيانات.
-   *
-   * لا نستخدم sort() على أسماء المستويات.
-   *
-   * levels هنا مرتبة مسبقاً من
-   * payments-cache حسب levels.sort_order.
-   *
-   * نعرض فقط المستويات الموجودة فعلياً
-   * عند الطلاب.
-   */
   const grades = useMemo(() => {
     const availableGrades =
       new Set(
@@ -438,14 +431,6 @@ export function PaymentStudents() {
             level.name,
         )
 
-    /*
-     * احتياطياً:
-     * إذا كان هناك مستوى موجود عند طالب
-     * ولكنه غير موجود في جدول levels
-     * أو غير نشط، لا نخفيه من الفلتر.
-     *
-     * نضعه في النهاية.
-     */
     const matchedGrades =
       new Set(
         orderedGrades,
@@ -691,6 +676,7 @@ export function PaymentStudents() {
       setDetailsDialogOpen(true)
       setLoadingHistory(true)
       setPaymentHistory([])
+      setEditingPayment(null)
 
       try {
         const response =
@@ -743,7 +729,8 @@ export function PaymentStudents() {
     () => {
       if (
         loadingHistory ||
-        savingPayment
+        savingPayment ||
+        savingEdit
       ) {
         return
       }
@@ -751,6 +738,7 @@ export function PaymentStudents() {
       setDetailsDialogOpen(false)
       setDetailsStudent(null)
       setPaymentHistory([])
+      setEditingPayment(null)
 
       if (returnPath) {
         router.push(
@@ -917,13 +905,6 @@ export function PaymentStudents() {
           )
         }
 
-        /*
-         * إجبار تحديث الكاش بعد إضافة الدفعة
-         * حتى تتحدث المبالغ والحالة مباشرة.
-         *
-         * مستويات قاعدة البيانات ستعود
-         * أيضاً من نفس الـ API والكاش.
-         */
         const refreshedStudents =
           await loadPayments(true)
 
@@ -942,41 +923,10 @@ export function PaymentStudents() {
           )
         }
 
-        try {
-          const historyResponse =
-            await fetch(
-              `/api/payments/history?studentId=${encodeURIComponent(
-                detailsStudent.id,
-              )}&academicYearId=${encodeURIComponent(
-                currentAcademicYearId,
-              )}`,
-              {
-                method: 'GET',
-                cache: 'no-store',
-              },
-            )
-
-          const historyData =
-            await historyResponse
-              .json()
-              .catch(() => null)
-
-          if (
-            historyResponse.ok
-          ) {
-            setPaymentHistory(
-              (historyData?.payments ??
-                []) as PaymentRecord[],
-            )
-          }
-        } catch (
-          historyError
-        ) {
-          console.error(
-            'Failed to refresh payment history:',
-            historyError,
-          )
-        }
+        await refreshPaymentHistory(
+          detailsStudent.id,
+          currentAcademicYearId,
+        )
 
         form.reset()
 
@@ -1007,6 +957,266 @@ export function PaymentStudents() {
         )
       } finally {
         setSavingPayment(false)
+      }
+    }
+
+  /*
+   * تحديث سجل الدفعات بعد الإضافة أو التعديل.
+   */
+  const refreshPaymentHistory =
+    async (
+      studentId: string,
+      academicYearId: string,
+    ) => {
+      try {
+        const historyResponse =
+          await fetch(
+            `/api/payments/history?studentId=${encodeURIComponent(
+              studentId,
+            )}&academicYearId=${encodeURIComponent(
+              academicYearId,
+            )}`,
+            {
+              method: 'GET',
+              cache: 'no-store',
+            },
+          )
+
+        const historyData =
+          await historyResponse
+            .json()
+            .catch(() => null)
+
+        if (
+          historyResponse.ok
+        ) {
+          setPaymentHistory(
+            (historyData?.payments ??
+              []) as PaymentRecord[],
+          )
+        }
+      } catch (
+        historyError
+      ) {
+        console.error(
+          'Failed to refresh payment history:',
+          historyError,
+        )
+      }
+    }
+
+  /*
+   * تعديل دفعة موجودة.
+   *
+   * مهم:
+   * التعديل يستخدم PATCH ويعدل نفس السجل
+   * ولا ينشئ دفعة جديدة.
+   *
+   * لذلك يمكن تعديل دفعة حتى لو أصبح
+   * الطالب مدفوعاً بالكامل.
+   */
+  const handleEditPayment =
+    async (
+      event: React.FormEvent<HTMLFormElement>,
+    ) => {
+      event.preventDefault()
+
+      if (
+        !editingPayment ||
+        !detailsStudent ||
+        !currentAcademicYearId
+      ) {
+        alert(
+          'تعذر تحديد الدفعة أو الطالب أو السنة الدراسية.',
+        )
+        return
+      }
+
+      const form =
+        event.currentTarget
+
+      const formData =
+        new FormData(form)
+
+      const amount = Number(
+        formData.get(
+          'editAmount',
+        ) || 0,
+      )
+
+      const paymentMethod =
+        String(
+          formData.get(
+            'editPaymentMethod',
+          ) || 'نقدي',
+        ) as PaymentMethod
+
+      const paymentDate =
+        String(
+          formData.get(
+            'editPaymentDate',
+          ) || '',
+        ).trim()
+
+      const referenceNumber =
+        String(
+          formData.get(
+            'editReferenceNumber',
+          ) || '',
+        ).trim()
+
+      const notes =
+        String(
+          formData.get(
+            'editNotes',
+          ) || '',
+        ).trim()
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        alert(
+          'أدخل مبلغاً صحيحاً.',
+        )
+        return
+      }
+
+      if (!paymentDate) {
+        alert(
+          'اختر تاريخ الدفع.',
+        )
+        return
+      }
+
+      setSavingEdit(true)
+
+      try {
+        const response =
+          await fetch(
+            '/api/payments',
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body: JSON.stringify({
+                payment_id:
+                  editingPayment.id,
+
+                amount: Number(
+                  amount.toFixed(3),
+                ),
+
+                payment_method:
+                  paymentMethod,
+
+                payment_date:
+                  paymentDate,
+
+                reference_number:
+                  referenceNumber ||
+                  null,
+
+                notes:
+                  notes || null,
+              }),
+            },
+          )
+
+        const data =
+          await response
+            .json()
+            .catch(() => null)
+
+        if (!response.ok) {
+          const error =
+            new Error(
+              data?.error ||
+                'تعذر تعديل الدفعة.',
+            ) as Error & {
+              maxAmount?: number
+            }
+
+          if (
+            data?.maxAmount != null
+          ) {
+            error.message =
+              `${data.error} الحد الأقصى المسموح: ${formatCurrency(
+                Number(
+                  data.maxAmount,
+                ),
+              )}`
+          }
+
+          throw error
+        }
+
+        const updatedPayment =
+          data?.payment
+
+        if (!updatedPayment) {
+          throw new Error(
+            'تم تعديل الدفعة ولكن لم يتم إرجاع السجل المحدث.',
+          )
+        }
+
+        /*
+         * تحديث الكاش والطالب مباشرة.
+         *
+         * هذا مهم إذا أدى تعديل الدفعة
+         * إلى تغيير الحالة من:
+         *
+         * مدفوع بالكامل → مدفوع جزئياً
+         *
+         * أو العكس.
+         */
+        const refreshedStudents =
+          await loadPayments(true)
+
+        const refreshedStudent =
+          refreshedStudents.find(
+            (student) =>
+              student.id ===
+              detailsStudent.id,
+          )
+
+        if (
+          refreshedStudent
+        ) {
+          setDetailsStudent(
+            refreshedStudent,
+          )
+        }
+
+        /*
+         * تحديث سجل الدفعات داخل النافذة.
+         */
+        await refreshPaymentHistory(
+          detailsStudent.id,
+          currentAcademicYearId,
+        )
+
+        setEditingPayment(null)
+
+        alert(
+          'تم تعديل الدفعة بنجاح.',
+        )
+      } catch (error) {
+        console.error(
+          'Failed to edit payment:',
+          error,
+        )
+
+        alert(
+          getErrorMessage(
+            error,
+            'تعذر تعديل الدفعة.',
+          ),
+        )
+      } finally {
+        setSavingEdit(false)
       }
     }
 
@@ -1450,9 +1660,10 @@ export function PaymentStudents() {
                       }
                       disabled={
                         loadingHistory ||
-                        savingPayment
+                        savingPayment ||
+                        savingEdit
                       }
-                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-muted"
+                      className="shrink-0 rounded-md p-2 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
                       aria-label="إغلاق"
                     >
                       <X className="size-5" />
@@ -1611,6 +1822,26 @@ export function PaymentStudents() {
                                       </p>
                                     </div>
                                   )}
+
+                                  <div className="sm:col-span-2 flex justify-end border-t pt-3">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        setEditingPayment(
+                                          payment,
+                                        )
+                                      }
+                                      disabled={
+                                        savingPayment ||
+                                        savingEdit
+                                      }
+                                    >
+                                      <Pencil className="ml-1 size-4" />
+                                      تعديل
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             ),
@@ -1619,7 +1850,188 @@ export function PaymentStudents() {
                       )}
                     </section>
 
+                    {editingPayment && (
+                      <section className="border-t pt-6">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-semibold">
+                              تعديل الدفعة
+                            </h3>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              سيتم تعديل نفس الدفعة ولن يتم إنشاء دفعة جديدة.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditingPayment(
+                                null,
+                              )
+                            }
+                            disabled={
+                              savingEdit
+                            }
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                            aria-label="إلغاء التعديل"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </div>
+
+                        <form
+                          onSubmit={
+                            handleEditPayment
+                          }
+                          className="space-y-4 rounded-lg border bg-muted/20 p-4"
+                        >
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium">
+                              المبلغ
+                            </label>
+
+                            <input
+                              name="editAmount"
+                              type="number"
+                              step="0.001"
+                              min="0.001"
+                              defaultValue={Number(
+                                editingPayment.amount,
+                              ).toFixed(3)}
+                              required
+                              disabled={
+                                savingEdit
+                              }
+                              className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium">
+                              طريقة الدفع
+                            </label>
+
+                            <select
+                              name="editPaymentMethod"
+                              defaultValue={
+                                editingPayment.payment_method
+                              }
+                              disabled={
+                                savingEdit
+                              }
+                              className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                            >
+                              <option value="نقدي">
+                                نقدي
+                              </option>
+
+                              <option value="تحويل">
+                                تحويل
+                              </option>
+
+                              <option value="بطاقة">
+                                بطاقة
+                              </option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium">
+                              تاريخ الدفع
+                            </label>
+
+                            <input
+                              name="editPaymentDate"
+                              type="date"
+                              defaultValue={
+                                editingPayment.payment_date
+                              }
+                              required
+                              disabled={
+                                savingEdit
+                              }
+                              className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium">
+                              رقم العملية
+                              <span className="mr-1 text-xs text-muted-foreground">
+                                اختياري
+                              </span>
+                            </label>
+
+                            <input
+                              name="editReferenceNumber"
+                              type="text"
+                              defaultValue={
+                                editingPayment.reference_number ??
+                                ''
+                              }
+                              disabled={
+                                savingEdit
+                              }
+                              className="h-10 w-full rounded-md border bg-background px-3 outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1.5 block text-sm font-medium">
+                              ملاحظات
+                              <span className="mr-1 text-xs text-muted-foreground">
+                                اختياري
+                              </span>
+                            </label>
+
+                            <textarea
+                              name="editNotes"
+                              rows={3}
+                              defaultValue={
+                                editingPayment.notes ??
+                                ''
+                              }
+                              disabled={
+                                savingEdit
+                              }
+                              className="w-full rounded-md border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+
+                          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                setEditingPayment(
+                                  null,
+                                )
+                              }
+                              disabled={
+                                savingEdit
+                              }
+                            >
+                              إلغاء
+                            </Button>
+
+                            <Button
+                              type="submit"
+                              disabled={
+                                savingEdit
+                              }
+                            >
+                              {savingEdit
+                                ? 'جاري حفظ التعديل...'
+                                : 'حفظ التعديل'}
+                            </Button>
+                          </div>
+                        </form>
+                      </section>
+                    )}
+
                     {!detailsStudent.feeExempt &&
+                      !editingPayment &&
                       Math.max(
                         detailsStudent.amountDue -
                           detailsStudent.amountPaid,
@@ -1774,7 +2186,8 @@ export function PaymentStudents() {
                       }
                       disabled={
                         loadingHistory ||
-                        savingPayment
+                        savingPayment ||
+                        savingEdit
                       }
                     >
                       إغلاق
