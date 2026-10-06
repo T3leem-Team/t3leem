@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react'
 import {
   AlertCircle,
+  Award,
   CalendarDays,
   Check,
   Clock3,
@@ -130,6 +131,35 @@ type StudentTrip = {
   course_name: string
   level_id: string | null
   level_name: string | null
+}
+
+type SavedCourseResult = {
+  course_id: string
+  course_name: string
+  percentage: number | null
+  numerator: number
+  denominator: number
+  registered: boolean
+  status: string
+}
+
+type SavedAwardResult = {
+  id: string
+  academic_year_id: string
+  student_id: string
+  status: 'eligible' | 'not_eligible'
+  annual_percentage: number | null
+  course_count: number
+  minimum_percentage: number
+  require_all_courses: boolean
+  from_date: string | null
+  to_date: string | null
+  course_results: SavedCourseResult[]
+}
+
+type AttendanceAwardResponse = {
+  showAttendanceAwardResult: boolean
+  attendanceAwardResult: SavedAwardResult | null
 }
 
 function getTodayString() {
@@ -362,24 +392,9 @@ function calculateCourseSummary(
 }
 
 export default function StudentStatusPage() {
-  /*
-   * يمنع تسجيل الزيارة أكثر من مرة أثناء نفس تحميل الصفحة.
-   */
   const visitRecordedRef = useRef(false)
-
-  /*
-   * يمنع تسجيل نفس عملية البحث أكثر من مرة.
-   *
-   * يتم تصفيره عند بداية بحث جديد.
-   */
   const realTrackingRecordedRef = useRef(false)
 
-  /*
-   * تسجيل زيارة الصفحة.
-   *
-   * لا يعتمد على نجاح البحث.
-   * مجرد فتح الصفحة = visit.
-   */
   useEffect(() => {
     if (visitRecordedRef.current) {
       return
@@ -427,6 +442,12 @@ export default function StudentStatusPage() {
   const [trackingStarted, setTrackingStarted] =
     useState(false)
 
+  const [showAttendanceAwardResult, setShowAttendanceAwardResult] =
+    useState(false)
+
+  const [attendanceAwardResult, setAttendanceAwardResult] =
+    useState<SavedAwardResult | null>(null)
+
   const [currentCourses, setCurrentCourses] =
     useState<CourseSummary[]>([])
 
@@ -445,28 +466,6 @@ export default function StudentStatusPage() {
   const [activePersonalId, setActivePersonalId] =
     useState('')
 
-  /*
-   * يسجل فتح المتابعة الحقيقي.
-   *
-   * مهم جدًا:
-   *
-   * لا ننتظر useEffect ولا مجموعة states.
-   *
-   * بمجرد أن يرجع RPC بنجاح ويؤكد:
-   *
-   *   registrationStatus === 'tracking'
-   *   trackingStarted === true
-   *   student موجود
-   *
-   * نعتبر أن المستخدم وصل فعلًا إلى المتابعة.
-   *
-   * لا يتم إرسال:
-   * - CPR
-   * - اسم الطالب
-   * - student id
-   *
-   * إلى Analytics.
-   */
   const recordRealTrackingOpen = () => {
     if (realTrackingRecordedRef.current) {
       return
@@ -485,23 +484,12 @@ export default function StudentStatusPage() {
           )
 
         if (analyticsError) {
-          /*
-           * Analytics ليس جزءًا من عملية المتابعة.
-           *
-           * لذلك فشل التسجيل لا يعطل الصفحة.
-           *
-           * ونسمح بمحاولة أخرى إذا حصل بحث جديد.
-           */
           console.error(
             'Real tracking open analytics error:',
             analyticsError,
           )
         }
       } catch (analyticsException) {
-        /*
-         * نفس الشيء:
-         * فشل Analytics لا يؤثر على المتابعة.
-         */
         console.error(
           'Real tracking open analytics exception:',
           analyticsException,
@@ -519,12 +507,6 @@ export default function StudentStatusPage() {
       return
     }
 
-    /*
-     * هذا بحث جديد.
-     *
-     * لذلك يمكن تسجيل real_tracking_open جديد
-     * إذا كان البحث التالي ناجحًا.
-     */
     realTrackingRecordedRef.current = false
 
     setLoading(true)
@@ -536,6 +518,9 @@ export default function StudentStatusPage() {
     setRegistrationStatus(null)
     setTrackingStarted(false)
 
+    setShowAttendanceAwardResult(false)
+    setAttendanceAwardResult(null)
+
     setCurrentCourses([])
     setPreviousCourses([])
     setSelectedCourse(null)
@@ -545,6 +530,11 @@ export default function StudentStatusPage() {
     setActivePersonalId('')
 
     try {
+      /*
+       * أولًا نستعمل RPC المتابعة الحالي كما هو.
+       *
+       * هذا يحافظ على كل منطق الصفحة الحالي.
+       */
       const {
         data,
         error: rpcError,
@@ -579,11 +569,6 @@ export default function StudentStatusPage() {
         payload.trackingStarted === true,
       )
 
-      /*
-       * طلب التسجيل ما زال قيد المراجعة.
-       *
-       * لا Analytics حقيقي هنا.
-       */
       if (status === 'under_review') {
         setSearched(true)
         return
@@ -610,27 +595,6 @@ export default function StudentStatusPage() {
       setLevel(levelData)
       setActivePersonalId(personalId)
 
-      /*
-       * =====================================================
-       * نقطة تسجيل REAL TRACKING OPEN
-       * =====================================================
-       *
-       * هنا لدينا كل المعلومات المطلوبة بالفعل:
-       *
-       * 1. البحث نجح.
-       * 2. الطالب موجود.
-       * 3. الحالة tracking.
-       * 4. trackingStarted = true.
-       *
-       * لا نحتاج انتظار:
-       * - setSearched
-       * - تحميل الدورات
-       * - حساب الحضور
-       * - تحميل الرحلات
-       * - أي useEffect آخر.
-       *
-       * وهذا هو سبب أن التسجيل أصبح موثوقًا.
-       */
       if (
         status === 'tracking' &&
         payload.trackingStarted === true
@@ -638,14 +602,6 @@ export default function StudentStatusPage() {
         recordRealTrackingOpen()
       }
 
-      /*
-       * إذا لم تبدأ المتابعة فعليًا:
-       *
-       * - accepted_waiting
-       * - أي حالة أخرى
-       *
-       * لا نسجل real_tracking_open.
-       */
       if (
         status !== 'tracking' ||
         payload.trackingStarted !== true
@@ -653,6 +609,63 @@ export default function StudentStatusPage() {
         setSearched(true)
         return
       }
+
+      /*
+       * =====================================================
+       * نتيجة التكريم
+       * =====================================================
+       *
+       * إذا كان خيار إظهار نتيجة التكريم مفعّلًا:
+       *
+       * - نستخدم RPC مستقل.
+       * - لا نحسب الحضور من جديد.
+       * - لا نحمل الرحلات.
+       * - لا نحسب الدورات الحالية/السابقة.
+       * - الصفحة ستعرض نتيجة التكريم فقط.
+       */
+      const {
+        data: awardData,
+        error: awardError,
+      } = await supabase.rpc(
+        'get_student_attendance_award_result_by_personal_id',
+        {
+          p_personal_id: personalId,
+        },
+      )
+
+      if (awardError) {
+        throw awardError
+      }
+
+      const awardPayload =
+        awardData as AttendanceAwardResponse | null
+
+      const awardEnabled =
+        awardPayload?.showAttendanceAwardResult === true
+
+      setShowAttendanceAwardResult(awardEnabled)
+
+      setAttendanceAwardResult(
+        awardPayload?.attendanceAwardResult ?? null,
+      )
+
+      /*
+       * إذا كان وضع التكريم مفعّلًا:
+       *
+       * نتوقف هنا بالكامل.
+       *
+       * لن يتم تحميل الرحلات أو حساب الحضور العادي.
+       */
+      if (awardEnabled) {
+        setSearched(true)
+        return
+      }
+
+      /*
+       * =====================================================
+       * المنطق الحالي للمتابعة
+       * =====================================================
+       */
 
       const courses = Array.isArray(
         payload.courses,
@@ -851,16 +864,23 @@ export default function StudentStatusPage() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-            <UserRound className="size-7" />
+            {showAttendanceAwardResult ? (
+              <Award className="size-7" />
+            ) : (
+              <UserRound className="size-7" />
+            )}
           </div>
 
           <h1 className="text-2xl font-bold">
-            متابعة الطالب
+            {showAttendanceAwardResult
+              ? 'نتيجة التكريم'
+              : 'متابعة الطالب'}
           </h1>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            أدخل الرقم الشخصي للطالب لعرض بياناته
-            ومتابعة الحضور والرحلات
+            {showAttendanceAwardResult
+              ? 'عرض نتيجة التكريم ونسب الحضور للدورات التي بُني عليها الاستحقاق'
+              : 'أدخل الرقم الشخصي للطالب لعرض بياناته ومتابعة الحضور والرحلات'}
           </p>
         </div>
 
@@ -928,12 +948,24 @@ export default function StudentStatusPage() {
 
         {searched &&
           !error &&
+          showAttendanceAwardResult && (
+            <div className="mt-5">
+              <AttendanceAwardResultCard
+                result={attendanceAwardResult}
+              />
+            </div>
+          )}
+
+        {searched &&
+          !error &&
+          !showAttendanceAwardResult &&
           registrationStatus === 'under_review' && (
             <UnderReviewCard />
           )}
 
         {searched &&
           !error &&
+          !showAttendanceAwardResult &&
           registrationStatus === 'accepted_waiting' &&
           student && (
             <div className="mt-5 space-y-5">
@@ -948,6 +980,7 @@ export default function StudentStatusPage() {
 
         {searched &&
           !error &&
+          !showAttendanceAwardResult &&
           registrationStatus === 'tracking' &&
           trackingStarted &&
           student && (
@@ -1103,13 +1136,263 @@ export default function StudentStatusPage() {
           )}
       </div>
 
-      {selectedCourse && (
-        <AttendanceDetailsModal
-          summary={selectedCourse}
-          onClose={() => setSelectedCourse(null)}
-        />
-      )}
+      {!showAttendanceAwardResult &&
+        selectedCourse && (
+          <AttendanceDetailsModal
+            summary={selectedCourse}
+            onClose={() => setSelectedCourse(null)}
+          />
+        )}
     </main>
+  )
+}
+
+function AttendanceAwardResultCard({
+  result,
+}: {
+  result: SavedAwardResult | null
+}) {
+  if (!result) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-amber-200 bg-background shadow-sm">
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-6">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <Award className="size-6" />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-amber-900">
+                نتيجة التكريم
+              </h2>
+
+              <p className="mt-1 text-sm text-amber-800">
+                لا توجد نتيجة تكريم محفوظة لهذا الطالب حاليًا.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-5">
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-4">
+            <p className="text-sm leading-6 text-muted-foreground">
+              يرجى مراجعة إدارة المدرسة.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const eligible =
+    result.status === 'eligible'
+
+  const courseResults =
+    Array.isArray(result.course_results)
+      ? result.course_results
+      : []
+
+  const finalPercentage =
+    result.annual_percentage ?? 0
+
+  return (
+    <div className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+      <div
+        className={`border-b px-5 py-7 ${
+          eligible
+            ? 'border-green-200 bg-green-50'
+            : 'border-red-200 bg-red-50'
+        }`}
+      >
+        <div className="flex flex-col items-center text-center">
+          <div
+            className={`mb-3 flex size-14 items-center justify-center rounded-2xl ${
+              eligible
+                ? 'bg-green-100 text-green-700'
+                : 'bg-red-100 text-red-700'
+            }`}
+          >
+            {eligible ? (
+              <Award className="size-8" />
+            ) : (
+              <X className="size-8" />
+            )}
+          </div>
+
+          <h2
+            className={`text-2xl font-bold ${
+              eligible
+                ? 'text-green-800'
+                : 'text-red-800'
+            }`}
+          >
+            {eligible
+              ? 'مستحق للتكريم'
+              : 'غير مستحق للتكريم'}
+          </h2>
+
+          <p className="mt-2 text-sm text-muted-foreground">
+            النتيجة مبنية على نسب الحضور في الدورات
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-5 p-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border bg-muted/20 p-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              النسبة النهائية
+            </p>
+
+            <p className="mt-2 text-3xl font-bold">
+              {finalPercentage}%
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              عدد الدورات
+            </p>
+
+            <p className="mt-2 text-3xl font-bold">
+              {result.course_count}
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-4 text-center">
+            <p className="text-xs text-muted-foreground">
+              الحد الأدنى
+            </p>
+
+            <p className="mt-2 text-3xl font-bold">
+              {result.minimum_percentage}%
+            </p>
+          </div>
+        </div>
+
+        {(result.from_date ||
+          result.to_date) && (
+          <div className="rounded-xl border bg-background p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">
+                فترة احتساب النتيجة
+              </span>
+
+              <span className="font-medium">
+                {result.from_date
+                  ? formatDate(result.from_date)
+                  : '—'}
+                {' — '}
+                {result.to_date
+                  ? formatDate(result.to_date)
+                  : '—'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="mb-3">
+            <h3 className="font-semibold">
+              الدورات ونسب الحضور
+            </h3>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              هذه هي النسب التي بُني عليها تحديد الاستحقاق.
+            </p>
+          </div>
+
+          {courseResults.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-center">
+              <p className="font-semibold text-amber-900">
+                لم يحضر الطالب أي دورة
+              </p>
+
+              <p className="mt-1 text-sm text-amber-800">
+                لذلك تم تحديد النتيجة على أنها غير مستحق
+                للتكريم.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {courseResults.map((course, index) => {
+                const percentage =
+                  course.percentage ?? 0
+
+                return (
+                  <div
+                    key={`${course.course_id}-${index}`}
+                    className="rounded-xl border bg-background p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-semibold">
+                          {course.course_name ||
+                            `الدورة ${index + 1}`}
+                        </p>
+
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>
+                            الحالة: {course.status || '—'}
+                          </span>
+
+                          <span>
+                            الحضور: {course.numerator}
+                          </span>
+
+                          <span>
+                            الأيام المحتسبة: {course.denominator}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${
+                          percentage >=
+                          result.minimum_percentage
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {percentage}%
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div
+          className={`rounded-2xl border p-5 text-center ${
+            eligible
+              ? 'border-green-200 bg-green-50'
+              : 'border-red-200 bg-red-50'
+          }`}
+        >
+          <p className="text-sm text-muted-foreground">
+            النتيجة النهائية
+          </p>
+
+          <p
+            className={`mt-2 text-xl font-bold ${
+              eligible
+                ? 'text-green-800'
+                : 'text-red-800'
+            }`}
+          >
+            {eligible
+              ? 'مستحق للتكريم'
+              : 'غير مستحق للتكريم'}
+          </p>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            النسبة النهائية: {finalPercentage}%
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
 
