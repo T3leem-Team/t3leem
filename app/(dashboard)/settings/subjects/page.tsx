@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
 import {
+  ArrowRight,
   Check,
   Edit3,
   Loader2,
@@ -25,6 +28,8 @@ type Subject = {
 }
 
 export default function Page() {
+  const router = useRouter()
+
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [newSubject, setNewSubject] = useState('')
 
@@ -320,6 +325,18 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      {/* زر العودة */}
+      <div className="flex justify-start">
+        <Button
+          type="button"
+          onClick={() => router.back()}
+          className="h-10 gap-2 bg-primary px-4 text-primary-foreground shadow-sm hover:bg-primary/90"
+        >
+          <ArrowRight className="size-4" />
+          عودة
+        </Button>
+      </div>
+
       <PageHeader
         title="المواد الدراسية"
         description="إضافة وتعديل وحذف المواد الدراسية"
