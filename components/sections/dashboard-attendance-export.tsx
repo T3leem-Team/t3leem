@@ -81,7 +81,6 @@ type Props = {
   assignments: Assignment[]
   teachers: Teacher[]
   students: Student[]
-  attendanceRecords: AttendanceRecord[]
   attendanceStatuses: AttendanceStatus[]
 }
 
@@ -336,7 +335,6 @@ export function DashboardAttendanceExport({
   assignments,
   teachers,
   students,
-  attendanceRecords,
   attendanceStatuses,
 }: Props) {
   const today = getLocalDateString()
@@ -572,21 +570,33 @@ export function DashboardAttendanceExport({
           }
         }
 
-       const exportedAttendanceRecords: AttendanceRecord[] = []
+        /*
+         * لا نعتمد على attendanceRecords
+         * المحملة في الصفحة.
+         *
+         * نسحب بيانات الحضور مباشرة من Supabase
+         * وقت إنشاء ملف Excel.
+         *
+         * يتم جلب البيانات على دفعات 1000 سجل
+         * لتجنب حدود الاستعلام.
+         */
+        const exportedAttendanceRecords:
+          AttendanceRecord[] = []
 
-          const pageSize = 1000
-          let page = 0
-          
-          while (true) {
-            const from = page * pageSize
-            const to = from + pageSize - 1
-          
-            const {
-              data: attendanceData,
-              error: attendanceError,
-            } = await supabase
-              .from('attendance')
-              .select(`
+        const pageSize = 1000
+        let page = 0
+
+        while (true) {
+          const from = page * pageSize
+          const to = from + pageSize - 1
+
+          const {
+            data: attendanceData,
+            error: attendanceError,
+          } = await supabase
+            .from('attendance')
+            .select(
+              `
                 id,
                 student_id,
                 enrollment_id,
@@ -594,61 +604,94 @@ export function DashboardAttendanceExport({
                 status_id,
                 note,
                 course_id
-              `)
-              .eq('course_id', course.id)
-              .in('student_id', studentIds)
-              .gte('attendance_date', safeFromDate)
-              .lte('attendance_date', safeToDate)
-              .range(from, to)
-              .order('attendance_date', {
+              `,
+            )
+            .eq(
+              'course_id',
+              course.id,
+            )
+            .in(
+              'student_id',
+              studentIds,
+            )
+            .gte(
+              'attendance_date',
+              safeFromDate,
+            )
+            .lte(
+              'attendance_date',
+              safeToDate,
+            )
+            .range(from, to)
+            .order(
+              'attendance_date',
+              {
                 ascending: true,
-              })
-          
-            if (attendanceError) {
-              console.error(
-                'Attendance export attendance query error:',
-                attendanceError,
-              )
-          
-              throw attendanceError
-            }
-          
-            const rows = attendanceData ?? []
-          
-            for (const item of rows) {
-              const recordDate =
-                normalizeAttendanceDate(
-                  String(item.attendance_date ?? ''),
-                )
-          
-              if (!lessonDates.includes(recordDate)) {
-                continue
-              }
-          
-              exportedAttendanceRecords.push({
-                id: String(item.id),
-                studentId: String(item.student_id),
-                enrollmentId: item.enrollment_id
-                  ? String(item.enrollment_id)
-                  : null,
-                attendanceDate: recordDate,
-                statusId: String(item.status_id),
-                note: item.note
-                  ? String(item.note)
-                  : null,
-                courseId: String(item.course_id),
-              })
-            }
-          
-            if (rows.length < pageSize) {
-              break
-            }
-          
-            page += 1
+              },
+            )
+
+          if (attendanceError) {
+            console.error(
+              'Attendance export attendance query error:',
+              attendanceError,
+            )
+
+            throw attendanceError
           }
 
-const relevantRecords =
-  exportedAttendanceRecords
+          const rows = attendanceData ?? []
+
+          for (const item of rows) {
+            const recordDate =
+              normalizeAttendanceDate(
+                String(
+                  item.attendance_date ?? '',
+                ),
+              )
+
+            if (
+              !lessonDates.includes(
+                recordDate,
+              )
+            ) {
+              continue
+            }
+
+            exportedAttendanceRecords.push({
+              id: String(item.id),
+              studentId: String(
+                item.student_id,
+              ),
+              enrollmentId:
+                item.enrollment_id
+                  ? String(
+                      item.enrollment_id,
+                    )
+                  : null,
+              attendanceDate:
+                recordDate,
+              statusId: String(
+                item.status_id,
+              ),
+              note: item.note
+                ? String(item.note)
+                : null,
+              courseId: String(
+                item.course_id,
+              ),
+            })
+          }
+
+          if (rows.length < pageSize) {
+            break
+          }
+
+          page += 1
+        }
+
+        const relevantRecords =
+          exportedAttendanceRecords
+
         const recordMap = new Map<
           string,
           AttendanceRecord
@@ -695,13 +738,13 @@ const relevantRecords =
           /*
            * التاريخ الرسمي لانضمام الطالب.
            *
-           * مثال:
+           * إذا كان:
            * join_date = 2026-10-05
            *
-           * 2026-10-04 وأقدم:
+           * الأيام قبل 2026-10-05:
            * غير منضم
            *
-           * 2026-10-05 وما بعده:
+           * من 2026-10-05:
            * يوجد سجل = حالة الحضور
            * لا يوجد سجل = لم يسجل
            */
@@ -730,16 +773,12 @@ const relevantRecords =
               recordMap.get(key)
 
             /*
-             * أولوية التاريخ مطلقة.
+             * أولوية تاريخ الانضمام مطلقة.
              *
              * إذا كانت الحصة قبل join_date:
-             * لا نستخدم سجل attendance إطلاقًا.
+             * النتيجة دائمًا غير منضم.
              *
-             * حتى لو كان في قاعدة البيانات:
-             * حاضر / غائب / متأخر / مستأذن
-             *
-             * النتيجة تكون دائمًا:
-             * غير منضم
+             * حتى لو كان هناك سجل في attendance.
              */
             const isBeforeEnrollment =
               Boolean(enrollmentDate) &&
@@ -775,7 +814,8 @@ const relevantRecords =
             detailsRows.push({
               المعلم: teacherName,
               الدورة: course.name,
-              'اسم الطالب': student.name,
+              'اسم الطالب':
+                student.name,
               'رقم الطالب':
                 student.studentId ?? '',
               'الرقم الشخصي':
@@ -786,11 +826,6 @@ const relevantRecords =
                   lessonDate,
                 ),
               الحالة: statusLabel,
-
-              /*
-               * لا نعرض ملاحظة الحضور
-               * في يوم كان الطالب فيه غير منضم.
-               */
               ملاحظة:
                 isBeforeEnrollment
                   ? ''
@@ -827,13 +862,16 @@ const relevantRecords =
           summaryRows.push({
             المعلم: teacherName,
             الدورة: course.name,
-            'اسم الطالب': student.name,
+            'اسم الطالب':
+              student.name,
             'رقم الطالب':
               student.studentId ?? '',
             'الرقم الشخصي':
               student.personalId ?? '',
-            'من تاريخ': safeFromDate,
-            'إلى تاريخ': safeToDate,
+            'من تاريخ':
+              safeFromDate,
+            'إلى تاريخ':
+              safeToDate,
             'عدد أيام الدراسة':
               lessonDates.length,
             حاضر: counts.present,
@@ -948,7 +986,6 @@ const relevantRecords =
       academicYear?.id,
       academicYear?.startDate,
       assignments,
-      attendanceRecords,
       attendanceStatuses,
       course,
       students,
