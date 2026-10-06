@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
 import {
+  ArrowRight,
   Check,
   Edit3,
   Plus,
@@ -52,6 +55,8 @@ const sortTeachers = (items: Teacher[]) =>
   )
 
 export default function Page() {
+  const router = useRouter()
+
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -398,6 +403,18 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      {/* العودة */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="المعلمون"
         description="إدارة بيانات المعلمين وحالاتهم"
@@ -870,4 +887,3 @@ export default function Page() {
     </div>
   )
 }
-
