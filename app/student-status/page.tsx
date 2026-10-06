@@ -583,8 +583,9 @@ export default function StudentStatusPage() {
   const handleSearch = async () => {
     /*
      * حماية إضافية:
-     * حتى لو تم استدعاء الدالة بطريقة غير متوقعة
      * لا نسمح بالبحث إذا الصفحة مقفلة.
+     *
+     * الحماية الأساسية موجودة كذلك داخل Supabase RPC.
      */
     if (pageEnabled !== true) {
       return
@@ -884,7 +885,10 @@ export default function StudentStatusPage() {
     tripId: string,
     response: TripResponse,
   ) => {
-    if (!activePersonalId || pageEnabled !== true) {
+    if (
+      !activePersonalId ||
+      pageEnabled !== true
+    ) {
       return
     }
 
@@ -1323,10 +1327,6 @@ function AttendanceAwardResultCard({
       ? result.course_results
       : []
 
-  /*
-   * إذا كانت النتيجة المحفوظة null، فهذا يعني عدم وجود
-   * حضور محتسب. في صفحة التكريم نعرضها 0%.
-   */
   const finalPercentage =
     result.annual_percentage ?? 0
 
@@ -1451,10 +1451,6 @@ function AttendanceAwardResultCard({
           ) : (
             <div className="space-y-3">
               {courseResults.map((course, index) => {
-                /*
-                 * غير معيّن للدورة + لا توجد نسبة محفوظة
-                 * = 0% حسب منطق التكريم.
-                 */
                 const percentage =
                   course.percentage ?? 0
 
