@@ -572,35 +572,83 @@ export function DashboardAttendanceExport({
           }
         }
 
-       const relevantRecords =
-          attendanceRecords.filter((record) => {
-            const recordStudentId =
-              normalizeId(
-                record.studentId,
-              )
-        
-            const recordCourseId =
-              normalizeId(
-                record.courseId,
-              )
-        
-            const recordDate =
-              normalizeAttendanceDate(
-                record.attendanceDate,
-              )
-        
-            return (
-              recordCourseId ===
-                normalizeId(course.id) &&
-              studentIds.includes(
-                recordStudentId,
-              ) &&
-              recordDate >= safeFromDate &&
-              recordDate <= safeToDate &&
-              lessonDates.includes(recordDate)
-            )
-          })
+       const exportedAttendanceRecords: AttendanceRecord[] = []
 
+          const pageSize = 1000
+          let page = 0
+          
+          while (true) {
+            const from = page * pageSize
+            const to = from + pageSize - 1
+          
+            const {
+              data: attendanceData,
+              error: attendanceError,
+            } = await supabase
+              .from('attendance')
+              .select(`
+                id,
+                student_id,
+                enrollment_id,
+                attendance_date,
+                status_id,
+                note,
+                course_id
+              `)
+              .eq('course_id', course.id)
+              .in('student_id', studentIds)
+              .gte('attendance_date', safeFromDate)
+              .lte('attendance_date', safeToDate)
+              .range(from, to)
+              .order('attendance_date', {
+                ascending: true,
+              })
+          
+            if (attendanceError) {
+              console.error(
+                'Attendance export attendance query error:',
+                attendanceError,
+              )
+          
+              throw attendanceError
+            }
+          
+            const rows = attendanceData ?? []
+          
+            for (const item of rows) {
+              const recordDate =
+                normalizeAttendanceDate(
+                  String(item.attendance_date ?? ''),
+                )
+          
+              if (!lessonDates.includes(recordDate)) {
+                continue
+              }
+          
+              exportedAttendanceRecords.push({
+                id: String(item.id),
+                studentId: String(item.student_id),
+                enrollmentId: item.enrollment_id
+                  ? String(item.enrollment_id)
+                  : null,
+                attendanceDate: recordDate,
+                statusId: String(item.status_id),
+                note: item.note
+                  ? String(item.note)
+                  : null,
+                courseId: String(item.course_id),
+              })
+            }
+          
+            if (rows.length < pageSize) {
+              break
+            }
+          
+            page += 1
+          }
+
+const relevantRecords =
+  exportedAttendanceRecords
         const recordMap = new Map<
           string,
           AttendanceRecord
