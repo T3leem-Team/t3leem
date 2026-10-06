@@ -261,13 +261,11 @@ export function DashboardViewPanels({
   const [notesFromDate, setNotesFromDate] =
     useState(
       selectedCourse?.startDate ??
-        getLocalDateString(),
+        selectedDate,
     )
 
   const [notesToDate, setNotesToDate] =
-    useState(
-      getLocalDateString(),
-    )
+    useState(selectedDate)
 
   const statusMap = useMemo(
     () =>
@@ -284,9 +282,6 @@ export function DashboardViewPanels({
     [attendanceStatuses],
   )
 
-  const todayDate =
-    getLocalDateString()
-
   const attendanceNotes =
     useMemo<AttendanceNote[]>(
       () => {
@@ -295,7 +290,15 @@ export function DashboardViewPanels({
             selectedCourseId,
           )
 
-        if (!courseId) {
+        const date =
+          normalizeAttendanceDate(
+            selectedDate,
+          )
+
+        if (
+          !courseId ||
+          !date
+        ) {
           return []
         }
 
@@ -312,7 +315,7 @@ export function DashboardViewPanels({
             if (
               normalizeAttendanceDate(
                 record.attendanceDate,
-              ) !== todayDate
+              ) !== date
             ) {
               return false
             }
@@ -413,9 +416,9 @@ export function DashboardViewPanels({
         attendanceRecords,
         assignments,
         selectedCourseId,
+        selectedDate,
         statusMap,
         teachers,
-        todayDate,
       ],
     )
 
@@ -776,6 +779,11 @@ export function DashboardViewPanels({
       return
     }
 
+    const selectedPageDate =
+      normalizeAttendanceDate(
+        selectedDate,
+      )
+
     const fromDate =
       normalizeAttendanceDate(
         selectedCourse.startDate,
@@ -785,12 +793,12 @@ export function DashboardViewPanels({
           allCourseNotes.length - 1
         ]?.attendanceDate,
       ) ||
-      todayDate
+      selectedPageDate
 
     downloadNotes(
       allCourseNotes,
       fromDate,
-      todayDate,
+      selectedPageDate,
     )
   }
 
@@ -864,7 +872,7 @@ export function DashboardViewPanels({
               </CardTitle>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                ملاحظات المعلمين المسجلة اليوم
+                ملاحظات المعلمين المسجلة في التاريخ المحدد
               </p>
             </div>
 
@@ -912,7 +920,7 @@ export function DashboardViewPanels({
                         <Download className="size-4 shrink-0 text-sky-600" />
 
                         <span>
-                          من بداية الدورة حتى الآن
+                          من بداية الدورة حتى التاريخ المحدد
                         </span>
                       </button>
 
@@ -921,11 +929,11 @@ export function DashboardViewPanels({
                         onClick={() => {
                           setNotesFromDate(
                             selectedCourse?.startDate ??
-                              getLocalDateString(),
+                              selectedDate,
                           )
 
                           setNotesToDate(
-                            getLocalDateString(),
+                            selectedDate,
                           )
 
                           setCustomDownloadOpen(
@@ -976,7 +984,7 @@ export function DashboardViewPanels({
                             }
                             max={
                               notesToDate ||
-                              getLocalDateString()
+                              selectedDate
                             }
                             onChange={(
                               event,
@@ -1005,7 +1013,7 @@ export function DashboardViewPanels({
                               notesFromDate
                             }
                             max={
-                              getLocalDateString()
+                              selectedDate
                             }
                             onChange={(
                               event,
@@ -1053,7 +1061,7 @@ export function DashboardViewPanels({
 
             <p className="text-sm font-medium">
               {formatDate(
-                todayDate,
+                selectedDate,
               )}
             </p>
           </div>
@@ -1065,7 +1073,7 @@ export function DashboardViewPanels({
                 <ClipboardCheck className="mx-auto size-7 text-slate-300" />
 
                 <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا توجد ملاحظات اليوم
+                  لا توجد ملاحظات في هذا التاريخ
                 </p>
 
                 <p className="mt-1 text-xs text-muted-foreground">
