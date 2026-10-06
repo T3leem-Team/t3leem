@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
+  ArrowRight,
   Award,
   Loader2,
   Save,
@@ -24,6 +26,8 @@ type Settings = {
 }
 
 export default function StudentStatusSettingsPage() {
+  const router = useRouter()
+
   const [settings, setSettings] = useState<Settings | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -288,6 +292,18 @@ export default function StudentStatusSettingsPage() {
 
   return (
     <div dir="rtl" className="space-y-6 p-6">
+      {/* Back Button */}
+      <div className="flex justify-start">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
+        >
+          <ArrowRight className="size-4" />
+          عودة
+        </button>
+      </div>
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">
