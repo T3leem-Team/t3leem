@@ -89,10 +89,36 @@ type RegistrationStatus =
   | 'tracking'
   | null
 
+type SavedCourseResult = {
+  course_id: string
+  course_name: string
+  percentage: number | null
+  numerator: number
+  denominator: number
+  registered: boolean
+  status: string
+}
+
+type SavedAwardResult = {
+  id: string
+  academic_year_id: string
+  student_id: string
+  status: 'eligible' | 'not_eligible'
+  annual_percentage: number | null
+  course_count: number
+  minimum_percentage: number
+  require_all_courses: boolean
+  from_date: string | null
+  to_date: string | null
+  course_results: SavedCourseResult[]
+}
+
 type StudentStatusResponse = {
   student: Student | null
   registrationStatus: RegistrationStatus
   trackingStarted: boolean
+  showAttendanceAwardResult?: boolean
+  attendanceAwardResult?: SavedAwardResult | null
   request?: {
     id: string
     request_number: string | null
@@ -131,35 +157,6 @@ type StudentTrip = {
   course_name: string
   level_id: string | null
   level_name: string | null
-}
-
-type SavedCourseResult = {
-  course_id: string
-  course_name: string
-  percentage: number | null
-  numerator: number
-  denominator: number
-  registered: boolean
-  status: string
-}
-
-type SavedAwardResult = {
-  id: string
-  academic_year_id: string
-  student_id: string
-  status: 'eligible' | 'not_eligible'
-  annual_percentage: number | null
-  course_count: number
-  minimum_percentage: number
-  require_all_courses: boolean
-  from_date: string | null
-  to_date: string | null
-  course_results: SavedCourseResult[]
-}
-
-type AttendanceAwardResponse = {
-  showAttendanceAwardResult: boolean
-  attendanceAwardResult: SavedAwardResult | null
 }
 
 function getTodayString() {
@@ -531,9 +528,9 @@ export default function StudentStatusPage() {
 
     try {
       /*
-       * أولًا نستعمل RPC المتابعة الحالي كما هو.
-       *
-       * هذا يحافظ على كل منطق الصفحة الحالي.
+       * =====================================================
+       * جلب بيانات الطالب
+       * =====================================================
        */
       const {
         data,
@@ -559,6 +556,51 @@ export default function StudentStatusPage() {
         setSearched(true)
         return
       }
+
+      /*
+       * =====================================================
+       * نتيجة التكريم
+       * =====================================================
+       *
+       * نقرأها من نفس RPC الرئيسي.
+       *
+       * مهم:
+       * لا ننتظر trackingStarted هنا.
+       *
+       * لأن الطالب قد يكون مسجلًا في السنة ولكنه غير
+       * معين لمعلم، ومع ذلك لديه نتيجة تكريم محفوظة.
+       */
+      const awardEnabled =
+        payload.showAttendanceAwardResult === true
+
+      setShowAttendanceAwardResult(awardEnabled)
+
+      setAttendanceAwardResult(
+        payload.attendanceAwardResult ?? null,
+      )
+
+      /*
+       * إذا كان وضع التكريم مفعّلًا، نتوقف هنا.
+       *
+       * لا نحتاج:
+       * - trackingStarted
+       * - تعيين الطالب لمعلم
+       * - الرحلات
+       * - الدورات العادية
+       * - حساب الحضور من جديد
+       *
+       * نعرض فقط الـsnapshot المحفوظ.
+       */
+      if (awardEnabled) {
+        setSearched(true)
+        return
+      }
+
+      /*
+       * =====================================================
+       * المنطق العادي للمتابعة
+       * =====================================================
+       */
 
       const status =
         payload.registrationStatus ?? null
@@ -609,63 +651,6 @@ export default function StudentStatusPage() {
         setSearched(true)
         return
       }
-
-      /*
-       * =====================================================
-       * نتيجة التكريم
-       * =====================================================
-       *
-       * إذا كان خيار إظهار نتيجة التكريم مفعّلًا:
-       *
-       * - نستخدم RPC مستقل.
-       * - لا نحسب الحضور من جديد.
-       * - لا نحمل الرحلات.
-       * - لا نحسب الدورات الحالية/السابقة.
-       * - الصفحة ستعرض نتيجة التكريم فقط.
-       */
-      const {
-        data: awardData,
-        error: awardError,
-      } = await supabase.rpc(
-        'get_student_attendance_award_result_by_personal_id',
-        {
-          p_personal_id: personalId,
-        },
-      )
-
-      if (awardError) {
-        throw awardError
-      }
-
-      const awardPayload =
-        awardData as AttendanceAwardResponse | null
-
-      const awardEnabled =
-        awardPayload?.showAttendanceAwardResult === true
-
-      setShowAttendanceAwardResult(awardEnabled)
-
-      setAttendanceAwardResult(
-        awardPayload?.attendanceAwardResult ?? null,
-      )
-
-      /*
-       * إذا كان وضع التكريم مفعّلًا:
-       *
-       * نتوقف هنا بالكامل.
-       *
-       * لن يتم تحميل الرحلات أو حساب الحضور العادي.
-       */
-      if (awardEnabled) {
-        setSearched(true)
-        return
-      }
-
-      /*
-       * =====================================================
-       * المنطق الحالي للمتابعة
-       * =====================================================
-       */
 
       const courses = Array.isArray(
         payload.courses,
@@ -1192,6 +1177,10 @@ function AttendanceAwardResultCard({
       ? result.course_results
       : []
 
+  /*
+   * إذا كانت النتيجة المحفوظة null، فهذا يعني عدم وجود
+   * حضور محتسب. في صفحة التكريم نعرضها 0%.
+   */
   const finalPercentage =
     result.annual_percentage ?? 0
 
@@ -1255,7 +1244,7 @@ function AttendanceAwardResultCard({
             </p>
 
             <p className="mt-2 text-3xl font-bold">
-              {result.course_count}
+              {courseResults.length}
             </p>
           </div>
 
@@ -1316,6 +1305,10 @@ function AttendanceAwardResultCard({
           ) : (
             <div className="space-y-3">
               {courseResults.map((course, index) => {
+                /*
+                 * غير معيّن للدورة + لا توجد نسبة محفوظة
+                 * = 0% حسب منطق التكريم.
+                 */
                 const percentage =
                   course.percentage ?? 0
 
@@ -1333,7 +1326,11 @@ function AttendanceAwardResultCard({
 
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           <span>
-                            الحالة: {course.status || '—'}
+                            الحالة:{' '}
+                            {course.status ||
+                              (course.registered
+                                ? 'لديه حضور'
+                                : 'غير حاضر')}
                           </span>
 
                           <span>
@@ -1341,7 +1338,8 @@ function AttendanceAwardResultCard({
                           </span>
 
                           <span>
-                            الأيام المحتسبة: {course.denominator}
+                            الأيام المحتسبة:{' '}
+                            {course.denominator}
                           </span>
                         </div>
                       </div>
