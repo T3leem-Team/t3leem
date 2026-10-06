@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import {
   Archive,
+  ArrowRight,
   Award,
   Download,
   Power,
@@ -23,6 +24,17 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
+      </div>
+
       <PageHeader
         title="الإجراءات الإدارية الخاصة"
         description="اختر الإجراء الإداري الذي تريد تنفيذه."
