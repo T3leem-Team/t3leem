@@ -657,7 +657,7 @@ export default function Page() {
       />
 
       {/* زر العودة */}
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <Button
           type="button"
           onClick={() => router.back()}
