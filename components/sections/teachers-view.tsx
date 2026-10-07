@@ -6,15 +6,14 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowLeft,
   ArrowLeftRight,
-  ArrowRight,
   History,
   Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-react'
-
 import { supabase } from '@/lib/supabase'
 
 import {
@@ -2083,7 +2082,7 @@ export function TeachersView() {
                 title="العودة"
                 className="text-primary hover:bg-primary/10 hover:text-primary"
                 >
-                  <ArrowRight className="size-5 stroke-[2.5]" />
+                  <ArrowLeft className="size-5 stroke-[2.5]" />
               </Button>
               </div>
 
