@@ -404,7 +404,7 @@ export default function Page() {
   return (
     <div className="space-y-6">
       {/* العودة */}
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <button
           type="button"
           onClick={() => router.back()}
@@ -853,7 +853,7 @@ export default function Page() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-start gap-2 pt-2">
                 <Button
                   type="button"
                   variant="outline"
