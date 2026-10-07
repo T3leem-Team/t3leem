@@ -176,7 +176,7 @@ export default function TrustedDevicesPage() {
   return (
     <div className="space-y-6">
       {/* العودة */}
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <button
           type="button"
           onClick={() => router.back()}
@@ -192,7 +192,7 @@ export default function TrustedDevicesPage() {
         description="مراجعة الأجهزة الجديدة والموافقة عليها أو رفضها قبل السماح لها بالدخول إلى النظام."
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <button
           type="button"
           onClick={loadDevices}
