@@ -5,12 +5,20 @@ import {
   useMemo,
   useState,
 } from 'react'
+
 import {
   Search,
   X,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 
 type Student = {
   id: string
@@ -71,12 +79,12 @@ type Props = {
   courses: Course[]
   teachers: Teacher[]
   attendanceRecords: AttendanceRecord[]
-  attendanceStatusMap: Map<string, string>
+  statusMap: Map<string, string>
   selectedCourseId: string
   selectedDate: string
   lessonDateStatus: string
-  onSelectStudent: (
-    result: StudentSearchResult,
+  setSelectedStudent: (
+    result: StudentSearchResult | null,
   ) => void
 }
 
@@ -163,11 +171,11 @@ export function DashboardStudentSearch({
   courses,
   teachers,
   attendanceRecords,
-  attendanceStatusMap,
+  statusMap,
   selectedCourseId,
   selectedDate,
   lessonDateStatus,
-  onSelectStudent,
+  setSelectedStudent,
 }: Props) {
   const [
     studentSearch,
@@ -249,6 +257,38 @@ export function DashboardStudentSearch({
       [enrollments],
     )
 
+  const getLevelName = (
+    studentId: string,
+  ) => {
+    const enrollment =
+      enrollments.find(
+        (item) =>
+          normalizeId(
+            item.studentId,
+          ) ===
+            normalizeId(
+              studentId,
+            ) &&
+          item.status === 'نشط',
+      )
+
+    if (!enrollment?.levelId) {
+      return null
+    }
+
+    return (
+      levels.find(
+        (level) =>
+          normalizeId(
+            level.id,
+          ) ===
+          normalizeId(
+            enrollment.levelId,
+          ),
+      )?.name ?? null
+    )
+  }
+
   const searchResults =
     useMemo<StudentSearchResult[]>(
       () => {
@@ -257,9 +297,7 @@ export function DashboardStudentSearch({
             studentSearch,
           )
 
-        if (
-          rawQuery.length < 2
-        ) {
+        if (rawQuery.length < 2) {
           return []
         }
 
@@ -438,7 +476,7 @@ export function DashboardStudentSearch({
 
               if (record) {
                 const rawStatus =
-                  attendanceStatusMap.get(
+                  statusMap.get(
                     normalizeId(
                       record.statusId,
                     ),
@@ -468,93 +506,12 @@ export function DashboardStudentSearch({
         courses,
         teachers,
         attendanceRecords,
-        attendanceStatusMap,
+        statusMap,
         selectedCourseId,
         selectedDate,
         lessonDateStatus,
       ],
     )
-
-  const searchType =
-    useMemo<
-      'name' | 'personal' | 'phone'
-    >(() => {
-      const query =
-        normalizeText(
-          studentSearch,
-        )
-
-      if (!query) {
-        return 'name'
-      }
-
-      const numericQuery =
-        normalizeNumber(query)
-
-      if (
-        /^[0-9]+$/.test(
-          numericQuery,
-        )
-      ) {
-        const hasPersonalId =
-          students.some(
-            (student) =>
-              enrolledStudentIds.has(
-                normalizeId(
-                  student.id,
-                ),
-              ) &&
-              normalizeNumber(
-                student.personalId,
-              ).includes(
-                numericQuery,
-              ),
-          )
-
-        return hasPersonalId
-          ? 'personal'
-          : 'phone'
-      }
-
-      return 'name'
-    }, [
-      studentSearch,
-      students,
-      enrolledStudentIds,
-    ])
-
-  const getLevelName = (
-    studentId: string,
-  ) => {
-    const enrollment =
-      enrollments.find(
-        (item) =>
-          normalizeId(
-            item.studentId,
-          ) ===
-            normalizeId(
-              studentId,
-            ) &&
-          item.status ===
-            'نشط',
-      )
-
-    if (!enrollment?.levelId) {
-      return null
-    }
-
-    return (
-      levels.find(
-        (level) =>
-          normalizeId(
-            level.id,
-          ) ===
-          normalizeId(
-            enrollment.levelId,
-          ),
-      )?.name ?? null
-    )
-  }
 
   return (
     <Card>
@@ -610,10 +567,6 @@ export function DashboardStudentSearch({
                         result.student.id,
                       )
 
-                    const phone =
-                      result.student.phone ||
-                      result.student.whatsapp
-
                     return (
                       <button
                         key={
@@ -622,7 +575,7 @@ export function DashboardStudentSearch({
                         }
                         type="button"
                         onClick={() =>
-                          onSelectStudent(
+                          setSelectedStudent(
                             result,
                           )
                         }
@@ -637,29 +590,9 @@ export function DashboardStudentSearch({
                         </p>
 
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {searchType ===
-                          'personal' ? (
-                            <>
-                              الرقم الشخصي:{' '}
-                              {result
-                                .student
-                                .personalId ||
-                                '—'}
-                            </>
-                          ) : searchType ===
-                            'phone' ? (
-                            <>
-                              رقم الهاتف:{' '}
-                              {phone ||
-                                '—'}
-                            </>
-                          ) : (
-                            <>
-                              المستوى:{' '}
-                              {levelName ||
-                                '—'}
-                            </>
-                          )}
+                          المستوى:{' '}
+                          {levelName ||
+                            '—'}
                         </p>
                       </button>
                     )
