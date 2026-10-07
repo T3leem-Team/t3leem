@@ -24,7 +24,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <button
           type="button"
           onClick={() => router.back()}
