@@ -69,7 +69,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <button
           type="button"
           onClick={() => router.back()}
@@ -85,7 +85,7 @@ export default function Page() {
         description="استعراض السنوات الدراسية المؤرشفة وبياناتها للقراءة والمراجعة."
       />
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-start gap-2">
         <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           <Archive className="h-4 w-4" />
           قراءة فقط
