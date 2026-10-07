@@ -30,11 +30,11 @@ import {
 
 import {
   AttendanceView,
-  AttendanceStatus,
-  AttendanceRecord,
-  AttendanceNotes,
-  Student,
-} from '@/components/sections/attendance-view'
+  type AttendanceStatus,
+  type AttendanceRecord,
+  type AttendanceNotes,
+  type Student,
+} from '@/components/sections/teacher-attendance'
 
 import {
   TeachersViewPreviousCourses,
