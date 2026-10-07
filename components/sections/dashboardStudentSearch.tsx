@@ -1,18 +1,18 @@
 'use client'
 
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react'
-
 import {
   Search,
   X,
 } from 'lucide-react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
 
-export type StudentSearchStudent = {
+type Student = {
   id: string
   studentId: string | null
   name: string
@@ -22,7 +22,7 @@ export type StudentSearchStudent = {
   status: string | null
 }
 
-export type StudentSearchEnrollment = {
+type Enrollment = {
   id: string
   studentId: string
   academicYearId: string
@@ -30,24 +30,24 @@ export type StudentSearchEnrollment = {
   status: string
 }
 
-export type StudentSearchAssignment = {
+type Assignment = {
   id: string
   courseId: string
   teacherId: string
   studentId: string
 }
 
-export type StudentSearchCourse = {
+type Course = {
   id: string
   name: string
 }
 
-export type StudentSearchTeacher = {
+type Teacher = {
   id: string
   name: string
 }
 
-export type StudentSearchAttendanceRecord = {
+type AttendanceRecord = {
   id: string
   studentId: string
   enrollmentId: string | null
@@ -58,32 +58,25 @@ export type StudentSearchAttendanceRecord = {
 }
 
 export type StudentSearchResult = {
-  student: StudentSearchStudent
+  student: Student
   courseNames: string[]
   teacherNames: string[]
   attendanceStatus: string | null
-  levelName: string | null
-}
-
-type Level = {
-  id: string
-  name: string
 }
 
 type Props = {
-  students: StudentSearchStudent[]
-  enrollments: StudentSearchEnrollment[]
-  assignments: StudentSearchAssignment[]
-  courses: StudentSearchCourse[]
-  teachers: StudentSearchTeacher[]
-  attendanceRecords: StudentSearchAttendanceRecord[]
+  students: Student[]
+  enrollments: Enrollment[]
+  assignments: Assignment[]
+  courses: Course[]
+  teachers: Teacher[]
+  attendanceRecords: AttendanceRecord[]
   attendanceStatusMap: Map<string, string>
   selectedCourseId: string
   selectedDate: string
   lessonDateStatus: string
-  levels: Level[]
   onSelectStudent: (
-    student: StudentSearchResult,
+    result: StudentSearchResult,
   ) => void
 }
 
@@ -95,13 +88,22 @@ function normalizeText(
     .replace(/\s+/g, ' ')
 }
 
+function normalizeId(
+  value: string | null | undefined,
+) {
+  return String(value ?? '').trim()
+}
+
 function normalizeArabicText(
   value: string | null | undefined,
 ) {
   return normalizeText(value)
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(
+      /[\u064B-\u065F\u0670\u06D6-\u06ED]/g,
+      '',
+    )
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ؤ/g, 'و')
@@ -109,52 +111,49 @@ function normalizeArabicText(
     .replace(/ـ/g, '')
 }
 
-function normalizeId(
+function normalizeNumber(
   value: string | null | undefined,
 ) {
-  return String(value ?? '').trim()
-}
-
-function normalizeAttendanceDate(
-  value: string | null | undefined,
-) {
-  return String(value ?? '').slice(0, 10)
+  return String(value ?? '')
+    .replace(/\s+/g, '')
+    .replace(/[-()]/g, '')
+    .trim()
 }
 
 function getAttendanceStatusLabel(
-  name: string,
+  value: string,
 ) {
-  const value = normalizeText(name)
+  const status = normalizeText(value)
 
   if (
-    value === 'حاضر' ||
-    value === 'حضور'
+    status === 'حاضر' ||
+    status === 'حضور'
   ) {
     return 'حاضر'
   }
 
   if (
-    value === 'غائب' ||
-    value === 'غياب'
+    status === 'غائب' ||
+    status === 'غياب'
   ) {
     return 'غائب'
   }
 
   if (
-    value === 'متأخر' ||
-    value === 'متأخر عن الحضور'
+    status === 'متأخر' ||
+    status === 'متأخر عن الحضور'
   ) {
     return 'متأخر'
   }
 
   if (
-    value === 'مستأذن' ||
-    value === 'مستأذن بعذر'
+    status === 'مستأذن' ||
+    status === 'مستأذن بعذر'
   ) {
     return 'مستأذن'
   }
 
-  return value || null
+  return status || null
 }
 
 export function DashboardStudentSearch({
@@ -168,13 +167,87 @@ export function DashboardStudentSearch({
   selectedCourseId,
   selectedDate,
   lessonDateStatus,
-  levels,
   onSelectStudent,
 }: Props) {
   const [
     studentSearch,
     setStudentSearch,
   ] = useState('')
+
+  const [
+    levels,
+    setLevels,
+  ] = useState<
+    { id: string; name: string }[]
+  >([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadLevels = async () => {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from('levels')
+        .select('id, name')
+        .order('name', {
+          ascending: true,
+        })
+
+      if (error) {
+        console.error(
+          'Dashboard levels load error:',
+          error,
+        )
+        return
+      }
+
+      if (cancelled) {
+        return
+      }
+
+      setLevels(
+        (data ?? []).map(
+          (level) => ({
+            id: normalizeId(
+              level.id,
+            ),
+            name: String(
+              level.name ?? '',
+            ),
+          }),
+        ),
+      )
+    }
+
+    void loadLevels()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const enrolledStudentIds =
+    useMemo(
+      () =>
+        new Set(
+          enrollments
+            .filter(
+              (enrollment) =>
+                enrollment.status ===
+                'نشط',
+            )
+            .map(
+              (enrollment) =>
+                normalizeId(
+                  enrollment.studentId,
+                ),
+            )
+            .filter(Boolean),
+        ),
+      [enrollments],
+    )
 
   const searchResults =
     useMemo<StudentSearchResult[]>(
@@ -184,128 +257,129 @@ export function DashboardStudentSearch({
             studentSearch,
           )
 
-        const query =
+        if (
+          rawQuery.length < 2
+        ) {
+          return []
+        }
+
+        const normalizedQuery =
           normalizeArabicText(
             rawQuery,
           )
 
-        if (query.length < 2) {
-          return []
-        }
+        const numericQuery =
+          normalizeNumber(
+            rawQuery,
+          )
 
-        const matchedStudents =
+        const isNumericSearch =
+          /^[0-9]+$/.test(
+            numericQuery,
+          )
+
+        const enrolledStudents =
           students.filter(
-            (student) => {
-              const name =
+            (student) =>
+              enrolledStudentIds.has(
+                normalizeId(
+                  student.id,
+                ),
+              ),
+          )
+
+        let matchedStudents =
+          enrolledStudents
+
+        if (isNumericSearch) {
+          const personalMatches =
+            enrolledStudents.filter(
+              (student) =>
+                normalizeNumber(
+                  student.personalId,
+                ).includes(
+                  numericQuery,
+                ),
+            )
+
+          if (
+            personalMatches.length > 0
+          ) {
+            matchedStudents =
+              personalMatches
+          } else {
+            matchedStudents =
+              enrolledStudents.filter(
+                (student) =>
+                  normalizeNumber(
+                    student.phone,
+                  ).includes(
+                    numericQuery,
+                  ) ||
+                  normalizeNumber(
+                    student.whatsapp,
+                  ).includes(
+                    numericQuery,
+                  ) ||
+                  normalizeNumber(
+                    student.studentId,
+                  ).includes(
+                    numericQuery,
+                  ),
+              )
+          }
+        } else {
+          matchedStudents =
+            enrolledStudents.filter(
+              (student) =>
                 normalizeArabicText(
                   student.name,
-                )
-
-              const personalId =
-                normalizeText(
-                  student.personalId,
-                ).toLowerCase()
-
-              const studentId =
-                normalizeText(
-                  student.studentId,
-                ).toLowerCase()
-
-              const phone =
-                normalizeText(
-                  student.phone,
-                ).toLowerCase()
-
-              const whatsapp =
-                normalizeText(
-                  student.whatsapp,
-                ).toLowerCase()
-
-              return (
-                name.includes(query) ||
-                personalId.includes(
-                  query,
-                ) ||
-                studentId.includes(
-                  query,
-                ) ||
-                phone.includes(query) ||
-                whatsapp.includes(query)
-              )
-            },
-          )
+                ).includes(
+                  normalizedQuery,
+                ),
+            )
+        }
 
         return matchedStudents
           .slice(0, 8)
           .map((student) => {
-            const normalizedStudentId =
+            const studentId =
               normalizeId(
                 student.id,
               )
-
-            const enrollment =
-              enrollments.find(
-                (item) =>
-                  normalizeId(
-                    item.studentId,
-                  ) ===
-                    normalizedStudentId &&
-                  item.status ===
-                    'نشط',
-              )
-
-            const levelName =
-              enrollment?.levelId
-                ? levels.find(
-                    (level) =>
-                      normalizeId(
-                        level.id,
-                      ) ===
-                      normalizeId(
-                        enrollment.levelId,
-                      ),
-                  )?.name ?? null
-                : null
 
             const studentAssignments =
               assignments.filter(
                 (assignment) =>
                   normalizeId(
                     assignment.studentId,
-                  ) ===
-                  normalizedStudentId,
-              )
-
-            const studentCourseIds =
-              Array.from(
-                new Set(
-                  studentAssignments.map(
-                    (assignment) =>
-                      normalizeId(
-                        assignment.courseId,
-                      ),
-                  ),
-                ),
+                  ) === studentId,
               )
 
             const courseNames =
-              studentCourseIds
-                .map(
-                  (courseId) =>
-                    courses.find(
-                      (course) =>
-                        normalizeId(
-                          course.id,
-                        ) ===
-                        courseId,
-                    )?.name,
-                )
-                .filter(
-                  (
-                    name,
-                  ): name is string =>
-                    Boolean(name),
-                )
+              Array.from(
+                new Set(
+                  studentAssignments
+                    .map(
+                      (assignment) =>
+                        courses.find(
+                          (course) =>
+                            normalizeId(
+                              course.id,
+                            ) ===
+                            normalizeId(
+                              assignment.courseId,
+                            ),
+                        )?.name,
+                    )
+                    .filter(
+                      (
+                        name,
+                      ): name is string =>
+                        Boolean(name),
+                    ),
+                ),
+              )
 
             const teacherNames =
               Array.from(
@@ -347,20 +421,19 @@ export function DashboardStudentSearch({
                   (item) =>
                     normalizeId(
                       item.studentId,
-                    ) ===
-                      normalizedStudentId &&
+                    ) === studentId &&
                     normalizeId(
                       item.courseId,
                     ) ===
                       normalizeId(
                         selectedCourseId,
                       ) &&
-                    normalizeAttendanceDate(
+                    String(
                       item.attendanceDate,
-                    ) ===
-                      normalizeAttendanceDate(
+                    ).slice(0, 10) ===
+                      String(
                         selectedDate,
-                      ),
+                      ).slice(0, 10),
                 )
 
               if (record) {
@@ -383,7 +456,6 @@ export function DashboardStudentSearch({
               courseNames,
               teacherNames,
               attendanceStatus,
-              levelName,
             }
           })
       },
@@ -391,6 +463,7 @@ export function DashboardStudentSearch({
         studentSearch,
         students,
         enrollments,
+        enrolledStudentIds,
         assignments,
         courses,
         teachers,
@@ -399,59 +472,89 @@ export function DashboardStudentSearch({
         selectedCourseId,
         selectedDate,
         lessonDateStatus,
-        levels,
       ],
     )
 
   const searchType =
-    useMemo(() => {
+    useMemo<
+      'name' | 'personal' | 'phone'
+    >(() => {
       const query =
         normalizeText(
           studentSearch,
-        ).toLowerCase()
+        )
 
       if (!query) {
         return 'name'
       }
 
-      const personalMatch =
-        students.some(
-          (student) =>
-            normalizeText(
-              student.personalId,
-            )
-              .toLowerCase()
-              .includes(query),
+      const numericQuery =
+        normalizeNumber(query)
+
+      if (
+        /^[0-9]+$/.test(
+          numericQuery,
         )
+      ) {
+        const hasPersonalId =
+          students.some(
+            (student) =>
+              enrolledStudentIds.has(
+                normalizeId(
+                  student.id,
+                ),
+              ) &&
+              normalizeNumber(
+                student.personalId,
+              ).includes(
+                numericQuery,
+              ),
+          )
 
-      if (personalMatch) {
-        return 'personal'
-      }
-
-      const phoneMatch =
-        students.some(
-          (student) =>
-            normalizeText(
-              student.phone,
-            )
-              .toLowerCase()
-              .includes(query) ||
-            normalizeText(
-              student.whatsapp,
-            )
-              .toLowerCase()
-              .includes(query),
-        )
-
-      if (phoneMatch) {
-        return 'phone'
+        return hasPersonalId
+          ? 'personal'
+          : 'phone'
       }
 
       return 'name'
     }, [
       studentSearch,
       students,
+      enrolledStudentIds,
     ])
+
+  const getLevelName = (
+    studentId: string,
+  ) => {
+    const enrollment =
+      enrollments.find(
+        (item) =>
+          normalizeId(
+            item.studentId,
+          ) ===
+            normalizeId(
+              studentId,
+            ) &&
+          item.status ===
+            'نشط',
+      )
+
+    if (!enrollment?.levelId) {
+      return null
+    }
+
+    return (
+      levels.find(
+        (level) =>
+          normalizeId(
+            level.id,
+          ) ===
+          normalizeId(
+            enrollment.levelId,
+          ),
+      )?.name ?? null
+    )
+  }
 
   return (
     <Card>
@@ -502,24 +605,20 @@ export function DashboardStudentSearch({
               <div className="divide-y">
                 {searchResults.map(
                   (result) => {
-                    const student =
-                      result.student
-
-                    const personalId =
-                      normalizeText(
-                        student.personalId,
+                    const levelName =
+                      getLevelName(
+                        result.student.id,
                       )
 
                     const phone =
-                      normalizeText(
-                        student.phone ||
-                          student.whatsapp,
-                      )
+                      result.student.phone ||
+                      result.student.whatsapp
 
                     return (
                       <button
                         key={
-                          student.id
+                          result.student
+                            .id
                         }
                         type="button"
                         onClick={() =>
@@ -529,45 +628,39 @@ export function DashboardStudentSearch({
                         }
                         className="w-full px-4 py-3 text-right transition-colors hover:bg-muted/40"
                       >
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            {
-                              student.name
-                            }
-                          </p>
+                        <p className="truncate font-medium">
+                          {
+                            result
+                              .student
+                              .name
+                          }
+                        </p>
 
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {searchType ===
-                            'personal' &&
-                            personalId && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                الرقم الشخصي:{' '}
-                                {
-                                  personalId
-                                }
-                              </p>
-                            )}
-
-                          {searchType ===
-                            'phone' &&
-                            phone && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                رقم الهاتف:{' '}
-                                {
-                                  phone
-                                }
-                              </p>
-                            )}
-
-                          {searchType ===
-                            'name' &&
-                            result.levelName && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {
-                                  result.levelName
-                                }
-                              </p>
-                            )}
-                        </div>
+                          'personal' ? (
+                            <>
+                              الرقم الشخصي:{' '}
+                              {result
+                                .student
+                                .personalId ||
+                                '—'}
+                            </>
+                          ) : searchType ===
+                            'phone' ? (
+                            <>
+                              رقم الهاتف:{' '}
+                              {phone ||
+                                '—'}
+                            </>
+                          ) : (
+                            <>
+                              المستوى:{' '}
+                              {levelName ||
+                                '—'}
+                            </>
+                          )}
+                        </p>
                       </button>
                     )
                   },
