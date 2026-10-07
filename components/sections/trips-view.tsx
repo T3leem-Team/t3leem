@@ -278,74 +278,75 @@ export function TripsView() {
     })
   }
 
- function handleCloseForm() {
-  setFormOpen(false)
-  setEditingTrip(null)
-}
+  function handleCloseForm() {
+    setFormOpen(false)
+    setEditingTrip(null)
+  }
 
-const publishedCount = trips.filter(
-  (trip) => trip.status === 'published'
-).length
+  const publishedCount = trips.filter(
+    (trip) => trip.status === 'published'
+  ).length
 
-const pendingCount = trips.filter(
-  (trip) => trip.status === 'pending_approval'
-).length
+  const pendingCount = trips.filter(
+    (trip) => trip.status === 'pending_approval'
+  ).length
 
-const closedCount = trips.filter(
-  (trip) => trip.status === 'closed'
-).length
+  const closedCount = trips.filter(
+    (trip) => trip.status === 'closed'
+  ).length
 
-return (
-  <div
-    dir="rtl"
-    className="space-y-6"
-  >
-    {/* رأس الصفحة */}
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          الرحلات
-        </h1>
+  return (
+    <div
+      dir="rtl"
+      className="space-y-6"
+    >
+      {/* رأس الصفحة */}
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            الرحلات
+          </h1>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          إدارة الرحلات والأنشطة ومتابعة حالة نشرها.
-        </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            إدارة الرحلات والأنشطة ومتابعة حالة نشرها.
+          </p>
+        </div>
+
+        {/* الأزرار */}
+        <div className="flex w-full items-center justify-between gap-3">
+          {/* تحديث - يسار */}
+          <button
+            type="button"
+            onClick={() =>
+              loadTrips({
+                silent: true,
+                force: true,
+              })
+            }
+            disabled={refreshing}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:bg-slate-900/70"
+          >
+            {refreshing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4" />
+            )}
+
+            تحديث
+          </button>
+
+          {/* إضافة رحلة - يمين */}
+          <button
+            type="button"
+            onClick={handleCreateTrip}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 text-sm font-medium text-sky-700 transition hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/50"
+          >
+            <CirclePlus className="size-4" />
+            إضافة رحلة
+          </button>
+        </div>
       </div>
 
-      <div className="flex w-full items-center justify-between gap-2 lg:w-auto">
-        {/* زر التحديث - يسار */}
-        <button
-          type="button"
-          onClick={() =>
-            loadTrips({
-              silent: true,
-              force: true,
-            })
-          }
-          disabled={refreshing}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {refreshing ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-
-          تحديث
-        </button>
-
-        {/* زر الإضافة - يمين */}
-        <button
-          type="button"
-          onClick={handleCreateTrip}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-        >
-          <CirclePlus className="size-4" />
-          إضافة رحلة
-        </button>
-      </div>
-    </div>
-    
       {/* الإحصائيات */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border bg-card p-4">
@@ -512,7 +513,7 @@ return (
               <button
                 type="button"
                 onClick={handleCreateTrip}
-                className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+                className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 text-sm font-medium text-sky-700 transition hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/50"
               >
                 <CirclePlus className="size-4" />
                 إضافة أول رحلة
