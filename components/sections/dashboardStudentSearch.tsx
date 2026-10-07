@@ -83,8 +83,8 @@ type Props = {
   selectedCourseId: string
   selectedDate: string
   lessonDateStatus: string
-  setSelectedStudent: (
-    result: StudentSearchResult | null,
+  onSelectStudent: (
+    result: StudentSearchResult,
   ) => void
 }
 
@@ -175,7 +175,7 @@ export function DashboardStudentSearch({
   selectedCourseId,
   selectedDate,
   lessonDateStatus,
-  setSelectedStudent,
+  onSelectStudent,
 }: Props) {
   const [
     studentSearch,
@@ -256,38 +256,6 @@ export function DashboardStudentSearch({
         ),
       [enrollments],
     )
-
-  const getLevelName = (
-    studentId: string,
-  ) => {
-    const enrollment =
-      enrollments.find(
-        (item) =>
-          normalizeId(
-            item.studentId,
-          ) ===
-            normalizeId(
-              studentId,
-            ) &&
-          item.status === 'نشط',
-      )
-
-    if (!enrollment?.levelId) {
-      return null
-    }
-
-    return (
-      levels.find(
-        (level) =>
-          normalizeId(
-            level.id,
-          ) ===
-          normalizeId(
-            enrollment.levelId,
-          ),
-      )?.name ?? null
-    )
-  }
 
   const searchResults =
     useMemo<StudentSearchResult[]>(
@@ -513,6 +481,45 @@ export function DashboardStudentSearch({
       ],
     )
 
+  const getLevelName = (
+    studentId: string,
+  ) => {
+    const enrollment =
+      enrollments.find(
+        (item) =>
+          normalizeId(
+            item.studentId,
+          ) ===
+            normalizeId(
+              studentId,
+            ) &&
+          item.status === 'نشط',
+      )
+
+    if (!enrollment?.levelId) {
+      return null
+    }
+
+    return (
+      levels.find(
+        (level) =>
+          normalizeId(
+            level.id,
+          ) ===
+          normalizeId(
+            enrollment.levelId,
+          ),
+      )?.name ?? null
+    )
+  }
+
+  const handleSelectStudent = (
+    result: StudentSearchResult,
+  ) => {
+    onSelectStudent(result)
+    setStudentSearch('')
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -575,7 +582,7 @@ export function DashboardStudentSearch({
                         }
                         type="button"
                         onClick={() =>
-                          setSelectedStudent(
+                          handleSelectStudent(
                             result,
                           )
                         }
