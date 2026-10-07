@@ -12,12 +12,10 @@ import {
   ClipboardCheck,
   Clock3,
   RefreshCw,
-  Search,
   UserCheck,
   UserX,
   Users,
   BookOpen,
-  X,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -42,6 +40,11 @@ import {
 import { DashboardAttendanceExport } from '@/components/sections/dashboard-attendance-export'
 
 import { DashboardViewPanels } from '@/components/sections/dashboard-view-panels'
+
+import {
+  DashboardStudentSearch,
+  type StudentSearchResult,
+} from '@/components/sections/dashboardStudentSearch'
 
 type AcademicYear = {
   id: string
@@ -120,13 +123,6 @@ type DashboardStats = {
   lateCount: number
   excusedCount: number
   recordedCount: number
-}
-
-type StudentSearchResult = {
-  student: Student
-  courseNames: string[]
-  teacherNames: string[]
-  attendanceStatus: string | null
 }
 
 type LessonDateStatus =
@@ -290,28 +286,6 @@ function isExcusedStatus(name: string) {
     value === 'مستأذن' ||
     value === 'مستأذن بعذر'
   )
-}
-
-function getAttendanceStatusLabel(
-  name: string,
-) {
-  if (isPresentStatus(name)) {
-    return 'حاضر'
-  }
-
-  if (isAbsentStatus(name)) {
-    return 'غائب'
-  }
-
-  if (isLateStatus(name)) {
-    return 'متأخر'
-  }
-
-  if (isExcusedStatus(name)) {
-    return 'مستأذن'
-  }
-
-  return normalizeText(name) || null
 }
 
 function getCourseDays(
@@ -500,11 +474,6 @@ export function DashboardView() {
     attendanceDetailsOpen,
     setAttendanceDetailsOpen,
   ] = useState(false)
-
-  const [
-    studentSearch,
-    setStudentSearch,
-  ] = useState('')
 
   const [
     selectedStudent,
@@ -2049,196 +2018,6 @@ export function DashboardView() {
       [stats],
     )
 
-  const searchResults =
-    useMemo<StudentSearchResult[]>(
-      () => {
-        const query =
-          normalizeText(
-            studentSearch,
-          ).toLowerCase()
-
-        if (
-          query.length < 2
-        ) {
-          return []
-        }
-
-        const enrolledStudents =
-          students.filter(
-            (student) => {
-              const values = [
-                student.name,
-                student.studentId ??
-                  '',
-                student.personalId ??
-                  '',
-                student.phone ??
-                  '',
-                student.whatsapp ??
-                  '',
-              ].map((value) =>
-                normalizeText(
-                  value,
-                ).toLowerCase(),
-              )
-
-              return values.some(
-                (value) =>
-                  value.includes(
-                    query,
-                  ),
-              )
-            },
-          )
-
-        return enrolledStudents
-          .slice(0, 8)
-          .map((student) => {
-            const studentCourseIds =
-              Array.from(
-                new Set(
-                  assignments
-                    .filter(
-                      (assignment) =>
-                        normalizeId(
-                          assignment.studentId,
-                        ) ===
-                        normalizeId(
-                          student.id,
-                        ),
-                    )
-                    .map(
-                      (assignment) =>
-                        normalizeId(
-                          assignment.courseId,
-                        ),
-                    ),
-                ),
-              )
-
-            const courseNames =
-              studentCourseIds
-                .map(
-                  (courseId) =>
-                    courses.find(
-                      (course) =>
-                        normalizeId(
-                          course.id,
-                        ) ===
-                        courseId,
-                    )?.name,
-                )
-                .filter(
-                  (
-                    name,
-                  ): name is string =>
-                    Boolean(name),
-                )
-
-            const teacherNames =
-              Array.from(
-                new Set(
-                  assignments
-                    .filter(
-                      (assignment) =>
-                        normalizeId(
-                          assignment.studentId,
-                        ) ===
-                        normalizeId(
-                          student.id,
-                        ),
-                    )
-                    .map(
-                      (assignment) =>
-                        teachers.find(
-                          (teacher) =>
-                            normalizeId(
-                              teacher.id,
-                            ) ===
-                            normalizeId(
-                              assignment.teacherId,
-                            ),
-                        )?.name,
-                    )
-                    .filter(
-                      (
-                        name,
-                      ): name is string =>
-                        Boolean(name),
-                    ),
-                ),
-              )
-
-            let attendanceStatus:
-              | string
-              | null = null
-
-            if (
-              selectedCourseId &&
-              selectedDate &&
-              lessonDateStatus ===
-                'lesson'
-            ) {
-              const record =
-                attendanceRecords.find(
-                  (item) =>
-                    normalizeId(
-                      item.studentId,
-                    ) ===
-                      normalizeId(
-                        student.id,
-                      ) &&
-                    normalizeId(
-                      item.courseId,
-                    ) ===
-                      normalizeId(
-                        selectedCourseId,
-                      ) &&
-                    normalizeAttendanceDate(
-                      item.attendanceDate,
-                    ) ===
-                      normalizeAttendanceDate(
-                        selectedDate,
-                      ),
-                )
-
-              if (record) {
-                const rawStatus =
-                  statusMap.get(
-                    normalizeId(
-                      record.statusId,
-                    ),
-                  ) ?? ''
-
-                attendanceStatus =
-                  getAttendanceStatusLabel(
-                    rawStatus,
-                  )
-              }
-            }
-
-            return {
-              student,
-              courseNames,
-              teacherNames,
-              attendanceStatus,
-            }
-          })
-      },
-      [
-        studentSearch,
-        students,
-        assignments,
-        courses,
-        teachers,
-        attendanceRecords,
-        selectedCourseId,
-        selectedDate,
-        statusMap,
-        lessonDateStatus,
-      ],
-    )
-
   if (checkingAccess || loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -2256,8 +2035,6 @@ export function DashboardView() {
         dir="rtl"
         className="space-y-6"
       >
-      
-
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -2297,123 +2074,29 @@ export function DashboardView() {
           </Button>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Search className="size-5 text-slate-500" />
-              البحث السريع عن طالب
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-              <input
-                value={studentSearch}
-                onChange={(event) =>
-                  setStudentSearch(
-                    event.target.value,
-                  )
-                }
-                placeholder="ابحث بالاسم أو الرقم الشخصي أو رقم الطالب..."
-                className="h-11 w-full rounded-lg border bg-background px-10 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
-              />
-
-              {studentSearch && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setStudentSearch('')
-                  }
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
-            </div>
-
-            {studentSearch.trim().length >=
-              2 && (
-              <div className="mt-3 overflow-hidden rounded-lg border">
-                {searchResults.length ===
-                0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                    لا يوجد طالب مطابق للبحث
-                  </div>
-                ) : (
-                  <div className="divide-y">
-                    {searchResults.map(
-                      (result) => (
-                        <button
-                          key={
-                            result.student
-                              .id
-                          }
-                          type="button"
-                          onClick={() =>
-                            setSelectedStudent(
-                              result,
-                            )
-                          }
-                          className="w-full px-4 py-3 text-right transition-colors hover:bg-muted/40"
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="min-w-0">
-                              <p className="truncate font-medium">
-                                {
-                                  result
-                                    .student
-                                    .name
-                                }
-                              </p>
-
-                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                {result
-                                  .student
-                                  .studentId && (
-                                  <span>
-                                    رقم الطالب:{' '}
-                                    {
-                                      result
-                                        .student
-                                        .studentId
-                                    }
-                                  </span>
-                                )}
-
-                                {result
-                                  .student
-                                  .personalId && (
-                                  <span>
-                                    الرقم الشخصي:{' '}
-                                    {
-                                      result
-                                        .student
-                                        .personalId
-                                    }
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {result.attendanceStatus && (
-                              <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
-                                {
-                                  result.attendanceStatus
-                                }
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <DashboardStudentSearch
+          students={students}
+          enrollments={enrollments}
+          assignments={assignments}
+          courses={courses}
+          teachers={teachers}
+          attendanceRecords={
+            attendanceRecords
+          }
+          attendanceStatusMap={
+            statusMap
+          }
+          selectedCourseId={
+            selectedCourseId
+          }
+          selectedDate={selectedDate}
+          lessonDateStatus={
+            lessonDateStatus
+          }
+          onSelectStudent={
+            setSelectedStudent
+          }
+        />
 
         <Card>
           <CardContent className="p-5">
