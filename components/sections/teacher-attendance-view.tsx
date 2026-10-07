@@ -54,48 +54,31 @@ type TeacherAttendanceViewProps = {
   attendanceStatuses: AttendanceStatus[]
   attendanceNotes: AttendanceNotes
 
-  attendancePercentages: Record<
-    string,
-    number
-  >
+  attendancePercentages: Record<string, number>
 
   statusMessage: string
 
   searchTerm: string
-  setSearchTerm: Dispatch<
-    SetStateAction<string>
-  >
+  setSearchTerm: Dispatch<SetStateAction<string>>
 
   showUnrecordedOnly: boolean
-  setShowUnrecordedOnly: Dispatch<
-    SetStateAction<boolean>
-  >
+  setShowUnrecordedOnly: Dispatch<SetStateAction<boolean>>
 
   showBulkStatusMenu: boolean
-  setShowBulkStatusMenu: Dispatch<
-    SetStateAction<boolean>
-  >
+  setShowBulkStatusMenu: Dispatch<SetStateAction<boolean>>
 
   isBulkSaving: boolean
   savingKey: string | null
   savingNoteKey: string | null
 
   editingStatusKey: string | null
-  setEditingStatusKey: Dispatch<
-    SetStateAction<string | null>
-  >
+  setEditingStatusKey: Dispatch<SetStateAction<string | null>>
 
-  setAttendanceNotes: Dispatch<
-    SetStateAction<AttendanceNotes>
-  >
+  setAttendanceNotes: Dispatch<SetStateAction<AttendanceNotes>>
 
-  setSelectedAttendanceDate: Dispatch<
-    SetStateAction<string | null>
-  >
+  setSelectedAttendanceDate: Dispatch<SetStateAction<string | null>>
 
-  setStatusMessage: Dispatch<
-    SetStateAction<string>
-  >
+  setStatusMessage: Dispatch<SetStateAction<string>>
 
   saveAttendance: (
     student: Student,
@@ -129,10 +112,7 @@ type TeacherAttendanceViewProps = {
   ) => AttendanceStatusName | null
 
   studentCardRefs: RefObject<
-    Record<
-      string,
-      HTMLDivElement | null
-    >
+    Record<string, HTMLDivElement | null>
   >
 }
 
@@ -174,7 +154,7 @@ export function TeacherAttendanceView({
   return (
     <div
       dir="rtl"
-      className="flex h-full min-h-0 flex-col overflow-hidden"
+      className="flex h-full min-h-0 flex-col"
     >
       {/* الرأس ثابت */}
       <div className="shrink-0 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -192,8 +172,7 @@ export function TeacherAttendanceView({
           type="date"
           value={activeDate}
           onChange={(event) => {
-            const nextDate =
-              event.target.value
+            const nextDate = event.target.value
 
             setSelectedAttendanceDate(
               nextDate || null,
@@ -221,8 +200,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      {dateState ===
-        'before-course' && (
+      {dateState === 'before-course' && (
         <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
             الدورة لم تبدأ بعد
@@ -230,9 +208,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-2 text-sm text-muted-foreground">
             التاريخ المحدد:{' '}
-            {formatDateForDisplay(
-              activeDate,
-            )}
+            {formatDateForDisplay(activeDate)}
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
@@ -244,8 +220,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      {dateState ===
-        'after-course' && (
+      {dateState === 'after-course' && (
         <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
             انتهت الدورة
@@ -253,9 +228,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-2 text-sm text-muted-foreground">
             التاريخ المحدد:{' '}
-            {formatDateForDisplay(
-              activeDate,
-            )}
+            {formatDateForDisplay(activeDate)}
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
@@ -267,8 +240,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      {dateState ===
-        'no-lesson' && (
+      {dateState === 'no-lesson' && (
         <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
             لا يوجد درس في هذا اليوم
@@ -276,9 +248,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-2 text-sm text-muted-foreground">
             التاريخ المحدد:{' '}
-            {formatDateForDisplay(
-              activeDate,
-            )}
+            {formatDateForDisplay(activeDate)}
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
@@ -287,8 +257,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      {dateState ===
-        'cancelled' && (
+      {dateState === 'cancelled' && (
         <div className="mt-4 shrink-0 rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-950/20">
           <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">
             اليوم أو الحصة ملغاة
@@ -296,9 +265,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-2 text-sm text-red-600 dark:text-red-400">
             التاريخ المحدد:{' '}
-            {formatDateForDisplay(
-              activeDate,
-            )}
+            {formatDateForDisplay(activeDate)}
           </p>
 
           <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
@@ -307,8 +274,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      {dateState ===
-        'future-lesson' && (
+      {dateState === 'future-lesson' && (
         <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
           <h3 className="text-lg font-semibold">
             الدرس لم يبدأ بعد
@@ -316,9 +282,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-2 text-sm text-muted-foreground">
             التاريخ المحدد:{' '}
-            {formatDateForDisplay(
-              activeDate,
-            )}
+            {formatDateForDisplay(activeDate)}
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
@@ -357,13 +321,8 @@ export function TeacherAttendanceView({
                       {!attendanceSummary.allRecorded && (
                         <div className="mt-0.5 text-xs opacity-80">
                           المسجل:{' '}
-                          {
-                            attendanceSummary.recorded
-                          }{' '}
-                          من{' '}
-                          {
-                            attendanceSummary.total
-                          }
+                          {attendanceSummary.recorded} من{' '}
+                          {attendanceSummary.total}
                         </div>
                       )}
                     </div>
@@ -373,12 +332,8 @@ export function TeacherAttendanceView({
                     <button
                       type="button"
                       onClick={() => {
-                        setShowUnrecordedOnly(
-                          true,
-                        )
-                        setShowBulkStatusMenu(
-                          false,
-                        )
+                        setShowUnrecordedOnly(true)
+                        setShowBulkStatusMenu(false)
                       }}
                       className="shrink-0 rounded-lg border border-red-300 bg-background px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                     >
@@ -394,9 +349,7 @@ export function TeacherAttendanceView({
                     type="text"
                     value={searchTerm}
                     onChange={(event) =>
-                      setSearchTerm(
-                        event.target.value,
-                      )
+                      setSearchTerm(event.target.value)
                     }
                     placeholder="بحث عن طالب..."
                     className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -409,13 +362,11 @@ export function TeacherAttendanceView({
                           type="button"
                           disabled={
                             isBulkSaving ||
-                            assignedStudents.length ===
-                              0
+                            assignedStudents.length === 0
                           }
                           onClick={() =>
                             setShowBulkStatusMenu(
-                              (current) =>
-                                !current,
+                              (current) => !current,
                             )
                           }
                           className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -433,9 +384,7 @@ export function TeacherAttendanceView({
 
                             <div className="space-y-1">
                               {attendanceStatusNames.map(
-                                (
-                                  statusName,
-                                ) => {
+                                (statusName) => {
                                   const styles =
                                     getStatusClasses(
                                       statusName,
@@ -443,13 +392,9 @@ export function TeacherAttendanceView({
 
                                   return (
                                     <button
-                                      key={
-                                        statusName
-                                      }
+                                      key={statusName}
                                       type="button"
-                                      disabled={
-                                        isBulkSaving
-                                      }
+                                      disabled={isBulkSaving}
                                       onClick={() =>
                                         void saveAllAttendance(
                                           statusName,
@@ -457,9 +402,7 @@ export function TeacherAttendanceView({
                                       }
                                       className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
                                     >
-                                      {
-                                        statusName
-                                      }
+                                      {statusName}
                                     </button>
                                   )
                                 },
@@ -474,20 +417,13 @@ export function TeacherAttendanceView({
                           <button
                             type="button"
                             onClick={() => {
-                              setShowUnrecordedOnly(
-                                true,
-                              )
-                              setShowBulkStatusMenu(
-                                false,
-                              )
+                              setShowUnrecordedOnly(true)
+                              setShowBulkStatusMenu(false)
                             }}
                             className="h-10 rounded-lg border border-red-300 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
                           >
                             إكمال غير المسجلين (
-                            {
-                              attendanceSummary.unrecorded
-                            }
-                            )
+                            {attendanceSummary.unrecorded})
                           </button>
                         )}
 
@@ -495,9 +431,7 @@ export function TeacherAttendanceView({
                         <button
                           type="button"
                           onClick={() =>
-                            setShowUnrecordedOnly(
-                              false,
-                            )
+                            setShowUnrecordedOnly(false)
                           }
                           className="h-10 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted"
                         >
@@ -520,15 +454,9 @@ export function TeacherAttendanceView({
                   className={`rounded-lg border px-4 py-3 text-sm ${
                     statusMessage.startsWith('✓')
                       ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
-                      : statusMessage.includes(
-                            'تعذر',
-                          ) ||
-                          statusMessage.includes(
-                            'ملغي',
-                          ) ||
-                          statusMessage.includes(
-                            'لا يمكن',
-                          )
+                      : statusMessage.includes('تعذر') ||
+                          statusMessage.includes('ملغي') ||
+                          statusMessage.includes('لا يمكن')
                         ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
                         : 'border-border bg-muted/40'
                   }`}
@@ -539,9 +467,8 @@ export function TeacherAttendanceView({
             </div>
 
             {/* القائمة فقط هي التي تعمل لها Scroll */}
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pl-1 pr-1">
-              {displayedStudents.length ===
-              0 ? (
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-4 pl-1 pr-1 touch-pan-y">
+              {displayedStudents.length === 0 ? (
                 <div
                   className={`rounded-xl border border-dashed p-10 text-center text-sm ${
                     showUnrecordedOnly
@@ -554,294 +481,42 @@ export function TeacherAttendanceView({
                     : 'لا يوجد طلبة.'}
                 </div>
               ) : (
-                displayedStudents.map(
-                  (student) => {
-                    const key = `${activeDate}:${student.id}`
+                displayedStudents.map((student) => {
+                  const key = `${activeDate}:${student.id}`
 
-                    const record =
-                      getRecordForStudent(
-                        student.id,
-                        activeDate,
-                      )
+                  const record =
+                    getRecordForStudent(
+                      student.id,
+                      activeDate,
+                    )
 
-                    const status =
-                      getStudentStatus(
-                        student.id,
-                        activeDate,
-                      )
+                  const status =
+                    getStudentStatus(
+                      student.id,
+                      activeDate,
+                    )
 
-                    const note =
-                      attendanceNotes[key] ??
-                      record?.note ??
-                      ''
+                  const note =
+                    attendanceNotes[key] ??
+                    record?.note ??
+                    ''
 
-                    const percentage =
-                      attendancePercentages[
-                        student.id
-                      ] ?? 0
+                  const percentage =
+                    attendancePercentages[student.id] ?? 0
 
-                    const saving =
-                      savingKey === key ||
-                      isBulkSaving
+                  const saving =
+                    savingKey === key ||
+                    isBulkSaving
 
-                    const savingNote =
-                      savingNoteKey === key
+                  const savingNote =
+                    savingNoteKey === key
 
-                    const editing =
-                      editingStatusKey ===
-                      key
+                  const editing =
+                    editingStatusKey === key
 
-                    if (
-                      status ===
-                      'غير منضم'
-                    ) {
-                      const selectedStyles =
-                        getStatusClasses(
-                          status,
-                        )
-
-                      return (
-                        <div
-                          key={student.id}
-                          ref={(element) => {
-                            studentCardRefs.current[
-                              student.id
-                            ] = element
-                          }}
-                          className={`rounded-xl border bg-card px-4 py-4 transition-all ${
-                            saving
-                              ? 'opacity-70'
-                              : ''
-                          }`}
-                        >
-                          <div className="space-y-4">
-                            <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
-                              <div className="min-w-0 xl:flex-1">
-                                <div className="font-semibold">
-                                  {
-                                    student.name
-                                  }
-                                </div>
-
-                                {student.levelName && (
-                                  <div className="mt-0.5 text-xs text-muted-foreground">
-                                    {
-                                      student.levelName
-                                    }
-                                  </div>
-                                )}
-                              </div>
-
-                              <button
-                                type="button"
-                                disabled
-                                className={`h-10 shrink-0 cursor-not-allowed rounded-lg border px-5 text-sm font-medium opacity-90 ${selectedStyles.selected}`}
-                              >
-                                غير منضم
-                              </button>
-
-                              <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
-                                <span className="text-sm font-bold text-muted-foreground">
-                                  —
-                                </span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                                ملاحظات المعلم
-                              </label>
-
-                              <textarea
-                                value={note}
-                                onChange={(
-                                  event,
-                                ) =>
-                                  setAttendanceNotes(
-                                    (
-                                      current,
-                                    ) => ({
-                                      ...current,
-                                      [key]:
-                                        event
-                                          .target
-                                          .value,
-                                    }),
-                                  )
-                                }
-                                onBlur={(
-                                  event,
-                                ) =>
-                                  void saveNote(
-                                    student,
-                                    activeDate,
-                                    event.target
-                                      .value,
-                                  )
-                                }
-                                placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
-                                rows={3}
-                                className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                              />
-
-                              <div className="mt-1 flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">
-                                  اضغط خارج الخانة لحفظ الملاحظة
-                                </span>
-
-                                {savingNote && (
-                                  <span className="text-xs text-muted-foreground">
-                                    جارٍ الحفظ...
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    if (
-                      !status ||
-                      editing
-                    ) {
-                      return (
-                        <div
-                          key={student.id}
-                          ref={(element) => {
-                            studentCardRefs.current[
-                              student.id
-                            ] = element
-                          }}
-                          className={`rounded-xl border bg-card p-4 transition-all ${
-                            saving
-                              ? 'opacity-70'
-                              : ''
-                          }`}
-                        >
-                          <div className="space-y-4">
-                            <div>
-                              <div className="font-semibold">
-                                {
-                                  student.name
-                                }
-                              </div>
-
-                              {student.levelName && (
-                                <div className="mt-0.5 text-xs text-muted-foreground">
-                                  {
-                                    student.levelName
-                                  }
-                                </div>
-                              )}
-                            </div>
-
-                            <div>
-                              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                                حالة الحضور
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2">
-                                {attendanceStatusNames.map(
-                                  (
-                                    statusName,
-                                  ) => {
-                                    const styles =
-                                      getStatusClasses(
-                                        statusName,
-                                      )
-
-                                    const isSelected =
-                                      status ===
-                                      statusName
-
-                                    return (
-                                      <button
-                                        key={
-                                          statusName
-                                        }
-                                        type="button"
-                                        disabled={
-                                          saving
-                                        }
-                                        onClick={() => {
-                                          if (
-                                            isSelected &&
-                                            status
-                                          ) {
-                                            void clearAttendance(
-                                              student,
-                                              activeDate,
-                                            )
-                                            return
-                                          }
-
-                                          void saveAttendance(
-                                            student,
-                                            activeDate,
-                                            statusName,
-                                          )
-                                        }}
-                                        className={`min-h-12 rounded-xl border px-3 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                                          isSelected
-                                            ? styles.selected
-                                            : styles.normal
-                                        } ${
-                                          saving
-                                            ? 'cursor-not-allowed opacity-50'
-                                            : ''
-                                        }`}
-                                      >
-                                        {
-                                          statusName
-                                        }
-                                      </button>
-                                    )
-                                  },
-                                )}
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                                ملاحظات المعلم
-                              </label>
-
-                              <textarea
-                                value={note}
-                                onChange={(
-                                  event,
-                                ) =>
-                                  setAttendanceNotes(
-                                    (
-                                      current,
-                                    ) => ({
-                                      ...current,
-                                      [key]:
-                                        event
-                                          .target
-                                          .value,
-                                    }),
-                                  )
-                                }
-                                placeholder="اكتب ملاحظة عن الطالب..."
-                                rows={3}
-                                className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                              />
-
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                سيتم حفظ الملاحظة عند اختيار حالة الحضور.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    }
-
+                  if (status === 'غير منضم') {
                     const selectedStyles =
-                      getStatusClasses(
-                        status,
-                      )
+                      getStatusClasses(status)
 
                     return (
                       <div
@@ -852,69 +527,34 @@ export function TeacherAttendanceView({
                           ] = element
                         }}
                         className={`rounded-xl border bg-card px-4 py-4 transition-all ${
-                          saving
-                            ? 'opacity-70'
-                            : ''
+                          saving ? 'opacity-70' : ''
                         }`}
                       >
                         <div className="space-y-4">
                           <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
                             <div className="min-w-0 xl:flex-1">
                               <div className="font-semibold">
-                                {
-                                  student.name
-                                }
+                                {student.name}
                               </div>
 
                               {student.levelName && (
                                 <div className="mt-0.5 text-xs text-muted-foreground">
-                                  {
-                                    student.levelName
-                                  }
+                                  {student.levelName}
                                 </div>
                               )}
                             </div>
 
                             <button
                               type="button"
-                              disabled={
-                                saving ||
-                                status ===
-                                  'غير منضم'
-                              }
-                              onClick={() => {
-                                if (
-                                  status ===
-                                  'غير منضم'
-                                ) {
-                                  return
-                                }
-
-                                setEditingStatusKey(
-                                  key,
-                                )
-                              }}
-                              className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
-                                saving ||
-                                status ===
-                                  'غير منضم'
-                                  ? 'cursor-not-allowed opacity-50'
-                                  : 'cursor-pointer'
-                              }`}
+                              disabled
+                              className={`h-10 shrink-0 cursor-not-allowed rounded-lg border px-5 text-sm font-medium opacity-90 ${selectedStyles.selected}`}
                             >
-                              {status}
+                              غير منضم
                             </button>
 
                             <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
-                              <span
-                                className={`text-sm font-bold ${getPercentageClass(
-                                  percentage,
-                                )}`}
-                              >
-                                {status ===
-                                'غير منضم'
-                                  ? '—'
-                                  : `${percentage}%`}
+                              <span className="text-sm font-bold text-muted-foreground">
+                                —
                               </span>
                             </div>
                           </div>
@@ -926,29 +566,20 @@ export function TeacherAttendanceView({
 
                             <textarea
                               value={note}
-                              onChange={(
-                                event,
-                              ) =>
+                              onChange={(event) =>
                                 setAttendanceNotes(
-                                  (
-                                    current,
-                                  ) => ({
+                                  (current) => ({
                                     ...current,
                                     [key]:
-                                      event
-                                        .target
-                                        .value,
+                                      event.target.value,
                                   }),
                                 )
                               }
-                              onBlur={(
-                                event,
-                              ) =>
+                              onBlur={(event) =>
                                 void saveNote(
                                   student,
                                   activeDate,
-                                  event.target
-                                    .value,
+                                  event.target.value,
                                 )
                               }
                               placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
@@ -971,8 +602,233 @@ export function TeacherAttendanceView({
                         </div>
                       </div>
                     )
-                  },
-                )
+                  }
+
+                  if (!status || editing) {
+                    return (
+                      <div
+                        key={student.id}
+                        ref={(element) => {
+                          studentCardRefs.current[
+                            student.id
+                          ] = element
+                        }}
+                        className={`rounded-xl border bg-card p-4 transition-all ${
+                          saving ? 'opacity-70' : ''
+                        }`}
+                      >
+                        <div className="space-y-4">
+                          <div>
+                            <div className="font-semibold">
+                              {student.name}
+                            </div>
+
+                            {student.levelName && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {student.levelName}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <div className="mb-2 text-xs font-medium text-muted-foreground">
+                              حالة الحضور
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              {attendanceStatusNames.map(
+                                (statusName) => {
+                                  const styles =
+                                    getStatusClasses(
+                                      statusName,
+                                    )
+
+                                  const isSelected =
+                                    status ===
+                                    statusName
+
+                                  return (
+                                    <button
+                                      key={statusName}
+                                      type="button"
+                                      disabled={saving}
+                                      onClick={() => {
+                                        if (
+                                          isSelected &&
+                                          status
+                                        ) {
+                                          void clearAttendance(
+                                            student,
+                                            activeDate,
+                                          )
+                                          return
+                                        }
+
+                                        void saveAttendance(
+                                          student,
+                                          activeDate,
+                                          statusName,
+                                        )
+                                      }}
+                                      className={`min-h-12 rounded-xl border px-3 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                                        isSelected
+                                          ? styles.selected
+                                          : styles.normal
+                                      } ${
+                                        saving
+                                          ? 'cursor-not-allowed opacity-50'
+                                          : ''
+                                      }`}
+                                    >
+                                      {statusName}
+                                    </button>
+                                  )
+                                },
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                              ملاحظات المعلم
+                            </label>
+
+                            <textarea
+                              value={note}
+                              onChange={(event) =>
+                                setAttendanceNotes(
+                                  (current) => ({
+                                    ...current,
+                                    [key]:
+                                      event.target.value,
+                                  }),
+                                )
+                              }
+                              placeholder="اكتب ملاحظة عن الطالب..."
+                              rows={3}
+                              className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                            />
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              سيتم حفظ الملاحظة عند اختيار حالة الحضور.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const selectedStyles =
+                    getStatusClasses(status)
+
+                  return (
+                    <div
+                      key={student.id}
+                      ref={(element) => {
+                        studentCardRefs.current[
+                          student.id
+                        ] = element
+                      }}
+                      className={`rounded-xl border bg-card px-4 py-4 transition-all ${
+                        saving ? 'opacity-70' : ''
+                      }`}
+                    >
+                      <div className="space-y-4">
+                        <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                          <div className="min-w-0 xl:flex-1">
+                            <div className="font-semibold">
+                              {student.name}
+                            </div>
+
+                            {student.levelName && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {student.levelName}
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={
+                              saving ||
+                              status === 'غير منضم'
+                            }
+                            onClick={() => {
+                              if (
+                                status === 'غير منضم'
+                              ) {
+                                return
+                              }
+
+                              setEditingStatusKey(key)
+                            }}
+                            className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
+                              saving ||
+                              status === 'غير منضم'
+                                ? 'cursor-not-allowed opacity-50'
+                                : 'cursor-pointer'
+                            }`}
+                          >
+                            {status}
+                          </button>
+
+                          <div className="flex h-10 shrink-0 items-center justify-center rounded-lg bg-muted/50 px-5">
+                            <span
+                              className={`text-sm font-bold ${getPercentageClass(
+                                percentage,
+                              )}`}
+                            >
+                              {status === 'غير منضم'
+                                ? '—'
+                                : `${percentage}%`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                            ملاحظات المعلم
+                          </label>
+
+                          <textarea
+                            value={note}
+                            onChange={(event) =>
+                              setAttendanceNotes(
+                                (current) => ({
+                                  ...current,
+                                  [key]:
+                                    event.target.value,
+                                }),
+                              )
+                            }
+                            onBlur={(event) =>
+                              void saveNote(
+                                student,
+                                activeDate,
+                                event.target.value,
+                              )
+                            }
+                            placeholder="اكتب ملاحظة أو تعليق عن الطالب..."
+                            rows={3}
+                            className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          />
+
+                          <div className="mt-1 flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              اضغط خارج الخانة لحفظ الملاحظة
+                            </span>
+
+                            {savingNote && (
+                              <span className="text-xs text-muted-foreground">
+                                جارٍ الحفظ...
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
