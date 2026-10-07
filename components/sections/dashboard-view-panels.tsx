@@ -105,6 +105,12 @@ type AttendanceNote = {
   teacherName: string
 }
 
+type StudentAttendanceDay = {
+  date: string
+  status: string
+  note: string
+}
+
 type DashboardViewPanelsProps = {
   selectedCourse: Course | null
   academicYear: AcademicYear | null
@@ -185,6 +191,24 @@ function isAbsentStatus(name: string) {
   )
 }
 
+function isLateStatus(name: string) {
+  const value = normalizeText(name)
+
+  return (
+    value === 'متأخر' ||
+    value === 'متأخر عن الحضور'
+  )
+}
+
+function isExcusedStatus(name: string) {
+  const value = normalizeText(name)
+
+  return (
+    value === 'مستأذن' ||
+    value === 'مستأذن بعذر'
+  )
+}
+
 function getAttendanceStatusLabel(
   name: string,
 ) {
@@ -196,21 +220,15 @@ function getAttendanceStatusLabel(
     return 'غائب'
   }
 
-  const value = normalizeText(name)
-
-  if (
-    value === 'متأخر' ||
-    value === 'متأخر عن الحضور'
-  ) {
+  if (isLateStatus(name)) {
     return 'متأخر'
   }
 
-  if (
-    value === 'مستأذن' ||
-    value === 'مستأذن بعذر'
-  ) {
+  if (isExcusedStatus(name)) {
     return 'مستأذن'
   }
+
+  const value = normalizeText(name)
 
   return value || 'غير محدد'
 }
@@ -229,6 +247,197 @@ function getLocalDateString() {
   ).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+function normalizeDay(value: string) {
+  return normalizeText(value).toLowerCase()
+}
+
+function getDayIndex(value: string) {
+  const day = normalizeDay(value)
+
+  const map: Record<string, number> = {
+    sunday: 0,
+    sun: 0,
+    الأحد: 0,
+    الاحد: 0,
+
+    monday: 1,
+    mon: 1,
+    الاثنين: 1,
+    الإثنين: 1,
+
+    tuesday: 2,
+    tue: 2,
+    tues: 2,
+    الثلاثاء: 2,
+
+    wednesday: 3,
+    wed: 3,
+    الأربعاء: 3,
+    الاربعاء: 3,
+
+    thursday: 4,
+    thu: 4,
+    thurs: 4,
+    الخميس: 4,
+
+    friday: 5,
+    fri: 5,
+    الجمعة: 5,
+
+    saturday: 6,
+    sat: 6,
+    السبت: 6,
+  }
+
+  if (
+    /^\d$/.test(day) &&
+    Number(day) >= 0 &&
+    Number(day) <= 6
+  ) {
+    return Number(day)
+  }
+
+  return map[day]
+}
+
+function isCourseStudyDay(
+  date: string,
+  course: Course,
+) {
+  if (!course.days || course.days.length === 0) {
+    return true
+  }
+
+  const parts = date.split('-')
+
+  if (parts.length !== 3) {
+    return false
+  }
+
+  const year = Number(parts[0])
+  const month = Number(parts[1])
+  const day = Number(parts[2])
+
+  const parsedDate = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+    ),
+  )
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return false
+  }
+
+  const dayIndex = parsedDate.getUTCDay()
+
+  return course.days.some(
+    (courseDay) =>
+      getDayIndex(courseDay) ===
+      dayIndex,
+  )
+}
+
+function getCourseLessonDates(
+  course: Course | null,
+) {
+  if (!course?.startDate) {
+    return []
+  }
+
+  const startDate =
+    normalizeAttendanceDate(
+      course.startDate,
+    )
+
+  const today =
+    getLocalDateString()
+
+  const courseEnd =
+    normalizeAttendanceDate(
+      course.endDate,
+    )
+
+  const endDate =
+    courseEnd &&
+    courseEnd < today
+      ? courseEnd
+      : today
+
+  if (!startDate || startDate > endDate) {
+    return []
+  }
+
+  const dates: string[] = []
+
+  const current = new Date(
+    `${startDate}T00:00:00`,
+  )
+
+  const end = new Date(
+    `${endDate}T00:00:00`,
+  )
+
+  while (
+    current <= end
+  ) {
+    const year =
+      current.getFullYear()
+
+    const month = String(
+      current.getMonth() + 1,
+    ).padStart(2, '0')
+
+    const day = String(
+      current.getDate(),
+    ).padStart(2, '0')
+
+    const date = `${year}-${month}-${day}`
+
+    if (
+      isCourseStudyDay(
+        date,
+        course,
+      )
+    ) {
+      dates.push(date)
+    }
+
+    current.setDate(
+      current.getDate() + 1,
+    )
+  }
+
+  return dates
+}
+
+function getStatusBadgeClass(
+  status: string,
+) {
+  if (isPresentStatus(status)) {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  }
+
+  if (isAbsentStatus(status)) {
+    return 'border-red-200 bg-red-50 text-red-700'
+  }
+
+  if (isLateStatus(status)) {
+    return 'border-amber-200 bg-amber-50 text-amber-700'
+  }
+
+  if (isExcusedStatus(status)) {
+    return 'border-sky-200 bg-sky-50 text-sky-700'
+  }
+
+  if (status === 'لم يسجل') {
+    return 'border-slate-200 bg-slate-50 text-slate-600'
+  }
+
+  return 'border-slate-200 bg-slate-50 text-slate-700'
 }
 
 export function DashboardViewPanels({
@@ -256,6 +465,9 @@ export function DashboardViewPanels({
     useState(false)
 
   const [customDownloadOpen, setCustomDownloadOpen] =
+    useState(false)
+
+  const [studentAttendanceDetailsOpen, setStudentAttendanceDetailsOpen] =
     useState(false)
 
   const [notesFromDate, setNotesFromDate] =
@@ -638,6 +850,187 @@ export function DashboardViewPanels({
       selectedStudent,
       assignments,
       teachers,
+    ])
+
+  /*
+   * Student attendance for the currently selected course.
+   *
+   * The percentage follows the attendance rules:
+   * حاضر + متأخر + مستأذن = attended
+   * غائب = denominator
+   * لم يسجل = excluded from percentage
+   */
+  const selectedStudentAttendance =
+    useMemo(() => {
+      if (
+        !selectedStudent ||
+        !selectedCourse
+      ) {
+        return {
+          percentage: 0,
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          recorded: 0,
+          lessonCount: 0,
+          days: [] as StudentAttendanceDay[],
+        }
+      }
+
+      const studentId =
+        normalizeId(
+          selectedStudent.student.id,
+        )
+
+      const courseId =
+        normalizeId(
+          selectedCourse.id,
+        )
+
+      const lessonDates =
+        getCourseLessonDates(
+          selectedCourse,
+        )
+
+      const studentRecords =
+        attendanceRecords.filter(
+          (record) =>
+            normalizeId(
+              record.studentId,
+            ) === studentId &&
+            normalizeId(
+              record.courseId,
+            ) === courseId,
+        )
+
+      const recordByDate =
+        new Map<
+          string,
+          AttendanceRecord
+        >()
+
+      for (const record of studentRecords) {
+        const date =
+          normalizeAttendanceDate(
+            record.attendanceDate,
+          )
+
+        if (!date) {
+          continue
+        }
+
+        if (!recordByDate.has(date)) {
+          recordByDate.set(
+            date,
+            record,
+          )
+        }
+      }
+
+      let present = 0
+      let absent = 0
+      let late = 0
+      let excused = 0
+
+      const days =
+        lessonDates.map(
+          (date) => {
+            const record =
+              recordByDate.get(
+                date,
+              )
+
+            if (!record) {
+              return {
+                date,
+                status: 'لم يسجل',
+                note: '',
+              }
+            }
+
+            const rawStatus =
+              statusMap.get(
+                normalizeId(
+                  record.statusId,
+                ),
+              ) ?? ''
+
+            const status =
+              getAttendanceStatusLabel(
+                rawStatus,
+              )
+
+            if (
+              isPresentStatus(
+                rawStatus,
+              )
+            ) {
+              present += 1
+            } else if (
+              isAbsentStatus(
+                rawStatus,
+              )
+            ) {
+              absent += 1
+            } else if (
+              isLateStatus(
+                rawStatus,
+              )
+            ) {
+              late += 1
+            } else if (
+              isExcusedStatus(
+                rawStatus,
+              )
+            ) {
+              excused += 1
+            }
+
+            return {
+              date,
+              status,
+              note:
+                normalizeText(
+                  record.note,
+                ),
+            }
+          },
+        )
+
+      const recorded =
+        present +
+        absent +
+        late +
+        excused
+
+      const percentage =
+        recorded > 0
+          ? Math.round(
+              ((present +
+                late +
+                excused) /
+                recorded) *
+                100,
+            )
+          : 0
+
+      return {
+        percentage,
+        present,
+        absent,
+        late,
+        excused,
+        recorded,
+        lessonCount:
+          lessonDates.length,
+        days,
+      }
+    }, [
+      selectedStudent,
+      selectedCourse,
+      attendanceRecords,
+      statusMap,
     ])
 
   const downloadNotes = (
@@ -1054,7 +1447,6 @@ export function DashboardViewPanels({
         </CardHeader>
 
         <CardContent>
-          
           {attendanceNotes.length ===
           0 ? (
             <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
@@ -1209,9 +1601,15 @@ export function DashboardViewPanels({
         <div
           dir="rtl"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onMouseDown={() =>
+          onMouseDown={() => {
+            if (
+              studentAttendanceDetailsOpen
+            ) {
+              return
+            }
+
             setSelectedStudent(null)
-          }
+          }}
         >
           <div
             className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-background shadow-xl"
@@ -1315,6 +1713,125 @@ export function DashboardViewPanels({
 
               <div className="rounded-xl border p-4">
                 <p className="text-sm font-medium">
+                  الدورة الحالية
+                </p>
+
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {selectedCourse?.name ??
+                        'لا توجد دورة'}
+                    </p>
+
+                    {selectedCourse?.startDate && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        من{' '}
+                        {formatDate(
+                          selectedCourse.startDate,
+                        )}
+                        {selectedCourse.endDate &&
+                          ` إلى ${formatDate(
+                            selectedCourse.endDate,
+                          )}`}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="shrink-0 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      نسبة الحضور
+                    </p>
+
+                    <p
+                      className={`mt-1 text-2xl font-bold ${
+                        selectedStudentAttendance.recorded ===
+                        0
+                          ? 'text-muted-foreground'
+                          : selectedStudentAttendance.percentage >=
+                              60
+                            ? 'text-emerald-600'
+                            : 'text-red-600'
+                      }`}
+                    >
+                      {selectedStudentAttendance.recorded >
+                      0
+                        ? `${selectedStudentAttendance.percentage}%`
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  <div className="rounded-lg bg-emerald-50 p-2 text-center">
+                    <p className="text-[11px] text-emerald-700">
+                      حاضر
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-emerald-700">
+                      {
+                        selectedStudentAttendance.present
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-red-50 p-2 text-center">
+                    <p className="text-[11px] text-red-700">
+                      غائب
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-red-700">
+                      {
+                        selectedStudentAttendance.absent
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-amber-50 p-2 text-center">
+                    <p className="text-[11px] text-amber-700">
+                      متأخر
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-amber-700">
+                      {
+                        selectedStudentAttendance.late
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-sky-50 p-2 text-center">
+                    <p className="text-[11px] text-sky-700">
+                      مستأذن
+                    </p>
+
+                    <p className="mt-1 text-lg font-bold text-sky-700">
+                      {
+                        selectedStudentAttendance.excused
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setStudentAttendanceDetailsOpen(
+                      true,
+                    )
+                  }
+                  disabled={
+                    !selectedCourse ||
+                    selectedStudentAttendance.days
+                      .length === 0
+                  }
+                  className="mt-4 h-10 w-full gap-2 border border-violet-200 bg-violet-50 text-violet-700 shadow-sm hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CalendarDays className="size-4" />
+                  تفاصيل الحضور
+                </Button>
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <p className="text-sm font-medium">
                   الدورات
                 </p>
 
@@ -1397,6 +1914,216 @@ export function DashboardViewPanels({
           </div>
         </div>
       )}
+
+      {/* Student attendance history modal */}
+      {selectedStudent &&
+        studentAttendanceDetailsOpen && (
+          <div
+            dir="rtl"
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+            onMouseDown={() =>
+              setStudentAttendanceDetailsOpen(
+                false,
+              )
+            }
+          >
+            <div
+              className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl"
+              onMouseDown={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div className="flex shrink-0 items-center justify-between border-b px-5 py-4">
+                <div>
+                  <h2 className="font-semibold">
+                    تفاصيل حضور الطالب
+                  </h2>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {
+                      selectedStudent
+                        .student
+                        .name
+                    }
+                    {' • '}
+                    {selectedCourse?.name ??
+                      'الدورة الحالية'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setStudentAttendanceDetailsOpen(
+                      false,
+                    )
+                  }
+                  className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="إغلاق"
+                  title="إغلاق"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              <div className="shrink-0 border-b bg-muted/20 p-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="rounded-xl border bg-background p-3 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      نسبة الحضور
+                    </p>
+
+                    <p
+                      className={`mt-1 text-xl font-bold ${
+                        selectedStudentAttendance.recorded ===
+                        0
+                          ? 'text-muted-foreground'
+                          : selectedStudentAttendance.percentage >=
+                              60
+                            ? 'text-emerald-600'
+                            : 'text-red-600'
+                      }`}
+                    >
+                      {selectedStudentAttendance.recorded >
+                      0
+                        ? `${selectedStudentAttendance.percentage}%`
+                        : '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-emerald-50 p-3 text-center">
+                    <p className="text-xs text-emerald-700">
+                      حاضر
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-emerald-700">
+                      {
+                        selectedStudentAttendance.present
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-red-50 p-3 text-center">
+                    <p className="text-xs text-red-700">
+                      غائب
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-red-700">
+                      {
+                        selectedStudentAttendance.absent
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-amber-50 p-3 text-center">
+                    <p className="text-xs text-amber-700">
+                      متأخر
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-amber-700">
+                      {
+                        selectedStudentAttendance.late
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-sky-50 p-3 text-center">
+                    <p className="text-xs text-sky-700">
+                      مستأذن
+                    </p>
+
+                    <p className="mt-1 text-xl font-bold text-sky-700">
+                      {
+                        selectedStudentAttendance.excused
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {selectedStudentAttendance.days.length ===
+                0 ? (
+                  <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-dashed text-center">
+                    <div>
+                      <CalendarDays className="mx-auto size-7 text-slate-300" />
+
+                      <p className="mt-3 text-sm font-medium text-muted-foreground">
+                        لا توجد أيام دراسة مسجلة للدورة
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border">
+                    <div className="grid grid-cols-[1fr_auto] border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground">
+                      <div>
+                        التاريخ
+                      </div>
+
+                      <div>
+                        الحالة
+                      </div>
+                    </div>
+
+                    <div className="divide-y">
+                      {selectedStudentAttendance.days.map(
+                        (item) => (
+                          <div
+                            key={
+                              item.date
+                            }
+                            className="grid grid-cols-[1fr_auto] items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/20"
+                          >
+                            <div>
+                              <p className="text-sm font-medium">
+                                {formatDate(
+                                  item.date,
+                                )}
+                              </p>
+
+                              {item.note && (
+                                <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
+                                  ملاحظة:{' '}
+                                  {
+                                    item.note
+                                  }
+                                </p>
+                              )}
+                            </div>
+
+                            <span
+                              className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${getStatusBadgeClass(
+                                item.status,
+                              )}`}
+                            >
+                              {
+                                item.status
+                              }
+                            </span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 border-t px-5 py-3">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setStudentAttendanceDetailsOpen(
+                      false,
+                    )
+                  }
+                  className="h-10 w-full"
+                >
+                  إغلاق
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Teacher attendance details */}
       {attendanceDetailsOpen &&
