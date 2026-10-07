@@ -30,11 +30,11 @@ import {
 } from '@/components/ui/card'
 
 import {
-  AttendanceStatus,
-  AttendanceRecord,
-  AttendanceNotes,
-  Student,
-} from '@/components/sections/attendance-view'
+  type AttendanceStatus,
+  type AttendanceRecord,
+  type AttendanceNotes,
+  type Student,
+} from '@/components/sections/teacher-attendance'
 
 import {
   TeachersViewTeacherPanel,
