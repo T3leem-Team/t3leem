@@ -285,37 +285,46 @@ export function TeachersViewTeacherPanel({
             </div>
           </div>
 
-          {/* بيانات المعلم */}
+          {/* بيانات المعلم + تفاصيل الدورة */}
           <div
             dir="rtl"
-            className="border-b px-4 py-4 sm:px-6"
+            className="border-b bg-muted/20 px-4 py-4 sm:px-6"
           >
-            <h2 className="text-lg font-semibold">
-              {selectedTeacher.name}
-            </h2>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              {getStudentCount(
-                selectedTeacher.id,
-              )}{' '}
-              طالب
-            </p>
-          </div>
+              {/* المعلم */}
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  المعلم
+                </p>
 
-          {/* تفاصيل الدورة */}
-          <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
-            <div className="flex flex-wrap items-center gap-4">
+                <div className="mt-1 flex items-center gap-3">
+                  <p className="font-semibold">
+                    {selectedTeacher.name}
+                  </p>
+
+                  <span className="rounded-full bg-background px-3 py-1 text-sm text-muted-foreground">
+                    {getStudentCount(
+                      selectedTeacher.id,
+                    )}{' '}
+                    طالب
+                  </span>
+                </div>
+              </div>
+
+              {/* الدورة الحالية */}
               <div>
                 <p className="text-xs text-muted-foreground">
                   الدورة الحالية
                 </p>
 
-                <p className="font-semibold">
+                <p className="mt-1 font-semibold">
                   {currentCourse?.name ??
                     '—'}
                 </p>
               </div>
 
+              {/* المادة */}
               {selectedTeacherSubjectNames.length >
                 0 && (
                 <div>
@@ -323,7 +332,7 @@ export function TeachersViewTeacherPanel({
                     المادة
                   </p>
 
-                  <p className="font-semibold">
+                  <p className="mt-1 font-semibold">
                     {selectedTeacherSubjectNames.join(
                       '، ',
                     )}
@@ -331,38 +340,45 @@ export function TeachersViewTeacherPanel({
                 </div>
               )}
 
+              {/* التاريخ */}
               {currentCourse && (
-                <span className="rounded-full bg-background px-3 py-1.5 text-sm">
-                  {currentCourse.startDate
-                    ? new Intl.DateTimeFormat(
-                        'ar-BH',
-                        {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        },
-                      ).format(
-                        new Date(
-                          `${currentCourse.startDate}T00:00:00`,
-                        ),
-                      )
-                    : '—'}{' '}
-                  —{' '}
-                  {currentCourse.endDate
-                    ? new Intl.DateTimeFormat(
-                        'ar-BH',
-                        {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        },
-                      ).format(
-                        new Date(
-                          `${currentCourse.endDate}T00:00:00`,
-                        ),
-                      )
-                    : '—'}
-                </span>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الفترة
+                  </p>
+
+                  <span className="mt-1 inline-flex rounded-full bg-background px-3 py-1.5 text-sm">
+                    {currentCourse.startDate
+                      ? new Intl.DateTimeFormat(
+                          'ar-BH',
+                          {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          },
+                        ).format(
+                          new Date(
+                            `${currentCourse.startDate}T00:00:00`,
+                          ),
+                        )
+                      : '—'}{' '}
+                    —{' '}
+                    {currentCourse.endDate
+                      ? new Intl.DateTimeFormat(
+                          'ar-BH',
+                          {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          },
+                        ).format(
+                          new Date(
+                            `${currentCourse.endDate}T00:00:00`,
+                          ),
+                        )
+                      : '—'}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -370,13 +386,10 @@ export function TeachersViewTeacherPanel({
           {/* التبويبات */}
           <div className="border-b px-4 py-3 sm:px-6">
             <div className="flex flex-wrap gap-2">
+
+              {/* الطلاب */}
               <Button
-                variant={
-                  activePanel ===
-                  'students'
-                    ? 'default'
-                    : 'outline'
-                }
+                variant="outline"
                 onClick={() => {
                   setActivePanel(
                     'students',
@@ -386,17 +399,18 @@ export function TeachersViewTeacherPanel({
                     null,
                   )
                 }}
+                className={
+                  activePanel === 'students'
+                    ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700 hover:text-white'
+                    : 'border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800'
+                }
               >
                 الطلاب
               </Button>
 
+              {/* الحضور والغياب */}
               <Button
-                variant={
-                  activePanel ===
-                  'attendance'
-                    ? 'default'
-                    : 'outline'
-                }
+                variant="outline"
                 onClick={() => {
                   setActivePanel(
                     'attendance',
@@ -406,17 +420,18 @@ export function TeachersViewTeacherPanel({
                     null,
                   )
                 }}
+                className={
+                  activePanel === 'attendance'
+                    ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white'
+                    : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'
+                }
               >
                 الحضور والغياب
               </Button>
 
+              {/* الدورات السابقة */}
               <Button
-                variant={
-                  activePanel ===
-                  'previousCourses'
-                    ? 'default'
-                    : 'outline'
-                }
+                variant="outline"
                 onClick={() => {
                   setActivePanel(
                     'previousCourses',
@@ -440,6 +455,12 @@ export function TeachersViewTeacherPanel({
                       null,
                   )
                 }}
+                className={
+                  activePanel ===
+                  'previousCourses'
+                    ? 'border-violet-600 bg-violet-600 text-white hover:bg-violet-700 hover:text-white'
+                    : 'border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800'
+                }
               >
                 <History className="size-4" />
                 الدورات السابقة
