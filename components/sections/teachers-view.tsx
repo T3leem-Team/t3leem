@@ -43,6 +43,10 @@ import {
 const initialTeachersCache =
   getTeachersCache()
 
+type RemoveMode =
+  | 'assignment_only'
+  | 'assignment_and_attendance'
+
 export function TeachersView() {
   const [teachers, setTeachers] =
     useState<Teacher[]>(
@@ -99,6 +103,14 @@ export function TeachersView() {
   ] = useState<string | null>(
     null,
   )
+
+  const [
+    pendingRemove,
+    setPendingRemove,
+  ] = useState<{
+    assignment: Assignment
+    student: Student
+  } | null>(null)
 
   const [
     allowTeacherTransfer,
@@ -929,6 +941,8 @@ export function TeachersView() {
       null,
     )
 
+    setPendingRemove(null)
+
     const previousCourses =
       courses.filter(
         (course) =>
@@ -972,6 +986,8 @@ export function TeachersView() {
     setSelectedPreviousCourseId(
       null,
     )
+
+    setPendingRemove(null)
   }
 
   const openAddStudents = () => {
@@ -1523,12 +1539,29 @@ export function TeachersView() {
         return
       }
 
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من مسح الطالب "${student.name}" من هذا المعلم؟\n\nسيتم إلغاء ربط الطالب بالمعلم والمادة فقط، ولن يتم حذف الطالب من النظام أو حذف أو تعديل أي سجل من سجلات الحضور والغياب.`,
-        )
+      setStatusMessage('')
 
-      if (!confirmed) {
+      setPendingRemove({
+        assignment,
+        student,
+      })
+    }
+
+  const executeRemoveStudent =
+    async (
+      assignment: Assignment,
+      student: Student,
+      mode: RemoveMode,
+    ) => {
+      if (
+        !canRemoveStudents
+      ) {
+        return
+      }
+
+      if (
+        deletingAssignmentId
+      ) {
         return
       }
 
@@ -1536,24 +1569,40 @@ export function TeachersView() {
         assignment.id,
       )
 
-      setStatusMessage(
-        'جاري مسح الطالب من المعلم...',
-      )
+      setPendingRemove(null)
 
-      const { error } =
-        await supabase
-          .from(
-            'teacher_student_assignments',
-          )
-          .delete()
-          .eq(
-            'id',
-            assignment.id,
-          )
-
-      if (error) {
+      if (
+        mode ===
+        'assignment_and_attendance'
+      ) {
         setStatusMessage(
-          `تعذر مسح الطالب من المعلم: ${error.message}`,
+          'جاري مسح التعيين وسجل الحضور...',
+        )
+      } else {
+        setStatusMessage(
+          'جاري مسح التعيين...',
+        )
+      }
+
+      /*
+       * أولًا نحذف التعيين نفسه.
+       * لا يتم حذف الطالب ولا enrollment.
+       */
+      const {
+        error: assignmentError,
+      } = await supabase
+        .from(
+          'teacher_student_assignments',
+        )
+        .delete()
+        .eq(
+          'id',
+          assignment.id,
+        )
+
+      if (assignmentError) {
+        setStatusMessage(
+          `تعذر مسح التعيين: ${assignmentError.message}`,
         )
 
         setDeletingAssignmentId(
@@ -1563,6 +1612,96 @@ export function TeachersView() {
         return
       }
 
+      /*
+       * في حالة اختيار:
+       * "مسح التعيين وسجل الحضور"
+       *
+       * نحذف حضور الطالب في هذه الدورة فقط.
+       * لا نستخدم enrollment_id ولا نحذف enrollment.
+       */
+      if (
+        mode ===
+        'assignment_and_attendance'
+      ) {
+        const {
+          error: attendanceError,
+        } = await supabase
+          .from('attendance')
+          .delete()
+          .eq(
+            'student_id',
+            student.id,
+          )
+          .eq(
+            'course_id',
+            assignment.courseId,
+          )
+
+        if (attendanceError) {
+          /*
+           * التعيين تم حذفه بالفعل.
+           * لذلك نحدث الواجهة بحيث لا يظهر الطالب
+           * كمعين، لكن نوضح أن الحضور لم يُحذف.
+           */
+          setAssignments(
+            (current) => {
+              const next =
+                current.filter(
+                  (item) =>
+                    item.id !==
+                    assignment.id,
+                )
+
+              updateTeachersCache({
+                assignments:
+                  next,
+              })
+
+              return next
+            },
+          )
+
+          setSelectedStudentIds(
+            (current) =>
+              current.filter(
+                (id) =>
+                  id !==
+                  student.id,
+              ),
+          )
+
+          setStatusMessage(
+            `تم مسح التعيين، لكن تعذر مسح سجل حضور ${student.name}: ${attendanceError.message}`,
+          )
+
+          setDeletingAssignmentId(
+            null,
+          )
+
+          return
+        }
+
+        /*
+         * تحديث سجل الحضور الموجود في الكاش
+         * حتى لا يظهر الحضور القديم مباشرة في الواجهة.
+         */
+        updateAttendanceRecords(
+          (current) =>
+            current.filter(
+              (record) =>
+                !(
+                  record.studentId ===
+                    student.id &&
+                  record.courseId ===
+                    assignment.courseId
+                ),
+            ),
+        )
+      }
+
+      /*
+       * تحديث قائمة التعيينات في الواجهة والكاش.
+       */
       setAssignments(
         (current) => {
           const next =
@@ -1592,9 +1731,18 @@ export function TeachersView() {
         null,
       )
 
-      setStatusMessage(
-        `تم مسح ${student.name} من المعلم والمادة بنجاح، وسجلات الحضور محفوظة كما هي ✅`,
-      )
+      if (
+        mode ===
+        'assignment_and_attendance'
+      ) {
+        setStatusMessage(
+          `تم مسح تعيين ${student.name} وسجل حضوره في الدورة الحالية بنجاح ✅`,
+        )
+      } else {
+        setStatusMessage(
+          `تم مسح تعيين ${student.name} بنجاح، وسجل الحضور محفوظ كما هو ✅`,
+        )
+      }
     }
 
   if (
@@ -2132,6 +2280,105 @@ export function TeachersView() {
             saveTransfer
           }
         />
+      )}
+
+      {pendingRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            className="w-full max-w-md rounded-xl border bg-background p-6 shadow-xl"
+            dir="rtl"
+          >
+            <div>
+              <h3 className="text-lg font-semibold">
+                مسح تعيين الطالب
+              </h3>
+
+              <p className="mt-2 text-sm text-muted-foreground">
+                الطالب:{' '}
+                <span className="font-medium text-foreground">
+                  {pendingRemove.student.name}
+                </span>
+              </p>
+
+              <p className="mt-3 text-sm text-muted-foreground">
+                اختر الإجراء الذي تريد تنفيذه:
+              </p>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <button
+                type="button"
+                disabled={
+                  deletingAssignmentId !==
+                  null
+                }
+                onClick={() => {
+                  const pending =
+                    pendingRemove
+
+                  void executeRemoveStudent(
+                    pending.assignment,
+                    pending.student,
+                    'assignment_only',
+                  )
+                }}
+                className="w-full rounded-lg border px-4 py-3 text-right transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div className="font-medium">
+                  مسح التعيين فقط
+                </div>
+
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                  يتم إلغاء تعيين الطالب من المعلم
+                  والمادة، مع الاحتفاظ بسجل الحضور
+                  كما هو.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  deletingAssignmentId !==
+                  null
+                }
+                onClick={() => {
+                  const pending =
+                    pendingRemove
+
+                  void executeRemoveStudent(
+                    pending.assignment,
+                    pending.student,
+                    'assignment_and_attendance',
+                  )
+                }}
+                className="w-full rounded-lg border border-destructive/30 px-4 py-3 text-right text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <div className="font-medium">
+                  مسح التعيين وسجل الحضور
+                </div>
+
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                  يتم إلغاء تعيين الطالب وحذف جميع
+                  سجلات حضوره في الدورة الحالية فقط.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  deletingAssignmentId !==
+                  null
+                }
+                onClick={() =>
+                  setPendingRemove(null)
+                }
+                className="w-full rounded-lg bg-muted px-4 py-3 text-center text-sm font-medium transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
