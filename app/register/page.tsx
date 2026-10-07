@@ -896,6 +896,7 @@ export default function RegisterPage() {
 
   async function saveCustomFieldValues(
     requestId: string,
+    trackingToken: string,
   ) {
     if (
       customFields.length ===
@@ -935,6 +936,10 @@ export default function RegisterPage() {
         {
           p_request_id:
             requestId,
+
+          p_tracking_token:
+            trackingToken,
+
           p_fields:
             rows,
         },
@@ -1177,6 +1182,7 @@ export default function RegisterPage() {
 
       await saveCustomFieldValues(
         createdRequest.id,
+        trackingToken,
       )
 
       if (
