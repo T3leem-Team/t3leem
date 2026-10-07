@@ -1276,7 +1276,7 @@ export default function AttendanceAwardsCalculator() {
           العودة للصفحة السابقة
       ===================================================== */}
 
-      <div className="flex w-full justify-end">
+      <div className="flex w-full justify-start">
         <Button
           type="button"
           onClick={() => router.back()}
