@@ -6,14 +6,15 @@ import {
   useState,
 } from 'react'
 import {
-  ArrowLeft,
   ArrowLeftRight,
+  ArrowRight,
   History,
   Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-react'
+
 import { supabase } from '@/lib/supabase'
 
 import {
@@ -2034,57 +2035,51 @@ export function TeachersView() {
         </CardContent>
       </Card>
 
-      {selectedTeacher && (
+     {selectedTeacher && (
         <div className="fixed inset-0 z-50 bg-background">
           <div className="mx-auto flex h-full max-w-6xl flex-col">
-            <div className="flex items-center justify-between border-b px-4 py-4 sm:px-6">
+            <div
+              dir="rtl"
+              className="flex items-center justify-between border-b px-4 py-4 sm:px-6"
+            >
               <div>
                 <h2 className="text-lg font-semibold">
-                  {
-                    selectedTeacher.name
-                  }
+                  {selectedTeacher.name}
                 </h2>
-
+      
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>
-                    {currentCourse?.name ??
-                      '—'}
+                    {currentCourse?.name ?? '—'}
                   </span>
-
-                  {selectedTeacherSubjectNames.length >
-                    0 && (
+      
+                  {selectedTeacherSubjectNames.length > 0 && (
                     <>
                       <span>•</span>
-
+      
                       <span className="font-medium text-foreground">
-                        {selectedTeacherSubjectNames.join(
-                          '، ',
-                        )}
+                        {selectedTeacherSubjectNames.join('، ')}
                       </span>
                     </>
                   )}
                 </div>
-
+      
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {getStudentCount(
-                    selectedTeacher.id,
-                  )}{' '}
-                  طالب
+                  {getStudentCount(selectedTeacher.id)} طالب
                 </p>
               </div>
-
+      
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
                 onClick={closeTeacher}
                 disabled={saving}
                 aria-label="العودة"
                 title="العودة"
-                className="text-primary hover:bg-primary/10 hover:text-primary"
-                >
-                  <ArrowLeft className="size-5 stroke-[2.5]" />
+                className="shrink-0 border-primary/30 text-primary hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
+              >
+                <ArrowRight className="size-5 stroke-[2.5]" />
               </Button>
-              </div>
+            </div>
 
               <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
               <div className="flex flex-wrap items-center gap-3">
