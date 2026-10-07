@@ -312,8 +312,11 @@ export function TripsView() {
           </p>
         </div>
 
-        {/* الأزرار */}
-        <div className="flex w-full items-center justify-between gap-3">
+      {/* الأزرار */}
+        <div
+          dir="ltr"
+          className="flex w-full items-center justify-between gap-3"
+        >
           {/* تحديث - يسار */}
           <button
             type="button"
@@ -331,10 +334,10 @@ export function TripsView() {
             ) : (
               <RefreshCw className="size-4" />
             )}
-
-            تحديث
+        
+            <span dir="rtl">تحديث</span>
           </button>
-
+        
           {/* إضافة رحلة - يمين */}
           <button
             type="button"
@@ -342,7 +345,7 @@ export function TripsView() {
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 text-sm font-medium text-sky-700 transition hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/50"
           >
             <CirclePlus className="size-4" />
-            إضافة رحلة
+            <span dir="rtl">إضافة رحلة</span>
           </button>
         </div>
       </div>
