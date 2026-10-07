@@ -264,11 +264,12 @@ export function TeachersViewTeacherPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-background">
-        <div className="mx-auto flex h-full max-w-6xl flex-col">
+      {/* الصفحة الرئيسية */}
+      <div className="fixed inset-0 z-50 overflow-hidden bg-background">
+        <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col">
 
           {/* زر العودة */}
-          <div className="border-b px-4 py-4 sm:px-6">
+          <div className="shrink-0 border-b px-4 py-4 sm:px-6">
             <div
               dir="rtl"
               className="flex justify-start"
@@ -288,7 +289,7 @@ export function TeachersViewTeacherPanel({
           {/* بيانات المعلم + تفاصيل الدورة */}
           <div
             dir="rtl"
-            className="border-b bg-muted/20 px-4 py-4 sm:px-6"
+            className="shrink-0 border-b bg-muted/20 px-4 py-4 sm:px-6"
           >
             <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
 
@@ -384,7 +385,7 @@ export function TeachersViewTeacherPanel({
           </div>
 
           {/* التبويبات */}
-          <div className="border-b px-4 py-3 sm:px-6">
+          <div className="shrink-0 border-b px-4 py-3 sm:px-6">
             <div className="flex flex-wrap gap-2">
 
               {/* الطلاب */}
@@ -469,12 +470,24 @@ export function TeachersViewTeacherPanel({
           </div>
 
           {/* محتوى المعلم */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <div
+            className="
+              min-h-0
+              flex-1
+              overflow-y-auto
+              overflow-x-hidden
+              overscroll-contain
+              touch-pan-y
+              p-4
+              sm:p-6
+            "
+          >
 
             {/* الطلاب */}
             {activePanel ===
               'students' && (
               <div className="space-y-5">
+
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">
@@ -657,6 +670,7 @@ export function TeachersViewTeacherPanel({
             {activePanel ===
               'addStudents' && (
               <div className="mx-auto max-w-3xl space-y-5">
+
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">
@@ -924,44 +938,46 @@ export function TeachersViewTeacherPanel({
             {/* الحضور */}
             {activePanel ===
               'attendance' && (
-              <AttendanceView
-                currentCourse={
-                  currentCourse
-                }
-                teacherId={
-                  selectedTeacher.id
-                }
-                assignedStudents={
-                  assignedStudents
-                }
-                attendanceStatuses={
-                  attendanceStatuses
-                }
-                attendanceRecords={
-                  attendanceRecords
-                }
-                setAttendanceRecords={
-                  updateAttendanceRecords
-                }
-                attendanceNotes={
-                  attendanceNotes
-                }
-                setAttendanceNotes={
-                  setAttendanceNotes
-                }
-                statusMessage={
-                  statusMessage
-                }
-                setStatusMessage={
-                  setStatusMessage
-                }
-                selectedAttendanceDate={
-                  selectedAttendanceDate
-                }
-                setSelectedAttendanceDate={
-                  setSelectedAttendanceDate
-                }
-              />
+              <div className="min-h-full">
+                <AttendanceView
+                  currentCourse={
+                    currentCourse
+                  }
+                  teacherId={
+                    selectedTeacher.id
+                  }
+                  assignedStudents={
+                    assignedStudents
+                  }
+                  attendanceStatuses={
+                    attendanceStatuses
+                  }
+                  attendanceRecords={
+                    attendanceRecords
+                  }
+                  setAttendanceRecords={
+                    updateAttendanceRecords
+                  }
+                  attendanceNotes={
+                    attendanceNotes
+                  }
+                  setAttendanceNotes={
+                    setAttendanceNotes
+                  }
+                  statusMessage={
+                    statusMessage
+                  }
+                  setStatusMessage={
+                    setStatusMessage
+                  }
+                  selectedAttendanceDate={
+                    selectedAttendanceDate
+                  }
+                  setSelectedAttendanceDate={
+                    setSelectedAttendanceDate
+                  }
+                />
+              </div>
             )}
 
             {/* الدورات السابقة */}
@@ -1005,8 +1021,8 @@ export function TeachersViewTeacherPanel({
         transferStudentId &&
         currentCourse &&
         canTransferStudents && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-            <Card className="w-full max-w-md">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/40 p-4 touch-pan-y">
+            <Card className="my-auto w-full max-w-md">
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold">
