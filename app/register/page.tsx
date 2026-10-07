@@ -915,13 +915,6 @@ export default function RegisterPage() {
           return {
             custom_field_id:
               field.id,
-
-            record_type:
-              'registration_request',
-
-            record_id:
-              requestId,
-
             value:
               rawValue.trim() ||
               null,
@@ -937,18 +930,19 @@ export default function RegisterPage() {
     }
 
     const result =
-      await supabase
-        .from(
-          'custom_field_values',
-        )
-        .upsert(rows, {
-          onConflict:
-            'custom_field_id,record_type,record_id',
-        })
+      await supabase.rpc(
+        'save_registration_custom_fields',
+        {
+          p_request_id:
+            requestId,
+          p_fields:
+            rows,
+        },
+      )
 
     if (result.error) {
       console.error(
-        'custom_field_values error:',
+        'save_registration_custom_fields RPC error:',
         result.error,
       )
 
