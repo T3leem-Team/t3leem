@@ -902,25 +902,7 @@ const exportStudentsToExcel =
 return (
   <div className="space-y-6">
 
-    {/* سهم العودة - أعلى يمين الصفحة */}
-    <div
-      className="relative h-10"
-      dir="rtl"
-    >
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        onClick={() =>
-          router.back()
-        }
-        aria-label="العودة"
-        title="العودة"
-        className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
-      >
-        <ArrowRight className="size-5 stroke-[2.5]" />
-      </Button>
-    </div>
+
 
     <div
       className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm transition-all ${
