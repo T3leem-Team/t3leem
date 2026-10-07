@@ -7,6 +7,7 @@ import {
 } from 'react'
 import {
   ArrowLeftRight,
+  ArrowRight,
   History,
   Plus,
   Search,
@@ -2074,18 +2075,19 @@ export function TeachersView() {
               </div>
 
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                onClick={
-                  closeTeacher
-                }
+                onClick={closeTeacher}
                 disabled={saving}
-              >
-                <X className="size-4" />
+                aria-label="العودة"
+                title="العودة"
+                className="text-primary hover:bg-primary/10 hover:text-primary"
+                >
+                  <ArrowRight className="size-5 stroke-[2.5]" />
               </Button>
-            </div>
+              </div>
 
-            <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
+              <div className="border-b bg-muted/20 px-4 py-4 sm:px-6">
               <div className="flex flex-wrap items-center gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">
