@@ -2183,22 +2183,7 @@ export function EnrollmentView() {
       className="space-y-6"
       dir="rtl"
     >
-      {/* زر العودة */}
-      <div className="relative h-10">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={() =>
-            router.back()
-          }
-          aria-label="العودة"
-          title="العودة"
-          className="absolute right-0 top-0 h-9 w-9 border-foreground/30 bg-background text-foreground shadow-sm hover:border-foreground/50 hover:bg-muted hover:text-foreground"
-        >
-          <ArrowRight className="size-5 stroke-[2.5]" />
-        </Button>
-      </div>
+   
 
       <PageHeader
         title="طلبات التسجيل"
