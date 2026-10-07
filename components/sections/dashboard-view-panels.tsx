@@ -1054,18 +1054,7 @@ export function DashboardViewPanels({
         </CardHeader>
 
         <CardContent>
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              التاريخ
-            </p>
-
-            <p className="text-sm font-medium">
-              {formatDate(
-                selectedDate,
-              )}
-            </p>
-          </div>
-
+          
           {attendanceNotes.length ===
           0 ? (
             <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
