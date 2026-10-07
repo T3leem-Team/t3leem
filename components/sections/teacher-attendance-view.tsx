@@ -21,7 +21,6 @@ import {
   formatDateForDisplay,
   getPercentageClass,
   getStatusClasses,
-  type getAttendancePercentage,
 } from '@/components/sections/teacher-attendance'
 
 type AttendanceSummary = {
