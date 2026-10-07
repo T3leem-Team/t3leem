@@ -2564,9 +2564,9 @@ export function DashboardView() {
             setAttendanceDetailsOpen
           }
           selectedStudent={
-            selectedStudent
+            setSelectedStudent
           }
-          onSelectStudent={
+          setSelectedStudent={
             setSelectedStudent
           }
           router={router}
