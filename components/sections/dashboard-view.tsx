@@ -2564,7 +2564,7 @@ export function DashboardView() {
             setAttendanceDetailsOpen
           }
           selectedStudent={
-            setSelectedStudent
+            selectedStudent
           }
           setSelectedStudent={
             setSelectedStudent
