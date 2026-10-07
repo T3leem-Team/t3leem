@@ -1441,7 +1441,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-start">
         <Button
           type="button"
           onClick={() => router.back()}
@@ -1463,7 +1463,7 @@ export default function Page() {
       )}
 
       {!showForm && (
-        <div className="flex justify-end">
+        <div className="flex justify-start">
           <Button
             type="button"
             onClick={openAddForm}
