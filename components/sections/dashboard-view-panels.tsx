@@ -1630,11 +1630,11 @@ export function DashboardViewPanels({
 
               <button
                 type="button"
-                onClick={() =>
-                  setSelectedStudent(
-                    null,
-                  )
-                }
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setStudentAttendanceDetailsOpen(false)
+                  setSelectedStudent(null)
+                }}
                 className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <X className="size-5" />
