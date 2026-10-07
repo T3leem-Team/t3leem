@@ -1,10 +1,10 @@
 'use client'
 
 import {
+  ArrowRight,
   CalendarCheck,
   Users,
   UserCheck,
-  X,
 } from 'lucide-react'
 
 export type TeacherAttendanceDetail = {
@@ -84,9 +84,11 @@ export function AttendanceDetails({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="العودة"
+            title="العودة"
+            className="rounded-lg p-2 text-primary transition-colors hover:bg-primary/10"
           >
-            <X className="size-5" />
+            <ArrowRight className="size-5 stroke-[2.5]" />
           </button>
         </div>
 
