@@ -192,6 +192,40 @@ function formatDate(value: string) {
   }
 }
 
+const dayLabels: Record<string, string> = {
+  sunday: 'الأحد',
+  monday: 'الاثنين',
+  tuesday: 'الثلاثاء',
+  wednesday: 'الأربعاء',
+  thursday: 'الخميس',
+  friday: 'الجمعة',
+  saturday: 'السبت',
+
+  Sun: 'الأحد',
+  Mon: 'الاثنين',
+  Tue: 'الثلاثاء',
+  Wed: 'الأربعاء',
+  Thu: 'الخميس',
+  Fri: 'الجمعة',
+  Sat: 'السبت',
+
+  الأحد: 'الأحد',
+  الاثنين: 'الاثنين',
+  الثلاثاء: 'الثلاثاء',
+  الأربعاء: 'الأربعاء',
+  الخميس: 'الخميس',
+  الجمعة: 'الجمعة',
+  السبت: 'السبت',
+}
+
+function getDayLabel(day: string) {
+  return (
+    dayLabels[day] ??
+    dayLabels[day.trim()] ??
+    day
+  )
+}
+
 export function SupervisionView() {
   const today = getLocalDateString()
 
@@ -1281,22 +1315,27 @@ export function SupervisionView() {
                     )}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {selectedCourse.days?.length >
-                  0 ? (
-                    selectedCourse.days.map(
-                      (
-                        day,
-                        index,
-                      ) => (
-                        <Badge
-                          key={`${day}-${index}`}
-                          variant="neutral"
-                        >
-                          {day}
-                        </Badge>
-                      ),
-                    )
+                <div
+                  className="min-w-0 text-right"
+                  dir="rtl"
+                >
+                  <p className="mb-2 text-sm font-medium">
+                    أيام الدراسة
+                  </p>
+                
+                  {selectedCourse.days?.length > 0 ? (
+                    <div className="flex flex-wrap justify-start gap-2">
+                      {selectedCourse.days.map(
+                        (day, index) => (
+                          <Badge
+                            key={`${day}-${index}`}
+                            variant="neutral"
+                          >
+                            {getDayLabel(day)}
+                          </Badge>
+                        ),
+                      )}
+                    </div>
                   ) : (
                     <Badge variant="neutral">
                       أيام الدورة غير محددة
