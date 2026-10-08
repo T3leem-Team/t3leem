@@ -363,17 +363,6 @@ export function StudentForm({
     setCustomGuardianRelation,
   ] = useState('')
 
-  /*
-   * ============================================================
-   * تهيئة صلة القرابة عند فتح طالب للتعديل
-   *
-   * إذا كانت القيمة موجودة ضمن الخيارات المعروفة:
-   * نعرضها مباشرة.
-   *
-   * وإذا كانت قيمة مخصصة مثل "العم":
-   * نختار "أخرى" ونضع القيمة داخل خانة الإدخال.
-   * ============================================================
-   */
   useEffect(() => {
     const relation =
       editingStudent?.guardianRelation?.trim() ??
@@ -403,11 +392,6 @@ export function StudentForm({
     )
   }, [editingStudent])
 
-  /*
-   * ============================================================
-   * نافذة الخطأ
-   * ============================================================
-   */
   const showError = (
     message: string,
   ) => {
@@ -420,11 +404,6 @@ export function StudentForm({
     setErrorMessage('')
   }
 
-  /*
-   * ============================================================
-   * تحويل أخطاء Supabase إلى رسائل مفهومة
-   * ============================================================
-   */
   const getDatabaseErrorMessage = (
     error: any,
   ) => {
@@ -439,9 +418,6 @@ export function StudentForm({
     const combined =
       `${message} ${details}`.toLowerCase()
 
-    /*
-     * الرقم الشخصي مكرر
-     */
     if (
       combined.includes(
         'personal_id',
@@ -464,9 +440,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * student_id مكرر
-     */
     if (
       combined.includes(
         'student_id',
@@ -477,9 +450,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * السنة الدراسية
-     */
     if (
       combined.includes(
         'academic_year',
@@ -490,9 +460,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * الصف الأكاديمي
-     */
     if (
       combined.includes(
         'level_id',
@@ -503,9 +470,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * الهاتف
-     */
     if (
       combined.includes(
         'phone',
@@ -516,9 +480,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * واتساب
-     */
     if (
       combined.includes(
         'whatsapp',
@@ -529,9 +490,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * صلاحيات قاعدة البيانات
-     */
     if (
       combined.includes(
         'permission',
@@ -548,9 +506,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * القيمة غير صحيحة
-     */
     if (
       combined.includes(
         'invalid input',
@@ -564,9 +519,6 @@ export function StudentForm({
       )
     }
 
-    /*
-     * الرسالة الأصلية إذا لم نتعرف عليها
-     */
     return (
       message ||
       'حدث خطأ غير معروف أثناء حفظ الطالب.'
@@ -642,12 +594,6 @@ export function StudentForm({
       data.get('notes') || '',
     ).trim()
 
-    /*
-     * ============================================================
-     * التحقق من أرقام الهاتف والرقم الشخصي
-     * ============================================================
-     */
-
     if (
       personalId &&
       !/^\d{1,9}$/.test(
@@ -682,12 +628,6 @@ export function StudentForm({
       return
     }
 
-    /*
-     * ============================================================
-     * التحقق من "أخرى"
-     * ============================================================
-     */
-
     if (
       guardianRelationSelection ===
         'أخرى' &&
@@ -698,12 +638,6 @@ export function StudentForm({
       )
       return
     }
-
-    /*
-     * ============================================================
-     * التحقق من الحقول الأساسية
-     * ============================================================
-     */
 
     const missingFields: string[] =
       []
@@ -737,12 +671,6 @@ export function StudentForm({
       return
     }
 
-    /*
-     * ============================================================
-     * التحقق من الرقم الشخصي
-     * ============================================================
-     */
-
     if (
       personalId.length < 5
     ) {
@@ -751,12 +679,6 @@ export function StudentForm({
       )
       return
     }
-
-    /*
-     * ============================================================
-     * التحقق من المبلغ
-     * ============================================================
-     */
 
     if (
       !Number.isFinite(
@@ -770,24 +692,12 @@ export function StudentForm({
       return
     }
 
-    /*
-     * ============================================================
-     * السنة الدراسية
-     * ============================================================
-     */
-
     if (!currentAcademicYearId) {
       showError(
         'لا توجد سنة دراسية حالية مفعلة.\n\nيجب تفعيل سنة دراسية قبل تسجيل الطالب.',
       )
       return
     }
-
-    /*
-     * ============================================================
-     * الصف الأكاديمي
-     * ============================================================
-     */
 
     const selectedLevel =
       academicLevels.find(
@@ -801,12 +711,6 @@ export function StudentForm({
       )
       return
     }
-
-    /*
-     * ============================================================
-     * التحقق من الرسوم
-     * ============================================================
-     */
 
     if (
       !editingStudent &&
@@ -823,15 +727,6 @@ export function StudentForm({
       )
       return
     }
-
-    /*
-     * ============================================================
-     * التحقق من تكرار الرقم الشخصي
-     *
-     * نتحقق هنا قبل INSERT حتى يحصل المستخدم
-     * على رسالة واضحة بدل رسالة PostgreSQL.
-     * ============================================================
-     */
 
     const {
       data: duplicateStudents,
@@ -855,10 +750,6 @@ export function StudentForm({
       return
     }
 
-    /*
-     * في حالة التعديل:
-     * نستثني الطالب الحالي من عملية التحقق.
-     */
     const duplicateStudent =
       duplicateStudents?.find(
         (student) =>
@@ -915,9 +806,6 @@ export function StudentForm({
         return
       }
 
-      /*
-       * البحث عن ربط الطالب بالسنة الدراسية
-       */
       const {
         data: existingEnrollment,
         error:
@@ -982,6 +870,8 @@ export function StudentForm({
             level_id:
               selectedLevel.id,
             class_id: null,
+            course_id:
+              currentCourse?.id ?? null,
             status: 'نشط',
             join_date:
               getTodayString(),
@@ -1090,7 +980,7 @@ export function StudentForm({
 
     /*
      * ============================================================
-     * ربط الصف الأكاديمي
+     * ربط الصف الأكاديمي والدورة الحالية
      * ============================================================
      */
 
@@ -1106,15 +996,14 @@ export function StudentForm({
         level_id:
           selectedLevel.id,
         class_id: null,
+        course_id:
+          currentCourse?.id ?? null,
         status: 'نشط',
         join_date:
           getTodayString(),
       })
 
     if (enrollmentError) {
-      /*
-       * محاولة تنظيف الطالب إذا فشل ربط الصف.
-       */
       await supabase
         .from('students')
         .delete()
@@ -1158,9 +1047,6 @@ export function StudentForm({
         })
 
       if (paymentError) {
-        /*
-         * تنظيف كل ما تم إنشاؤه
-         */
         await supabase
           .from('enrollments')
           .delete()
@@ -1343,10 +1229,6 @@ export function StudentForm({
 
   return (
     <>
-      {/* ==========================================================
-          نافذة الخطأ
-          ========================================================== */}
-
       {isErrorOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div
@@ -1398,10 +1280,6 @@ export function StudentForm({
           </div>
         </div>
       )}
-
-      {/* ==========================================================
-          السايد بار
-          ========================================================== */}
 
       <div className="fixed inset-0 z-50">
         <button
