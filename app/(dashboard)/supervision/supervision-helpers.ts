@@ -1,4 +1,10 @@
-import type { LucideIcon } from 'lucide-react'
+import {
+  CalendarDays,
+  Clock3,
+  MessageSquareText,
+  UserX,
+  type LucideIcon,
+} from 'lucide-react'
 
 export type SupervisionType =
   | 'day_cancelled'
@@ -134,9 +140,11 @@ export function getLocalDateString() {
   const now = new Date()
 
   const year = now.getFullYear()
+
   const month = String(
     now.getMonth() + 1,
   ).padStart(2, '0')
+
   const day = String(
     now.getDate(),
   ).padStart(2, '0')
