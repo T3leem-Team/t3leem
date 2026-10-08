@@ -34,11 +34,11 @@ import {
   type AttendanceRecord,
   type AttendanceNotes,
   type Student,
-} from '@/components/sections/teacher-attendance'
+} from '@/app/(dashboard)/teachers/teacher-attendance'
 
 import {
   TeachersViewPreviousCourses,
-} from '@/components/sections/teachers-view-previous-courses'
+} from '@/app/(dashboard)/teachers/teachers-view-previous-courses'
 
 type ActivePanel =
   | 'students'
