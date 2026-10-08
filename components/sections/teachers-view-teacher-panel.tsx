@@ -481,7 +481,7 @@ export function TeachersViewTeacherPanel({
               min-w-0
               flex-1
               overflow-y-auto
-              overflow-x-auto
+              overflow-x-hidden
               overscroll-contain
               touch-pan-y
               p-3
