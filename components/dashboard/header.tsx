@@ -892,10 +892,6 @@ export function Header({
               border-border
               bg-card
               shadow-2xl
-
-              sm:left-auto
-              sm:right-0
-              sm:max-w-[calc(100vw-2rem)]
             "
           >
             <div className="border-b border-border px-4 py-3">
