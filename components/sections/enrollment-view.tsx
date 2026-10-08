@@ -26,8 +26,9 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-import { EnrollmentImport } from './enrollment-import'
-import { EnrollmentArchive } from './enrollment-archive'
+import { EnrollmentImport } from '@/app/(dashboard)/enrollment/enrollment-import'
+import { EnrollmentArchive } from '@/app/(dashboard)/enrollment/enrollment-archive'
+
 import {
   DEFAULT_COLUMNS,
   EnrollmentTables,
@@ -37,8 +38,7 @@ import {
   type Filters,
   type Level,
   type RegistrationRequest,
-} from './enrollment-view-two'
-
+} from '@/app/(dashboard)/enrollment/enrollment-view-two'
 const CURRENT_YEAR_KEY =
   'allow_add_to_current_year'
 
