@@ -227,10 +227,6 @@ export function TeachersViewTeacherPanel({
                   <p className="break-words font-semibold">
                     {selectedTeacher.name}
                   </p>
-  
-                  <span className="shrink-0 rounded-full bg-background px-3 py-1 text-sm text-muted-foreground">
-                    {getStudentCount(selectedTeacher.id)} طالب
-                  </span>
                 </div>
               </div>
   
