@@ -1957,342 +1957,324 @@ export function StudentsTable({
       )}
 
       {paymentStudent && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              closePayment()
-            }
-          }}
-        >
           <div
-            className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
-            dir="rtl"
-            onMouseDown={(
-              event
-            ) =>
-              event.stopPropagation()
-            }
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closePayment()
+              }
+            }}
           >
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  تفاصيل السداد
-                </h2>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {paymentStudent.name}
-                </p>
+            <div
+              className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
+              dir="rtl"
+              onMouseDown={(event) =>
+                event.stopPropagation()
+              }
+            >
+              <div className="mb-5 flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    تفاصيل السداد
+                  </h2>
+  
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {paymentStudent.name}
+                  </p>
+                </div>
+  
+                <button
+                  type="button"
+                  onClick={closePayment}
+                  disabled={paymentSaving}
+                  className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  إغلاق
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={
-                  closePayment
-                }
-                disabled={
-                  paymentSaving
-                }
-                className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                إغلاق
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">
-                  المستحق
-                </div>
-
-                <div className="mt-1 font-semibold">
-                  {Number(
-                    paymentStudent.amountDue
-                  ).toFixed(
-                    3
-                  )}{' '}
-                  د.ب
-                </div>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">
-                  المدفوع
-                </div>
-
-                <div className="mt-1 font-semibold">
-                  {Number(
-                    paymentStudent.amountPaid
-                  ).toFixed(
-                    3
-                  )}{' '}
-                  د.ب
-                </div>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">
-                  المتبقي
-                </div>
-
-                <div className="mt-1 font-semibold">
-                  {Math.max(
-                    Number(
+  
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    المستحق
+                  </div>
+  
+                  <div className="mt-1 font-semibold">
+                    {Number(
                       paymentStudent.amountDue
-                    ) -
+                    ).toFixed(3)}{' '}
+                    د.ب
+                  </div>
+                </div>
+  
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    المدفوع
+                  </div>
+  
+                  <div className="mt-1 font-semibold">
+                    {Number(
+                      paymentStudent.amountPaid
+                    ).toFixed(3)}{' '}
+                    د.ب
+                  </div>
+                </div>
+  
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    المتبقي
+                  </div>
+  
+                  <div className="mt-1 font-semibold">
+                    {Math.max(
                       Number(
-                        paymentStudent.amountPaid
-                      ),
-                    0
-                  ).toFixed(
-                    3
-                  )}{' '}
-                  د.ب
+                        paymentStudent.amountDue
+                      ) -
+                        Number(
+                          paymentStudent.amountPaid
+                        ),
+                      0
+                    ).toFixed(3)}{' '}
+                    د.ب
+                  </div>
                 </div>
-              </div>
-
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">
-                  الحالة
-                </div>
-
-                <div className="mt-2">
-                  <StatusBadge
-                    status={getPaymentStatusLabel(
-                      paymentStudent.paymentStatus
-                    )}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {!paymentStudent.feeExempt &&
-              Number(
-                paymentStudent.amountPaid
-              ) <
-                Number(
-                  paymentStudent.amountDue
-                ) && (
-                <div className="mt-5">
-                  {!showAddPayment ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowAddPayment(
-                          true
-                        )
-                      }
-                      className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-                    >
-                      إضافة دفعة
-                    </button>
-                  ) : (
-                    <div className="space-y-4 rounded-lg border p-4">
-                      <div className="text-sm font-semibold">
-                        إضافة دفعة
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs text-muted-foreground">
-                          المبلغ
-                        </label>
-
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.001"
-                          value={
-                            paymentAmount
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setPaymentAmount(
-                              event.target
-                                .value
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-1"
-                          placeholder="0.000"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs text-muted-foreground">
-                          طريقة الدفع
-                        </label>
-
-                        <select
-                          value={
-                            paymentMethod
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setPaymentMethod(
-                              event
-                                .target
-                                .value as
-                                | 'نقدي'
-                                | 'تحويل'
-                                | 'بطاقة'
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        >
-                          <option value="نقدي">
-                            نقدي
-                          </option>
-
-                          <option value="تحويل">
-                            تحويل
-                          </option>
-
-                          <option value="بطاقة">
-                            بطاقة
-                          </option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs text-muted-foreground">
-                          تاريخ الدفع
-                        </label>
-
-                        <input
-                          type="date"
-                          value={
-                            paymentDate
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setPaymentDate(
-                              event
-                                .target
-                                .value
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs text-muted-foreground">
-                          رقم المرجع
-                        </label>
-
-                        <input
-                          value={
-                            paymentReference
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setPaymentReference(
-                              event
-                                .target
-                                .value
-                            )
-                          }
-                          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                          placeholder="اختياري"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="mb-1.5 block text-xs text-muted-foreground">
-                          ملاحظات
-                        </label>
-
-                        <textarea
-                          value={
-                            paymentNotes
-                          }
-                          onChange={(
-                            event
-                          ) =>
-                            setPaymentNotes(
-                              event
-                                .target
-                                .value
-                            )
-                          }
-                          rows={3}
-                          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                          placeholder="اختياري"
-                        />
-                      </div>
-
-                      {paymentMessage && (
-                        <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                          {
-                            paymentMessage
-                          }
-                        </div>
+  
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">
+                    الحالة
+                  </div>
+  
+                  <div className="mt-2">
+                    <StatusBadge
+                      status={getPaymentStatusLabel(
+                        paymentStudent.paymentStatus
                       )}
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={
-                            savePayment
-                          }
-                          disabled={
-                            paymentSaving
-                          }
-                          className="flex-1 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                        >
-                          {paymentSaving
-                            ? 'جاري الحفظ...'
-                            : 'حفظ الدفعة'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowAddPayment(
-                              false
-                            )
-                          }
-                          disabled={
-                            paymentSaving
-                          }
-                          className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
-                        >
-                          إلغاء
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    />
+                  </div>
                 </div>
-              )}
-
-            {paymentStudent.feeExempt && (
-              <div className="mt-5 rounded-lg border p-3 text-sm">
-                الطالب معفي من الرسوم ولا يمكن إضافة دفعة له.
               </div>
-            )}
-
-            {!paymentStudent.feeExempt &&
-              Number(
-                paymentStudent.amountPaid
-              ) >=
+  
+              {!paymentStudent.feeExempt &&
                 Number(
-                  paymentStudent.amountDue
-                ) && (
+                  paymentStudent.amountPaid
+                ) <
+                  Number(
+                    paymentStudent.amountDue
+                  ) && (
+                  <div className="mt-5">
+                    {!showAddPayment ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowAddPayment(true)
+                        }
+                        className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                      >
+                        إضافة دفعة
+                      </button>
+                    ) : (
+                      <div
+                        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+                        onMouseDown={(event) => {
+                          if (
+                            event.target ===
+                            event.currentTarget
+                          ) {
+                            setShowAddPayment(false)
+                          }
+                        }}
+                      >
+                        <div
+                          dir="rtl"
+                          className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-background p-5 shadow-2xl"
+                          onMouseDown={(event) =>
+                            event.stopPropagation()
+                          }
+                        >
+                          <div className="mb-5 flex items-start justify-between">
+                            <div>
+                              <h2 className="text-lg font-semibold">
+                                إضافة دفعة
+                              </h2>
+  
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {paymentStudent.name}
+                              </p>
+                            </div>
+  
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowAddPayment(false)
+                              }
+                              disabled={paymentSaving}
+                              className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
+                            >
+                              إغلاق
+                            </button>
+                          </div>
+  
+                          <div className="space-y-4">
+                            <div>
+                              <label className="mb-1.5 block text-xs text-muted-foreground">
+                                المبلغ
+                              </label>
+  
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={paymentAmount}
+                                onChange={(event) =>
+                                  setPaymentAmount(
+                                    event.target.value
+                                  )
+                                }
+                                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-1"
+                                placeholder="0.000"
+                              />
+                            </div>
+  
+                            <div>
+                              <label className="mb-1.5 block text-xs text-muted-foreground">
+                                طريقة الدفع
+                              </label>
+  
+                              <select
+                                value={paymentMethod}
+                                onChange={(event) =>
+                                  setPaymentMethod(
+                                    event.target
+                                      .value as
+                                      | 'نقدي'
+                                      | 'تحويل'
+                                      | 'بطاقة'
+                                  )
+                                }
+                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                              >
+                                <option value="نقدي">
+                                  نقدي
+                                </option>
+  
+                                <option value="تحويل">
+                                  تحويل
+                                </option>
+  
+                                <option value="بطاقة">
+                                  بطاقة
+                                </option>
+                              </select>
+                            </div>
+  
+                            <div>
+                              <label className="mb-1.5 block text-xs text-muted-foreground">
+                                تاريخ الدفع
+                              </label>
+  
+                              <input
+                                type="date"
+                                value={paymentDate}
+                                onChange={(event) =>
+                                  setPaymentDate(
+                                    event.target.value
+                                  )
+                                }
+                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                              />
+                            </div>
+  
+                            <div>
+                              <label className="mb-1.5 block text-xs text-muted-foreground">
+                                رقم المرجع
+                              </label>
+  
+                              <input
+                                value={paymentReference}
+                                onChange={(event) =>
+                                  setPaymentReference(
+                                    event.target.value
+                                  )
+                                }
+                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                                placeholder="اختياري"
+                              />
+                            </div>
+  
+                            <div>
+                              <label className="mb-1.5 block text-xs text-muted-foreground">
+                                ملاحظات
+                              </label>
+  
+                              <textarea
+                                value={paymentNotes}
+                                onChange={(event) =>
+                                  setPaymentNotes(
+                                    event.target.value
+                                  )
+                                }
+                                rows={3}
+                                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                                placeholder="اختياري"
+                              />
+                            </div>
+  
+                            {paymentMessage && (
+                              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                                {paymentMessage}
+                              </div>
+                            )}
+  
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={savePayment}
+                                disabled={paymentSaving}
+                                className="flex-1 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                              >
+                                {paymentSaving
+                                  ? 'جاري الحفظ...'
+                                  : 'حفظ الدفعة'}
+                              </button>
+  
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowAddPayment(false)
+                                }
+                                disabled={paymentSaving}
+                                className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+  
+              {paymentStudent.feeExempt && (
                 <div className="mt-5 rounded-lg border p-3 text-sm">
-                  تم سداد الرسوم بالكامل.
+                  الطالب معفي من الرسوم ولا يمكن إضافة دفعة له.
                 </div>
               )}
+  
+              {!paymentStudent.feeExempt &&
+                Number(
+                  paymentStudent.amountPaid
+                ) >=
+                  Number(
+                    paymentStudent.amountDue
+                  ) && (
+                  <div className="mt-5 rounded-lg border p-3 text-sm">
+                    تم سداد الرسوم بالكامل.
+                  </div>
+                )}
+            </div>
           </div>
-        </div>
-      )}
-    </>
-  )
-}
+        )}
+      </>
+    )
+  }
