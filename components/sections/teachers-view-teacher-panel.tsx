@@ -265,7 +265,7 @@ export function TeachersViewTeacherPanel({
   return (
     <>
       {/* الصفحة الرئيسية */}
-      <div className="fixed inset-0 z-50 bg-background">
+      <div className="fixed inset-0 z-50 overflow-hidden bg-background">
         <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col">
 
           {/* زر العودة */}
