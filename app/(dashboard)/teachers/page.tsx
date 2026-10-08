@@ -1,3 +1,5 @@
-export default function Page() {
-  return null
+import { TeachersView } from '@/components/sections/teachers-view'
+
+export default function TeachersPage() {
+  return <TeachersView />
 }
