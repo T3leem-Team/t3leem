@@ -40,10 +40,14 @@ import {
   TeachersViewTeacherPanel,
 } from '@/app/(dashboard)/teachers/teachers-view-teacher-panel'
 
-export function TeachersView() {
-  const initialTeachersCache =
-    getTeachersCache()
+const initialTeachersCache =
+  getTeachersCache()
 
+type RemoveMode =
+  | 'assignment_only'
+  | 'assignment_and_attendance'
+
+export function TeachersView() {
   const [teachers, setTeachers] =
     useState<Teacher[]>(
       initialTeachersCache?.teachers ?? [],
