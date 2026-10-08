@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-import { requireDashboardSection } from '@/lib/authorization'
+import { requireDashboardSection } from '@/lib/auth/authorization'
 
 export default async function SettingsLayout({
   children,
