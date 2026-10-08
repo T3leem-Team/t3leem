@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 
-import { PaymentStudents } from './PaymentStudents'
-import { PaymentFinancial } from './PaymentFinancial'
-import { PaymentPersonal } from './PaymentPersonal'
+import { PaymentStudents } from '@/app/(dashboard)/payments/students/PaymentStudents'
+import { PaymentFinancial } from '@/app/(dashboard)/payments/financial/PaymentFinancial'
+import { PaymentPersonal } from '@/app/(dashboard)/payments/personal/PaymentPersonal'
 
 type PaymentSection =
   | 'students'
