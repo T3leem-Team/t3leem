@@ -364,7 +364,6 @@ export function StudentForm({
     setCustomGuardianRelation,
   ] = useState('')
 
-  // شاشة الدفعة الأولى داخل نفس النافذة
   const [
     isPaymentView,
     setIsPaymentView,
@@ -596,7 +595,6 @@ export function StudentForm({
     closeError()
 
     const form = e.currentTarget
-
     const data = new FormData(form)
 
     const name = String(
@@ -985,7 +983,6 @@ export function StudentForm({
       )
 
       closeStudentDrawer()
-
       form.reset()
 
       return
@@ -1125,91 +1122,65 @@ export function StudentForm({
 
     const mappedStudent = {
       id: newStudent.id,
-
       studentId:
         newStudent.student_id ??
         '',
-
       name:
         newStudent.name,
-
       personalId:
         newStudent.personal_id ??
         '',
-
       guardianRelation:
         newStudent.guardian_relation ??
         '',
-
       gender: '',
-
       age: null,
-
       grade,
-
       phone:
         newStudent.phone ??
         '',
-
       whatsapp:
         newStudent.whatsapp ??
         '',
-
       status:
         newStudent.status ??
         'نشط',
-
       source:
         newStudent.source ??
         'manual',
-
       createdAt:
         new Date().toISOString(),
-
       updatedAt: '',
-
       academicYearId:
         currentAcademicYearId,
-
       paymentStatus,
-
       amountDue:
         currentAnnualFee,
-
       amountPaid,
-
       feeExempt:
         Boolean(
           newStudent.fee_exempt,
         ),
-
       chronicDiseases:
         newStudent.health_notes ??
         '',
-
       notes:
         newStudent.notes ?? '',
-
       attendance:
         currentCourse
           ? 'لم يحضر'
           : 'لم يحضر',
-
       courseStatuses:
         courses.map(
           (course) => ({
             courseId:
               course.id,
-
             courseName:
               course.name,
-
             startDate:
               course.start_date,
-
             endDate:
               course.end_date,
-
             status:
               getCourseStatus(
                 course,
@@ -1219,7 +1190,6 @@ export function StudentForm({
               ),
           }),
         ),
-
       attendanceSummaries:
         courses.map(
           (course) =>
@@ -1230,7 +1200,6 @@ export function StudentForm({
               attendanceStatuses,
             ),
         ),
-
       attendanceRecords: [],
     }
 
@@ -1248,7 +1217,6 @@ export function StudentForm({
     )
 
     closeStudentDrawer()
-
     form.reset()
   }
 
@@ -1316,10 +1284,10 @@ export function StudentForm({
           }
         />
 
-        <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
+        <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden border-l bg-background shadow-xl">
           {isPaymentView ? (
-            <>
-              <div className="flex items-center gap-3 border-b px-6 py-4">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
                 <button
                   type="button"
                   onClick={() =>
@@ -1344,95 +1312,97 @@ export function StudentForm({
                 </div>
               </div>
 
-              <div className="space-y-6 p-6">
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium">
-                        الرسوم السنوية
-                      </p>
+              <div className="min-h-0 flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">
+                          الرسوم السنوية
+                        </p>
 
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {
-                          currentAcademicYearName
-                        }
-                      </p>
-                    </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {
+                            currentAcademicYearName
+                          }
+                        </p>
+                      </div>
 
-                    <div className="text-lg font-semibold">
-                      {currentAnnualFee.toLocaleString(
-                        'ar-BH',
-                        {
-                          minimumFractionDigits: 3,
-                          maximumFractionDigits: 3,
-                        },
-                      )}{' '}
-                      د.ب
+                      <div className="text-lg font-semibold">
+                        {currentAnnualFee.toLocaleString(
+                          'ar-BH',
+                          {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          },
+                        )}{' '}
+                        د.ب
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    مبلغ الدفعة
-                  </label>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      مبلغ الدفعة
+                    </label>
 
-                  <input
-                    type="number"
-                    min="0"
-                    max={
-                      currentAnnualFee >
-                      0
-                        ? currentAnnualFee
-                        : undefined
-                    }
-                    step="0.001"
-                    value={
-                      paymentAmount
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setPaymentAmount(
-                        event.target
-                          .value,
-                      )
-                    }
-                    inputMode="decimal"
-                    autoFocus
-                    placeholder="0.000"
-                    className="h-12 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                  />
+                    <input
+                      type="number"
+                      min="0"
+                      max={
+                        currentAnnualFee >
+                        0
+                          ? currentAnnualFee
+                          : undefined
+                      }
+                      step="0.001"
+                      value={
+                        paymentAmount
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setPaymentAmount(
+                          event.target
+                            .value,
+                        )
+                      }
+                      inputMode="decimal"
+                      autoFocus
+                      placeholder="0.000"
+                      className="h-12 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                    />
 
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    لا يمكن أن تتجاوز الدفعة الرسوم السنوية.
-                  </p>
-                </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      لا يمكن أن تتجاوز الدفعة الرسوم السنوية.
+                    </p>
+                  </div>
 
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      الدفعة الحالية
-                    </span>
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        الدفعة الحالية
+                      </span>
 
-                    <span className="text-base font-semibold">
-                      {Number(
-                        paymentAmount ||
-                          0,
-                      ).toLocaleString(
-                        'ar-BH',
-                        {
-                          minimumFractionDigits: 3,
-                          maximumFractionDigits: 3,
-                        },
-                      )}{' '}
-                      د.ب
-                    </span>
+                      <span className="text-base font-semibold">
+                        {Number(
+                          paymentAmount ||
+                            0,
+                        ).toLocaleString(
+                          'ar-BH',
+                          {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          },
+                        )}{' '}
+                        د.ب
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
+              <div className="flex shrink-0 gap-3 border-t bg-background p-6">
                 <Button
                   type="button"
                   className="flex-1"
@@ -1455,9 +1425,9 @@ export function StudentForm({
                   إلغاء
                 </Button>
               </div>
-            </>
+            </div>
           ) : (
-            <>
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="flex items-center justify-between border-b px-6 py-4">
                 <div>
                   <h2 className="text-lg font-semibold">
@@ -1936,7 +1906,7 @@ export function StudentForm({
                   </Button>
                 </div>
               </form>
-            </>
+            </div>
           )}
         </aside>
       </div>
