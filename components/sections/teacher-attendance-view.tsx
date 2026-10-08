@@ -154,16 +154,16 @@ export function TeacherAttendanceView({
   return (
     <div
       dir="rtl"
-      className="flex min-h-0 w-full flex-col"
+      className="w-full min-w-0"
     >
       {/* الرأس */}
-      <div className="shrink-0 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h2 className="text-xl font-bold">
             الحضور والغياب
           </h2>
 
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 break-words text-sm text-muted-foreground">
             {currentCourse.name}
           </p>
         </div>
@@ -189,7 +189,7 @@ export function TeacherAttendanceView({
 
       {/* رسائل حالة التاريخ */}
       {isCheckingCancellation && (
-        <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center sm:p-8">
           <h3 className="text-lg font-semibold">
             جارٍ التحقق من حالة اليوم
           </h3>
@@ -201,7 +201,7 @@ export function TeacherAttendanceView({
       )}
 
       {dateState === 'before-course' && (
-        <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center sm:p-8">
           <h3 className="text-lg font-semibold">
             الدورة لم تبدأ بعد
           </h3>
@@ -221,7 +221,7 @@ export function TeacherAttendanceView({
       )}
 
       {dateState === 'after-course' && (
-        <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center sm:p-8">
           <h3 className="text-lg font-semibold">
             انتهت الدورة
           </h3>
@@ -241,7 +241,7 @@ export function TeacherAttendanceView({
       )}
 
       {dateState === 'no-lesson' && (
-        <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center sm:p-8">
           <h3 className="text-lg font-semibold">
             لا يوجد درس في هذا اليوم
           </h3>
@@ -258,7 +258,7 @@ export function TeacherAttendanceView({
       )}
 
       {dateState === 'cancelled' && (
-        <div className="mt-4 shrink-0 rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-900/50 dark:bg-red-950/20">
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-900/50 dark:bg-red-950/20 sm:p-8">
           <h3 className="text-lg font-semibold text-red-700 dark:text-red-400">
             اليوم أو الحصة ملغاة
           </h3>
@@ -275,7 +275,7 @@ export function TeacherAttendanceView({
       )}
 
       {dateState === 'future-lesson' && (
-        <div className="mt-4 shrink-0 rounded-xl border border-dashed bg-muted/30 p-8 text-center">
+        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center sm:p-8">
           <h3 className="text-lg font-semibold">
             الدرس لم يبدأ بعد
           </h3>
@@ -292,17 +292,17 @@ export function TeacherAttendanceView({
       )}
 
       {isAttendanceAvailable && (
-        <div className="min-h-0 w-full pt-4">
-          <div className="flex min-h-0 w-full flex-col">
-            {/* كل ما فوق قائمة الطلاب ثابت */}
-            <div className="shrink-0 space-y-4">
-              {/* حالة التسجيل */}
+        <div className="w-full min-w-0 pt-4">
+          <div className="w-full min-w-0">
+
+            {/* حالة التسجيل */}
+            <div className="rounded-xl border px-4 py-3">
               <div
-                className={`rounded-xl border px-4 py-3 ${
+                className={
                   attendanceSummary.allRecorded
                     ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
                     : 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
-                }`}
+                }
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-2">
@@ -313,7 +313,7 @@ export function TeacherAttendanceView({
                     </span>
 
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold">
+                      <div className="break-words text-sm font-semibold">
                         {attendanceSummary.allRecorded
                           ? `تم تسجيل حالة جميع الطلاب (${attendanceSummary.recorded}/${attendanceSummary.total})`
                           : `لم يكتمل التسجيل — باقي ${attendanceSummary.unrecorded} من ${attendanceSummary.total}`}
@@ -343,137 +343,137 @@ export function TeacherAttendanceView({
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* البحث والتحكم */}
-              <div className="rounded-xl border bg-card p-3">
-                <div className="flex flex-col gap-3">
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(event) =>
-                      setSearchTerm(event.target.value)
-                    }
-                    placeholder="بحث عن طالب..."
-                    className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                  />
+            {/* البحث والتحكم */}
+            <div className="mt-4 rounded-xl border bg-card p-3">
+              <div className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) =>
+                    setSearchTerm(event.target.value)
+                  }
+                  placeholder="بحث عن طالب..."
+                  className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
 
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                      <div className="relative">
-                        <button
-                          type="button"
-                          disabled={
-                            isBulkSaving ||
-                            assignedStudents.length === 0
-                          }
-                          onClick={() =>
-                            setShowBulkStatusMenu(
-                              (current) => !current,
-                            )
-                          }
-                          className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isBulkSaving
-                            ? 'جارٍ تسجيل الكل...'
-                            : 'تحديد الكل'}
-                        </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap gap-2">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        disabled={
+                          isBulkSaving ||
+                          assignedStudents.length === 0
+                        }
+                        onClick={() =>
+                          setShowBulkStatusMenu(
+                            (current) => !current,
+                          )
+                        }
+                        className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isBulkSaving
+                          ? 'جارٍ تسجيل الكل...'
+                          : 'تحديد الكل'}
+                      </button>
 
-                        {showBulkStatusMenu && (
-                          <div className="absolute right-0 top-12 z-20 min-w-[180px] rounded-xl border bg-background p-2 shadow-lg">
-                            <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
-                              اختر الحالة للجميع
-                            </div>
-
-                            <div className="space-y-1">
-                              {attendanceStatusNames.map(
-                                (statusName) => {
-                                  const styles =
-                                    getStatusClasses(
-                                      statusName,
-                                    )
-
-                                  return (
-                                    <button
-                                      key={statusName}
-                                      type="button"
-                                      disabled={isBulkSaving}
-                                      onClick={() =>
-                                        void saveAllAttendance(
-                                          statusName,
-                                        )
-                                      }
-                                      className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
-                                    >
-                                      {statusName}
-                                    </button>
-                                  )
-                                },
-                              )}
-                            </div>
+                      {showBulkStatusMenu && (
+                        <div className="absolute right-0 top-12 z-30 w-52 max-w-[calc(100vw-2rem)] rounded-xl border bg-background p-2 shadow-lg">
+                          <div className="px-2 pb-2 text-xs font-medium text-muted-foreground">
+                            اختر الحالة للجميع
                           </div>
-                        )}
-                      </div>
 
-                      {!attendanceSummary.allRecorded &&
-                        !showUnrecordedOnly && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowUnrecordedOnly(true)
-                              setShowBulkStatusMenu(false)
-                            }}
-                            className="h-10 rounded-lg border border-red-300 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
-                          >
-                            إكمال غير المسجلين (
-                            {attendanceSummary.unrecorded})
-                          </button>
-                        )}
+                          <div className="space-y-1">
+                            {attendanceStatusNames.map(
+                              (statusName) => {
+                                const styles =
+                                  getStatusClasses(
+                                    statusName,
+                                  )
 
-                      {showUnrecordedOnly && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowUnrecordedOnly(false)
-                          }
-                          className="h-10 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted"
-                        >
-                          عرض جميع الطلاب
-                        </button>
+                                return (
+                                  <button
+                                    key={statusName}
+                                    type="button"
+                                    disabled={isBulkSaving}
+                                    onClick={() =>
+                                      void saveAllAttendance(
+                                        statusName,
+                                      )
+                                    }
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
+                                  >
+                                    {statusName}
+                                  </button>
+                                )
+                              },
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    <div className="text-xs text-muted-foreground">
-                      {showUnrecordedOnly
-                        ? `عرض غير المسجلين فقط: ${displayedStudents.length}`
-                        : `إجمالي الطلاب: ${assignedStudents.length}`}
-                    </div>
+                    {!attendanceSummary.allRecorded &&
+                      !showUnrecordedOnly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUnrecordedOnly(true)
+                            setShowBulkStatusMenu(false)
+                          }}
+                          className="h-10 rounded-lg border border-red-300 bg-red-50 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300"
+                        >
+                          إكمال غير المسجلين (
+                          {attendanceSummary.unrecorded})
+                        </button>
+                      )}
+
+                    {showUnrecordedOnly && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowUnrecordedOnly(false)
+                        }
+                        className="h-10 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted"
+                      >
+                        عرض جميع الطلاب
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {showUnrecordedOnly
+                      ? `عرض غير المسجلين فقط: ${displayedStudents.length}`
+                      : `إجمالي الطلاب: ${assignedStudents.length}`}
                   </div>
                 </div>
               </div>
-
-              {/* رسالة الحالة */}
-              {statusMessage && (
-                <div
-                  className={`rounded-lg border px-4 py-3 text-sm ${
-                    statusMessage.startsWith('✓')
-                      ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
-                      : statusMessage.includes('تعذر') ||
-                          statusMessage.includes('ملغي') ||
-                          statusMessage.includes('لا يمكن')
-                        ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
-                        : 'border-border bg-muted/40'
-                  }`}
-                >
-                  {statusMessage}
-                </div>
-              )}
             </div>
 
-            {/* قائمة الطلبة — بدون Scroll داخلي */}
-            <div className="min-w-0 space-y-4 py-4 pl-1 pr-1">
+            {/* رسالة الحالة */}
+            {statusMessage && (
+              <div
+                className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                  statusMessage.startsWith('✓')
+                    ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
+                    : statusMessage.includes('تعذر') ||
+                        statusMessage.includes('ملغي') ||
+                        statusMessage.includes('لا يمكن')
+                      ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300'
+                      : 'border-border bg-muted/40'
+                }`}
+              >
+                {statusMessage}
+              </div>
+            )}
+
+            {/* قائمة الطلبة */}
+            <div className="min-w-0 space-y-4 py-4">
               {displayedStudents.length === 0 ? (
                 <div
-                  className={`rounded-xl border border-dashed p-10 text-center text-sm ${
+                  className={`rounded-xl border border-dashed p-8 text-center text-sm sm:p-10 ${
                     showUnrecordedOnly
                       ? 'border-green-300 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300'
                       : 'text-muted-foreground'
@@ -534,14 +534,14 @@ export function TeacherAttendanceView({
                         }`}
                       >
                         <div className="space-y-4">
-                          <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                          <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
                             <div className="min-w-0 xl:flex-1">
-                              <div className="font-semibold">
+                              <div className="break-words font-semibold">
                                 {student.name}
                               </div>
 
                               {student.levelName && (
-                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                <div className="mt-0.5 break-words text-xs text-muted-foreground">
                                   {student.levelName}
                                 </div>
                               )}
@@ -590,7 +590,7 @@ export function TeacherAttendanceView({
                               className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
 
-                            <div className="mt-1 flex items-center justify-between">
+                            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                               <span className="text-xs text-muted-foreground">
                                 اضغط خارج الخانة لحفظ الملاحظة
                               </span>
@@ -622,12 +622,12 @@ export function TeacherAttendanceView({
                       >
                         <div className="space-y-4">
                           <div>
-                            <div className="font-semibold">
+                            <div className="break-words font-semibold">
                               {student.name}
                             </div>
 
                             {student.levelName && (
-                              <div className="mt-0.5 text-xs text-muted-foreground">
+                              <div className="mt-0.5 break-words text-xs text-muted-foreground">
                                 {student.levelName}
                               </div>
                             )}
@@ -737,14 +737,14 @@ export function TeacherAttendanceView({
                       }`}
                     >
                       <div className="space-y-4">
-                        <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center">
+                        <div className="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
                           <div className="min-w-0 xl:flex-1">
-                            <div className="font-semibold">
+                            <div className="break-words font-semibold">
                               {student.name}
                             </div>
 
                             {student.levelName && (
-                              <div className="mt-0.5 text-xs text-muted-foreground">
+                              <div className="mt-0.5 break-words text-xs text-muted-foreground">
                                 {student.levelName}
                               </div>
                             )}
@@ -816,7 +816,7 @@ export function TeacherAttendanceView({
                             className="w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                           />
 
-                          <div className="mt-1 flex items-center justify-between">
+                          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs text-muted-foreground">
                               اضغط خارج الخانة لحفظ الملاحظة
                             </span>
@@ -838,7 +838,7 @@ export function TeacherAttendanceView({
         </div>
       )}
 
-      <p className="shrink-0 pt-2 text-xs text-muted-foreground">
+      <p className="pt-2 text-xs text-muted-foreground">
         فترة الدورة:{' '}
         {formatDateForDisplay(
           currentCourse.startDate,
