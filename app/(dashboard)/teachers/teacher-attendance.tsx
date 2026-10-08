@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase'
 
 import {
   TeacherAttendanceView,
-} from '@/components/sections/teacher-attendance-view'
+} from '@/app/(dashboard)/teachers/teacher-attendance-view'
 
 export type Course = {
   id: string
