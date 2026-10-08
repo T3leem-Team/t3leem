@@ -44,6 +44,16 @@ export function TeachersView() {
   const initialTeachersCache =
     getTeachersCache()
 
+  const [teachers, setTeachers] =
+    useState<Teacher[]>(
+      initialTeachersCache?.teachers ?? [],
+    )
+
+  const [courses, setCourses] =
+    useState<ManagedCourse[]>(
+      initialTeachersCache?.courses ?? [],
+    )
+
   const [students, setStudents] =
     useState<Student[]>(
       initialTeachersCache?.students ?? [],
