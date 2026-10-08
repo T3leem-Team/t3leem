@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import {
   AttendanceDetails,
   type TeacherAttendanceDetail,
-} from '@/components/sections/teacher-attendance-details'
+} from '@/app/(dashboard)/teachers/teacher-attendance-details'
 
 type AcademicYear = {
   id: string
