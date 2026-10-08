@@ -40,6 +40,7 @@ import {
   TeachersViewTeacherPanel,
 } from '@/app/(dashboard)/teachers/teachers-view-teacher-panel'
 
+export function TeachersView() {
   const initialTeachersCache =
     getTeachersCache()
 
