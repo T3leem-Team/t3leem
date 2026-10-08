@@ -24,6 +24,7 @@ export type GuardResult = {
   sessionId?: string
   deviceId?: string
   profileId?: string
+  role?: string
   reason?: string
 }
 
@@ -147,8 +148,13 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       error: profileError,
     } = await supabaseAdmin
       .from('user_profiles')
-      .select('id, is_active')
-      .eq('auth_user_id', user.id)
+      .select(
+        'id, role, is_active',
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
       .maybeSingle()
 
     if (profileError) {
@@ -188,12 +194,18 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
         'id',
         session.trusted_device_id,
       )
-      .eq('auth_user_id', user.id)
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
       .eq(
         'device_token_hash',
         deviceTokenHash,
       )
-      .eq('status', 'approved')
+      .eq(
+        'status',
+        'approved',
+      )
       .maybeSingle()
 
     if (deviceError) {
@@ -226,6 +238,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       sessionId: session.id,
       deviceId: device.id,
       profileId: profile.id,
+      role: profile.role,
     }
   } catch (error) {
     console.error(
@@ -255,12 +268,18 @@ async function closeSession(
         logout_at: now,
         last_activity_at: now,
       })
-      .eq('id', sessionId)
+      .eq(
+        'id',
+        sessionId,
+      )
       .eq(
         'auth_user_id',
         authUserId,
       )
-      .eq('is_active', true)
+      .eq(
+        'is_active',
+        true,
+      )
 
   if (error) {
     console.error(
@@ -274,7 +293,9 @@ async function sha256(
   value: string,
 ) {
   const data =
-    new TextEncoder().encode(value)
+    new TextEncoder().encode(
+      value,
+    )
 
   const hash =
     await crypto.subtle.digest(
