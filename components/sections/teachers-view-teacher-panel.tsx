@@ -265,11 +265,11 @@ export function TeachersViewTeacherPanel({
   return (
     <>
       {/* الصفحة الرئيسية */}
-      <div className="fixed inset-0 z-50 overflow-hidden bg-background">
-        <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col">
+      <div className="fixed inset-0 z-50 bg-background">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col">
 
           {/* زر العودة */}
-          <div className="shrink-0 border-b px-4 py-4 sm:px-6">
+          <div className="shrink-0 border-b px-3 py-3 sm:px-6 sm:py-4">
             <div
               dir="rtl"
               className="flex justify-start"
@@ -289,22 +289,22 @@ export function TeachersViewTeacherPanel({
           {/* بيانات المعلم + تفاصيل الدورة */}
           <div
             dir="rtl"
-            className="shrink-0 border-b bg-muted/20 px-4 py-4 sm:px-6"
+            className="shrink-0 border-b bg-muted/20 px-3 py-4 sm:px-6"
           >
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4">
 
               {/* المعلم */}
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">
                   المعلم
                 </p>
 
-                <div className="mt-1 flex items-center gap-3">
-                  <p className="font-semibold">
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-3">
+                  <p className="break-words font-semibold">
                     {selectedTeacher.name}
                   </p>
 
-                  <span className="rounded-full bg-background px-3 py-1 text-sm text-muted-foreground">
+                  <span className="shrink-0 rounded-full bg-background px-3 py-1 text-sm text-muted-foreground">
                     {getStudentCount(
                       selectedTeacher.id,
                     )}{' '}
@@ -314,12 +314,12 @@ export function TeachersViewTeacherPanel({
               </div>
 
               {/* الدورة الحالية */}
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">
                   الدورة الحالية
                 </p>
 
-                <p className="mt-1 font-semibold">
+                <p className="mt-1 break-words font-semibold">
                   {currentCourse?.name ??
                     '—'}
                 </p>
@@ -328,12 +328,12 @@ export function TeachersViewTeacherPanel({
               {/* المادة */}
               {selectedTeacherSubjectNames.length >
                 0 && (
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">
                     المادة
                   </p>
 
-                  <p className="mt-1 font-semibold">
+                  <p className="mt-1 break-words font-semibold">
                     {selectedTeacherSubjectNames.join(
                       '، ',
                     )}
@@ -343,12 +343,12 @@ export function TeachersViewTeacherPanel({
 
               {/* التاريخ */}
               {currentCourse && (
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">
                     الفترة
                   </p>
 
-                  <span className="mt-1 inline-flex rounded-full bg-background px-3 py-1.5 text-sm">
+                  <span className="mt-1 inline-flex max-w-full flex-wrap rounded-full bg-background px-3 py-1.5 text-sm">
                     {currentCourse.startDate
                       ? new Intl.DateTimeFormat(
                           'ar-BH',
@@ -385,8 +385,8 @@ export function TeachersViewTeacherPanel({
           </div>
 
           {/* التبويبات */}
-          <div className="shrink-0 border-b px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap gap-2">
+          <div className="shrink-0 border-b px-3 py-3 sm:px-6">
+            <div className="flex gap-2 overflow-x-auto pb-1">
 
               {/* الطلاب */}
               <Button
@@ -400,11 +400,11 @@ export function TeachersViewTeacherPanel({
                     null,
                   )
                 }}
-                className={
+                className={`shrink-0 ${
                   activePanel === 'students'
                     ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700 hover:text-white'
                     : 'border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800'
-                }
+                }`}
               >
                 الطلاب
               </Button>
@@ -421,11 +421,11 @@ export function TeachersViewTeacherPanel({
                     null,
                   )
                 }}
-                className={
+                className={`shrink-0 ${
                   activePanel === 'attendance'
                     ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white'
                     : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'
-                }
+                }`}
               >
                 الحضور والغياب
               </Button>
@@ -456,12 +456,12 @@ export function TeachersViewTeacherPanel({
                       null,
                   )
                 }}
-                className={
+                className={`shrink-0 ${
                   activePanel ===
                   'previousCourses'
                     ? 'border-violet-600 bg-violet-600 text-white hover:bg-violet-700 hover:text-white'
                     : 'border-violet-200 text-violet-700 hover:bg-violet-50 hover:text-violet-800'
-                }
+                }`}
               >
                 <History className="size-4" />
                 الدورات السابقة
@@ -470,548 +470,560 @@ export function TeachersViewTeacherPanel({
           </div>
 
           {/* محتوى المعلم */}
+          {/*
+            مهم:
+            هذا هو الـ scroll الرئيسي للصفحة.
+            لا نضع overflow-y-auto داخل AttendanceView مرة ثانية.
+          */}
           <div
             className="
               min-h-0
+              min-w-0
               flex-1
               overflow-y-auto
-              overflow-x-hidden
+              overflow-x-auto
               overscroll-contain
               touch-pan-y
-              p-4
+              p-3
               sm:p-6
             "
           >
+            <div className="min-w-0 w-full">
 
-            {/* الطلاب */}
-            {activePanel ===
-              'students' && (
-              <div className="space-y-5">
+              {/* الطلاب */}
+              {activePanel ===
+                'students' && (
+                <div className="space-y-5">
 
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">
-                      طلاب المعلم
-                    </h3>
+                  <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">
+                        طلاب المعلم
+                      </h3>
 
-                    <p className="text-sm text-muted-foreground">
-                      الطلاب المسندون لهذا المعلم في الدورة الحالية.
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={
-                      openAddStudents
-                    }
-                  >
-                    <Plus className="size-4" />
-                    إضافة طلاب
-                  </Button>
-                </div>
-
-                {assignedStudents.length ===
-                0 ? (
-                  <div className="rounded-lg border border-dashed p-10 text-center">
-                    <p className="font-medium">
-                      لا يوجد طلاب حاليًا
-                    </p>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      أضف الطلاب من القائمة الأساسية.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="px-4 py-3 text-right font-medium">
-                            الطالب
-                          </th>
-
-                          <th className="px-4 py-3 text-right font-medium">
-                            الاتصال
-                          </th>
-
-                          <th className="px-4 py-3 text-right font-medium">
-                            المستوى
-                          </th>
-
-                          {(canTransferStudents ||
-                            canRemoveStudents) && (
-                            <th className="px-4 py-3 text-right font-medium">
-                              إجراء
-                            </th>
-                          )}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {assignedStudents.map(
-                          (
-                            student,
-                          ) => {
-                            const assignment =
-                              assignments.find(
-                                (
-                                  item,
-                                ) =>
-                                  item.courseId ===
-                                    currentCourse?.id &&
-                                  item.teacherId ===
-                                    selectedTeacher.id &&
-                                  item.studentId ===
-                                    student.id,
-                              )
-
-                            const isDeleting =
-                              assignment?.id ===
-                              deletingAssignmentId
-
-                            return (
-                              <tr
-                                key={
-                                  student.id
-                                }
-                                className="border-t"
-                              >
-                                <td className="px-4 py-3 font-medium">
-                                  {
-                                    student.name
-                                  }
-                                </td>
-
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-col gap-1">
-                                    <span>
-                                      {student.phone ||
-                                        '—'}
-                                    </span>
-
-                                    <span>
-                                      {student.whatsapp ||
-                                        '—'}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                <td className="px-4 py-3">
-                                  {
-                                    student.levelName
-                                  }
-                                </td>
-
-                                {(canTransferStudents ||
-                                  canRemoveStudents) && (
-                                  <td className="px-4 py-3">
-                                    <div className="flex flex-wrap gap-2">
-                                      {canTransferStudents && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() =>
-                                            openTransfer(
-                                              student.id,
-                                            )
-                                          }
-                                          disabled={
-                                            isDeleting ||
-                                            saving
-                                          }
-                                        >
-                                          <ArrowLeftRight className="size-4" />
-                                          نقل
-                                        </Button>
-                                      )}
-
-                                      {canRemoveStudents && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            if (
-                                              assignment
-                                            ) {
-                                              removeStudentFromTeacher(
-                                                assignment,
-                                                student,
-                                              )
-                                            }
-                                          }}
-                                          disabled={
-                                            !assignment ||
-                                            isDeleting ||
-                                            saving
-                                          }
-                                          className="text-destructive hover:text-destructive"
-                                        >
-                                          <Trash2 className="size-4" />
-
-                                          {isDeleting
-                                            ? 'جاري المسح...'
-                                            : 'مسح'}
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </td>
-                                )}
-                              </tr>
-                            )
-                          },
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* إضافة الطلاب */}
-            {activePanel ===
-              'addStudents' && (
-              <div className="mx-auto max-w-3xl space-y-5">
-
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">
-                      إضافة طلاب
-                    </h3>
-
-                    <p className="text-sm text-muted-foreground">
-                      اختر الطلاب من الطلاب المسجلين في السنة الدراسية الحالية.
-                    </p>
-
-                    <div className="mt-3 rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">
-                        سيتم الإضافة تلقائيًا إلى
+                      <p className="break-words text-sm text-muted-foreground">
+                        الطلاب المسندون لهذا المعلم في الدورة الحالية.
                       </p>
+                    </div>
 
-                      <p className="mt-1 font-medium">
-                        {currentCourse?.name ??
-                          '—'}
+                    <Button
+                      onClick={
+                        openAddStudents
+                      }
+                      className="shrink-0"
+                    >
+                      <Plus className="size-4" />
+                      إضافة طلاب
+                    </Button>
+                  </div>
+
+                  {assignedStudents.length ===
+                  0 ? (
+                    <div className="rounded-lg border border-dashed p-8 text-center sm:p-10">
+                      <p className="font-medium">
+                        لا يوجد طلاب حاليًا
                       </p>
 
                       <p className="mt-1 text-sm text-muted-foreground">
-                        المادة:{' '}
-                        <span className="font-medium text-foreground">
-                          {selectedTeacherSubjectNames.length >
-                          0
-                            ? selectedTeacherSubjectNames.join(
-                                '، ',
-                              )
-                            : 'غير محددة'}
-                        </span>
+                        أضف الطلاب من القائمة الأساسية.
                       </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="w-full overflow-x-auto rounded-lg border">
+                      <table className="w-full min-w-[700px] text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-4 py-3 text-right font-medium">
+                              الطالب
+                            </th>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setActivePanel(
-                        'students',
-                      )
-                    }
-                  >
-                    <X className="size-4" />
-                  </Button>
+                            <th className="px-4 py-3 text-right font-medium">
+                              الاتصال
+                            </th>
+
+                            <th className="px-4 py-3 text-right font-medium">
+                              المستوى
+                            </th>
+
+                            {(canTransferStudents ||
+                              canRemoveStudents) && (
+                              <th className="px-4 py-3 text-right font-medium">
+                                إجراء
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {assignedStudents.map(
+                            (
+                              student,
+                            ) => {
+                              const assignment =
+                                assignments.find(
+                                  (
+                                    item,
+                                  ) =>
+                                    item.courseId ===
+                                      currentCourse?.id &&
+                                    item.teacherId ===
+                                      selectedTeacher.id &&
+                                    item.studentId ===
+                                      student.id,
+                                )
+
+                              const isDeleting =
+                                assignment?.id ===
+                                deletingAssignmentId
+
+                              return (
+                                <tr
+                                  key={
+                                    student.id
+                                  }
+                                  className="border-t"
+                                >
+                                  <td className="px-4 py-3 font-medium">
+                                    {
+                                      student.name
+                                    }
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-col gap-1">
+                                      <span>
+                                        {student.phone ||
+                                          '—'}
+                                      </span>
+
+                                      <span>
+                                        {student.whatsapp ||
+                                          '—'}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {
+                                      student.levelName
+                                    }
+                                  </td>
+
+                                  {(canTransferStudents ||
+                                    canRemoveStudents) && (
+                                    <td className="px-4 py-3">
+                                      <div className="flex flex-wrap gap-2">
+                                        {canTransferStudents && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                              openTransfer(
+                                                student.id,
+                                              )
+                                            }
+                                            disabled={
+                                              isDeleting ||
+                                              saving
+                                            }
+                                          >
+                                            <ArrowLeftRight className="size-4" />
+                                            نقل
+                                          </Button>
+                                        )}
+
+                                        {canRemoveStudents && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              if (
+                                                assignment
+                                              ) {
+                                                removeStudentFromTeacher(
+                                                  assignment,
+                                                  student,
+                                                )
+                                              }
+                                            }}
+                                            disabled={
+                                              !assignment ||
+                                              isDeleting ||
+                                              saving
+                                            }
+                                            className="text-destructive hover:text-destructive"
+                                          >
+                                            <Trash2 className="size-4" />
+
+                                            {isDeleting
+                                              ? 'جاري المسح...'
+                                              : 'مسح'}
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              )
+                            },
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {selectedTeacherSubjects.length ===
-                  0 && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                    لا توجد مادة مخصصة لهذا المعلم في هذه الدورة.
-                    <br />
-                    يرجى تحديد المادة للمعلم من إعدادات الدورة قبل
-                    بدء تعيين الطلاب.
-                  </div>
-                )}
+              {/* إضافة الطلاب */}
+              {activePanel ===
+                'addStudents' && (
+                <div className="mx-auto w-full max-w-3xl space-y-5">
 
-                {selectedTeacherSubjects.length >
-                  1 && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                    المعلم مرتبط بأكثر من مادة في هذه الدورة:
-                    <span className="font-medium">
-                      {' '}
-                      {selectedTeacherSubjectNames.join(
-                        '، ',
-                      )}
-                    </span>
-                    .
-                    <br />
-                    لا يوجد اختيار مادة في هذه الصفحة، لذلك يجب أن
-                    تكون مادة المعلم محددة بشكل واحد من إعدادات الدورة.
-                  </div>
-                )}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold">
+                        إضافة طلاب
+                      </h3>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    المستوى الأكاديمي
-                  </label>
+                      <p className="break-words text-sm text-muted-foreground">
+                        اختر الطلاب من الطلاب المسجلين في السنة الدراسية الحالية.
+                      </p>
 
-                  <select
-                    value={
-                      selectedGrade
-                    }
-                    onChange={(
-                      event,
-                    ) => {
-                      setSelectedGrade(
-                        event.target
-                          .value,
-                      )
+                      <div className="mt-3 rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          سيتم الإضافة تلقائيًا إلى
+                        </p>
 
-                      setSelectedStudentIds(
-                        [],
-                      )
-                    }}
-                    className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                  >
-                    <option value="">
-                      اختر المستوى
-                    </option>
+                        <p className="mt-1 break-words font-medium">
+                          {currentCourse?.name ??
+                            '—'}
+                        </p>
 
-                    {availableGrades.map(
-                      (
-                        grade,
-                      ) => (
-                        <option
-                          key={
-                            grade
-                          }
-                          value={
-                            grade
-                          }
-                        >
-                          {
-                            grade
-                          }
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-
-                {selectedGrade && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        الطلاب
-                      </span>
-
-                      <span className="text-xs text-muted-foreground">
-                        تم تحديد{' '}
-                        {
-                          selectedStudentIds.length
-                        }
-                      </span>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          المادة:{' '}
+                          <span className="font-medium text-foreground">
+                            {selectedTeacherSubjectNames.length >
+                            0
+                              ? selectedTeacherSubjectNames.join(
+                                  '، ',
+                                )
+                              : 'غير محددة'}
+                          </span>
+                        </p>
+                      </div>
                     </div>
 
-                    {availableStudents.length ===
-                      0 &&
-                    unavailableStudents.length ===
-                      0 ? (
-                      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        لا يوجد طلاب لهذا المستوى.
-                      </div>
-                    ) : (
-                      <div className="overflow-hidden rounded-lg border">
-                        {availableStudents.map(
-                          (
-                            student,
-                          ) => {
-                            const selected =
-                              selectedStudentIds.includes(
-                                student.id,
-                              )
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() =>
+                        setActivePanel(
+                          'students',
+                        )
+                      }
+                      className="shrink-0"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
 
-                            return (
-                              <label
+                  {selectedTeacherSubjects.length ===
+                    0 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      لا توجد مادة مخصصة لهذا المعلم في هذه الدورة.
+                      <br />
+                      يرجى تحديد المادة للمعلم من إعدادات الدورة قبل
+                      بدء تعيين الطلاب.
+                    </div>
+                  )}
+
+                  {selectedTeacherSubjects.length >
+                    1 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                      المعلم مرتبط بأكثر من مادة في هذه الدورة:
+                      <span className="font-medium">
+                        {' '}
+                        {selectedTeacherSubjectNames.join(
+                          '، ',
+                        )}
+                      </span>
+                      .
+                      <br />
+                      لا يوجد اختيار مادة في هذه الصفحة، لذلك يجب أن
+                      تكون مادة المعلم محددة بشكل واحد من إعدادات الدورة.
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      المستوى الأكاديمي
+                    </label>
+
+                    <select
+                      value={
+                        selectedGrade
+                      }
+                      onChange={(
+                        event,
+                      ) => {
+                        setSelectedGrade(
+                          event.target
+                            .value,
+                        )
+
+                        setSelectedStudentIds(
+                          [],
+                        )
+                      }}
+                      className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                    >
+                      <option value="">
+                        اختر المستوى
+                      </option>
+
+                      {availableGrades.map(
+                        (
+                          grade,
+                        ) => (
+                          <option
+                            key={
+                              grade
+                            }
+                            value={
+                              grade
+                            }
+                          >
+                            {
+                              grade
+                            }
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+
+                  {selectedGrade && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium">
+                          الطلاب
+                        </span>
+
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          تم تحديد{' '}
+                          {
+                            selectedStudentIds.length
+                          }
+                        </span>
+                      </div>
+
+                      {availableStudents.length ===
+                        0 &&
+                      unavailableStudents.length ===
+                        0 ? (
+                        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                          لا يوجد طلاب لهذا المستوى.
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden rounded-lg border">
+                          {availableStudents.map(
+                            (
+                              student,
+                            ) => {
+                              const selected =
+                                selectedStudentIds.includes(
+                                  student.id,
+                                )
+
+                              return (
+                                <label
+                                  key={
+                                    student.id
+                                  }
+                                  className="flex cursor-pointer items-center gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      selected
+                                    }
+                                    onChange={() =>
+                                      toggleStudent(
+                                        student.id,
+                                      )
+                                    }
+                                    className="size-4 shrink-0"
+                                  />
+
+                                  <div className="min-w-0">
+                                    <p className="break-words font-medium">
+                                      {
+                                        student.name
+                                      }
+                                    </p>
+
+                                    <p className="text-xs text-muted-foreground">
+                                      {student.personalId ||
+                                        '—'}
+                                    </p>
+                                  </div>
+                                </label>
+                              )
+                            },
+                          )}
+
+                          {unavailableStudents.map(
+                            ({
+                              student,
+                              teacherName,
+                            }) => (
+                              <div
                                 key={
                                   student.id
                                 }
-                                className="flex cursor-pointer items-center gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
+                                className="flex items-center gap-3 border-b bg-muted/20 p-4 last:border-b-0"
                               >
                                 <input
                                   type="checkbox"
-                                  checked={
-                                    selected
-                                  }
-                                  onChange={() =>
-                                    toggleStudent(
-                                      student.id,
-                                    )
-                                  }
-                                  className="size-4"
+                                  disabled
+                                  className="size-4 shrink-0"
                                 />
 
-                                <div>
-                                  <p className="font-medium">
+                                <div className="min-w-0">
+                                  <p className="break-words font-medium text-muted-foreground">
                                     {
                                       student.name
                                     }
                                   </p>
 
-                                  <p className="text-xs text-muted-foreground">
-                                    {student.personalId ||
-                                      '—'}
+                                  <p className="break-words text-xs text-muted-foreground">
+                                    عند الأستاذ{' '}
+                                    {
+                                      teacherName
+                                    }
                                   </p>
                                 </div>
-                              </label>
-                            )
-                          },
-                        )}
-
-                        {unavailableStudents.map(
-                          ({
-                            student,
-                            teacherName,
-                          }) => (
-                            <div
-                              key={
-                                student.id
-                              }
-                              className="flex items-center gap-3 border-b bg-muted/20 p-4 last:border-b-0"
-                            >
-                              <input
-                                type="checkbox"
-                                disabled
-                                className="size-4"
-                              />
-
-                              <div>
-                                <p className="font-medium text-muted-foreground">
-                                  {
-                                    student.name
-                                  }
-                                </p>
-
-                                <p className="text-xs text-muted-foreground">
-                                  عند الأستاذ{' '}
-                                  {
-                                    teacherName
-                                  }
-                                </p>
                               </div>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col-reverse justify-end gap-2 border-t pt-4 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        setActivePanel(
+                          'students',
+                        )
+                      }
+                      disabled={saving}
+                    >
+                      إلغاء
+                    </Button>
+
+                    <Button
+                      onClick={
+                        saveStudents
+                      }
+                      disabled={
+                        saving ||
+                        selectedStudentIds.length ===
+                          0 ||
+                        selectedTeacherSubjects.length !==
+                          1
+                      }
+                    >
+                      {saving
+                        ? 'جاري الحفظ...'
+                        : 'حفظ'}
+                    </Button>
                   </div>
-                )}
-
-                <div className="flex justify-end gap-2 border-t pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setActivePanel(
-                        'students',
-                      )
-                    }
-                    disabled={saving}
-                  >
-                    إلغاء
-                  </Button>
-
-                  <Button
-                    onClick={
-                      saveStudents
-                    }
-                    disabled={
-                      saving ||
-                      selectedStudentIds.length ===
-                        0 ||
-                      selectedTeacherSubjects.length !==
-                        1
-                    }
-                  >
-                    {saving
-                      ? 'جاري الحفظ...'
-                      : 'حفظ'}
-                  </Button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* الحضور */}
-            {activePanel ===
-              'attendance' && (
-              <div className="min-h-full">
-                <AttendanceView
-                  currentCourse={
-                    currentCourse
-                  }
-                  teacherId={
-                    selectedTeacher.id
-                  }
-                  assignedStudents={
-                    assignedStudents
-                  }
-                  attendanceStatuses={
-                    attendanceStatuses
-                  }
-                  attendanceRecords={
-                    attendanceRecords
-                  }
-                  setAttendanceRecords={
-                    updateAttendanceRecords
-                  }
-                  attendanceNotes={
-                    attendanceNotes
-                  }
-                  setAttendanceNotes={
-                    setAttendanceNotes
-                  }
-                  statusMessage={
-                    statusMessage
-                  }
-                  setStatusMessage={
-                    setStatusMessage
-                  }
-                  selectedAttendanceDate={
-                    selectedAttendanceDate
-                  }
-                  setSelectedAttendanceDate={
-                    setSelectedAttendanceDate
-                  }
-                />
-              </div>
-            )}
+              {/* الحضور */}
+              {activePanel ===
+                'attendance' && (
+                <div className="w-full min-w-0">
+                  <AttendanceView
+                    currentCourse={
+                      currentCourse
+                    }
+                    teacherId={
+                      selectedTeacher.id
+                    }
+                    assignedStudents={
+                      assignedStudents
+                    }
+                    attendanceStatuses={
+                      attendanceStatuses
+                    }
+                    attendanceRecords={
+                      attendanceRecords
+                    }
+                    setAttendanceRecords={
+                      updateAttendanceRecords
+                    }
+                    attendanceNotes={
+                      attendanceNotes
+                    }
+                    setAttendanceNotes={
+                      setAttendanceNotes
+                    }
+                    statusMessage={
+                      statusMessage
+                    }
+                    setStatusMessage={
+                      setStatusMessage
+                    }
+                    selectedAttendanceDate={
+                      selectedAttendanceDate
+                    }
+                    setSelectedAttendanceDate={
+                      setSelectedAttendanceDate
+                    }
+                  />
+                </div>
+              )}
 
-            {/* الدورات السابقة */}
-            {activePanel ===
-              'previousCourses' && (
-              <TeachersViewPreviousCourses
-                teacherId={
-                  selectedTeacher.id
-                }
-                courses={courses}
-                assignments={
-                  assignments
-                }
-                students={students}
-                attendanceStatuses={
-                  attendanceStatuses
-                }
-                attendanceRecords={
-                  attendanceRecords
-                }
-                courseTeacherIds={
-                  courseTeacherIds
-                }
-                teacherCourseSubjects={
-                  teacherCourseSubjects
-                }
-                selectedCourseId={
-                  selectedPreviousCourseId
-                }
-                onSelectedCourseChange={
-                  setSelectedPreviousCourseId
-                }
-              />
-            )}
+              {/* الدورات السابقة */}
+              {activePanel ===
+                'previousCourses' && (
+                <div className="w-full min-w-0">
+                  <TeachersViewPreviousCourses
+                    teacherId={
+                      selectedTeacher.id
+                    }
+                    courses={courses}
+                    assignments={
+                      assignments
+                    }
+                    students={students}
+                    attendanceStatuses={
+                      attendanceStatuses
+                    }
+                    attendanceRecords={
+                      attendanceRecords
+                    }
+                    courseTeacherIds={
+                      courseTeacherIds
+                    }
+                    teacherCourseSubjects={
+                      teacherCourseSubjects
+                    }
+                    selectedCourseId={
+                      selectedPreviousCourseId
+                    }
+                    onSelectedCourseChange={
+                      setSelectedPreviousCourseId
+                    }
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1021,10 +1033,10 @@ export function TeachersViewTeacherPanel({
         transferStudentId &&
         currentCourse &&
         canTransferStudents && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/40 p-4 touch-pan-y">
-            <Card className="my-auto w-full max-w-md">
-              <CardContent className="space-y-4 p-5">
-                <div className="flex items-center justify-between">
+          <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-3 touch-pan-y sm:items-center sm:p-4">
+            <Card className="my-3 w-full max-w-md sm:my-auto">
+              <CardContent className="space-y-4 p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold">
                     نقل الطالب
                   </h2>
@@ -1036,12 +1048,13 @@ export function TeachersViewTeacherPanel({
                       closeTransfer
                     }
                     disabled={saving}
+                    className="shrink-0"
                   >
                     <X className="size-4" />
                   </Button>
                 </div>
 
-                <p className="text-sm text-muted-foreground">
+                <p className="break-words text-sm text-muted-foreground">
                   سيتم إلغاء الربط الحالي ونقل الطالب إلى المعلم الجديد.
                   <br />
                   <span className="font-medium text-foreground">
@@ -1054,7 +1067,7 @@ export function TeachersViewTeacherPanel({
                 </p>
 
                 <div className="rounded-lg border bg-muted/30 p-4">
-                  <p className="font-medium">
+                  <p className="break-words font-medium">
                     {
                       students.find(
                         (
@@ -1092,8 +1105,8 @@ export function TeachersViewTeacherPanel({
                         : null
 
                     return (
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <div>
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <div className="break-words">
                           المعلم الحالي:{' '}
                           <span className="font-medium text-foreground">
                             {
@@ -1102,7 +1115,7 @@ export function TeachersViewTeacherPanel({
                           </span>
                         </div>
 
-                        <div>
+                        <div className="break-words">
                           المادة الحالية:{' '}
                           <span className="font-medium text-foreground">
                             {currentSubject?.subjectName ||
@@ -1190,7 +1203,7 @@ export function TeachersViewTeacherPanel({
                       بعد النقل ستكون المادة
                     </p>
 
-                    <p className="mt-1 font-medium">
+                    <p className="mt-1 break-words font-medium">
                       {selectedTransferTeacher &&
                       selectedTransferTeacher
                         .subjects.length ===
@@ -1221,7 +1234,7 @@ export function TeachersViewTeacherPanel({
                     </div>
                   )}
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex flex-col-reverse justify-end gap-2 pt-2 sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={
