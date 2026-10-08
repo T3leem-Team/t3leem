@@ -880,18 +880,22 @@ export function Header({
           <div
             className="
               absolute
-              right-0
+              left-0
               top-full
               z-[9999]
               mt-2
               w-80
-              max-w-[calc(100vw-2rem)]
+              max-w-[calc(100vw-1rem)]
               overflow-hidden
               rounded-xl
               border
               border-border
               bg-card
               shadow-2xl
+
+              sm:left-auto
+              sm:right-0
+              sm:max-w-[calc(100vw-2rem)]
             "
           >
             <div className="border-b border-border px-4 py-3">
