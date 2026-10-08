@@ -9,7 +9,6 @@ import {
 import {
   X,
   AlertCircle,
-  ArrowRight,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -364,16 +363,6 @@ export function StudentForm({
     setCustomGuardianRelation,
   ] = useState('')
 
-  const [
-    isPaymentView,
-    setIsPaymentView,
-  ] = useState(false)
-
-  const [
-    paymentAmount,
-    setPaymentAmount,
-  ] = useState('0')
-
   useEffect(() => {
     const relation =
       editingStudent?.guardianRelation?.trim() ??
@@ -401,21 +390,6 @@ export function StudentForm({
     setCustomGuardianRelation(
       relation,
     )
-  }, [editingStudent])
-
-  useEffect(() => {
-    setIsPaymentView(false)
-
-    if (editingStudent) {
-      setPaymentAmount(
-        String(
-          editingStudent.amountPaid ??
-            0,
-        ),
-      )
-    } else {
-      setPaymentAmount('0')
-    }
   }, [editingStudent])
 
   const showError = (
@@ -551,42 +525,6 @@ export function StudentForm({
     )
   }
 
-  function savePaymentAndReturn() {
-    const amount = Number(
-      paymentAmount || 0,
-    )
-
-    if (
-      !Number.isFinite(amount) ||
-      amount < 0
-    ) {
-      showError(
-        'المبلغ المدفوع غير صحيح.\n\nيجب أن يكون المبلغ صفرًا أو مبلغًا موجبًا.',
-      )
-      return
-    }
-
-    if (
-      currentAnnualFee > 0 &&
-      amount > currentAnnualFee
-    ) {
-      showError(
-        `المبلغ المدفوع أكبر من الرسوم السنوية.\n\nالرسوم السنوية: ${currentAnnualFee.toFixed(
-          3,
-        )} د.ب\nالمبلغ المدخل: ${amount.toFixed(
-          3,
-        )} د.ب`,
-      )
-      return
-    }
-
-    setPaymentAmount(
-      amount.toFixed(3),
-    )
-
-    setIsPaymentView(false)
-  }
-
   async function handleSubmit(
     e: FormEvent<HTMLFormElement>,
   ) {
@@ -595,6 +533,7 @@ export function StudentForm({
     closeError()
 
     const form = e.currentTarget
+
     const data = new FormData(form)
 
     const name = String(
@@ -647,7 +586,9 @@ export function StudentForm({
       ).trim()
 
     const amountPaid =
-      Number(paymentAmount || 0)
+      Number(
+        data.get('amountPaid') || 0,
+      )
 
     const notes = String(
       data.get('notes') || '',
@@ -823,6 +764,12 @@ export function StudentForm({
       return
     }
 
+    /*
+     * ============================================================
+     * تعديل طالب
+     * ============================================================
+     */
+
     if (editingStudent) {
       const {
         data: updatedStudent,
@@ -983,10 +930,17 @@ export function StudentForm({
       )
 
       closeStudentDrawer()
+
       form.reset()
 
       return
     }
+
+    /*
+     * ============================================================
+     * إضافة طالب جديد
+     * ============================================================
+     */
 
     const {
       data: newStudent,
@@ -1024,6 +978,12 @@ export function StudentForm({
       return
     }
 
+    /*
+     * ============================================================
+     * ربط الصف الأكاديمي والدورة الحالية
+     * ============================================================
+     */
+
     const {
       error: enrollmentError,
     } = await supabase
@@ -1060,6 +1020,12 @@ export function StudentForm({
 
       return
     }
+
+    /*
+     * ============================================================
+     * الدفعة الأولى
+     * ============================================================
+     */
 
     if (amountPaid > 0) {
       const {
@@ -1111,6 +1077,12 @@ export function StudentForm({
       }
     }
 
+    /*
+     * ============================================================
+     * حالة الدفع
+     * ============================================================
+     */
+
     const paymentStatus =
       amountPaid >=
         currentAnnualFee &&
@@ -1120,67 +1092,99 @@ export function StudentForm({
           ? 'مدفوع جزئيًا'
           : 'غير مدفوع'
 
+    /*
+     * ============================================================
+     * تجهيز الطالب للقائمة
+     * ============================================================
+     */
+
     const mappedStudent = {
       id: newStudent.id,
+
       studentId:
         newStudent.student_id ??
         '',
+
       name:
         newStudent.name,
+
       personalId:
         newStudent.personal_id ??
         '',
+
       guardianRelation:
         newStudent.guardian_relation ??
         '',
+
       gender: '',
+
       age: null,
+
       grade,
+
       phone:
         newStudent.phone ??
         '',
+
       whatsapp:
         newStudent.whatsapp ??
         '',
+
       status:
         newStudent.status ??
         'نشط',
+
       source:
         newStudent.source ??
         'manual',
+
       createdAt:
         new Date().toISOString(),
+
       updatedAt: '',
+
       academicYearId:
         currentAcademicYearId,
+
       paymentStatus,
+
       amountDue:
         currentAnnualFee,
+
       amountPaid,
+
       feeExempt:
         Boolean(
           newStudent.fee_exempt,
         ),
+
       chronicDiseases:
         newStudent.health_notes ??
         '',
+
       notes:
         newStudent.notes ?? '',
+
       attendance:
         currentCourse
           ? 'لم يحضر'
           : 'لم يحضر',
+
       courseStatuses:
         courses.map(
           (course) => ({
             courseId:
               course.id,
+
             courseName:
               course.name,
+
             startDate:
               course.start_date,
+
             endDate:
               course.end_date,
+
             status:
               getCourseStatus(
                 course,
@@ -1190,6 +1194,7 @@ export function StudentForm({
               ),
           }),
         ),
+
       attendanceSummaries:
         courses.map(
           (course) =>
@@ -1200,6 +1205,7 @@ export function StudentForm({
               attendanceStatuses,
             ),
         ),
+
       attendanceRecords: [],
     }
 
@@ -1217,6 +1223,7 @@ export function StudentForm({
     )
 
     closeStudentDrawer()
+
     form.reset()
   }
 
@@ -1284,109 +1291,380 @@ export function StudentForm({
           }
         />
 
-        <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-hidden border-l bg-background shadow-xl">
-          {isPaymentView ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIsPaymentView(
-                      false,
-                    )
-                  }
-                  className="rounded-md p-2 hover:bg-muted"
-                  aria-label="رجوع"
-                >
-                  <ArrowRight className="size-5" />
-                </button>
+        <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold">
+                {editingStudent
+                  ? 'تعديل بيانات الطالب'
+                  : 'إضافة طالب'}
+              </h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {editingStudent
+                  ? 'تعديل بيانات الطالب الأساسية'
+                  : 'إدخال بيانات الطالب الأساسية'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                closeStudentDrawer
+              }
+              className="rounded-md p-2 hover:bg-muted"
+              aria-label="إغلاق"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          <form
+            key={
+              editingStudent?.id ??
+              'new'
+            }
+            onSubmit={
+              handleSubmit
+            }
+          >
+            <div className="space-y-6 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-2 block text-sm font-medium">
+                    اسم الطالب
+                  </label>
+
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    defaultValue={
+                      editingStudent?.name ??
+                      ''
+                    }
+                    placeholder="أدخل اسم الطالب"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+                </div>
 
                 <div>
-                  <h2 className="text-lg font-semibold">
-                    إضافة الدفعة الأولى
-                  </h2>
+                  <label className="mb-2 block text-sm font-medium">
+                    الرقم الشخصي
+                  </label>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    أدخل مبلغ الدفعة الأولى
+                  <input
+                    name="personalId"
+                    type="text"
+                    required
+                    defaultValue={
+                      editingStudent?.personalId ??
+                      ''
+                    }
+                    placeholder="أدخل الرقم الشخصي"
+                    maxLength={9}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 9)
+                    }}
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    أرقام فقط، بحد أقصى 9 أرقام.
                   </p>
                 </div>
-              </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-6">
-                <div className="space-y-6">
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-medium">
-                          الرسوم السنوية
-                        </p>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    صلة القرابة
+                  </label>
 
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {
-                            currentAcademicYearName
-                          }
-                        </p>
-                      </div>
+                  <select
+                    name="guardianRelation"
+                    value={
+                      selectedGuardianRelation
+                    }
+                    onChange={(
+                      event,
+                    ) => {
+                      const value =
+                        event.target
+                          .value
 
-                      <div className="text-lg font-semibold">
-                        {currentAnnualFee.toLocaleString(
-                          'ar-BH',
-                          {
-                            minimumFractionDigits: 3,
-                            maximumFractionDigits: 3,
-                          },
-                        )}{' '}
-                        د.ب
-                      </div>
-                    </div>
-                  </div>
+                      setSelectedGuardianRelation(
+                        value,
+                      )
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      مبلغ الدفعة
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      max={
-                        currentAnnualFee >
-                        0
-                          ? currentAnnualFee
-                          : undefined
+                      if (
+                        value !==
+                        'أخرى'
+                      ) {
+                        setCustomGuardianRelation(
+                          '',
+                        )
                       }
-                      step="0.001"
+                    }}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  >
+                    <option value="">
+                      اختر صلة القرابة
+                    </option>
+
+                    <option value="الأب">
+                      الأب
+                    </option>
+
+                    <option value="الأم">
+                      الأم
+                    </option>
+
+                    <option value="الأخ">
+                      الأخ
+                    </option>
+
+                    <option value="الأخت">
+                      الأخت
+                    </option>
+
+                    <option value="الجد">
+                      الجد
+                    </option>
+
+                    <option value="الجدة">
+                      الجدة
+                    </option>
+
+                    <option value="أخرى">
+                      أخرى
+                    </option>
+                  </select>
+
+                  {selectedGuardianRelation ===
+                    'أخرى' && (
+                    <input
+                      id="customGuardianRelation"
+                      name="customGuardianRelation"
+                      type="text"
                       value={
-                        paymentAmount
+                        customGuardianRelation
                       }
                       onChange={(
                         event,
                       ) =>
-                        setPaymentAmount(
+                        setCustomGuardianRelation(
                           event.target
                             .value,
                         )
                       }
-                      inputMode="decimal"
+                      placeholder="اكتب صلة القرابة"
+                      required
                       autoFocus
-                      placeholder="0.000"
-                      className="h-12 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                      className="mt-3 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                     />
+                  )}
+                </div>
 
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      لا يمكن أن تتجاوز الدفعة الرسوم السنوية.
-                    </p>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    الصف الأكاديمي
+                  </label>
+
+                  <select
+                    name="grade"
+                    required
+                    defaultValue={
+                      editingStudent?.grade ??
+                      ''
+                    }
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">
+                      اختر الصف
+                    </option>
+
+                    {academicLevels.map(
+                      (level) => (
+                        <option
+                          key={
+                            level.id
+                          }
+                          value={
+                            level.name
+                          }
+                        >
+                          {
+                            level.name
+                          }
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    رقم الهاتف
+                  </label>
+
+                  <input
+                    name="phone"
+                    type="tel"
+                    defaultValue={
+                      editingStudent?.phone ??
+                      ''
+                    }
+                    placeholder="مثال: 33xxxxxx"
+                    maxLength={8}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 8)
+                    }}
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    أرقام فقط، بحد أقصى 8 أرقام.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    رقم واتساب
+                  </label>
+
+                  <input
+                    name="whatsapp"
+                    type="tel"
+                    defaultValue={
+                      editingStudent?.whatsapp ??
+                      ''
+                    }
+                    placeholder="مثال: 33xxxxxx"
+                    maxLength={8}
+                    inputMode="numeric"
+                    onChange={(event) => {
+                      event.currentTarget.value =
+                        event.currentTarget.value
+                          .replace(/\D/g, '')
+                          .slice(0, 8)
+                    }}
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  />
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    أرقام فقط، بحد أقصى 8 أرقام.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t pt-5">
+                <h3 className="mb-4 text-sm font-semibold">
+                  المعلومات الصحية
+                </h3>
+
+                <label className="mb-2 block text-sm font-medium">
+                  الأمراض المزمنة
+                </label>
+
+                <input
+                  name="chronicDiseases"
+                  type="text"
+                  defaultValue={
+                    editingStudent?.chronicDiseases ??
+                    ''
+                  }
+                  placeholder="لا يوجد"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                />
+              </div>
+
+              <div className="border-t pt-5">
+                <h3 className="mb-4 text-sm font-semibold">
+                  المعلومات المالية
+                </h3>
+
+                <div className="rounded-md border bg-muted/30 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium">
+                        الرسوم السنوية
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        حسب السنة الدراسية الحالية:{' '}
+                        {
+                          currentAcademicYearName
+                        }
+                      </p>
+                    </div>
+
+                    <div className="text-lg font-semibold">
+                      {currentAnnualFee.toLocaleString(
+                        'ar-BH',
+                        {
+                          minimumFractionDigits: 3,
+                          maximumFractionDigits: 3,
+                        },
+                      )}{' '}
+                      د.ب
+                    </div>
                   </div>
+                </div>
 
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
-                        الدفعة الحالية
-                      </span>
+                {!editingStudent ? (
+                  <>
+                    <div className="mt-4">
+                      <label className="mb-2 block text-sm font-medium">
+                        الدفعة الأولى
+                      </label>
 
-                      <span className="text-base font-semibold">
+                      <input
+                        name="amountPaid"
+                        type="number"
+                        min="0"
+                        max={
+                          currentAnnualFee >
+                          0
+                            ? currentAnnualFee
+                            : undefined
+                        }
+                        step="0.001"
+                        defaultValue="0"
+                        placeholder="0"
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                      />
+                    </div>
+
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      يمكنك تسجيل الدفعة الأولى مع إضافة الطالب. سيتم حفظها كدفعة فعلية، ويمكن إضافة الدفعات اللاحقة من قسم المدفوعات.
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-4 rounded-md border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">
+                          المدفوع حتى الآن
+                        </p>
+
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          لتسجيل دفعة جديدة استخدم حالة الدفع من قائمة الطلاب.
+                        </p>
+                      </div>
+
+                      <div className="text-lg font-semibold">
                         {Number(
-                          paymentAmount ||
+                          editingStudent?.amountPaid ??
                             0,
                         ).toLocaleString(
                           'ar-BH',
@@ -1396,518 +1674,51 @@ export function StudentForm({
                           },
                         )}{' '}
                         د.ب
-                      </span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              <div className="flex shrink-0 gap-3 border-t bg-background p-6">
-                <Button
-                  type="button"
-                  className="flex-1"
-                  onClick={
-                    savePaymentAndReturn
-                  }
-                >
-                  حفظ الدفعة
-                </Button>
+              <div className="border-t pt-5">
+                <label className="mb-2 block text-sm font-medium">
+                  ملاحظات
+                </label>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    setIsPaymentView(
-                      false,
-                    )
+                <textarea
+                  name="notes"
+                  defaultValue={
+                    editingStudent?.notes ??
+                    ''
                   }
-                >
-                  إلغاء
-                </Button>
+                  placeholder="أدخل أي ملاحظات إضافية..."
+                  rows={4}
+                  className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
+                />
               </div>
             </div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="flex items-center justify-between border-b px-6 py-4">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    {editingStudent
-                      ? 'تعديل بيانات الطالب'
-                      : 'إضافة طالب'}
-                  </h2>
 
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {editingStudent
-                      ? 'تعديل بيانات الطالب الأساسية'
-                      : 'إدخال بيانات الطالب الأساسية'}
-                  </p>
-                </div>
+            <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
+              <Button
+                type="submit"
+                className="flex-1"
+              >
+                {editingStudent
+                  ? 'حفظ التعديلات'
+                  : 'حفظ الطالب'}
+              </Button>
 
-                <button
-                  type="button"
-                  onClick={
-                    closeStudentDrawer
-                  }
-                  className="rounded-md p-2 hover:bg-muted"
-                  aria-label="إغلاق"
-                >
-                  <X className="size-5" />
-                </button>
-              </div>
-
-              <form
-                key={
-                  editingStudent?.id ??
-                  'new'
-                }
-                onSubmit={
-                  handleSubmit
+              <Button
+                type="button"
+                variant="outline"
+                onClick={
+                  closeStudentDrawer
                 }
               >
-                <div className="space-y-6 p-6">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <label className="mb-2 block text-sm font-medium">
-                        اسم الطالب
-                      </label>
-
-                      <input
-                        name="name"
-                        type="text"
-                        required
-                        defaultValue={
-                          editingStudent?.name ??
-                          ''
-                        }
-                        placeholder="أدخل اسم الطالب"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        الرقم الشخصي
-                      </label>
-
-                      <input
-                        name="personalId"
-                        type="text"
-                        required
-                        defaultValue={
-                          editingStudent?.personalId ??
-                          ''
-                        }
-                        placeholder="أدخل الرقم الشخصي"
-                        maxLength={9}
-                        inputMode="numeric"
-                        onChange={(
-                          event,
-                        ) => {
-                          event.currentTarget.value =
-                            event.currentTarget.value
-                              .replace(
-                                /\D/g,
-                                '',
-                              )
-                              .slice(
-                                0,
-                                9,
-                              )
-                        }}
-                        dir="ltr"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        أرقام فقط، بحد أقصى 9 أرقام.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        صلة القرابة
-                      </label>
-
-                      <select
-                        name="guardianRelation"
-                        value={
-                          selectedGuardianRelation
-                        }
-                        onChange={(
-                          event,
-                        ) => {
-                          const value =
-                            event.target
-                              .value
-
-                          setSelectedGuardianRelation(
-                            value,
-                          )
-
-                          if (
-                            value !==
-                            'أخرى'
-                          ) {
-                            setCustomGuardianRelation(
-                              '',
-                            )
-                          }
-                        }}
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      >
-                        <option value="">
-                          اختر صلة القرابة
-                        </option>
-
-                        <option value="الأب">
-                          الأب
-                        </option>
-
-                        <option value="الأم">
-                          الأم
-                        </option>
-
-                        <option value="الأخ">
-                          الأخ
-                        </option>
-
-                        <option value="الأخت">
-                          الأخت
-                        </option>
-
-                        <option value="الجد">
-                          الجد
-                        </option>
-
-                        <option value="الجدة">
-                          الجدة
-                        </option>
-
-                        <option value="أخرى">
-                          أخرى
-                        </option>
-                      </select>
-
-                      {selectedGuardianRelation ===
-                        'أخرى' && (
-                        <input
-                          id="customGuardianRelation"
-                          name="customGuardianRelation"
-                          type="text"
-                          value={
-                            customGuardianRelation
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setCustomGuardianRelation(
-                              event
-                                .target
-                                .value,
-                            )
-                          }
-                          placeholder="اكتب صلة القرابة"
-                          required
-                          autoFocus
-                          className="mt-3 h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                        />
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        الصف الأكاديمي
-                      </label>
-
-                      <select
-                        name="grade"
-                        required
-                        defaultValue={
-                          editingStudent?.grade ??
-                          ''
-                        }
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      >
-                        <option value="">
-                          اختر الصف
-                        </option>
-
-                        {academicLevels.map(
-                          (
-                            level,
-                          ) => (
-                            <option
-                              key={
-                                level.id
-                              }
-                              value={
-                                level.name
-                              }
-                            >
-                              {
-                                level.name
-                              }
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        رقم الهاتف
-                      </label>
-
-                      <input
-                        name="phone"
-                        type="tel"
-                        defaultValue={
-                          editingStudent?.phone ??
-                          ''
-                        }
-                        placeholder="مثال: 33xxxxxx"
-                        maxLength={8}
-                        inputMode="numeric"
-                        onChange={(
-                          event,
-                        ) => {
-                          event.currentTarget.value =
-                            event.currentTarget.value
-                              .replace(
-                                /\D/g,
-                                '',
-                              )
-                              .slice(
-                                0,
-                                8,
-                              )
-                        }}
-                        dir="ltr"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        أرقام فقط، بحد أقصى 8 أرقام.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium">
-                        رقم واتساب
-                      </label>
-
-                      <input
-                        name="whatsapp"
-                        type="tel"
-                        defaultValue={
-                          editingStudent?.whatsapp ??
-                          ''
-                        }
-                        placeholder="مثال: 33xxxxxx"
-                        maxLength={8}
-                        inputMode="numeric"
-                        onChange={(
-                          event,
-                        ) => {
-                          event.currentTarget.value =
-                            event.currentTarget.value
-                              .replace(
-                                /\D/g,
-                                '',
-                              )
-                              .slice(
-                                0,
-                                8,
-                              )
-                        }}
-                        dir="ltr"
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                      />
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        أرقام فقط، بحد أقصى 8 أرقام.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="border-t pt-5">
-                    <h3 className="mb-4 text-sm font-semibold">
-                      المعلومات الصحية
-                    </h3>
-
-                    <label className="mb-2 block text-sm font-medium">
-                      الأمراض المزمنة
-                    </label>
-
-                    <input
-                      name="chronicDiseases"
-                      type="text"
-                      defaultValue={
-                        editingStudent?.chronicDiseases ??
-                        ''
-                      }
-                      placeholder="لا يوجد"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                    />
-                  </div>
-
-                  <div className="border-t pt-5">
-                    <h3 className="mb-4 text-sm font-semibold">
-                      المعلومات المالية
-                    </h3>
-
-                    <div className="rounded-md border bg-muted/30 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium">
-                            الرسوم السنوية
-                          </p>
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            حسب السنة الدراسية الحالية:{' '}
-                            {
-                              currentAcademicYearName
-                            }
-                          </p>
-                        </div>
-
-                        <div className="text-lg font-semibold">
-                          {currentAnnualFee.toLocaleString(
-                            'ar-BH',
-                            {
-                              minimumFractionDigits: 3,
-                              maximumFractionDigits: 3,
-                            },
-                          )}{' '}
-                          د.ب
-                        </div>
-                      </div>
-                    </div>
-
-                    {!editingStudent ? (
-                      <>
-                        <div className="mt-4 rounded-md border bg-muted/30 p-4">
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <p className="text-sm font-medium">
-                                الدفعة الأولى
-                              </p>
-
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {Number(
-                                  paymentAmount ||
-                                    0,
-                                ) >
-                                0
-                                  ? `تم تحديد ${Number(
-                                      paymentAmount,
-                                    ).toLocaleString(
-                                      'ar-BH',
-                                      {
-                                        minimumFractionDigits: 3,
-                                        maximumFractionDigits: 3,
-                                      },
-                                    )} د.ب`
-                                  : 'لم تتم إضافة دفعة أولى'}
-                              </p>
-                            </div>
-
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() =>
-                                setIsPaymentView(
-                                  true,
-                                )
-                              }
-                            >
-                              {Number(
-                                paymentAmount ||
-                                  0,
-                              ) >
-                              0
-                                ? 'تعديل الدفعة'
-                                : 'إضافة دفعة'}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <p className="mt-3 text-xs text-muted-foreground">
-                          يمكنك إضافة الدفعة الأولى من خلال نفس النافذة دون تمديد نموذج الطالب.
-                        </p>
-                      </>
-                    ) : (
-                      <div className="mt-4 rounded-md border bg-muted/30 p-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium">
-                              المدفوع حتى الآن
-                            </p>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              لتسجيل دفعة جديدة استخدم حالة الدفع من قائمة الطلاب.
-                            </p>
-                          </div>
-
-                          <div className="text-lg font-semibold">
-                            {Number(
-                              editingStudent?.amountPaid ??
-                                0,
-                            ).toLocaleString(
-                              'ar-BH',
-                              {
-                                minimumFractionDigits: 3,
-                                maximumFractionDigits: 3,
-                              },
-                            )}{' '}
-                            د.ب
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="border-t pt-5">
-                    <label className="mb-2 block text-sm font-medium">
-                      ملاحظات
-                    </label>
-
-                    <textarea
-                      name="notes"
-                      defaultValue={
-                        editingStudent?.notes ??
-                        ''
-                      }
-                      placeholder="أدخل أي ملاحظات إضافية..."
-                      rows={4}
-                      className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="sticky bottom-0 flex gap-3 border-t bg-background p-6">
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                  >
-                    {editingStudent
-                      ? 'حفظ التعديلات'
-                      : 'حفظ الطالب'}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={
-                      closeStudentDrawer
-                    }
-                  >
-                    إلغاء
-                  </Button>
-                </div>
-              </form>
+                إلغاء
+              </Button>
             </div>
-          )}
+          </form>
         </aside>
       </div>
     </>
