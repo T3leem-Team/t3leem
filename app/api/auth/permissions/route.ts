@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 import { requireAuth } from '@/lib/require-auth'
+import { requirePermission } from '@/lib/auth/authorization'
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -22,12 +23,15 @@ const supabaseAdmin = createClient(
 
 const PRIMARY_ADMIN_USERNAME = 'admin'
 
-const MANAGE_ASSIGNMENTS_PERMISSION_ID =
+const TEACHERS_ASSIGNMENTS_PERMISSION_ID =
   '549e42cf-2348-4750-a943-2ca4ce51177a'
 
-const SUPERVISION_MANAGE_PERMISSION_ID =
-  '172a4a69-8046-4e80-b3d3-e5be2d63bc40'
-
+/**
+ * تحميل صلاحيات المستخدم الحالية
+ *
+ * هنا لا نعتمد على اسم الدور كحاجز أمني.
+ * الدور يستخدم فقط لجلب الصلاحيات المرتبطة به.
+ */
 async function getCurrentAccess() {
   const {
     access,
@@ -55,19 +59,27 @@ async function getCurrentAccess() {
     }
   }
 
+  /*
+   * نحتاج username فقط لأجل منطق
+   * system_elements القديم الخاص بالحساب الأساسي.
+   *
+   * لا نستخدم role هنا لاتخاذ قرار صلاحيات
+   * المستخدم الأساسية.
+   */
   const {
     data: profile,
     error: profileError,
-  } = await supabaseAdmin
-    .from('user_profiles')
-    .select(
-      'id, username, role, is_active',
-    )
-    .eq(
-      'id',
-      access.profileId,
-    )
-    .maybeSingle()
+  } =
+    await supabaseAdmin
+      .from('user_profiles')
+      .select(
+        'id, username, role, is_active',
+      )
+      .eq(
+        'id',
+        access.profileId,
+      )
+      .maybeSingle()
 
   if (profileError) {
     console.error(
@@ -104,6 +116,9 @@ async function getCurrentAccess() {
     }
   }
 
+  /*
+   * صلاحيات المستخدم المباشرة.
+   */
   const {
     data: directRows,
     error: directError,
@@ -136,38 +151,57 @@ async function getCurrentAccess() {
     }
   }
 
-  const {
-    data: roleRows,
-    error: roleError,
-  } =
-    await supabaseAdmin
-      .from('role_permissions')
-      .select(
-        'permission_id',
-      )
-      .eq(
-        'role',
-        profile.role,
+  /*
+   * صلاحيات الدور.
+   *
+   * الدور هنا مجرد وسيلة لجلب الصلاحيات
+   * المرتبطة به، وليس حاجزاً مثل:
+   *
+   * role === 'Admin'
+   */
+  let roleRows: {
+    permission_id: string
+  }[] = []
+
+  if (access.role) {
+    const {
+      data,
+      error: roleError,
+    } =
+      await supabaseAdmin
+        .from('role_permissions')
+        .select(
+          'permission_id',
+        )
+        .eq(
+          'role',
+          access.role,
+        )
+
+    if (roleError) {
+      console.error(
+        'Role permissions error:',
+        roleError,
       )
 
-  if (roleError) {
-    console.error(
-      'Role permissions error:',
-      roleError,
-    )
-
-    return {
-      access: null,
-      response: NextResponse.json(
-        {
-          error:
-            'تعذر قراءة صلاحيات الدور.',
-        },
-        { status: 500 },
-      ),
+      return {
+        access: null,
+        response: NextResponse.json(
+          {
+            error:
+              'تعذر قراءة صلاحيات الدور.',
+          },
+          { status: 500 },
+        ),
+      }
     }
+
+    roleRows = data ?? []
   }
 
+  /*
+   * دمج الصلاحيات المباشرة + صلاحيات الدور.
+   */
   const permissionIds =
     Array.from(
       new Set(
@@ -176,7 +210,8 @@ async function getCurrentAccess() {
             (row) =>
               row.permission_id,
           ),
-          ...(roleRows ?? []).map(
+
+          ...roleRows.map(
             (row) =>
               row.permission_id,
           ),
@@ -184,17 +219,22 @@ async function getCurrentAccess() {
       ),
     )
 
+  /*
+   * أسماء الصلاحيات المستخدمة حالياً
+   * في الواجهة.
+   *
+   * إذا كان المستخدم يملك صلاحية
+   * teachers.manage_assignments
+   * نرسل اسمها للواجهة.
+   */
   const permissionNames: string[] = []
 
   const hasManageAssignments =
     permissionIds.includes(
-      MANAGE_ASSIGNMENTS_PERMISSION_ID,
+      TEACHERS_ASSIGNMENTS_PERMISSION_ID,
     )
 
-  if (
-    hasManageAssignments ||
-    profile.role === 'Admin'
-  ) {
+  if (hasManageAssignments) {
     permissionNames.push(
       'teachers.manage_assignments',
     )
@@ -203,21 +243,19 @@ async function getCurrentAccess() {
   /*
    * صلاحيات عناصر النظام
    *
-   * هذه الصلاحيات منفصلة تماماً عن
-   * permissions / role_permissions.
+   * هذه منفصلة عن permissions.
    *
-   * مدير النظام الأساسي username = admin
-   * يحصل تلقائياً على جميع العناصر النشطة.
+   * الحساب الأساسي username = admin
+   * يحتفظ بالسلوك الحالي: يرى جميع العناصر النشطة.
    *
    * باقي المستخدمين يحصلون فقط على العناصر
-   * التي تم تعيينها لهم من صفحة التحكم بعناصر النظام.
+   * المعيّنة لهم.
    */
   let systemElementKeys: string[] = []
 
   if (
     profile.username ===
-      PRIMARY_ADMIN_USERNAME &&
-    profile.role === 'Admin'
+    PRIMARY_ADMIN_USERNAME
   ) {
     const {
       data: elements,
@@ -328,6 +366,13 @@ async function getCurrentAccess() {
   }
 }
 
+/*
+ * GET
+ *
+ * قراءة صلاحيات المستخدم الحالية
+ * + عناصر النظام
+ * + إعدادات الإشراف.
+ */
 export async function GET() {
   try {
     const {
@@ -380,7 +425,7 @@ export async function GET() {
 
     /*
      * إذا لم يوجد سجل الإعدادات الأساسي،
-     * ننشئه تلقائياً بالقيم الافتراضية.
+     * ننشئه بالقيم الافتراضية.
      */
     if (!supervisionSettings) {
       const {
@@ -431,9 +476,6 @@ export async function GET() {
         permissionNames:
           access.permissionNames,
 
-        /*
-         * صلاحيات عناصر النظام المنفصلة.
-         */
         systemElementKeys:
           access.systemElementKeys,
 
@@ -474,42 +516,27 @@ export async function GET() {
   }
 }
 
+/*
+ * PATCH
+ *
+ * تعديل إعدادات الإشراف.
+ *
+ * الحماية هنا تعتمد على permission_key
+ * وليس على اسم الدور.
+ */
 export async function PATCH(
   request: Request,
 ) {
   try {
     const {
-      access,
-      response,
-    } = await getCurrentAccess()
-
-    if (response) {
-      return response
-    }
-
-    if (!access) {
-      return NextResponse.json(
-        {
-          authenticated: false,
-        },
-        { status: 401 },
-      )
-    }
-
-    const canManageSupervision =
-      access.profile.role === 'Admin' ||
-      access.permissionIds.includes(
-        SUPERVISION_MANAGE_PERMISSION_ID,
+      error: permissionError,
+    } =
+      await requirePermission(
+        'supervision.manage',
       )
 
-    if (!canManageSupervision) {
-      return NextResponse.json(
-        {
-          error:
-            'ليس لديك صلاحية إدارة إعدادات الإشراف.',
-        },
-        { status: 403 },
-      )
+    if (permissionError) {
+      return permissionError
     }
 
     const body =
@@ -550,8 +577,6 @@ export async function PATCH(
 
     /*
      * نتأكد من وجود سجل الإعدادات.
-     * إذا لم يكن موجوداً ننشئه بالقيم الافتراضية
-     * ثم نطبق التعديل المطلوب.
      */
     const {
       data: existingSettings,
@@ -583,6 +608,10 @@ export async function PATCH(
       )
     }
 
+    /*
+     * إذا لم يوجد السجل، ننشئه بالقيم
+     * الافتراضية مع تطبيق التعديل المطلوب.
+     */
     if (!existingSettings) {
       const {
         data: createdSettings,
@@ -592,9 +621,11 @@ export async function PATCH(
           .from('supervision_settings')
           .insert({
             id: 'default',
+
             allow_teacher_transfer:
               updates.allow_teacher_transfer ??
               true,
+
             allow_teacher_remove:
               updates.allow_teacher_remove ??
               true,
@@ -636,6 +667,9 @@ export async function PATCH(
       })
     }
 
+    /*
+     * تحديث الإعدادات الموجودة.
+     */
     const {
       data,
       error,
