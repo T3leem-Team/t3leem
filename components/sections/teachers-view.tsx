@@ -34,29 +34,14 @@ import {
   type AttendanceRecord,
   type AttendanceNotes,
   type Student,
-} from '@/components/sections/teacher-attendance'
+} from '@/app/(dashboard)/teachers/teacher-attendance'
 
 import {
   TeachersViewTeacherPanel,
-} from '@/components/sections/teachers-view-teacher-panel'
+} from '@/app/(dashboard)/teachers/teachers-view-teacher-panel'
 
-const initialTeachersCache =
-  getTeachersCache()
-
-type RemoveMode =
-  | 'assignment_only'
-  | 'assignment_and_attendance'
-
-export function TeachersView() {
-  const [teachers, setTeachers] =
-    useState<Teacher[]>(
-      initialTeachersCache?.teachers ?? [],
-    )
-
-  const [courses, setCourses] =
-    useState<ManagedCourse[]>(
-      initialTeachersCache?.courses ?? [],
-    )
+  const initialTeachersCache =
+    getTeachersCache()
 
   const [students, setStudents] =
     useState<Student[]>(
