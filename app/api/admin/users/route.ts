@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '@/lib/require-auth'
+import { requirePermission } from '@/lib/auth/authorization'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,84 +25,6 @@ type AllowedRole =
 
 /*
  * --------------------------------------------------
- * التحقق من أن المستخدم الحالي هو مدير النظام
- * --------------------------------------------------
- */
-async function requireAdmin() {
-  const { access, response } =
-    await requireAuth()
-
-  if (response) {
-    return {
-      error: response,
-    }
-  }
-
-  const {
-    data: profile,
-    error,
-  } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select(
-        `
-        id,
-        auth_user_id,
-        username,
-        email,
-        full_name,
-        role,
-        department,
-        is_active
-        `,
-      )
-      .eq(
-        'auth_user_id',
-        access!.userId,
-      )
-      .maybeSingle()
-
-  if (error) {
-    console.error(
-      'Admin profile lookup error:',
-      error,
-    )
-
-    return {
-      error: NextResponse.json(
-        {
-          error:
-            'تعذر التحقق من صلاحيات المستخدم.',
-        },
-        { status: 500 },
-      ),
-    }
-  }
-
-  if (
-    !profile ||
-    profile.role !== 'Admin' ||
-    !profile.is_active
-  ) {
-    return {
-      error: NextResponse.json(
-        {
-          error:
-            'ليس لديك صلاحية إدارة المستخدمين.',
-        },
-        { status: 403 },
-      ),
-    }
-  }
-
-  return {
-    profile,
-    access,
-  }
-}
-
-/*
- * --------------------------------------------------
  * GET
  *
  * تحميل:
@@ -111,12 +33,15 @@ async function requireAdmin() {
  * - صلاحيات الأدوار
  * - أقسام لوحة التحكم
  * - ربط الأقسام بالمستخدمين
+ *
+ * الحماية:
+ * users.view
  * --------------------------------------------------
  */
 export async function GET() {
   try {
     const { error } =
-      await requireAdmin()
+      await requirePermission('users.view')
 
     if (error) {
       return error
@@ -250,14 +175,6 @@ export async function GET() {
     /*
      * --------------------------------------------------
      * تحميل صلاحيات الأدوار
-     *
-     * مثال:
-     *
-     * Teacher
-     * ├─ students.view
-     * ├─ attendance.view
-     * ├─ attendance.manage
-     * └─ teachers.manage_assignments
      * --------------------------------------------------
      */
     const {
@@ -389,9 +306,6 @@ export async function GET() {
            * ----------------------------------------------
            * الصلاحيات الفردية فقط
            * ----------------------------------------------
-           *
-           * هذه تأتي من:
-           * user_permissions
            */
           const permissionLinks =
             (
@@ -417,9 +331,6 @@ export async function GET() {
            * ----------------------------------------------
            * صلاحيات الدور
            * ----------------------------------------------
-           *
-           * هذه تأتي من:
-           * role_permissions
            */
           const rolePermissionIds =
             Array.from(
@@ -444,8 +355,6 @@ export async function GET() {
            * ----------------------------------------------
            * جميع الصلاحيات الفعلية
            * ----------------------------------------------
-           *
-           * الدور + الفردية
            */
           const effectivePermissionIds =
             Array.from(
@@ -542,44 +451,24 @@ export async function GET() {
           return {
             ...user,
 
-            /*
-             * ==============================================
-             * الصلاحيات الفردية فقط
-             * ==============================================
-             */
             permissionIds:
               userPermissionIds,
 
             permissions:
               userPermissionDetails,
 
-            /*
-             * ==============================================
-             * صلاحيات الدور
-             * ==============================================
-             */
             rolePermissionIds:
               rolePermissionIds,
 
             rolePermissions:
               rolePermissionDetails,
 
-            /*
-             * ==============================================
-             * الصلاحيات الفعلية
-             * ==============================================
-             */
             effectivePermissionIds:
               effectivePermissionIds,
 
             effectivePermissions:
               effectivePermissionDetails,
 
-            /*
-             * ==============================================
-             * أقسام لوحة التحكم
-             * ==============================================
-             */
             sectionIds:
               userSectionIds,
 
@@ -620,6 +509,9 @@ export async function GET() {
  * POST
  *
  * إنشاء مستخدم جديد
+ *
+ * الحماية:
+ * users.manage
  * --------------------------------------------------
  */
 export async function POST(
@@ -627,7 +519,7 @@ export async function POST(
 ) {
   try {
     const { error } =
-      await requireAdmin()
+      await requirePermission('users.manage')
 
     if (error) {
       return error
@@ -1229,15 +1121,6 @@ export async function POST(
      * --------------------------------------------------
      * إرجاع المستخدم الجديد
      * --------------------------------------------------
-     *
-     * ملاحظة:
-     * permissionIds = فردية فقط
-     *
-     * rolePermissionIds = صلاحيات الدور
-     *
-     * effectivePermissionIds =
-     * الدور + الفردية
-     * --------------------------------------------------
      */
     const {
       data: createdRolePermissions,
@@ -1316,6 +1199,9 @@ export async function POST(
  * PATCH
  *
  * تعديل المستخدم
+ *
+ * الحماية:
+ * users.manage
  * --------------------------------------------------
  */
 export async function PATCH(
@@ -1325,7 +1211,9 @@ export async function PATCH(
     const {
       access,
       error,
-    } = await requireAdmin()
+    } = await requirePermission(
+      'users.manage',
+    )
 
     if (error) {
       return error
@@ -1583,7 +1471,7 @@ export async function PATCH(
 
     /*
      * --------------------------------------------------
-     * منع الأدمن من تعطيل نفسه
+     * منع المستخدم من تعطيل نفسه
      * --------------------------------------------------
      */
     if (
@@ -1746,9 +1634,6 @@ export async function PATCH(
     /*
      * --------------------------------------------------
      * تحديث الصلاحيات الفردية
-     *
-     * مهم:
-     * هنا نحفظ فقط permissionIds القادمة من الواجهة.
      *
      * صلاحيات الدور لا تدخل إلى user_permissions.
      * --------------------------------------------------
@@ -2072,27 +1957,15 @@ export async function PATCH(
       user: {
         ...updatedProfile,
 
-        /*
-         * الصلاحيات الفردية فقط
-         */
         permissionIds:
           validPermissionIds,
 
-        /*
-         * صلاحيات الدور
-         */
         rolePermissionIds:
           updatedRolePermissionIds,
 
-        /*
-         * جميع الصلاحيات الفعلية
-         */
         effectivePermissionIds:
           updatedEffectivePermissionIds,
 
-        /*
-         * أقسام لوحة التحكم
-         */
         sectionIds:
           validSectionIds,
       },
@@ -2118,6 +1991,9 @@ export async function PATCH(
  * DELETE
  *
  * حذف المستخدم نهائيًا
+ *
+ * الحماية:
+ * users.manage
  * --------------------------------------------------
  */
 export async function DELETE(
@@ -2127,7 +2003,9 @@ export async function DELETE(
     const {
       access,
       error,
-    } = await requireAdmin()
+    } = await requirePermission(
+      'users.manage',
+    )
 
     if (error) {
       return error
@@ -2220,9 +2098,7 @@ export async function DELETE(
     /*
      * حذف الصلاحيات الفردية
      *
-     * ملاحظة:
-     * role_permissions لا تُحذف لأنها مرتبطة بالدور
-     * وليس بالمستخدم نفسه.
+     * role_permissions لا تُحذف لأنها مرتبطة بالدور.
      */
     const {
       error:
