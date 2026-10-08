@@ -2,14 +2,17 @@
 
 import { History } from 'lucide-react'
 
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
 
 import type {
   AttendanceRecord,
   AttendanceStatus,
   Course,
   Student,
-} from '@/components/sections/attendance-view'
+} from '@/app/(dashboard)/teachers/teacher-attendance'
 
 export type PreviousCourseAssignment = {
   id: string
@@ -18,7 +21,6 @@ export type PreviousCourseAssignment = {
   studentId: string
   subjectId: string
 }
-
 export type PreviousCourseSubject = {
   courseId: string
   teacherId: string
