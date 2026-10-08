@@ -38,16 +38,16 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-import { StudentDetails } from './student-details'
+import { StudentDetails } from '@/app/(dashboard)/students/student-details'
 
 import {
   StudentsTable,
   type StudentTableStudent,
   type StudentTableFilters,
   type StudentDynamicField,
-} from './students-table'
+} from '@/app/(dashboard)/students/students-table'
 
-import { StudentForm } from './student-form'
+import { StudentForm } from '@/app/(dashboard)/students/student-form'
 
 type Filters = StudentTableFilters
 
@@ -706,511 +706,425 @@ export function StudentsView() {
     )
   }
 
- /*
- * ============================================================
- * تصدير Excel
- * ============================================================
- */
-const exportStudentsToExcel =
-  () => {
-    if (
-      filteredStudents.length ===
-      0
-    ) {
-      setSupabaseStatus(
-        'لا توجد بيانات لتصديرها إلى Excel'
+  /*
+   * ============================================================
+   * تصدير Excel
+   * ============================================================
+   */
+  const exportStudentsToExcel =
+    () => {
+      if (
+        filteredStudents.length ===
+        0
+      ) {
+        setSupabaseStatus(
+          'لا توجد بيانات لتصديرها إلى Excel'
+        )
+        return
+      }
+
+      const exportData =
+        filteredStudents.map(
+          (
+            student,
+            index
+          ) => {
+            const remaining =
+              student.feeExempt
+                ? 0
+                : Math.max(
+                    Number(
+                      student.amountDue
+                    ) -
+                      Number(
+                        student.amountPaid
+                      ),
+                    0
+                  )
+
+            const row: Record<
+              string,
+              any
+            > = {
+              '#':
+                index + 1,
+
+              'معرف الطالب':
+                student.studentId,
+
+              'اسم الطالب':
+                student.name,
+
+              'الرقم الشخصي':
+                student.personalId,
+
+              'صلة القرابة':
+                student.guardianRelation,
+
+              'رقم الطالب':
+                student.studentPhone,
+
+              'دورة الالتحاق':
+                student.enrollmentCourseName,
+
+              'الجنس':
+                student.gender,
+
+              'العمر':
+                student.age ?? '',
+
+              'الصف الأكاديمي':
+                student.grade,
+
+              'الفصل':
+                student.className,
+
+              'رقم الهاتف':
+                student.phone,
+
+              'رقم واتساب':
+                student.whatsapp,
+
+              'الحالة':
+                student.status,
+
+              'مصدر التسجيل':
+                student.source,
+
+              'حالة الدفع':
+                student.paymentStatus,
+
+              'الرسوم السنوية':
+                student.amountDue,
+
+              'المدفوع':
+                student.amountPaid,
+
+              'المتبقي':
+                remaining,
+
+              'الإعفاء':
+                student.feeExempt
+                  ? 'نعم'
+                  : 'لا',
+
+              'الملاحظات':
+                student.notes,
+
+              'المعلومات الصحية':
+                student.chronicDiseases,
+
+              'الحضور الحالي':
+                student.attendance,
+
+              'تاريخ الإضافة':
+                student.createdAt,
+
+              'آخر تحديث':
+                student.updatedAt,
+
+              'السنة الدراسية':
+                student.academicYearName,
+            }
+
+            dynamicFields.forEach(
+              (field) => {
+                row[field.name] =
+                  student
+                    .dynamicValues?.[
+                    field.id
+                  ] ?? ''
+              }
+            )
+
+            student.courseStatuses.forEach(
+              (course) => {
+                row[
+                  `${course.courseName} - الحالة`
+                ] =
+                  course.status
+              }
+            )
+
+            return row
+          }
+        )
+
+      const worksheet =
+        XLSX.utils.json_to_sheet(
+          exportData
+        )
+
+      const workbook =
+        XLSX.utils.book_new()
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        'الطلاب'
       )
-      return
+
+      worksheet['!cols'] =
+        Object.keys(
+          exportData[0] ?? {}
+        ).map(
+          (_, index) => ({
+            wch:
+              index === 0
+                ? 6
+                : 24,
+          })
+        )
+
+      const safeYearName =
+        currentAcademicYearName
+          .replace(
+            /[\\/:*?"<>|]/g,
+            '-'
+          )
+          .trim()
+
+      const fileName =
+        safeYearName
+          ? `الطلاب-${safeYearName}.xlsx`
+          : 'الطلاب.xlsx'
+
+      XLSX.writeFile(
+        workbook,
+        fileName
+      )
+
+      setSupabaseStatus(
+        `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
+      )
     }
 
-    const exportData =
-      filteredStudents.map(
-        (
-          student,
-          index
-        ) => {
-          const remaining =
-            student.feeExempt
-              ? 0
-              : Math.max(
-                  Number(
-                    student.amountDue
-                  ) -
-                    Number(
-                      student.amountPaid
-                    ),
-                  0
-                )
+  return (
+    <div className="space-y-6">
 
-          const row: Record<
-            string,
-            any
-          > = {
-            '#':
-              index + 1,
+      <div
+        className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm transition-all ${
+          isLoadingStudents
+            ? 'border-primary/30 bg-primary/5'
+            : 'bg-muted/30'
+        }`}
+      >
+        {isLoadingStudents && (
+          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+        )}
 
-            'معرف الطالب':
-              student.studentId,
+        <span>
+          {isLoadingStudents
+            ? 'جاري تحميل قائمة الطلاب والبيانات المرتبطة...'
+            : supabaseStatus}
+        </span>
+      </div>
 
-            'اسم الطالب':
-              student.name,
-
-            'الرقم الشخصي':
-              student.personalId,
-
-            'صلة القرابة':
-              student.guardianRelation,
-
-            'رقم الطالب':
-              student.studentPhone,
-
-            'دورة الالتحاق':
-              student.enrollmentCourseName,
-
-            'الجنس':
-              student.gender,
-
-            'العمر':
-              student.age ?? '',
-
-            'الصف الأكاديمي':
-              student.grade,
-
-            'الفصل':
-              student.className,
-
-            'رقم الهاتف':
-              student.phone,
-
-            'رقم واتساب':
-              student.whatsapp,
-
-            'الحالة':
-              student.status,
-
-            'مصدر التسجيل':
-              student.source,
-
-            'حالة الدفع':
-              student.paymentStatus,
-
-            'الرسوم السنوية':
-              student.amountDue,
-
-            'المدفوع':
-              student.amountPaid,
-
-            'المتبقي':
-              remaining,
-
-            'الإعفاء':
-              student.feeExempt
-                ? 'نعم'
-                : 'لا',
-
-            'الملاحظات':
-              student.notes,
-
-            'المعلومات الصحية':
-              student.chronicDiseases,
-
-            'الحضور الحالي':
-              student.attendance,
-
-            'تاريخ الإضافة':
-              student.createdAt,
-
-            'آخر تحديث':
-              student.updatedAt,
-
-            'السنة الدراسية':
-              student.academicYearName,
-          }
-
-          dynamicFields.forEach(
-            (field) => {
-              row[field.name] =
-                student
-                  .dynamicValues?.[
-                  field.id
-                ] ?? ''
+      <PageHeader
+        title="الطلاب"
+        description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
+        action={
+          <Button
+            onClick={
+              openAddStudent
             }
-          )
-
-          student.courseStatuses.forEach(
-            (course) => {
-              row[
-                `${course.courseName} - الحالة`
-              ] =
-                course.status
-            }
-          )
-
-          return row
-        }
-      )
-
-    const worksheet =
-      XLSX.utils.json_to_sheet(
-        exportData
-      )
-
-    const workbook =
-      XLSX.utils.book_new()
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      'الطلاب'
-    )
-
-    worksheet['!cols'] =
-      Object.keys(
-        exportData[0] ?? {}
-      ).map(
-        (_, index) => ({
-          wch:
-            index === 0
-              ? 6
-              : 24,
-        })
-      )
-
-    const safeYearName =
-      currentAcademicYearName
-        .replace(
-          /[\\/:*?"<>|]/g,
-          '-'
-        )
-        .trim()
-
-    const fileName =
-      safeYearName
-        ? `الطلاب-${safeYearName}.xlsx`
-        : 'الطلاب.xlsx'
-
-    XLSX.writeFile(
-      workbook,
-      fileName
-    )
-
-    setSupabaseStatus(
-      `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
-    )
-  }
-
-return (
-  <div className="space-y-6">
-
-
-
-    <div
-      className={`flex items-center gap-3 rounded-md border px-4 py-3 text-sm transition-all ${
-        isLoadingStudents
-          ? 'border-primary/30 bg-primary/5'
-          : 'bg-muted/30'
-      }`}
-    >
-      {isLoadingStudents && (
-        <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-      )}
-
-      <span>
-        {isLoadingStudents
-          ? 'جاري تحميل قائمة الطلاب والبيانات المرتبطة...'
-          : supabaseStatus}
-      </span>
-    </div>
-
-    <PageHeader
-      title="الطلاب"
-      description={`إجمالي ${studentList.length} طالب مسجّل في النظام`}
-      action={
-        <Button
-          onClick={
-            openAddStudent
-          }
-        >
-          <UserPlus className="size-4" />
-          إضافة طالب
-        </Button>
-      }
-    />
-
-    <Card>
-      <CardContent className="space-y-4 p-4">
-
-        {/* البحث العام */}
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value
-              )
-            }
-            placeholder="بحث عام في جميع بيانات الطلاب..."
-            className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
-          />
-        </div>
-
-        {/* =====================================================
-            الإحصائيات + أزرار الصفحة
-            ===================================================== */}
-        <div className="rounded-md border bg-muted/30 p-3">
-
-          {/* الإحصائيات */}
-          <div
-            dir="rtl"
-            className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b pb-3 text-sm"
           >
-            <div>
-              <span className="text-muted-foreground">
-                إجمالي الطلاب:
-              </span>{' '}
-              <span className="font-semibold">
-                {studentList.length}
-              </span>
-            </div>
+            <UserPlus className="size-4" />
+            إضافة طالب
+          </Button>
+        }
+      />
 
-            <div>
-              <span className="text-muted-foreground">
-                النتائج الحالية:
-              </span>{' '}
-              <span className="font-semibold">
-                {
-                  filteredStudents.length
-                }
-              </span>
-            </div>
+      <Card>
+        <CardContent className="space-y-4 p-4">
 
-            <div>
-              <span className="text-muted-foreground">
-                الرسوم السنوية:
-              </span>{' '}
-              <span className="font-semibold">
-                {currentAnnualFee.toLocaleString(
-                  'ar-BH',
-                  {
-                    minimumFractionDigits: 3,
-                    maximumFractionDigits: 3,
-                  }
-                )}{' '}
-                د.ب
-              </span>
-            </div>
+          {/* البحث العام */}
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
-            {currentCourseName && (
+            <input
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
+              placeholder="بحث عام في جميع بيانات الطلاب..."
+              className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
+            />
+          </div>
+
+          {/* =====================================================
+              الإحصائيات + أزرار الصفحة
+              ===================================================== */}
+          <div className="rounded-md border bg-muted/30 p-3">
+
+            {/* الإحصائيات */}
+            <div
+              dir="rtl"
+              className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b pb-3 text-sm"
+            >
               <div>
                 <span className="text-muted-foreground">
-                  الدورة الحالية:
+                  إجمالي الطلاب:
+                </span>{' '}
+                <span className="font-semibold">
+                  {studentList.length}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-muted-foreground">
+                  النتائج الحالية:
                 </span>{' '}
                 <span className="font-semibold">
                   {
-                    currentCourseName
+                    filteredStudents.length
                   }
                 </span>
               </div>
-            )}
-          </div>
 
-          {/* أزرار الصفحة */}
-          <div
-            dir="rtl"
-            className="flex flex-wrap items-center gap-2 pt-3"
-          >
-            {/* إضافة طالب */}
-            <Button
-              type="button"
-              onClick={
-                openAddStudent
-              }
-              className="shrink-0 whitespace-nowrap"
+              <div>
+                <span className="text-muted-foreground">
+                  الرسوم السنوية:
+                </span>{' '}
+                <span className="font-semibold">
+                  {currentAnnualFee.toLocaleString(
+                    'ar-BH',
+                    {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    }
+                  )}{' '}
+                  د.ب
+                </span>
+              </div>
+
+              {currentCourseName && (
+                <div>
+                  <span className="text-muted-foreground">
+                    الدورة الحالية:
+                  </span>{' '}
+                  <span className="font-semibold">
+                    {
+                      currentCourseName
+                    }
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* أزرار الصفحة */}
+            <div
+              dir="rtl"
+              className="flex flex-wrap items-center gap-2 pt-3"
             >
-              <UserPlus className="size-4" />
-              إضافة طالب
-            </Button>
+              {/* إضافة طالب */}
+              <Button
+                type="button"
+                onClick={
+                  openAddStudent
+                }
+                className="shrink-0 whitespace-nowrap"
+              >
+                <UserPlus className="size-4" />
+                إضافة طالب
+              </Button>
 
-            {/* تعديل */}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                !selectedStudentId
-              }
-              onClick={
-                openEditStudent
-              }
-              className="shrink-0 whitespace-nowrap"
-            >
-              <Pencil className="size-4" />
-              تعديل
-            </Button>
-
-            {/* إعفاء */}
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                !selectedStudentId
-              }
-              onClick={async () => {
-                if (
+              {/* تعديل */}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
                   !selectedStudentId
-                ) {
-                  return
                 }
-
-                const selected =
-                  studentList.find(
-                    (student) =>
-                      student.id ===
-                      selectedStudentId
-                  )
-
-                if (!selected) {
-                  return
+                onClick={
+                  openEditStudent
                 }
+                className="shrink-0 whitespace-nowrap"
+              >
+                <Pencil className="size-4" />
+                تعديل
+              </Button>
 
-                const nextFeeExempt =
-                  !selected.feeExempt
-
-                const {
-                  error,
-                } =
-                  await supabase
-                    .from(
-                      'students'
-                    )
-                    .update({
-                      fee_exempt:
-                        nextFeeExempt,
-                    })
-                    .eq(
-                      'id',
-                      selectedStudentId
-                    )
-
-                if (error) {
-                  setSupabaseStatus(
-                    `خطأ في تحديث حالة الإعفاء: ${error.message}`
-                  )
-                  return
+              {/* إعفاء */}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  !selectedStudentId
                 }
-
-                setStudentList(
-                  (current) => {
-                    const next =
-                      current.map(
-                        (
-                          student
-                        ) =>
-                          student.id ===
-                          selectedStudentId
-                            ? {
-                                ...student,
-                                feeExempt:
-                                  nextFeeExempt,
-                                paymentStatus:
-                                  nextFeeExempt
-                                    ? 'معفي'
-                                    : student.amountPaid >=
-                                          student.amountDue &&
-                                        student.amountDue >
-                                          0
-                                      ? 'مدفوع بالكامل'
-                                      : student.amountPaid >
-                                          0
-                                        ? 'مدفوع جزئيًا'
-                                        : 'غير مدفوع',
-                              }
-                            : student
-                      )
-
-                    updateStudentsCacheStudentList(
-                      next
-                    )
-
-                    return next
+                onClick={async () => {
+                  if (
+                    !selectedStudentId
+                  ) {
+                    return
                   }
-                )
 
-                setSupabaseStatus(
-                  nextFeeExempt
-                    ? 'تم إعفاء الطالب من الرسوم ✅'
-                    : 'تم إلغاء إعفاء الطالب ✅'
-                )
-              }}
-              className="shrink-0 whitespace-nowrap"
-            >
-              {selectedStudent?.feeExempt
-                ? 'إلغاء الإعفاء'
-                : 'إعفاء'}
-            </Button>
+                  const selected =
+                    studentList.find(
+                      (student) =>
+                        student.id ===
+                        selectedStudentId
+                    )
 
-            {/* مسح */}
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={
-                !selectedStudentId
-              }
-              onClick={async () => {
-                if (
-                  !selectedStudentId
-                ) {
-                  return
-                }
+                  if (!selected) {
+                    return
+                  }
 
-                const selected =
-                  studentList.find(
-                    (student) =>
-                      student.id ===
-                      selectedStudentId
-                  )
+                  const nextFeeExempt =
+                    !selected.feeExempt
 
-                if (!selected) {
-                  return
-                }
-
-                const confirmed =
-                  window.confirm(
-                    `⚠️ تأكيد الحذف النهائي\n\nهل أنت متأكد من حذف الطالب «${selected.name}» نهائيًا؟\n\nسيتم حذف بيانات الطالب وسجلاته المرتبطة به من النظام بالكامل.\n\n⚠️ هذا حذف نهائي وكامل ولا يمكن التراجع عنه.`
-                  )
-
-                if (!confirmed) {
-                  return
-                }
-
-                try {
                   const {
                     error,
                   } =
-                    await supabase.rpc(
-                      'delete_student_completely',
-                      {
-                        p_student_id:
-                          selectedStudentId,
-                      }
-                    )
+                    await supabase
+                      .from(
+                        'students'
+                      )
+                      .update({
+                        fee_exempt:
+                          nextFeeExempt,
+                      })
+                      .eq(
+                        'id',
+                        selectedStudentId
+                      )
 
                   if (error) {
-                    throw new Error(
-                      error.message
+                    setSupabaseStatus(
+                      `خطأ في تحديث حالة الإعفاء: ${error.message}`
                     )
+                    return
                   }
 
                   setStudentList(
                     (current) => {
                       const next =
-                        current.filter(
+                        current.map(
                           (
                             student
                           ) =>
-                            student.id !==
+                            student.id ===
                             selectedStudentId
+                              ? {
+                                  ...student,
+                                  feeExempt:
+                                    nextFeeExempt,
+                                  paymentStatus:
+                                    nextFeeExempt
+                                      ? 'معفي'
+                                      : student.amountPaid >=
+                                            student.amountDue &&
+                                          student.amountDue >
+                                            0
+                                        ? 'مدفوع بالكامل'
+                                        : student.amountPaid >
+                                            0
+                                          ? 'مدفوع جزئيًا'
+                                          : 'غير مدفوع',
+                                }
+                              : student
                         )
 
                       updateStudentsCacheStudentList(
@@ -1221,162 +1135,246 @@ return (
                     }
                   )
 
-                  setSelectedStudentId(
-                    ''
-                  )
-
                   setSupabaseStatus(
-                    `تم حذف الطالب «${selected.name}» نهائيًا من النظام ✅`
+                    nextFeeExempt
+                      ? 'تم إعفاء الطالب من الرسوم ✅'
+                      : 'تم إلغاء إعفاء الطالب ✅'
                   )
-                } catch (error) {
-                  console.error(
-                    'delete student error:',
-                    error
-                  )
+                }}
+                className="shrink-0 whitespace-nowrap"
+              >
+                {selectedStudent?.feeExempt
+                  ? 'إلغاء الإعفاء'
+                  : 'إعفاء'}
+              </Button>
 
-                  setSupabaseStatus(
-                    error instanceof Error
-                      ? `خطأ في حذف الطالب: ${error.message}`
-                      : 'حدث خطأ أثناء حذف الطالب'
-                  )
+              {/* مسح */}
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={
+                  !selectedStudentId
                 }
-              }}
-              className="shrink-0 whitespace-nowrap"
-            >
-              <X className="size-4" />
-              مسح
-            </Button>
+                onClick={async () => {
+                  if (
+                    !selectedStudentId
+                  ) {
+                    return
+                  }
 
-            {/* فاصل */}
-            <div className="hidden flex-1 sm:block" />
+                  const selected =
+                    studentList.find(
+                      (student) =>
+                        student.id ===
+                        selectedStudentId
+                    )
 
-            {/* تنزيل Excel */}
-            <Button
-              type="button"
-              onClick={
-                exportStudentsToExcel
-              }
-              disabled={
-                filteredStudents.length ===
-                0
-              }
-              className="shrink-0 whitespace-nowrap bg-green-600 text-white hover:bg-green-700 disabled:bg-green-600/50 disabled:text-white"
-            >
-              <Download className="size-4" />
-              تنزيل Excel
-            </Button>
+                  if (!selected) {
+                    return
+                  }
+
+                  const confirmed =
+                    window.confirm(
+                      `⚠️ تأكيد الحذف النهائي\n\nهل أنت متأكد من حذف الطالب «${selected.name}» نهائيًا؟\n\nسيتم حذف بيانات الطالب وسجلاته المرتبطة به من النظام بالكامل.\n\n⚠️ هذا حذف نهائي وكامل ولا يمكن التراجع عنه.`
+                    )
+
+                  if (!confirmed) {
+                    return
+                  }
+
+                  try {
+                    const {
+                      error,
+                    } =
+                      await supabase.rpc(
+                        'delete_student_completely',
+                        {
+                          p_student_id:
+                            selectedStudentId,
+                        }
+                      )
+
+                    if (error) {
+                      throw new Error(
+                        error.message
+                      )
+                    }
+
+                    setStudentList(
+                      (current) => {
+                        const next =
+                          current.filter(
+                            (
+                              student
+                            ) =>
+                              student.id !==
+                              selectedStudentId
+                          )
+
+                        updateStudentsCacheStudentList(
+                          next
+                        )
+
+                        return next
+                      }
+                    )
+
+                    setSelectedStudentId(
+                      ''
+                    )
+
+                    setSupabaseStatus(
+                      `تم حذف الطالب «${selected.name}» نهائيًا من النظام ✅`
+                    )
+                  } catch (error) {
+                    console.error(
+                      'delete student error:',
+                      error
+                    )
+
+                    setSupabaseStatus(
+                      error instanceof Error
+                        ? `خطأ في حذف الطالب: ${error.message}`
+                        : 'حدث خطأ أثناء حذف الطالب'
+                    )
+                  }
+                }}
+                className="shrink-0 whitespace-nowrap"
+              >
+                <X className="size-4" />
+                مسح
+              </Button>
+
+              {/* فاصل */}
+              <div className="hidden flex-1 sm:block" />
+
+              {/* تنزيل Excel */}
+              <Button
+                type="button"
+                onClick={
+                  exportStudentsToExcel
+                }
+                disabled={
+                  filteredStudents.length ===
+                  0
+                }
+                className="shrink-0 whitespace-nowrap bg-green-600 text-white hover:bg-green-700 disabled:bg-green-600/50 disabled:text-white"
+              >
+                <Download className="size-4" />
+                تنزيل Excel
+              </Button>
+            </div>
           </div>
-        </div>
 
-        <StudentsTable
-          students={
-            filteredStudents
-          }
-          courses={
-            courses
-          }
-          dynamicFields={
-            dynamicFields
+          <StudentsTable
+            students={
+              filteredStudents
+            }
+            courses={
+              courses
+            }
+            dynamicFields={
+              dynamicFields
+            }
+            academicLevels={
+              academicLevels
+            }
+            filters={
+              filters
+            }
+            visibleColumns={
+              visibleColumns
+            }
+            selectedStudentId={
+              selectedStudentId
+            }
+            currentCourseName={
+              currentCourseName
+            }
+            onSelectStudent={(
+              id
+            ) => {
+              setSelectedStudentId(
+                (current) =>
+                  current === id
+                    ? ''
+                    : id
+              )
+            }}
+            onUpdateFilter={
+              updateFilter
+            }
+            onToggleColumn={
+              toggleColumn
+            }
+            onOpenNotes={
+              openNotesDetails
+            }
+            onOpenAttendance={
+              openAttendanceDetails
+            }
+            onOpenColumns={() => {}}
+            onDeleteSelected={
+              deleteSelectedStudents
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <StudentDetails
+        student={
+          detailsStudent
+        }
+        mode={
+          detailsMode
+        }
+        onClose={
+          closeDetails
+        }
+      />
+
+      {isAddStudentOpen && (
+        <StudentForm
+          editingStudent={
+            editingStudent ??
+            null
           }
           academicLevels={
             academicLevels
           }
-          filters={
-            filters
+          currentAcademicYearId={
+            currentAcademicYearId
           }
-          visibleColumns={
-            visibleColumns
+          currentAcademicYearName={
+            currentAcademicYearName
           }
-          selectedStudentId={
-            selectedStudentId
+          currentAnnualFee={
+            currentAnnualFee
           }
-          currentCourseName={
-            currentCourseName
+          currentCourse={
+            courses.find(
+              (course) =>
+                course.id ===
+                currentCourseId
+            ) ?? null
           }
-          onSelectStudent={(
-            id
-          ) => {
-            setSelectedStudentId(
-              (current) =>
-                current === id
-                  ? ''
-                  : id
-            )
-          }}
-          onUpdateFilter={
-            updateFilter
+          courses={
+            courses
           }
-          onToggleColumn={
-            toggleColumn
+          attendanceStatuses={
+            attendanceStatuses
           }
-          onOpenNotes={
-            openNotesDetails
+          closeStudentDrawer={
+            closeStudentDrawer
           }
-          onOpenAttendance={
-            openAttendanceDetails
+          setSupabaseStatus={
+            setSupabaseStatus
           }
-          onOpenColumns={() => {}}
-          onDeleteSelected={
-            deleteSelectedStudents
+          setStudentList={
+            setStudentList as any
           }
         />
-      </CardContent>
-    </Card>
-
-    <StudentDetails
-      student={
-        detailsStudent
-      }
-      mode={
-        detailsMode
-      }
-      onClose={
-        closeDetails
-      }
-    />
-
-    {isAddStudentOpen && (
-      <StudentForm
-        editingStudent={
-          editingStudent ??
-          null
-        }
-        academicLevels={
-          academicLevels
-        }
-        currentAcademicYearId={
-          currentAcademicYearId
-        }
-        currentAcademicYearName={
-          currentAcademicYearName
-        }
-        currentAnnualFee={
-          currentAnnualFee
-        }
-        currentCourse={
-          courses.find(
-            (course) =>
-              course.id ===
-              currentCourseId
-          ) ?? null
-        }
-        courses={
-          courses
-        }
-        attendanceStatuses={
-          attendanceStatuses
-        }
-        closeStudentDrawer={
-          closeStudentDrawer
-        }
-        setSupabaseStatus={
-          setSupabaseStatus
-        }
-          setStudentList={
-          setStudentList as any
-        }
-      />
-    )}
-  </div>
-)
+      )}
+    </div>
+  )
 }
