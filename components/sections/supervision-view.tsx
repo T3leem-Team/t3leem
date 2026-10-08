@@ -9,8 +9,11 @@ import {
 
 import {
   AlertCircle,
+  CalendarDays,
   CheckCircle2,
+  Clock3,
   FileText,
+  MessageSquareText,
   Plus,
   Settings2,
   UserX,
