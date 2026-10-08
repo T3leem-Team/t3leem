@@ -14,15 +14,14 @@ import type {
   Course,
   Student,
   TeacherAttendanceStatus,
-} from '@/components/sections/teacher-attendance'
+} from '@/app/(dashboard)/teachers/teacher-attendance'
 
 import {
   attendanceStatusNames,
   formatDateForDisplay,
   getPercentageClass,
   getStatusClasses,
-} from '@/components/sections/teacher-attendance'
-
+} from '@/app/(dashboard)/teachers/teacher-attendance'
 type AttendanceSummary = {
   total: number
   recorded: number
