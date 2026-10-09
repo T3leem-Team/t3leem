@@ -37,7 +37,7 @@ import {
   type TeacherAttendanceDetail,
 } from '@/components/sections/teacher-attendance-details'
 
-import { DashboardAttendanceExport } from '@/components/sections/dashboard-attendance-export'
+import { DashboardAttendanceExport } from '@/app/(dashboard)/dashboard/dashboard-attendance-export'
 
 import { DashboardViewPanels } from '@/components/sections/dashboard-view-panels'
 
