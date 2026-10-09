@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
 import {
   createClient,
   type SupabaseClient,
 } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+import { requirePermission } from '@/lib/auth/authorization'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,123 +45,6 @@ function getAdminClient(): SupabaseClient {
       },
     },
   )
-}
-
-async function checkAdmin(): Promise<SupabaseClient> {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) {
-    throw new Error(
-      'NEXT_PUBLIC_SUPABASE_URL غير موجود.',
-    )
-  }
-
-  if (!anonKey) {
-    throw new Error(
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY غير موجود.',
-    )
-  }
-
-  const cookieStore =
-    await cookies()
-
-  const supabase =
-    createServerClient(
-      url,
-      anonKey,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-
-          setAll(
-            cookiesToSet,
-          ) {
-            try {
-              cookiesToSet.forEach(
-                ({
-                  name,
-                  value,
-                  options,
-                }) => {
-                  cookieStore.set(
-                    name,
-                    value,
-                    options,
-                  )
-                },
-              )
-            } catch {
-              // تجاهل خطأ تحديث الكوكيز
-            }
-          },
-        },
-      },
-    )
-
-  const {
-    data: { user },
-    error: authError,
-  } =
-    await supabase.auth.getUser()
-
-  if (authError || !user) {
-    throw new Error(
-      'يجب تسجيل الدخول لإنشاء النسخة الاحتياطية.',
-    )
-  }
-
-  const admin =
-    getAdminClient()
-
-  const {
-    data: profile,
-    error: profileError,
-  } =
-    await admin
-      .from('user_profiles')
-      .select(
-        'id, auth_user_id, username, full_name, role, is_active',
-      )
-      .eq(
-        'auth_user_id',
-        user.id,
-      )
-      .maybeSingle()
-
-  if (profileError) {
-    throw new Error(
-      `تعذر التحقق من صلاحيات المستخدم: ${profileError.message}`,
-    )
-  }
-
-  if (!profile) {
-    throw new Error(
-      'لم يتم العثور على ملف المستخدم.',
-    )
-  }
-
-  if (!profile.is_active) {
-    throw new Error(
-      'حساب المستخدم غير نشط.',
-    )
-  }
-
-  if (
-    profile.role !==
-    'Admin'
-  ) {
-    throw new Error(
-      'ليس لديك صلاحية إنشاء نسخة احتياطية.',
-    )
-  }
-
-  return admin
 }
 
 async function getAll(
@@ -1061,8 +943,24 @@ function appendSheet(
 
 export async function GET() {
   try {
-    const admin =
-      await checkAdmin()
+    const authorization =
+      await requirePermission('backup.manage')
+
+    if (authorization.error) {
+      return authorization.error
+    }
+
+    if (!authorization.access) {
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من صلاحيات النسخة الاحتياطية حالياً.',
+        },
+        { status: 503 },
+      )
+    }
+
+    const admin = getAdminClient()
 
     /* -----------------------------------------------------
        السنة الحالية
@@ -2231,7 +2129,6 @@ export async function GET() {
         },
       ],
     )
-
     /* -----------------------------------------------------
        المدفوعات
        ----------------------------------------------------- */
