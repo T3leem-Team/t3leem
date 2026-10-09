@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     if (!access.allowed) {
       return NextResponse.json(
         { error: 'انتهت صلاحية الوصول أو تعذر التحقق منها.' },
-        { status: 401 },
+        { status: access.reason === 'guard_error' ? 503 : 401 },
       )
     }
 
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // Reject cross-origin browser requests.
     const origin = request.headers.get('origin')
     const host = request.headers.get('host')
 
@@ -70,12 +69,19 @@ export async function POST(request: Request) {
     const teamId = process.env.VERCEL_TEAM_ID
 
     if (!token || !projectId || !teamId) {
-      console.error('Missing Vercel shutdown configuration')
-
       return NextResponse.json(
         { error: 'إعدادات الإيقاف غير مكتملة.' },
         { status: 503 },
       )
+    }
+
+    // الاختبار الآمن: لا يرسل أي طلب إلى Vercel.
+    if (body?.dryRun === true) {
+      return NextResponse.json({
+        success: true,
+        dryRun: true,
+        message: 'نجح فحص الصلاحيات والتأكيد والإعدادات. لم يتم إيقاف المشروع.',
+      })
     }
 
     const url = new URL(
@@ -83,6 +89,7 @@ export async function POST(request: Request) {
     )
 
     url.searchParams.set('teamId', teamId)
+    url.searchParams.set('slug', 't3leem')
 
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -95,7 +102,6 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const details = await response.text()
-
       console.error(
         'Vercel pause request failed:',
         response.status,
