@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Download,
   Loader2,
   Power,
+  RefreshCw,
   X,
 } from 'lucide-react'
 
@@ -21,11 +22,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-type Step =
-  | 'idle'
-  | 'backup-choice'
-  | 'countdown'
-  | 'disabling'
+type Step = 'idle' | 'backup-choice' | 'countdown' | 'disabling'
 
 export default function SystemShutdownClient() {
   const router = useRouter()
@@ -33,14 +30,63 @@ export default function SystemShutdownClient() {
   const [step, setStep] = useState<Step>('idle')
   const [countdown, setCountdown] = useState(10)
   const [loadingBackup, setLoadingBackup] = useState(false)
+  const [maintenance, setMaintenance] = useState<boolean | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState(true)
+  const [updating, setUpdating] = useState(false)
+
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const clearCountdown = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [])
+
+  const loadStatus = useCallback(async () => {
+    setLoadingStatus(true)
+
+    try {
+      const response = await fetch('/api/admin/system-maintenance', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok || typeof data?.maintenance !== 'boolean') {
+        throw new Error(data?.error || 'تعذر قراءة حالة الصيانة.')
+      }
+
+      setMaintenance(data.maintenance)
+    } catch (error) {
+      console.error('Load maintenance status error:', error)
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر قراءة حالة الصيانة.',
+      )
+    } finally {
+      setLoadingStatus(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadStatus()
+
+    return () => {
+      clearCountdown()
+    }
+  }, [loadStatus, clearCountdown])
+
+  function cancelShutdown() {
+    clearCountdown()
+    setStep('idle')
+    setCountdown(10)
+  }
 
   function startShutdown() {
     setStep('backup-choice')
-  }
-
-  function cancelShutdown() {
-    setStep('idle')
-    setCountdown(10)
   }
 
   async function downloadBackupFirst() {
@@ -49,35 +95,34 @@ export default function SystemShutdownClient() {
 
       const response = await fetch('/api/admin/backup', {
         method: 'GET',
+        cache: 'no-store',
       })
 
       if (!response.ok) {
-        throw new Error('تعذر إنشاء النسخة الاحتياطية.')
+        throw new Error('تعذر تنزيل النسخة الاحتياطية.')
       }
 
       const blob = await response.blob()
-
       const url = window.URL.createObjectURL(blob)
-
       const link = document.createElement('a')
 
       link.href = url
       link.download = 'T3LEEM-Backup.xlsx'
 
       document.body.appendChild(link)
-
       link.click()
-
       link.remove()
 
-      window.URL.revokeObjectURL(url)
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+      }, 1000)
 
       startCountdown()
     } catch (error) {
-      console.error('Backup before shutdown error:', error)
+      console.error('Backup before maintenance error:', error)
 
       alert(
-        'تعذر تنزيل النسخة الاحتياطية، لذلك لم يتم تعطيل النظام.',
+        'تعذر تنزيل النسخة الاحتياطية، لذلك لم يتم تفعيل الصيانة.',
       )
     } finally {
       setLoadingBackup(false)
@@ -85,48 +130,98 @@ export default function SystemShutdownClient() {
   }
 
   function startCountdown() {
+    clearCountdown()
     setCountdown(10)
     setStep('countdown')
 
     let remaining = 10
 
-    const interval = window.setInterval(() => {
+    intervalRef.current = window.setInterval(() => {
       remaining -= 1
-
       setCountdown(remaining)
 
       if (remaining <= 0) {
-        window.clearInterval(interval)
-        disableSystem()
+        clearCountdown()
+        void enableMaintenance()
       }
     }, 1000)
   }
 
-  async function disableSystem() {
+  async function enableMaintenance() {
     try {
       setStep('disabling')
+      setUpdating(true)
 
-      const response = await fetch(
-        '/api/admin/system-shutdown',
-        {
-          method: 'POST',
+      const response = await fetch('/api/admin/system-maintenance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      )
+        body: JSON.stringify({ enabled: true }),
+      })
+
+      const data = await response.json().catch(() => null)
 
       if (!response.ok) {
-        throw new Error('تعذر تعطيل النظام.')
+        throw new Error(data?.error || 'تعذر تفعيل وضع الصيانة.')
       }
 
-      window.location.href = '/404'
+      setMaintenance(true)
+      setStep('idle')
+
+      alert('تم تفعيل وضع الصيانة بنجاح.')
     } catch (error) {
-      console.error('System shutdown error:', error)
+      console.error('Enable maintenance error:', error)
 
       alert(
-        'تعذر تعطيل النظام. لم يتم تنفيذ العملية.',
+        error instanceof Error
+          ? error.message
+          : 'تعذر تفعيل وضع الصيانة.',
       )
 
       setStep('idle')
       setCountdown(10)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  async function disableMaintenance() {
+    const confirmed = window.confirm(
+      'هل تريد إيقاف وضع الصيانة والسماح للمستخدمين بالدخول مجددًا؟',
+    )
+
+    if (!confirmed) return
+
+    try {
+      setUpdating(true)
+
+      const response = await fetch('/api/admin/system-maintenance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ enabled: false }),
+      })
+
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'تعذر إيقاف وضع الصيانة.')
+      }
+
+      setMaintenance(false)
+      alert('تم إيقاف وضع الصيانة. النظام متاح الآن.')
+    } catch (error) {
+      console.error('Disable maintenance error:', error)
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إيقاف وضع الصيانة.',
+      )
+    } finally {
+      setUpdating(false)
     }
   }
 
@@ -144,8 +239,8 @@ export default function SystemShutdownClient() {
       </div>
 
       <PageHeader
-        title="تعطيل النظام"
-        description="تعطيل الوصول إلى النظام بالكامل."
+        title="إدارة وضع الصيانة"
+        description="إيقاف وصول المستخدمين مؤقتًا دون إيقاف استضافة النظام."
       />
 
       <Card>
@@ -156,130 +251,191 @@ export default function SystemShutdownClient() {
             </div>
 
             <div>
-              <CardTitle>تعطيل النظام بالكامل</CardTitle>
-
+              <CardTitle>حالة النظام</CardTitle>
               <CardDescription>
-                عند التعطيل سيتم منع الوصول إلى الموقع ولوحة التحكم
-                وواجهات النظام.
+                وضع الصيانة لا يحذف البيانات ولا يوقف Supabase.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent>
-          {step === 'idle' && (
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full"
-              onClick={startShutdown}
-            >
-              <Power className="size-4" />
-              تعطيل النظام
-            </Button>
-          )}
-
-          {step === 'backup-choice' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                <div className="flex gap-3">
-                  <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-
-                  <div className="space-y-1">
-                    <p className="font-semibold">
-                      هل تريد تنزيل نسخة احتياطية قبل التعطيل؟
-                    </p>
-
-                    <p className="text-sm text-muted-foreground">
-                      النسخة الاحتياطية اختيارية، ولن يتم حذف أي بيانات
-                      من النظام.
-                    </p>
-                  </div>
-                </div>
+        <CardContent className="space-y-5">
+          <div className="rounded-xl border p-4">
+            {loadingStatus ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                جاري قراءة حالة النظام...
               </div>
+            ) : maintenance === null ? (
+              <p className="text-sm text-destructive">
+                تعذر تحديد حالة النظام. حدّث الصفحة وحاول مجددًا.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="font-medium">الحالة الحالية</span>
 
-              <div className="grid gap-2 sm:grid-cols-3">
-                <Button
-                  type="button"
-                  onClick={downloadBackupFirst}
-                  disabled={loadingBackup}
+                <span
+                  className={
+                    maintenance
+                      ? 'rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800'
+                      : 'rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800'
+                  }
                 >
-                  {loadingBackup ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      جاري التنزيل...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="size-4" />
-                      نعم، تنزيل النسخة ثم التعطيل
-                    </>
-                  )}
-                </Button>
+                  {maintenance
+                    ? 'وضع الصيانة مفعّل'
+                    : 'النظام يعمل بصورة طبيعية'}
+                </span>
+              </div>
+            )}
+          </div>
 
+          {!loadingStatus && maintenance === false && (
+            <>
+              {step === 'idle' && (
                 <Button
                   type="button"
                   variant="destructive"
-                  onClick={startCountdown}
-                  disabled={loadingBackup}
+                  className="w-full"
+                  onClick={startShutdown}
+                  disabled={updating}
                 >
-                  لا، تعطيل مباشرة
+                  <Power className="size-4" />
+                  تفعيل وضع الصيانة
                 </Button>
+              )}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={cancelShutdown}
-                  disabled={loadingBackup}
-                >
-                  <X className="size-4" />
-                  إلغاء
-                </Button>
-              </div>
-            </div>
+              {step === 'backup-choice' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+
+                      <div className="space-y-1">
+                        <p className="font-semibold">
+                          هل تريد تنزيل نسخة احتياطية قبل الصيانة؟
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          النسخة اختيارية، ولن تُحذف أي بيانات عند تفعيل الصيانة.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <Button
+                      type="button"
+                      onClick={downloadBackupFirst}
+                      disabled={loadingBackup || updating}
+                    >
+                      {loadingBackup ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          جاري التنزيل...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="size-4" />
+                          تنزيل النسخة ثم المتابعة
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={startCountdown}
+                      disabled={loadingBackup || updating}
+                    >
+                      متابعة دون نسخة
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={cancelShutdown}
+                      disabled={loadingBackup || updating}
+                    >
+                      <X className="size-4" />
+                      إلغاء
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {step === 'countdown' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border p-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      سيتم تفعيل وضع الصيانة خلال
+                    </p>
+
+                    <div className="my-3 text-6xl font-bold tabular-nums">
+                      {countdown}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      يمكنك إلغاء العملية قبل انتهاء العد التنازلي.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={cancelShutdown}
+                  >
+                    <X className="size-4" />
+                    إلغاء الصيانة
+                  </Button>
+                </div>
+              )}
+
+              {step === 'disabling' && (
+                <div className="rounded-xl border p-6 text-center">
+                  <Loader2 className="mx-auto mb-3 size-8 animate-spin" />
+                  <p className="font-semibold">
+                    جاري تفعيل وضع الصيانة...
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    يرجى الانتظار.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
-          {step === 'countdown' && (
-            <div className="space-y-4">
-              <div className="rounded-xl border p-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  سيتم تعطيل النظام خلال
-                </p>
-
-                <div className="my-3 text-6xl font-bold tabular-nums">
-                  {countdown}
-                </div>
-
-                <p className="text-sm text-muted-foreground">
-                  يمكنك إلغاء العملية قبل انتهاء العد التنازلي.
-                </p>
-              </div>
+          {!loadingStatus && maintenance === true && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                المستخدمون العاديون سيشاهدون صفحة الصيانة، ويمكن للمسؤول الرئيسي إيقافها من هنا.
+              </p>
 
               <Button
                 type="button"
-                variant="outline"
                 className="w-full"
-                onClick={cancelShutdown}
+                onClick={disableMaintenance}
+                disabled={updating}
               >
-                <X className="size-4" />
-                إلغاء التعطيل
+                {updating ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                إيقاف وضع الصيانة
               </Button>
             </div>
           )}
 
-          {step === 'disabling' && (
-            <div className="rounded-xl border p-6 text-center">
-              <Loader2 className="mx-auto mb-3 size-8 animate-spin" />
-
-              <p className="font-semibold">
-                جاري تعطيل النظام...
-              </p>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                يرجى الانتظار.
-              </p>
-            </div>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => void loadStatus()}
+            disabled={loadingStatus || updating}
+          >
+            <RefreshCw className="size-4" />
+            تحديث حالة النظام
+          </Button>
         </CardContent>
       </Card>
     </div>
