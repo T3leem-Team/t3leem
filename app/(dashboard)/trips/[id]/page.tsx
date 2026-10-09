@@ -1,4 +1,4 @@
-import { TripDetailsView } from '@/components/sections/trip-details-view'
+import { TripDetailsView } from '@/app/(dashboard)/trips/trip-details-view'
 
 type Props = {
   params: Promise<{
