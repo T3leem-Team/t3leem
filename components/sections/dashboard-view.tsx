@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button'
 
 import {
   type TeacherAttendanceDetail,
-} from '@/components/sections/teacher-attendance-details'
+} from '@/app/(dashboard)/teachers/teacher-attendance-details'
 
 import { DashboardAttendanceExport } from '@/app/(dashboard)/dashboard/dashboard-attendance-export'
 
