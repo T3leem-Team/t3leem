@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-import { CommunicationViewGroups } from './communication-groups'
+import { CommunicationViewGroups } from '@/app/(dashboard)/communication/communication-groups'
 
 type CommunicationSection =
   | 'direct'
