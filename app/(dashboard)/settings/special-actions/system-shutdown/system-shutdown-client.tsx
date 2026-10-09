@@ -9,6 +9,7 @@ import {
   Download,
   Loader2,
   Power,
+  ShieldCheck,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -25,6 +26,7 @@ export default function SystemShutdownClient() {
   const router = useRouter()
 
   const [loadingBackup, setLoadingBackup] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [shuttingDown, setShuttingDown] = useState(false)
 
   async function downloadBackup() {
@@ -46,7 +48,6 @@ export default function SystemShutdownClient() {
 
       link.href = url
       link.download = 'T3LEEM-Backup.xlsx'
-
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -58,7 +59,6 @@ export default function SystemShutdownClient() {
       alert('بدأ تنزيل النسخة الاحتياطية.')
     } catch (error) {
       console.error('Backup download error:', error)
-
       alert(
         error instanceof Error
           ? error.message
@@ -69,9 +69,54 @@ export default function SystemShutdownClient() {
     }
   }
 
+  async function testShutdownConfiguration() {
+    try {
+      setTesting(true)
+
+      const response = await fetch('/api/admin/system-shutdown', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          confirm: 'إيقاف T3LEEM',
+          dryRun: true,
+        }),
+      })
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error || 'فشل الاختبار الآمن.',
+        )
+      }
+
+      if (result?.dryRun !== true) {
+        throw new Error(
+          'الرد لم يؤكد وضع الاختبار الآمن. لم يتم اعتبار الاختبار ناجحًا.',
+        )
+      }
+
+      alert(
+        'نجح الاختبار الآمن! تم فحص الصلاحيات والإعدادات، ولم يتم إيقاف مشروع Vercel.',
+      )
+    } catch (error) {
+      console.error('Safe shutdown test error:', error)
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إكمال الاختبار الآمن.',
+      )
+    } finally {
+      setTesting(false)
+    }
+  }
+
   async function shutdownProject() {
     const confirmed = window.confirm(
-      'تحذير: سيتم إيقاف مشروع T3LEEM الإنتاجي على Vercel. بعد الإيقاف قد لا تتمكن من استخدام التطبيق حتى تستأنف المشروع من لوحة Vercel. هل أنت متأكد من المتابعة؟',
+      'تحذير: سيتم إيقاف مشروع T3LEEM الإنتاجي على Vercel، وقد يتعذر استخدام الموقع حتى تستأنف المشروع. هل أنت متأكد؟',
     )
 
     if (!confirmed) return
@@ -88,19 +133,16 @@ export default function SystemShutdownClient() {
     try {
       setShuttingDown(true)
 
-      const response = await fetch(
-        '/api/admin/system-shutdown',
-        {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            confirm: 'إيقاف T3LEEM',
-          }),
+      const response = await fetch('/api/admin/system-shutdown', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      )
+        body: JSON.stringify({
+          confirm: 'إيقاف T3LEEM',
+        }),
+      })
 
       const result = await response.json().catch(() => null)
 
@@ -111,11 +153,10 @@ export default function SystemShutdownClient() {
       }
 
       alert(
-        'تم قبول طلب الإيقاف من Vercel. قد يصبح التطبيق غير متاح بعد تنفيذ الإيقاف.',
+        'قبلت Vercel طلب الإيقاف. قد يصبح الموقع غير متاح بعد تنفيذ الطلب.',
       )
     } catch (error) {
       console.error('System shutdown request error:', error)
-
       alert(
         error instanceof Error
           ? error.message
@@ -126,6 +167,8 @@ export default function SystemShutdownClient() {
     }
   }
 
+  const busy = loadingBackup || testing || shuttingDown
+
   return (
     <div className="space-y-6">
       <div className="flex justify-start">
@@ -134,7 +177,7 @@ export default function SystemShutdownClient() {
           variant="outline"
           onClick={() => router.back()}
           className="gap-2"
-          disabled={shuttingDown}
+          disabled={busy}
         >
           <ArrowRight className="h-4 w-4" />
           عودة
@@ -143,7 +186,7 @@ export default function SystemShutdownClient() {
 
       <PageHeader
         title="الإيقاف الكامل للنظام"
-        description="إدارة إيقاف مشروع T3LEEM بشكل منفصل عن وضع الصيانة."
+        description="اختبار إعدادات الإيقاف أو إيقاف مشروع T3LEEM بشكل كامل."
       />
 
       <Card>
@@ -154,9 +197,9 @@ export default function SystemShutdownClient() {
             </div>
 
             <div>
-              <CardTitle>إيقاف مشروع T3LEEM</CardTitle>
+              <CardTitle>إدارة مشروع T3LEEM</CardTitle>
               <CardDescription>
-                يرسل طلب إيقاف المشروع الإنتاجي إلى Vercel عبر API مخصص.
+                الاختبار الآمن منفصل عن عملية الإيقاف الفعلية.
               </CardDescription>
             </div>
           </div>
@@ -166,16 +209,11 @@ export default function SystemShutdownClient() {
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
             <div className="flex gap-3">
               <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-
               <div className="space-y-1">
-                <p className="font-semibold">
-                  انتبه قبل الإيقاف
-                </p>
-
+                <p className="font-semibold">قبل الإيقاف الفعلي</p>
                 <p className="text-sm text-muted-foreground">
-                  سيؤدي الإيقاف إلى جعل نسخة الإنتاج غير متاحة مؤقتًا.
-                  قاعدة بيانات Supabase منفصلة عن إيقاف المشروع.
-                  تأكد من قدرتك على استئناف المشروع من لوحة Vercel.
+                  الإيقاف الكامل قد يجعل نسخة الإنتاج غير متاحة مؤقتًا.
+                  قاعدة بيانات Supabase منفصلة عن إيقاف مشروع Vercel.
                 </p>
               </div>
             </div>
@@ -187,14 +225,13 @@ export default function SystemShutdownClient() {
               variant="outline"
               className="w-full"
               onClick={downloadBackup}
-              disabled={loadingBackup || shuttingDown}
+              disabled={busy}
             >
               {loadingBackup ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Download className="size-4" />
               )}
-
               {loadingBackup
                 ? 'جاري تنزيل النسخة...'
                 : 'تنزيل نسخة احتياطية'}
@@ -202,17 +239,31 @@ export default function SystemShutdownClient() {
 
             <Button
               type="button"
+              variant="outline"
+              className="w-full"
+              onClick={testShutdownConfiguration}
+              disabled={busy}
+            >
+              {testing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="size-4" />
+              )}
+              {testing ? 'جاري الاختبار الآمن...' : 'اختبار الإعدادات بأمان'}
+            </Button>
+
+            <Button
+              type="button"
               variant="destructive"
               className="w-full"
               onClick={shutdownProject}
-              disabled={loadingBackup || shuttingDown}
+              disabled={busy}
             >
               {shuttingDown ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Power className="size-4" />
               )}
-
               {shuttingDown
                 ? 'جاري إرسال طلب الإيقاف...'
                 : 'إيقاف مشروع T3LEEM بالكامل'}
@@ -220,8 +271,8 @@ export default function SystemShutdownClient() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            لاستعادة الخدمة بعد الإيقاف، افتح لوحة Vercel واستأنف المشروع
-            من Settings ثم General ثم Pause Project ثم Resume Project.
+            لاستعادة الخدمة بعد الإيقاف، افتح Vercel ثم Settings
+            ثم General وابحث عن خيار استئناف المشروع.
           </p>
         </CardContent>
       </Card>
