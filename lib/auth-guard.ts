@@ -21,6 +21,7 @@ const supabaseAdmin = createClient(
 export type GuardResult = {
   allowed: boolean
   userId?: string
+  username?: string
   sessionId?: string
   deviceId?: string
   profileId?: string
@@ -65,16 +66,14 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       error: sessionError,
     } = await supabaseAdmin
       .from('active_sessions')
-      .select(
-        `
-          id,
-          auth_user_id,
-          trusted_device_id,
-          is_active,
-          last_activity_at,
-          expires_at
-        `,
-      )
+      .select(`
+        id,
+        auth_user_id,
+        trusted_device_id,
+        is_active,
+        last_activity_at,
+        expires_at
+      `)
       .eq('id', sessionId)
       .eq('auth_user_id', user.id)
       .maybeSingle()
@@ -149,7 +148,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     } = await supabaseAdmin
       .from('user_profiles')
       .select(
-        'id, role, is_active',
+        'id, username, role, is_active',
       )
       .eq(
         'auth_user_id',
@@ -235,6 +234,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     return {
       allowed: true,
       userId: user.id,
+      username: profile.username,
       sessionId: session.id,
       deviceId: device.id,
       profileId: profile.id,
