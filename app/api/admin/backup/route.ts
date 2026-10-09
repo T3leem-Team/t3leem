@@ -2840,63 +2840,61 @@ export async function GET() {
     )
 
     /* =====================================================
-       إنشاء الملف
-       ===================================================== */
+   إنشاء الملف
+   ===================================================== */
 
-    const buffer =
-      XLSX.write(
-        workbook,
-        {
-          bookType:
-            'xlsx',
+const buffer =
+  XLSX.write(
+    workbook,
+    {
+      bookType:
+        'xlsx',
 
-          type:
-            'buffer',
-        },
-      )
+      type:
+        'buffer',
+    },
+  )
 
-    const filename =
-      `T3LEEM-Backup-${String(
-        academicYear.name ||
-          'Current-Year',
-      ).replace(
-        /[\\/:*?"<>|]/g,
-        '-',
-      )}.xlsx`
+const filename =
+  `T3LEEM-Backup-${String(
+    academicYear.name ||
+      'Current-Year',
+  ).replace(
+    /[\\/:*?"<>|]/g,
+    '-',
+  )}.xlsx`
 
-    return new NextResponse(
-      buffer as BodyInit,
-      {
-        status: 200,
+return new NextResponse(
+  buffer as BodyInit,
+  {
+    status: 200,
 
-        headers: {
-          'Content-Type':
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    headers: {
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 
-          'Content-Disposition':
-            `attachment; filename="${filename}"`,
+      'Content-Disposition':
+        `attachment; filename="${filename}"`,
 
-          'Cache-Control':
-            'no-store, no-cache, must-revalidate',
-        },
-      },
-    )
-  } catch (error) {
-    console.error(
-      'BACKUP API ERROR:',
-      error,
-    )
+      'Cache-Control':
+        'no-store, no-cache, must-revalidate',
+    },
+  },
+)
+} catch (error) {
+  console.error(
+    'BACKUP API ERROR:',
+    error,
+  )
 
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : String(error),
-      },
-      {
-        status: 500,
-      },
-    )
-  }
+  return NextResponse.json(
+    {
+      error:
+        'تعذر إنشاء النسخة الاحتياطية حالياً.',
+    },
+    {
+      status: 500,
+    },
+  )
+}
 }
