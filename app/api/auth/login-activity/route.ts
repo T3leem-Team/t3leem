@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-import { requirePermission } from '@/lib/require-permission'
+import { requirePermission } from '@/lib/auth/authorization'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,11 +16,21 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
-    const auth =
+    const authorization =
       await requirePermission('users.view')
 
-    if (auth.response) {
-      return auth.response
+    if (authorization.error) {
+      return authorization.error
+    }
+
+    if (!authorization.access) {
+      return NextResponse.json(
+        {
+          error:
+            'تعذر التحقق من الصلاحيات حالياً.',
+        },
+        { status: 503 },
+      )
     }
 
     const now = new Date()
