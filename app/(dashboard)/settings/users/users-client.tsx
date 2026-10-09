@@ -91,7 +91,7 @@ const roles: {
   },
 ]
 
-export default function Page() {
+export default function UsersClient() {
   const router = useRouter()
 
   const [users, setUsers] = useState<User[]>([])
