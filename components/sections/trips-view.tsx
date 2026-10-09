@@ -15,7 +15,7 @@ import {
   Users,
 } from 'lucide-react'
 
-import { TripsForm } from './trips-form'
+import { TripsForm } from '@/app/(dashboard)/trips/trips-form'
 import { loadTripsCache } from '@/lib/trips-cache'
 
 type TripStatus =
