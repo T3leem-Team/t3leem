@@ -44,7 +44,7 @@ import { DashboardViewPanels } from '@/app/(dashboard)/dashboard/dashboard-view-
 import {
   DashboardStudentSearch,
   type StudentSearchResult,
-} from '@/components/sections/dashboardStudentSearch'
+} from '@/app/(dashboard)/dashboard/dashboardStudentSearch'
 
 type AcademicYear = {
   id: string
