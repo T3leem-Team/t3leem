@@ -39,7 +39,7 @@ import {
 
 import { DashboardAttendanceExport } from '@/app/(dashboard)/dashboard/dashboard-attendance-export'
 
-import { DashboardViewPanels } from '@/components/sections/dashboard-view-panels'
+import { DashboardViewPanels } from '@/app/(dashboard)/dashboard/dashboard-view-panels'
 
 import {
   DashboardStudentSearch,
