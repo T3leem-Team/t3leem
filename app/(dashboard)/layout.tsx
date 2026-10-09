@@ -4,6 +4,7 @@ import { unstable_noStore as noStore } from 'next/cache'
 import { DashboardShell } from '@/components/dashboard/shell'
 import { SessionHeartbeat } from '@/components/auth/session-heartbeat'
 import { validateCurrentAccess } from '@/lib/auth-guard'
+import { isMaintenanceMode } from '@/lib/system-control'
 
 export default async function DashboardLayout({
   children,
@@ -17,8 +18,7 @@ export default async function DashboardLayout({
 
   if (!access.allowed) {
     if (
-      access.reason ===
-      'guard_error'
+      access.reason === 'guard_error'
     ) {
       throw new Error(
         'تعذر التحقق من جلسة المستخدم مؤقتًا.',
@@ -27,10 +27,27 @@ export default async function DashboardLayout({
 
     redirect(
       `/login?reason=${encodeURIComponent(
-        access.reason ??
-          'session_expired',
+        access.reason ?? 'session_expired',
       )}`,
     )
+  }
+
+  let maintenanceMode: boolean
+
+  try {
+    maintenanceMode = await isMaintenanceMode()
+  } catch {
+    throw new Error(
+      'تعذر التحقق من حالة النظام مؤقتًا.',
+    )
+  }
+
+  const isPrimaryAdmin =
+    access.username === 'admin' &&
+    access.role === 'Admin'
+
+  if (maintenanceMode && !isPrimaryAdmin) {
+    redirect('/maintenance')
   }
 
   return (
