@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Download,
-  ExternalLink,
   Loader2,
   Power,
 } from 'lucide-react'
@@ -26,7 +25,7 @@ export default function SystemShutdownClient() {
   const router = useRouter()
 
   const [loadingBackup, setLoadingBackup] = useState(false)
-  const [openingVercel, setOpeningVercel] = useState(false)
+  const [shuttingDown, setShuttingDown] = useState(false)
 
   async function downloadBackup() {
     try {
@@ -70,23 +69,60 @@ export default function SystemShutdownClient() {
     }
   }
 
-  function openVercel() {
+  async function shutdownProject() {
     const confirmed = window.confirm(
-      'سيتم فتح لوحة Vercel لإيقاف المشروع يدويًا. هل تريد المتابعة؟',
+      'تحذير: سيتم إيقاف مشروع T3LEEM الإنتاجي على Vercel. بعد الإيقاف قد لا تتمكن من استخدام التطبيق حتى تستأنف المشروع من لوحة Vercel. هل أنت متأكد من المتابعة؟',
     )
 
     if (!confirmed) return
 
-    setOpeningVercel(true)
+    const finalConfirmation = window.prompt(
+      'للتأكيد النهائي، اكتب بالضبط: إيقاف T3LEEM',
+    )
+
+    if (finalConfirmation !== 'إيقاف T3LEEM') {
+      alert('تم إلغاء الإيقاف؛ لم يتم إرسال الطلب.')
+      return
+    }
 
     try {
-      window.open(
-        'https://vercel.com/dashboard',
-        '_blank',
-        'noopener,noreferrer',
+      setShuttingDown(true)
+
+      const response = await fetch(
+        '/api/admin/system-shutdown',
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            confirm: 'إيقاف T3LEEM',
+          }),
+        },
+      )
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error || 'تعذر إرسال طلب الإيقاف إلى Vercel.',
+        )
+      }
+
+      alert(
+        'تم قبول طلب الإيقاف من Vercel. قد يصبح التطبيق غير متاح بعد تنفيذ الإيقاف.',
+      )
+    } catch (error) {
+      console.error('System shutdown request error:', error)
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء طلب إيقاف المشروع.',
       )
     } finally {
-      setOpeningVercel(false)
+      setShuttingDown(false)
     }
   }
 
@@ -98,6 +134,7 @@ export default function SystemShutdownClient() {
           variant="outline"
           onClick={() => router.back()}
           className="gap-2"
+          disabled={shuttingDown}
         >
           <ArrowRight className="h-4 w-4" />
           عودة
@@ -119,7 +156,7 @@ export default function SystemShutdownClient() {
             <div>
               <CardTitle>إيقاف مشروع T3LEEM</CardTitle>
               <CardDescription>
-                يتم الإيقاف الكامل من لوحة تحكم Vercel، وليس من وضع الصيانة.
+                يرسل طلب إيقاف المشروع الإنتاجي إلى Vercel عبر API مخصص.
               </CardDescription>
             </div>
           </div>
@@ -136,9 +173,9 @@ export default function SystemShutdownClient() {
                 </p>
 
                 <p className="text-sm text-muted-foreground">
-                  إيقاف مشروع Vercel يؤثر على إمكانية الوصول إلى التطبيق.
-                  لا يعني ذلك حذف قاعدة بيانات Supabase أو إيقافها.
-                  يُفضّل التأكد من وجود نسخة احتياطية قبل المتابعة.
+                  سيؤدي الإيقاف إلى جعل نسخة الإنتاج غير متاحة مؤقتًا.
+                  قاعدة بيانات Supabase منفصلة عن إيقاف المشروع.
+                  تأكد من قدرتك على استئناف المشروع من لوحة Vercel.
                 </p>
               </div>
             </div>
@@ -150,7 +187,7 @@ export default function SystemShutdownClient() {
               variant="outline"
               className="w-full"
               onClick={downloadBackup}
-              disabled={loadingBackup || openingVercel}
+              disabled={loadingBackup || shuttingDown}
             >
               {loadingBackup ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -167,23 +204,24 @@ export default function SystemShutdownClient() {
               type="button"
               variant="destructive"
               className="w-full"
-              onClick={openVercel}
-              disabled={loadingBackup || openingVercel}
+              onClick={shutdownProject}
+              disabled={loadingBackup || shuttingDown}
             >
-              {openingVercel ? (
+              {shuttingDown ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <ExternalLink className="size-4" />
+                <Power className="size-4" />
               )}
 
-              الانتقال إلى Vercel للإيقاف الكامل
+              {shuttingDown
+                ? 'جاري إرسال طلب الإيقاف...'
+                : 'إيقاف مشروع T3LEEM بالكامل'}
             </Button>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            بعد فتح Vercel، اختر مشروع T3LEEM واستخدم خيار Pause Project
-            إذا كان متاحًا. هذا الزر يفتح لوحة Vercel فقط؛ ولا يوقف المشروع
-            تلقائيًا.
+            لاستعادة الخدمة بعد الإيقاف، افتح لوحة Vercel واستأنف المشروع
+            من Settings ثم General ثم Pause Project ثم Resume Project.
           </p>
         </CardContent>
       </Card>
