@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -44,22 +45,27 @@ export default function ArchiveManager() {
     setLoading(true)
     setError('')
 
-    const { data, error } = await supabase
-      .from('academic_years')
-      .select(
-        'id, name, start_date, end_date, is_current, is_active'
-      )
-      .eq('is_active', true)
-      .order('start_date', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('academic_years')
+        .select(
+          'id, name, start_date, end_date, is_current, is_active'
+        )
+        .eq('is_active', true)
+        .order('start_date', { ascending: false })
 
-    if (error) {
+      if (error) {
+        setError('تعذر تحميل السنوات الدراسية.')
+        setYears([])
+      } else {
+        setYears(data ?? [])
+      }
+    } catch {
       setError('تعذر تحميل السنوات الدراسية.')
       setYears([])
-    } else {
-      setYears(data ?? [])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -101,30 +107,42 @@ export default function ArchiveManager() {
 
     setArchiving(true)
 
-    const { error } = await supabase
-      .from('academic_years')
-      .update({
-        is_active: false,
-        is_current: false,
+    try {
+      const response = await fetch('/api/admin/archive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          yearId: selectedYear.id,
+        }),
       })
-      .eq('id', selectedYear.id)
 
-    if (error) {
-      setError(
-        `تعذر تنفيذ الأرشفة: ${error.message}`
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        setError(
+          result?.error ||
+            'تعذر تنفيذ الأرشفة. حاول مرة أخرى.'
+        )
+        return
+      }
+
+      setSuccess(
+        result?.message ||
+          `تمت أرشفة السنة الدراسية "${selectedYear.name}" بنجاح.`
       )
+
+      setSelectedYearId('')
+
+      await loadYears()
+    } catch {
+      setError(
+        'تعذر الاتصال بالخادم لتنفيذ الأرشفة.'
+      )
+    } finally {
       setArchiving(false)
-      return
     }
-
-    setSuccess(
-      `تمت أرشفة السنة الدراسية "${selectedYear.name}" بنجاح.`
-    )
-
-    setSelectedYearId('')
-    setArchiving(false)
-
-    await loadYears()
   }
 
   return (
