@@ -1,15 +1,15 @@
+
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   ArrowRight,
   Download,
+  ExternalLink,
   Loader2,
   Power,
-  RefreshCw,
-  X,
 } from 'lucide-react'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -22,74 +22,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 
-type Step = 'idle' | 'backup-choice' | 'countdown' | 'disabling'
-
 export default function SystemShutdownClient() {
   const router = useRouter()
 
-  const [step, setStep] = useState<Step>('idle')
-  const [countdown, setCountdown] = useState(10)
   const [loadingBackup, setLoadingBackup] = useState(false)
-  const [maintenance, setMaintenance] = useState<boolean | null>(null)
-  const [loadingStatus, setLoadingStatus] = useState(true)
-  const [updating, setUpdating] = useState(false)
+  const [openingVercel, setOpeningVercel] = useState(false)
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const clearCountdown = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-  }, [])
-
-  const loadStatus = useCallback(async () => {
-    setLoadingStatus(true)
-
-    try {
-      const response = await fetch('/api/admin/system-maintenance', {
-        method: 'GET',
-        cache: 'no-store',
-      })
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok || typeof data?.maintenance !== 'boolean') {
-        throw new Error(data?.error || 'تعذر قراءة حالة الصيانة.')
-      }
-
-      setMaintenance(data.maintenance)
-    } catch (error) {
-      console.error('Load maintenance status error:', error)
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'تعذر قراءة حالة الصيانة.',
-      )
-    } finally {
-      setLoadingStatus(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadStatus()
-
-    return () => {
-      clearCountdown()
-    }
-  }, [loadStatus, clearCountdown])
-
-  function cancelShutdown() {
-    clearCountdown()
-    setStep('idle')
-    setCountdown(10)
-  }
-
-  function startShutdown() {
-    setStep('backup-choice')
-  }
-
-  async function downloadBackupFirst() {
+  async function downloadBackup() {
     try {
       setLoadingBackup(true)
 
@@ -117,111 +56,37 @@ export default function SystemShutdownClient() {
         window.URL.revokeObjectURL(url)
       }, 1000)
 
-      startCountdown()
+      alert('بدأ تنزيل النسخة الاحتياطية.')
     } catch (error) {
-      console.error('Backup before maintenance error:', error)
+      console.error('Backup download error:', error)
 
       alert(
-        'تعذر تنزيل النسخة الاحتياطية، لذلك لم يتم تفعيل الصيانة.',
+        error instanceof Error
+          ? error.message
+          : 'تعذر تنزيل النسخة الاحتياطية.',
       )
     } finally {
       setLoadingBackup(false)
     }
   }
 
-  function startCountdown() {
-    clearCountdown()
-    setCountdown(10)
-    setStep('countdown')
-
-    let remaining = 10
-
-    intervalRef.current = window.setInterval(() => {
-      remaining -= 1
-      setCountdown(remaining)
-
-      if (remaining <= 0) {
-        clearCountdown()
-        void enableMaintenance()
-      }
-    }, 1000)
-  }
-
-  async function enableMaintenance() {
-    try {
-      setStep('disabling')
-      setUpdating(true)
-
-      const response = await fetch('/api/admin/system-maintenance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ enabled: true }),
-      })
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || 'تعذر تفعيل وضع الصيانة.')
-      }
-
-      setMaintenance(true)
-      setStep('idle')
-
-      alert('تم تفعيل وضع الصيانة بنجاح.')
-    } catch (error) {
-      console.error('Enable maintenance error:', error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تفعيل وضع الصيانة.',
-      )
-
-      setStep('idle')
-      setCountdown(10)
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  async function disableMaintenance() {
+  function openVercel() {
     const confirmed = window.confirm(
-      'هل تريد إيقاف وضع الصيانة والسماح للمستخدمين بالدخول مجددًا؟',
+      'سيتم فتح لوحة Vercel لإيقاف المشروع يدويًا. هل تريد المتابعة؟',
     )
 
     if (!confirmed) return
 
+    setOpeningVercel(true)
+
     try {
-      setUpdating(true)
-
-      const response = await fetch('/api/admin/system-maintenance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ enabled: false }),
-      })
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || 'تعذر إيقاف وضع الصيانة.')
-      }
-
-      setMaintenance(false)
-      alert('تم إيقاف وضع الصيانة. النظام متاح الآن.')
-    } catch (error) {
-      console.error('Disable maintenance error:', error)
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'تعذر إيقاف وضع الصيانة.',
+      window.open(
+        'https://vercel.com/dashboard',
+        '_blank',
+        'noopener,noreferrer',
       )
     } finally {
-      setUpdating(false)
+      setOpeningVercel(false)
     }
   }
 
@@ -230,8 +95,9 @@ export default function SystemShutdownClient() {
       <div className="flex justify-start">
         <Button
           type="button"
+          variant="outline"
           onClick={() => router.back()}
-          className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+          className="gap-2"
         >
           <ArrowRight className="h-4 w-4" />
           عودة
@@ -239,8 +105,8 @@ export default function SystemShutdownClient() {
       </div>
 
       <PageHeader
-        title="إدارة وضع الصيانة"
-        description="إيقاف وصول المستخدمين مؤقتًا دون إيقاف استضافة النظام."
+        title="الإيقاف الكامل للنظام"
+        description="إدارة إيقاف مشروع T3LEEM بشكل منفصل عن وضع الصيانة."
       />
 
       <Card>
@@ -251,191 +117,74 @@ export default function SystemShutdownClient() {
             </div>
 
             <div>
-              <CardTitle>حالة النظام</CardTitle>
+              <CardTitle>إيقاف مشروع T3LEEM</CardTitle>
               <CardDescription>
-                وضع الصيانة لا يحذف البيانات ولا يوقف Supabase.
+                يتم الإيقاف الكامل من لوحة تحكم Vercel، وليس من وضع الصيانة.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-5">
-          <div className="rounded-xl border p-4">
-            {loadingStatus ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                جاري قراءة حالة النظام...
-              </div>
-            ) : maintenance === null ? (
-              <p className="text-sm text-destructive">
-                تعذر تحديد حالة النظام. حدّث الصفحة وحاول مجددًا.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="font-medium">الحالة الحالية</span>
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
 
-                <span
-                  className={
-                    maintenance
-                      ? 'rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800'
-                      : 'rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800'
-                  }
-                >
-                  {maintenance
-                    ? 'وضع الصيانة مفعّل'
-                    : 'النظام يعمل بصورة طبيعية'}
-                </span>
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  انتبه قبل الإيقاف
+                </p>
+
+                <p className="text-sm text-muted-foreground">
+                  إيقاف مشروع Vercel يؤثر على إمكانية الوصول إلى التطبيق.
+                  لا يعني ذلك حذف قاعدة بيانات Supabase أو إيقافها.
+                  يُفضّل التأكد من وجود نسخة احتياطية قبل المتابعة.
+                </p>
               </div>
-            )}
+            </div>
           </div>
 
-          {!loadingStatus && maintenance === false && (
-            <>
-              {step === 'idle' && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="w-full"
-                  onClick={startShutdown}
-                  disabled={updating}
-                >
-                  <Power className="size-4" />
-                  تفعيل وضع الصيانة
-                </Button>
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={downloadBackup}
+              disabled={loadingBackup || openingVercel}
+            >
+              {loadingBackup ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
               )}
 
-              {step === 'backup-choice' && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                    <div className="flex gap-3">
-                      <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+              {loadingBackup
+                ? 'جاري تنزيل النسخة...'
+                : 'تنزيل نسخة احتياطية'}
+            </Button>
 
-                      <div className="space-y-1">
-                        <p className="font-semibold">
-                          هل تريد تنزيل نسخة احتياطية قبل الصيانة؟
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          النسخة اختيارية، ولن تُحذف أي بيانات عند تفعيل الصيانة.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Button
-                      type="button"
-                      onClick={downloadBackupFirst}
-                      disabled={loadingBackup || updating}
-                    >
-                      {loadingBackup ? (
-                        <>
-                          <Loader2 className="size-4 animate-spin" />
-                          جاري التنزيل...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="size-4" />
-                          تنزيل النسخة ثم المتابعة
-                        </>
-                      )}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={startCountdown}
-                      disabled={loadingBackup || updating}
-                    >
-                      متابعة دون نسخة
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={cancelShutdown}
-                      disabled={loadingBackup || updating}
-                    >
-                      <X className="size-4" />
-                      إلغاء
-                    </Button>
-                  </div>
-                </div>
+            <Button
+              type="button"
+              variant="destructive"
+              className="w-full"
+              onClick={openVercel}
+              disabled={loadingBackup || openingVercel}
+            >
+              {openingVercel ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <ExternalLink className="size-4" />
               )}
 
-              {step === 'countdown' && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border p-6 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      سيتم تفعيل وضع الصيانة خلال
-                    </p>
+              الانتقال إلى Vercel للإيقاف الكامل
+            </Button>
+          </div>
 
-                    <div className="my-3 text-6xl font-bold tabular-nums">
-                      {countdown}
-                    </div>
-
-                    <p className="text-sm text-muted-foreground">
-                      يمكنك إلغاء العملية قبل انتهاء العد التنازلي.
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={cancelShutdown}
-                  >
-                    <X className="size-4" />
-                    إلغاء الصيانة
-                  </Button>
-                </div>
-              )}
-
-              {step === 'disabling' && (
-                <div className="rounded-xl border p-6 text-center">
-                  <Loader2 className="mx-auto mb-3 size-8 animate-spin" />
-                  <p className="font-semibold">
-                    جاري تفعيل وضع الصيانة...
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    يرجى الانتظار.
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-
-          {!loadingStatus && maintenance === true && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                المستخدمون العاديون سيشاهدون صفحة الصيانة، ويمكن للمسؤول الرئيسي إيقافها من هنا.
-              </p>
-
-              <Button
-                type="button"
-                className="w-full"
-                onClick={disableMaintenance}
-                disabled={updating}
-              >
-                {updating ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                إيقاف وضع الصيانة
-              </Button>
-            </div>
-          )}
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => void loadStatus()}
-            disabled={loadingStatus || updating}
-          >
-            <RefreshCw className="size-4" />
-            تحديث حالة النظام
-          </Button>
+          <p className="text-sm text-muted-foreground">
+            بعد فتح Vercel، اختر مشروع T3LEEM واستخدم خيار Pause Project
+            إذا كان متاحًا. هذا الزر يفتح لوحة Vercel فقط؛ ولا يوقف المشروع
+            تلقائيًا.
+          </p>
         </CardContent>
       </Card>
     </div>
