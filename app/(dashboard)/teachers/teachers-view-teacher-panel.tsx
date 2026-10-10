@@ -6,8 +6,10 @@ import type {
 } from 'react'
 
 import {
+  ArrowLeftRight,
   ArrowRight,
   History,
+  X,
 } from 'lucide-react'
 
 import {
@@ -18,6 +20,11 @@ import {
 } from '@/lib/teachers-cache'
 
 import { Button } from '@/components/ui/button'
+
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
 
 import {
   AttendanceView,
@@ -39,11 +46,6 @@ import {
   TeachersViewAddStudents,
 } from '@/app/(dashboard)/teachers/teachers-view-add-students'
 
-import {
-  TeachersViewTransferStudent,
-  type TransferTeacher,
-} from '@/app/(dashboard)/teachers/teachers-view-transfer-student'
-
 type ActivePanel =
   | 'students'
   | 'addStudents'
@@ -53,6 +55,11 @@ type ActivePanel =
 type UnavailableStudent = {
   student: Student
   teacherName: string
+}
+
+type TransferTeacher = {
+  teacher: Teacher
+  subjects: TeacherCourseSubject[]
 }
 
 type TeachersViewTeacherPanelProps = {
@@ -83,7 +90,7 @@ type TeachersViewTeacherPanelProps = {
   availableStudents: Student[]
   unavailableStudents: UnavailableStudent[]
   selectedStudentIds: string[]
-  setSelectedStudentIds: Dispatch<SetStateAction<string[]>>
+  setSelectedStudentIds?: Dispatch<SetStateAction<string[]>>
   toggleStudent: (studentId: string) => void
   saving: boolean
   openAddStudents: () => void
@@ -202,6 +209,7 @@ export function TeachersViewTeacherPanel({
             className="border-b bg-muted/20 px-3 py-4 sm:px-6"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4">
+
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">
                   المعلم
@@ -244,11 +252,14 @@ export function TeachersViewTeacherPanel({
 
                   <span className="mt-1 inline-flex max-w-full flex-wrap rounded-full bg-background px-3 py-1.5 text-sm">
                     {currentCourse.startDate
-                      ? new Intl.DateTimeFormat('ar-BH', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        }).format(
+                      ? new Intl.DateTimeFormat(
+                          'ar-BH',
+                          {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          },
+                        ).format(
                           new Date(
                             `${currentCourse.startDate}T00:00:00`,
                           ),
@@ -256,11 +267,14 @@ export function TeachersViewTeacherPanel({
                       : '—'}{' '}
                     —{' '}
                     {currentCourse.endDate
-                      ? new Intl.DateTimeFormat('ar-BH', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        }).format(
+                      ? new Intl.DateTimeFormat(
+                          'ar-BH',
+                          {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          },
+                        ).format(
                           new Date(
                             `${currentCourse.endDate}T00:00:00`,
                           ),
@@ -275,8 +289,8 @@ export function TeachersViewTeacherPanel({
           {/* التبويبات */}
           <div className="border-b px-3 py-3 sm:px-6">
             <div className="flex gap-2 overflow-x-auto pb-1">
+
               <Button
-                type="button"
                 variant="outline"
                 onClick={() => {
                   setActivePanel('students')
@@ -292,7 +306,6 @@ export function TeachersViewTeacherPanel({
               </Button>
 
               <Button
-                type="button"
                 variant="outline"
                 onClick={() => {
                   setActivePanel('attendance')
@@ -308,7 +321,6 @@ export function TeachersViewTeacherPanel({
               </Button>
 
               <Button
-                type="button"
                 variant="outline"
                 onClick={() => {
                   setActivePanel('previousCourses')
@@ -316,9 +328,9 @@ export function TeachersViewTeacherPanel({
                   const firstCourse = courses.find(
                     (course) =>
                       course.isClosed &&
-                      (courseTeacherIds[course.id] ?? []).includes(
-                        selectedTeacher.id,
-                      ),
+                      (
+                        courseTeacherIds[course.id] ?? []
+                      ).includes(selectedTeacher.id),
                   )
 
                   setSelectedPreviousCourseId(
@@ -351,7 +363,9 @@ export function TeachersViewTeacherPanel({
                 canRemoveStudents={canRemoveStudents}
                 openAddStudents={openAddStudents}
                 openTransfer={openTransfer}
-                removeStudentFromTeacher={removeStudentFromTeacher}
+                removeStudentFromTeacher={
+                  removeStudentFromTeacher
+                }
                 deletingAssignmentId={deletingAssignmentId}
                 saving={saving}
               />
@@ -361,15 +375,21 @@ export function TeachersViewTeacherPanel({
             {activePanel === 'addStudents' && (
               <TeachersViewAddStudents
                 currentCourse={currentCourse}
-                selectedTeacherSubjects={selectedTeacherSubjects}
-                selectedTeacherSubjectNames={selectedTeacherSubjectNames}
+                selectedTeacherSubjects={
+                  selectedTeacherSubjects
+                }
+                selectedTeacherSubjectNames={
+                  selectedTeacherSubjectNames
+                }
                 selectedGrade={selectedGrade}
                 setSelectedGrade={setSelectedGrade}
                 availableGrades={availableGrades}
                 availableStudents={availableStudents}
                 unavailableStudents={unavailableStudents}
                 selectedStudentIds={selectedStudentIds}
-                setSelectedStudentIds={setSelectedStudentIds}
+                setSelectedStudentIds={
+                  setSelectedStudentIds
+                }
                 toggleStudent={toggleStudent}
                 saving={saving}
                 saveStudents={saveStudents}
@@ -388,13 +408,21 @@ export function TeachersViewTeacherPanel({
                   assignedStudents={assignedStudents}
                   attendanceStatuses={attendanceStatuses}
                   attendanceRecords={attendanceRecords}
-                  setAttendanceRecords={updateAttendanceRecords}
+                  setAttendanceRecords={
+                    updateAttendanceRecords
+                  }
                   attendanceNotes={attendanceNotes}
-                  setAttendanceNotes={setAttendanceNotes}
+                  setAttendanceNotes={
+                    setAttendanceNotes
+                  }
                   statusMessage={statusMessage}
                   setStatusMessage={setStatusMessage}
-                  selectedAttendanceDate={selectedAttendanceDate}
-                  setSelectedAttendanceDate={setSelectedAttendanceDate}
+                  selectedAttendanceDate={
+                    selectedAttendanceDate
+                  }
+                  setSelectedAttendanceDate={
+                    setSelectedAttendanceDate
+                  }
                 />
               </div>
             )}
@@ -410,9 +438,15 @@ export function TeachersViewTeacherPanel({
                   attendanceStatuses={attendanceStatuses}
                   attendanceRecords={attendanceRecords}
                   courseTeacherIds={courseTeacherIds}
-                  teacherCourseSubjects={teacherCourseSubjects}
-                  selectedCourseId={selectedPreviousCourseId}
-                  onSelectedCourseChange={setSelectedPreviousCourseId}
+                  teacherCourseSubjects={
+                    teacherCourseSubjects
+                  }
+                  selectedCourseId={
+                    selectedPreviousCourseId
+                  }
+                  onSelectedCourseChange={
+                    setSelectedPreviousCourseId
+                  }
                 />
               </div>
             )}
@@ -420,28 +454,199 @@ export function TeachersViewTeacherPanel({
         </div>
       </div>
 
-      {/* نافذة نقل الطالب - أصبحت في ملف مستقل */}
+      {/* نافذة نقل الطالب */}
       {isTransferOpen &&
         transferStudentId &&
         currentCourse &&
         canTransferStudents && (
-          <TeachersViewTransferStudent
-            selectedTeacher={selectedTeacher}
-            currentCourse={currentCourse}
-            selectedTeacherSubjectNames={selectedTeacherSubjectNames}
-            students={students}
-            assignments={assignments}
-            teacherCourseSubjects={teacherCourseSubjects}
-            transferStudentId={transferStudentId}
-            transferTeacherId={transferTeacherId}
-            setTransferTeacherId={setTransferTeacherId}
-            transferTeachers={transferTeachers}
-            selectedTransferTeacher={selectedTransferTeacher}
-            setStatusMessage={setStatusMessage}
-            saving={saving}
-            closeTransfer={closeTransfer}
-            saveTransfer={saveTransfer}
-          />
+          <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/40 p-3 touch-pan-y sm:items-center sm:p-4">
+            <Card className="my-3 w-full max-w-md sm:my-auto">
+              <CardContent className="space-y-4 p-4 sm:p-5">
+
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-semibold">
+                    نقل الطالب
+                  </h2>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={closeTransfer}
+                    disabled={saving}
+                    className="shrink-0"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+
+                <p className="break-words text-sm text-muted-foreground">
+                  سيتم إلغاء الربط الحالي ونقل الطالب إلى المعلم الجديد.
+                  <br />
+                  <span className="font-medium text-foreground">
+                    المادة ستتغير تلقائيًا إلى مادة المعلم الجديد.
+                  </span>
+                  <br />
+                  <span className="font-medium text-foreground">
+                    سجلات الحضور والغياب لن تتأثر.
+                  </span>
+                </p>
+
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <p className="break-words font-medium">
+                    {
+                      students.find(
+                        (student) =>
+                          student.id === transferStudentId,
+                      )?.name
+                    }
+                  </p>
+
+                  {(() => {
+                    const currentAssignment =
+                      assignments.find(
+                        (item) =>
+                          item.courseId === currentCourse.id &&
+                          item.teacherId === selectedTeacher.id &&
+                          item.studentId === transferStudentId,
+                      )
+
+                    const currentSubject =
+                      currentAssignment
+                        ? teacherCourseSubjects.find(
+                            (item) =>
+                              item.courseId === currentCourse.id &&
+                              item.teacherId === selectedTeacher.id &&
+                              item.subjectId ===
+                                currentAssignment.subjectId,
+                          )
+                        : null
+
+                    return (
+                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        <div className="break-words">
+                          المعلم الحالي:{' '}
+                          <span className="font-medium text-foreground">
+                            {selectedTeacher.name}
+                          </span>
+                        </div>
+
+                        <div className="break-words">
+                          المادة الحالية:{' '}
+                          <span className="font-medium text-foreground">
+                            {currentSubject?.subjectName ||
+                              selectedTeacherSubjectNames.join('، ') ||
+                              '—'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    المعلم الجديد
+                  </label>
+
+                  <select
+                    value={transferTeacherId}
+                    onChange={(event) => {
+                      setTransferTeacherId(
+                        event.target.value,
+                      )
+
+                      setStatusMessage('')
+                    }}
+                    className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
+                  >
+                    <option value="">
+                      اختر المعلم
+                    </option>
+
+                    {transferTeachers.map(
+                      ({ teacher, subjects }) => {
+                        const subjectNames =
+                          Array.from(
+                            new Set(
+                              subjects.map(
+                                (subject) =>
+                                  subject.subjectName,
+                              ),
+                            ),
+                          )
+
+                        return (
+                          <option
+                            key={teacher.id}
+                            value={teacher.id}
+                          >
+                            {teacher.name}
+                            {subjectNames.length > 0
+                              ? ` — ${subjectNames.join('، ')}`
+                              : ' — لا توجد مادة'}
+                          </option>
+                        )
+                      },
+                    )}
+                  </select>
+                </div>
+
+                {transferTeacherId && (
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      بعد النقل ستكون المادة
+                    </p>
+
+                    <p className="mt-1 break-words font-medium">
+                      {selectedTransferTeacher &&
+                      selectedTransferTeacher.subjects.length === 1
+                        ? selectedTransferTeacher.subjects[0].subjectName
+                        : selectedTransferTeacher?.subjects.length === 0
+                          ? 'غير محددة'
+                          : 'أكثر من مادة'}
+                    </p>
+                  </div>
+                )}
+
+                {transferTeacherId &&
+                  selectedTransferTeacher &&
+                  selectedTransferTeacher.subjects.length !== 1 && (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                      {selectedTransferTeacher.subjects.length === 0
+                        ? 'لا يمكن النقل إلى هذا المعلم قبل تحديد مادته في إعدادات الدورة.'
+                        : 'لا يمكن النقل لأن هذا المعلم مرتبط بأكثر من مادة في الدورة. يجب تحديد مادة واحدة للمعلم.'}
+                    </div>
+                  )}
+
+                <div className="flex flex-col-reverse justify-end gap-2 pt-2 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    onClick={closeTransfer}
+                    disabled={saving}
+                  >
+                    إلغاء
+                  </Button>
+
+                  <Button
+                    onClick={saveTransfer}
+                    disabled={
+                      saving ||
+                      !transferTeacherId ||
+                      !selectedTransferTeacher ||
+                      selectedTransferTeacher.subjects.length !== 1
+                    }
+                  >
+                    <ArrowLeftRight className="size-4" />
+
+                    {saving
+                      ? 'جاري النقل...'
+                      : 'تأكيد النقل'}
+                  </Button>
+                </div>
+
+              </CardContent>
+            </Card>
+          </div>
         )}
     </>
   )
