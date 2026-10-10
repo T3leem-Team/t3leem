@@ -42,6 +42,10 @@ import {
   TeachersViewStudents,
 } from '@/app/(dashboard)/teachers/teachers-view-students'
 
+import {
+  TeachersViewAddStudents,
+} from '@/app/(dashboard)/teachers/teachers-view-add-students'
+
 type ActivePanel =
   | 'students'
   | 'addStudents'
@@ -86,6 +90,7 @@ type TeachersViewTeacherPanelProps = {
   availableStudents: Student[]
   unavailableStudents: UnavailableStudent[]
   selectedStudentIds: string[]
+  setSelectedStudentIds?: Dispatch<SetStateAction<string[]>>
   toggleStudent: (studentId: string) => void
   saving: boolean
   openAddStudents: () => void
@@ -140,6 +145,7 @@ export function TeachersViewTeacherPanel({
   availableStudents,
   unavailableStudents,
   selectedStudentIds,
+  setSelectedStudentIds,
   toggleStudent,
   saving,
   openAddStudents,
@@ -173,9 +179,8 @@ export function TeachersViewTeacherPanel({
     <>
       {/* الصفحة الرئيسية */}
       {/*
-        مهم:
-        هذه هي الحاوية الوحيدة المسؤولة عن الـ vertical scroll.
-        لا يوجد scroll عمودي داخلي في محتوى الصفحة.
+        هذه هي الحاوية الوحيدة المسؤولة عن التمرير العمودي.
+        لا تضف حاوية تمرير عمودية داخل محتوى الصفحة.
       */}
       <div className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-background">
         <div className="mx-auto w-full max-w-6xl">
@@ -198,14 +203,13 @@ export function TeachersViewTeacherPanel({
             </div>
           </div>
 
-          {/* بيانات المعلم + تفاصيل الدورة */}
+          {/* بيانات المعلم وتفاصيل الدورة */}
           <div
             dir="rtl"
             className="border-b bg-muted/20 px-3 py-4 sm:px-6"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4">
 
-              {/* المعلم */}
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">
                   المعلم
@@ -218,7 +222,6 @@ export function TeachersViewTeacherPanel({
                 </div>
               </div>
 
-              {/* الدورة الحالية */}
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">
                   الدورة الحالية
@@ -229,7 +232,6 @@ export function TeachersViewTeacherPanel({
                 </p>
               </div>
 
-              {/* المادة */}
               {selectedTeacherSubjectNames.length > 0 && (
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">
@@ -242,7 +244,6 @@ export function TeachersViewTeacherPanel({
                 </div>
               )}
 
-              {/* التاريخ */}
               {currentCourse && (
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">
@@ -289,7 +290,6 @@ export function TeachersViewTeacherPanel({
           <div className="border-b px-3 py-3 sm:px-6">
             <div className="flex gap-2 overflow-x-auto pb-1">
 
-              {/* الطلاب */}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -305,7 +305,6 @@ export function TeachersViewTeacherPanel({
                 الطلاب
               </Button>
 
-              {/* الحضور والغياب */}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -321,7 +320,6 @@ export function TeachersViewTeacherPanel({
                 الحضور والغياب
               </Button>
 
-              {/* الدورات السابقة */}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -352,19 +350,9 @@ export function TeachersViewTeacherPanel({
           </div>
 
           {/* محتوى المعلم */}
-          {/*
-            لا يوجد هنا:
-            overflow-y-auto
-            overflow-y-scroll
-            flex-1
-            min-h-0
-
-            الـ scroll العمودي الوحيد موجود في الحاوية
-            الرئيسية أعلاه.
-          */}
           <div className="min-w-0 w-full p-3 sm:p-6">
 
-            {/* الطلاب */}
+            {/* عرض الطلاب */}
             {activePanel === 'students' && (
               <TeachersViewStudents
                 selectedTeacher={selectedTeacher}
@@ -385,213 +373,33 @@ export function TeachersViewTeacherPanel({
 
             {/* إضافة الطلاب */}
             {activePanel === 'addStudents' && (
-              <div className="mx-auto w-full max-w-3xl space-y-5">
-
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-semibold">
-                      إضافة طلاب
-                    </h3>
-
-                    <p className="break-words text-sm text-muted-foreground">
-                      اختر الطلاب من الطلاب المسجلين في السنة الدراسية الحالية.
-                    </p>
-
-                    <div className="mt-3 rounded-lg border bg-muted/30 p-3">
-                      <p className="text-xs text-muted-foreground">
-                        سيتم الإضافة تلقائيًا إلى
-                      </p>
-
-                      <p className="mt-1 break-words font-medium">
-                        {currentCourse?.name ?? '—'}
-                      </p>
-
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        المادة:{' '}
-                        <span className="font-medium text-foreground">
-                          {selectedTeacherSubjectNames.length > 0
-                            ? selectedTeacherSubjectNames.join('، ')
-                            : 'غير محددة'}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setActivePanel('students')
-                    }
-                    className="shrink-0"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-
-                {selectedTeacherSubjects.length === 0 && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                    لا توجد مادة مخصصة لهذا المعلم في هذه الدورة.
-                    <br />
-                    يرجى تحديد المادة للمعلم من إعدادات الدورة قبل
-                    بدء تعيين الطلاب.
-                  </div>
-                )}
-
-                {selectedTeacherSubjects.length > 1 && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                    المعلم مرتبط بأكثر من مادة في هذه الدورة:
-                    <span className="font-medium">
-                      {' '}
-                      {selectedTeacherSubjectNames.join('، ')}
-                    </span>
-                    .
-                    <br />
-                    لا يوجد اختيار مادة في هذه الصفحة، لذلك يجب أن
-                    تكون مادة المعلم محددة بشكل واحد من إعدادات الدورة.
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    المستوى الأكاديمي
-                  </label>
-
-                  <select
-                    value={selectedGrade}
-                    onChange={(event) => {
-                      setSelectedGrade(event.target.value)
-                      setSelectedStudentIds([])
-                    }}
-                    className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none"
-                  >
-                    <option value="">
-                      اختر المستوى
-                    </option>
-
-                    {availableGrades.map((grade) => (
-                      <option
-                        key={grade}
-                        value={grade}
-                      >
-                        {grade}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedGrade && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium">
-                        الطلاب
-                      </span>
-
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        تم تحديد {selectedStudentIds.length}
-                      </span>
-                    </div>
-
-                    {availableStudents.length === 0 &&
-                    unavailableStudents.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                        لا يوجد طلاب لهذا المستوى.
-                      </div>
-                    ) : (
-                      <div className="overflow-hidden rounded-lg border">
-                        {availableStudents.map((student) => {
-                          const selected =
-                            selectedStudentIds.includes(
-                              student.id,
-                            )
-
-                          return (
-                            <label
-                              key={student.id}
-                              className="flex cursor-pointer items-center gap-3 border-b p-4 last:border-b-0 hover:bg-muted/30"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onChange={() =>
-                                  toggleStudent(student.id)
-                                }
-                                className="size-4 shrink-0"
-                              />
-
-                              <div className="min-w-0">
-                                <p className="break-words font-medium">
-                                  {student.name}
-                                </p>
-
-                                <p className="text-xs text-muted-foreground">
-                                  {student.personalId || '—'}
-                                </p>
-                              </div>
-                            </label>
-                          )
-                        })}
-
-                        {unavailableStudents.map(
-                          ({
-                            student,
-                            teacherName,
-                          }) => (
-                            <div
-                              key={student.id}
-                              className="flex items-center gap-3 border-b bg-muted/20 p-4 last:border-b-0"
-                            >
-                              <input
-                                type="checkbox"
-                                disabled
-                                className="size-4 shrink-0"
-                              />
-
-                              <div className="min-w-0">
-                                <p className="break-words font-medium text-muted-foreground">
-                                  {student.name}
-                                </p>
-
-                                <p className="break-words text-xs text-muted-foreground">
-                                  عند الأستاذ {teacherName}
-                                </p>
-                              </div>
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-col-reverse justify-end gap-2 border-t pt-4 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      setActivePanel('students')
-                    }
-                    disabled={saving}
-                  >
-                    إلغاء
-                  </Button>
-
-                  <Button
-                    onClick={saveStudents}
-                    disabled={
-                      saving ||
-                      selectedStudentIds.length === 0 ||
-                      selectedTeacherSubjects.length !== 1
-                    }
-                  >
-                    {saving
-                      ? 'جاري الحفظ...'
-                      : 'حفظ'}
-                  </Button>
-                </div>
-              </div>
+              <TeachersViewAddStudents
+                currentCourse={currentCourse}
+                selectedTeacherSubjects={
+                  selectedTeacherSubjects
+                }
+                selectedTeacherSubjectNames={
+                  selectedTeacherSubjectNames
+                }
+                selectedGrade={selectedGrade}
+                setSelectedGrade={setSelectedGrade}
+                availableGrades={availableGrades}
+                availableStudents={availableStudents}
+                unavailableStudents={unavailableStudents}
+                selectedStudentIds={selectedStudentIds}
+                setSelectedStudentIds={
+                  setSelectedStudentIds
+                }
+                toggleStudent={toggleStudent}
+                saving={saving}
+                saveStudents={saveStudents}
+                onClose={() => {
+                  setActivePanel('students')
+                }}
+              />
             )}
 
-            {/* الحضور */}
+            {/* الحضور والغياب */}
             {activePanel === 'attendance' && (
               <div className="w-full min-w-0">
                 <AttendanceView
@@ -756,10 +564,7 @@ export function TeachersViewTeacherPanel({
                     </option>
 
                     {transferTeachers.map(
-                      ({
-                        teacher,
-                        subjects,
-                      }) => {
+                      ({ teacher, subjects }) => {
                         const subjectNames =
                           Array.from(
                             new Set(
