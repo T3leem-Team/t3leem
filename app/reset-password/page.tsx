@@ -19,8 +19,11 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let active = true
     let recoveryVerified = false
-    let sessionChecked = false
-    let hasSession = false
+
+    const finishChecking = () => {
+      if (!active) return
+      setChecking(false)
+    }
 
     const {
       data: { subscription },
@@ -35,50 +38,81 @@ export default function ResetPasswordPage() {
         return
       }
 
-      // إذا وصل حدث الجلسة الأولية بعد فحص الجلسة،
-      // نحدّث الحالة دون اعتبار الجلسة العادية استعادة مؤكدة.
-      if (event === 'INITIAL_SESSION') {
-        hasSession = Boolean(session)
-        sessionChecked = true
-
-        if (!recoveryVerified && !hasSession) {
-          setReady(false)
-          setError(
-            'تعذر العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة.',
-          )
-          setChecking(false)
-        }
+      if (event === 'SIGNED_OUT') {
+        setReady(false)
+        setChecking(false)
       }
     })
 
     async function checkRecoverySession() {
-      const { data, error: sessionError } =
-        await supabase.auth.getSession()
+      try {
+        const { data, error: sessionError } =
+          await supabase.auth.getSession()
 
-      if (!active) return
+        if (!active) return
 
-      sessionChecked = true
-      hasSession = Boolean(data.session)
+        const url = new URL(window.location.href)
+        const urlHasCode = url.searchParams.has('code')
+        const urlHasRecoveryType =
+          url.hash.includes('type=recovery') ||
+          url.searchParams.get('type') === 'recovery'
 
-      if (sessionError || !data.session) {
-        if (!recoveryVerified) {
+        console.log('[RESET PASSWORD]', {
+          hasSession: Boolean(data.session),
+          sessionError: sessionError?.message ?? null,
+          urlHasCode,
+          urlHasRecoveryType,
+        })
+
+        if (sessionError) {
           setReady(false)
           setError(
-            'تعذر العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة.',
+            'تعذر التحقق من جلسة الاستعادة. اطلب رابطًا جديدًا وحاول مرة أخرى.',
           )
-          setChecking(false)
+          finishChecking()
+          return
         }
-        return
-      }
 
-      if (recoveryVerified) {
-        setReady(true)
-        setError('')
-        setChecking(false)
-      }
+        // لا نعتبر الجلسة العادية جلسة استعادة.
+        if (recoveryVerified) {
+          setReady(true)
+          setError('')
+          finishChecking()
+          return
+        }
 
-      // لا نرفض الرابط فورًا إذا كان عميل Supabase لا يزال
-      // يعالج حدث الاستعادة.
+        // نترك فرصة لمعالجة حدث PASSWORD_RECOVERY.
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 1200)
+        })
+
+        if (!active) return
+
+        if (recoveryVerified) {
+          setReady(true)
+          setError('')
+        } else if (!data.session) {
+          setReady(false)
+          setError(
+            'لم يتم العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة وصلتك.',
+          )
+        } else {
+          setReady(false)
+          setError(
+            'تم العثور على جلسة، لكن لم نتأكد أنها جلسة استعادة كلمة المرور. افتح رابط الاستعادة من البريد مرة أخرى.',
+          )
+        }
+
+        finishChecking()
+      } catch (err) {
+        if (!active) return
+
+        console.error('[RESET PASSWORD] Check failed:', err)
+
+        setReady(false)
+        setError('حدث خطأ أثناء التحقق من رابط الاستعادة.')
+        finishChecking()
+      }
     }
 
     checkRecoverySession()
@@ -119,6 +153,11 @@ export default function ResetPasswordPage() {
       })
 
       if (updateError) {
+        console.error(
+          '[RESET PASSWORD] Update failed:',
+          updateError.message,
+        )
+
         setError(
           `تعذر تغيير كلمة المرور: ${updateError.message}`,
         )
@@ -135,7 +174,8 @@ export default function ResetPasswordPage() {
       window.setTimeout(() => {
         router.replace('/login')
       }, 1500)
-    } catch {
+    } catch (err) {
+      console.error('[RESET PASSWORD] Unexpected error:', err)
       setError('حدث خطأ غير متوقع. حاول مرة أخرى.')
     } finally {
       setLoading(false)
