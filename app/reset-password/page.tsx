@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
+
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,6 +19,8 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let active = true
     let recoveryVerified = false
+    let sessionChecked = false
+    let hasSession = false
 
     const {
       data: { subscription },
@@ -29,25 +32,53 @@ export default function ResetPasswordPage() {
         setReady(true)
         setError('')
         setChecking(false)
+        return
+      }
+
+      // إذا وصل حدث الجلسة الأولية بعد فحص الجلسة،
+      // نحدّث الحالة دون اعتبار الجلسة العادية استعادة مؤكدة.
+      if (event === 'INITIAL_SESSION') {
+        hasSession = Boolean(session)
+        sessionChecked = true
+
+        if (!recoveryVerified && !hasSession) {
+          setReady(false)
+          setError(
+            'تعذر العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة.',
+          )
+          setChecking(false)
+        }
       }
     })
 
     async function checkRecoverySession() {
-      const { data, error } = await supabase.auth.getSession()
+      const { data, error: sessionError } =
+        await supabase.auth.getSession()
 
       if (!active) return
 
-      // لا نعتبر وجود جلسة عادية دليلًا على صلاحية الاستعادة.
-      if (error || !data.session || !recoveryVerified) {
-        setReady(false)
-        setError(
-          'تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا وافتحه مباشرة.',
-        )
-      } else {
-        setReady(true)
+      sessionChecked = true
+      hasSession = Boolean(data.session)
+
+      if (sessionError || !data.session) {
+        if (!recoveryVerified) {
+          setReady(false)
+          setError(
+            'تعذر العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة.',
+          )
+          setChecking(false)
+        }
+        return
       }
 
-      setChecking(false)
+      if (recoveryVerified) {
+        setReady(true)
+        setError('')
+        setChecking(false)
+      }
+
+      // لا نرفض الرابط فورًا إذا كان عميل Supabase لا يزال
+      // يعالج حدث الاستعادة.
     }
 
     checkRecoverySession()
@@ -64,7 +95,9 @@ export default function ResetPasswordPage() {
     setError('')
 
     if (!ready) {
-      setError('رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.')
+      setError(
+        'رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.',
+      )
       return
     }
 
@@ -87,7 +120,7 @@ export default function ResetPasswordPage() {
 
       if (updateError) {
         setError(
-          'تعذر تغيير كلمة المرور. قد يكون رابط الاستعادة منتهي الصلاحية؛ اطلب رابطًا جديدًا.',
+          `تعذر تغيير كلمة المرور: ${updateError.message}`,
         )
         return
       }
@@ -156,6 +189,7 @@ export default function ResetPasswordPage() {
                   >
                     كلمة المرور الجديدة
                   </label>
+
                   <input
                     id="password"
                     type="password"
@@ -175,6 +209,7 @@ export default function ResetPasswordPage() {
                   >
                     تأكيد كلمة المرور
                   </label>
+
                   <input
                     id="confirmPassword"
                     type="password"
