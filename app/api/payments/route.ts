@@ -14,6 +14,12 @@ const supabaseAdmin = createClient(
   },
 )
 
+const ALLOWED_PAYMENT_METHODS = [
+  'نقدي',
+  'تحويل',
+  'بطاقة',
+]
+
 async function checkPaymentsAccess() {
   return validateDashboardSection('payments')
 }
@@ -39,15 +45,214 @@ async function checkPaymentWriteAccess() {
   }
 }
 
+/**
+ * الحصول على الكورس الخاص بالطالب في السنة الدراسية.
+ *
+ * الأولوية لتسجيل الطالب، وإذا لم يكن فيه course_id
+ * نستخدم الكورس الوحيد المسجل للسنة الدراسية.
+ */
+async function resolveCourseId(
+  studentId: string,
+  academicYearId: string,
+  enrollmentCourseId?: string | null,
+): Promise<string | null> {
+  if (enrollmentCourseId) {
+    return enrollmentCourseId
+  }
+
+  const {
+    data: enrollment,
+    error: enrollmentError,
+  } = await supabaseAdmin
+    .from('enrollments')
+    .select('course_id')
+    .eq('student_id', studentId)
+    .eq('academic_year_id', academicYearId)
+    .eq('status', 'نشط')
+    .maybeSingle()
+
+  if (enrollmentError) {
+    throw enrollmentError
+  }
+
+  if (enrollment?.course_id) {
+    return enrollment.course_id
+  }
+
+  const {
+    data: courses,
+    error: coursesError,
+  } = await supabaseAdmin
+    .from('courses')
+    .select('id')
+    .eq('academic_year_id', academicYearId)
+    .limit(2)
+
+  if (coursesError) {
+    throw coursesError
+  }
+
+  // لا نخمن الكورس إذا لم يوجد كورس أو وُجد أكثر من واحد.
+  if (!courses || courses.length !== 1) {
+    return null
+  }
+
+  return courses[0].id
+}
+
+/**
+ * مزامنة الدفعة مع الإدارة المالية عند الحاجة.
+ *
+ * - لا يشترط وجود إعداد مالي لحفظ الدفعة.
+ * - لا ينشئ معاملة مكررة إذا كانت موجودة.
+ * - المعاملة الجديدة تبدأ بحالة pending.
+ * - عند تحديث معاملة موجودة، لا نغيّر حالة التأكيد.
+ * - نستخدم course_id المحفوظ في سجل الدفعة.
+ */
+async function syncPaymentToFinancialManagement(
+  payment: {
+    id: string
+    student_id: string
+    academic_year_id: string
+    course_id: string | null
+    amount: number
+    payment_method: string
+    payment_date: string
+    reference_number: string | null
+    notes: string | null
+  },
+  student: {
+    id: string
+    name: string
+    personal_id: string | null
+  },
+) {
+  try {
+    if (!payment.course_id) {
+      console.error(
+        'Cannot sync payment without course_id:',
+        payment.id,
+      )
+      return
+    }
+
+    // نبحث أولاً عن معاملة مرتبطة بالدفعة نفسها.
+    const {
+      data: existingTransaction,
+      error: transactionLookupError,
+    } = await supabaseAdmin
+      .from('financial_transactions')
+      .select('id')
+      .eq('payment_id', payment.id)
+      .maybeSingle()
+
+    if (transactionLookupError) {
+      // لا ننشئ معاملة جديدة إذا تعذر التأكد من وجود معاملة سابقة.
+      console.error(
+        'Financial transaction lookup error:',
+        transactionLookupError,
+      )
+      return
+    }
+
+    const transactionData = {
+      academic_year_id: payment.academic_year_id,
+      transaction_type: 'in',
+      amount: Number(Number(payment.amount).toFixed(3)),
+      adjustment_direction: null,
+      source_type: 'student_payment',
+      source: `دفعة طالب - ${student.name}`,
+      payment_id: payment.id,
+      student_id: student.id,
+      course_id: payment.course_id,
+      student_request_number: student.personal_id || null,
+      payment_method: payment.payment_method,
+      reference_number: payment.reference_number,
+      note: payment.notes,
+    }
+
+    if (existingTransaction) {
+      // تحديث المعاملة نفسها مع الحفاظ على حالة التأكيد
+      // وحقول confirmed_by وconfirmed_at.
+      const {
+        error: updateError,
+      } = await supabaseAdmin
+        .from('financial_transactions')
+        .update(transactionData)
+        .eq('id', existingTransaction.id)
+
+      if (updateError) {
+        console.error(
+          'Financial transaction update error:',
+          updateError,
+        )
+      }
+
+      return
+    }
+
+    // إذا لم توجد معاملة مرتبطة، نتحقق من إعداد الإدارة المالية.
+    const {
+      data: financialSettings,
+      error: settingsError,
+    } = await supabaseAdmin
+      .from('financial_settings')
+      .select('financial_mode')
+      .eq('academic_year_id', payment.academic_year_id)
+      .maybeSingle()
+
+    if (settingsError) {
+      console.error(
+        'Financial settings lookup error:',
+        settingsError,
+      )
+      return
+    }
+
+    // عدم تهيئة الإدارة المالية أو اختيار الوضع اليدوي
+    // لا يمنع حفظ الدفعة في جدول payments.
+    if (
+      financialSettings?.financial_mode !==
+      'student_payments'
+    ) {
+      return
+    }
+
+    const {
+      error: insertError,
+    } = await supabaseAdmin
+      .from('financial_transactions')
+      .insert({
+        ...transactionData,
+        confirmation_status: 'pending',
+        confirmed_by: null,
+        confirmed_at: null,
+      })
+
+    if (insertError) {
+      // قد يمنع الفهرس الفريد تكرار المعاملة.
+      // لا نلغي الدفعة الأساسية بسبب خطأ المزامنة.
+      console.error(
+        'Financial transaction creation error:',
+        insertError,
+      )
+    }
+  } catch (error) {
+    // الإدارة المالية مستقلة عن تسجيل الدفعة.
+    console.error(
+      'Payment financial synchronization error:',
+      error,
+    )
+  }
+}
+
 export async function GET() {
-  const access =
-    await checkPaymentsAccess()
+  const access = await checkPaymentsAccess()
 
   if (!access.allowed) {
     return NextResponse.json(
       {
-        error:
-          'غير مصرح لك بالوصول إلى قسم المدفوعات.',
+        error: 'غير مصرح لك بالوصول إلى قسم المدفوعات.',
         reason: access.reason,
       },
       { status: 403 },
@@ -60,9 +265,7 @@ export async function GET() {
       error: yearError,
     } = await supabaseAdmin
       .from('academic_years')
-      .select(
-        'id, name, annual_fee',
-      )
+      .select('id, name, annual_fee')
       .eq('is_current', true)
       .eq('is_active', true)
       .maybeSingle()
@@ -98,13 +301,8 @@ export async function GET() {
 
       supabaseAdmin
         .from('enrollments')
-        .select(
-          'student_id, level_id',
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
+        .select('student_id, level_id, course_id')
+        .eq('academic_year_id', currentYear.id)
         .eq('status', 'نشط'),
 
       supabaseAdmin
@@ -114,6 +312,7 @@ export async function GET() {
           id,
           student_id,
           academic_year_id,
+          course_id,
           amount,
           payment_method,
           payment_date,
@@ -122,10 +321,7 @@ export async function GET() {
           created_at
           `,
         )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
+        .eq('academic_year_id', currentYear.id)
         .order('payment_date', {
           ascending: false,
         })
@@ -135,9 +331,7 @@ export async function GET() {
 
       supabaseAdmin
         .from('levels')
-        .select(
-          'id, name, sort_order',
-        )
+        .select('id, name, sort_order')
         .eq('is_active', true)
         .order('sort_order', {
           ascending: true,
@@ -161,89 +355,58 @@ export async function GET() {
       throw levelsResult.error
     }
 
-    const levels =
-      (levelsResult.data ?? [])
-        .map((level) => ({
-          id: level.id,
-          name: level.name,
-          sort_order:
-            level.sort_order == null
-              ? null
-              : Number(
-                  level.sort_order,
-                ),
-        }))
-        .sort(
-          (a, b) => {
-            const aOrder =
-              a.sort_order ??
-              Number.MAX_SAFE_INTEGER
+    const levels = (levelsResult.data ?? [])
+      .map((level) => ({
+        id: level.id,
+        name: level.name,
+        sort_order:
+          level.sort_order == null
+            ? null
+            : Number(level.sort_order),
+      }))
+      .sort((a, b) => {
+        const aOrder =
+          a.sort_order ?? Number.MAX_SAFE_INTEGER
 
-            const bOrder =
-              b.sort_order ??
-              Number.MAX_SAFE_INTEGER
+        const bOrder =
+          b.sort_order ?? Number.MAX_SAFE_INTEGER
 
-            if (
-              aOrder !==
-              bOrder
-            ) {
-              return (
-                aOrder -
-                bOrder
-              )
-            }
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder
+        }
 
-            return String(
-              a.name ?? '',
-            ).localeCompare(
-              String(
-                b.name ?? '',
-              ),
-              'ar',
-            )
-          },
+        return String(a.name ?? '').localeCompare(
+          String(b.name ?? ''),
+          'ar',
         )
+      })
 
     return NextResponse.json({
       academicYear: currentYear,
-      students:
-        studentsResult.data ??
-        [],
-      enrollments:
-        enrollmentsResult.data ??
-        [],
-      payments:
-        paymentsResult.data ??
-        [],
+      students: studentsResult.data ?? [],
+      enrollments: enrollmentsResult.data ?? [],
+      payments: paymentsResult.data ?? [],
       levels,
     })
   } catch (error) {
-    console.error(
-      'Payments API GET error:',
-      error,
-    )
+    console.error('Payments API GET error:', error)
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحميل بيانات المدفوعات.',
+        error: 'تعذر تحميل بيانات المدفوعات.',
       },
       { status: 500 },
     )
   }
 }
 
-export async function POST(
-  request: Request,
-) {
-  const access =
-    await checkPaymentWriteAccess()
+export async function POST(request: Request) {
+  const access = await checkPaymentWriteAccess()
 
   if (!access.allowed) {
     return NextResponse.json(
       {
-        error:
-          'غير مصرح لك بإضافة دفعات.',
+        error: 'غير مصرح لك بإضافة دفعات.',
         reason: access.reason,
       },
       { status: 403 },
@@ -251,11 +414,9 @@ export async function POST(
   }
 
   try {
-    const body =
-      await request.json()
+    const body = await request.json()
 
-    const amount =
-      Number(body.amount)
+    const amount = Number(body.amount)
 
     if (
       !body.student_id ||
@@ -266,32 +427,23 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          error:
-            'بيانات الدفعة غير مكتملة.',
+          error: 'بيانات الدفعة غير مكتملة.',
         },
         { status: 400 },
       )
     }
 
-    const allowedMethods = [
-      'نقدي',
-      'تحويل',
-      'بطاقة',
-    ]
-
     const paymentMethod =
-      body.payment_method ??
-      'نقدي'
+      body.payment_method ?? 'نقدي'
 
     if (
-      !allowedMethods.includes(
+      !ALLOWED_PAYMENT_METHODS.includes(
         paymentMethod,
       )
     ) {
       return NextResponse.json(
         {
-          error:
-            'طريقة الدفع غير صحيحة.',
+          error: 'طريقة الدفع غير صحيحة.',
         },
         { status: 400 },
       )
@@ -300,19 +452,13 @@ export async function POST(
     const {
       data: currentYear,
       error: yearError,
-    } =
-      await supabaseAdmin
-        .from('academic_years')
-        .select(
-          'id, name, annual_fee',
-        )
-        .eq(
-          'id',
-          body.academic_year_id,
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('academic_years')
+      .select('id, name, annual_fee')
+      .eq('id', body.academic_year_id)
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle()
 
     if (yearError) {
       throw yearError
@@ -321,8 +467,7 @@ export async function POST(
     if (!currentYear) {
       return NextResponse.json(
         {
-          error:
-            'السنة الدراسية غير صحيحة أو غير نشطة.',
+          error: 'السنة الدراسية غير صحيحة أو غير نشطة.',
         },
         { status: 400 },
       )
@@ -331,17 +476,11 @@ export async function POST(
     const {
       data: student,
       error: studentError,
-    } =
-      await supabaseAdmin
-        .from('students')
-        .select(
-          'id, name, personal_id, fee_exempt',
-        )
-        .eq(
-          'id',
-          body.student_id,
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('students')
+      .select('id, name, personal_id, fee_exempt')
+      .eq('id', body.student_id)
+      .maybeSingle()
 
     if (studentError) {
       throw studentError
@@ -350,8 +489,7 @@ export async function POST(
     if (!student) {
       return NextResponse.json(
         {
-          error:
-            'الطالب غير موجود.',
+          error: 'الطالب غير موجود.',
         },
         { status: 404 },
       )
@@ -370,20 +508,13 @@ export async function POST(
     const {
       data: enrollment,
       error: enrollmentError,
-    } =
-      await supabaseAdmin
-        .from('enrollments')
-        .select('id')
-        .eq(
-          'student_id',
-          body.student_id,
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
-        .eq('status', 'نشط')
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('enrollments')
+      .select('id, course_id')
+      .eq('student_id', body.student_id)
+      .eq('academic_year_id', currentYear.id)
+      .eq('status', 'نشط')
+      .maybeSingle()
 
     if (enrollmentError) {
       throw enrollmentError
@@ -399,58 +530,51 @@ export async function POST(
       )
     }
 
+    const courseId = await resolveCourseId(
+      student.id,
+      currentYear.id,
+      enrollment.course_id,
+    )
+
+    if (!courseId) {
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحديد الكورس الخاص بالسنة الدراسية. لم تُحفظ الدفعة.',
+        },
+        { status: 400 },
+      )
+    }
+
     const {
       data: existingPayments,
       error: paymentsError,
-    } =
-      await supabaseAdmin
-        .from('payments')
-        .select('amount')
-        .eq(
-          'student_id',
-          body.student_id,
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
+    } = await supabaseAdmin
+      .from('payments')
+      .select('amount')
+      .eq('student_id', student.id)
+      .eq('academic_year_id', currentYear.id)
 
     if (paymentsError) {
       throw paymentsError
     }
 
-    const totalPaid =
-      (
-        existingPayments ?? []
-      ).reduce(
-        (
-          total,
-          payment,
-        ) =>
-          total +
-          Number(
-            payment.amount ?? 0,
-          ),
-        0,
-      )
+    const totalPaid = (existingPayments ?? []).reduce(
+      (total, payment) =>
+        total + Number(payment.amount ?? 0),
+      0,
+    )
 
-    const annualFee =
-      Number(
-        currentYear.annual_fee ??
-          0,
-      )
+    const annualFee = Number(
+      currentYear.annual_fee ?? 0,
+    )
 
-    const remaining =
-      Math.max(
-        annualFee -
-          totalPaid,
-        0,
-      )
+    const remaining = Math.max(
+      annualFee - totalPaid,
+      0,
+    )
 
-    if (
-      annualFee > 0 &&
-      amount > remaining
-    ) {
+    if (annualFee > 0 && amount > remaining) {
       return NextResponse.json(
         {
           error:
@@ -461,36 +585,35 @@ export async function POST(
       )
     }
 
+    const referenceNumber = String(
+      body.reference_number ?? '',
+    ).trim()
+
+    const notes = String(
+      body.notes ?? '',
+    ).trim()
+
     const {
-      data,
-      error,
+      data: payment,
+      error: insertError,
     } = await supabaseAdmin
       .from('payments')
       .insert({
-        student_id:
-          body.student_id,
-        academic_year_id:
-          currentYear.id,
-        amount:
-          Number(
-            amount.toFixed(3),
-          ),
-        payment_method:
-          paymentMethod,
-        payment_date:
-          body.payment_date,
-        reference_number:
-          body.reference_number ||
-          null,
-        notes:
-          body.notes ||
-          null,
+        student_id: student.id,
+        academic_year_id: currentYear.id,
+        course_id: courseId,
+        amount: Number(amount.toFixed(3)),
+        payment_method: paymentMethod,
+        payment_date: body.payment_date,
+        reference_number: referenceNumber || null,
+        notes: notes || null,
       })
       .select(
         `
         id,
         student_id,
         academic_year_id,
+        course_id,
         amount,
         payment_method,
         payment_date,
@@ -501,140 +624,47 @@ export async function POST(
       )
       .single()
 
-    if (error) {
-      throw error
+    if (insertError) {
+      throw insertError
     }
 
-    const {
-      data: financialSettings,
-      error:
-        financialSettingsError,
-    } =
-      await supabaseAdmin
-        .from(
-          'financial_settings',
-        )
-        .select(
-          'id, financial_mode',
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
-        .maybeSingle()
-
-    if (
-      financialSettingsError
-    ) {
-      console.error(
-        'Financial settings lookup error:',
-        financialSettingsError,
-      )
-    }
-
-    if (
-      financialSettings?.financial_mode ===
-      'student_payments'
-    ) {
-      const {
-        error:
-          financialTransactionError,
-      } =
-        await supabaseAdmin
-          .from(
-            'financial_transactions',
-          )
-          .insert({
-            academic_year_id:
-              currentYear.id,
-            transaction_type:
-              'in',
-            amount:
-              Number(
-                amount.toFixed(3),
-              ),
-            adjustment_direction:
-              null,
-            source_type:
-              'student_payment',
-            source:
-              `دفعة طالب - ${student.name}`,
-            payment_id:
-              data.id,
-            student_id:
-              student.id,
-            student_request_number:
-              student.personal_id ||
-              null,
-            payment_method:
-              paymentMethod,
-            reference_number:
-              body.reference_number ||
-              null,
-            confirmation_status:
-              'pending',
-            confirmed_by:
-              null,
-            confirmed_at:
-              null,
-            note:
-              body.notes ||
-              null,
-          })
-
-      if (
-        financialTransactionError
-      ) {
-        console.error(
-          'Financial transaction creation error:',
-          financialTransactionError,
-        )
-      }
-    }
+    // المزامنة لا تتحكم في نجاح تسجيل الدفعة.
+    await syncPaymentToFinancialManagement(
+      payment,
+      student,
+    )
 
     return NextResponse.json(
       {
-        payment: data,
+        payment,
       },
       { status: 201 },
     )
   } catch (error) {
-    console.error(
-      'Payments API POST error:',
-      error,
-    )
+    console.error('Payments API POST error:', error)
 
     return NextResponse.json(
       {
-        error:
-          'تعذر حفظ الدفعة.',
+        error: 'تعذر حفظ الدفعة.',
       },
       { status: 500 },
     )
   }
 }
 
-/*
+/**
  * تعديل دفعة موجودة.
  *
- * مهم:
- * التعديل يعمل حتى لو أصبح الطالب
- * "مدفوع بالكامل".
- *
- * نحسب إجمالي الدفعات بدون الدفعة
- * الحالية ثم نضيف المبلغ الجديد.
+ * نحدّث سجل الدفعة نفسه، ونحتفظ بالسنة والكورس
+ * المرتبطين بها. لا نغيّر حالة التأكيد المالي.
  */
-export async function PATCH(
-  request: Request,
-) {
-  const access =
-    await checkPaymentWriteAccess()
+export async function PATCH(request: Request) {
+  const access = await checkPaymentWriteAccess()
 
   if (!access.allowed) {
     return NextResponse.json(
       {
-        error:
-          'غير مصرح لك بتعديل الدفعات.',
+        error: 'غير مصرح لك بتعديل الدفعات.',
         reason: access.reason,
       },
       { status: 403 },
@@ -642,25 +672,20 @@ export async function PATCH(
   }
 
   try {
-    const body =
-      await request.json()
+    const body = await request.json()
 
-    const paymentId =
-      String(
-        body.payment_id ?? '',
-      ).trim()
+    const paymentId = String(
+      body.payment_id ?? '',
+    ).trim()
 
-    const amount =
-      Number(body.amount)
+    const amount = Number(body.amount)
 
-    const paymentDate =
-      String(
-        body.payment_date ?? '',
-      ).trim()
+    const paymentDate = String(
+      body.payment_date ?? '',
+    ).trim()
 
     const paymentMethod =
-      body.payment_method ??
-      'نقدي'
+      body.payment_method ?? 'نقدي'
 
     if (
       !paymentId ||
@@ -677,45 +702,35 @@ export async function PATCH(
       )
     }
 
-    const allowedMethods = [
-      'نقدي',
-      'تحويل',
-      'بطاقة',
-    ]
-
     if (
-      !allowedMethods.includes(
+      !ALLOWED_PAYMENT_METHODS.includes(
         paymentMethod,
       )
     ) {
       return NextResponse.json(
         {
-          error:
-            'طريقة الدفع غير صحيحة.',
+          error: 'طريقة الدفع غير صحيحة.',
         },
         { status: 400 },
       )
     }
 
-    /*
-     * جلب الدفعة الحالية.
-     */
     const {
       data: existingPayment,
       error: existingPaymentError,
-    } =
-      await supabaseAdmin
-        .from('payments')
-        .select(
-          `
-          id,
-          student_id,
-          academic_year_id,
-          amount
-          `,
-        )
-        .eq('id', paymentId)
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('payments')
+      .select(
+        `
+        id,
+        student_id,
+        academic_year_id,
+        course_id,
+        amount
+        `,
+      )
+      .eq('id', paymentId)
+      .maybeSingle()
 
     if (existingPaymentError) {
       throw existingPaymentError
@@ -724,33 +739,22 @@ export async function PATCH(
     if (!existingPayment) {
       return NextResponse.json(
         {
-          error:
-            'الدفعة غير موجودة.',
+          error: 'الدفعة غير موجودة.',
         },
         { status: 404 },
       )
     }
 
-    /*
-     * نتأكد أن السنة التي تنتمي إليها
-     * الدفعة هي السنة الحالية.
-     */
     const {
       data: currentYear,
       error: yearError,
-    } =
-      await supabaseAdmin
-        .from('academic_years')
-        .select(
-          'id, name, annual_fee',
-        )
-        .eq(
-          'id',
-          existingPayment.academic_year_id,
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('academic_years')
+      .select('id, name, annual_fee')
+      .eq('id', existingPayment.academic_year_id)
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle()
 
     if (yearError) {
       throw yearError
@@ -766,23 +770,14 @@ export async function PATCH(
       )
     }
 
-    /*
-     * جلب الطالب والتأكد من عدم إعفائه.
-     */
     const {
       data: student,
       error: studentError,
-    } =
-      await supabaseAdmin
-        .from('students')
-        .select(
-          'id, name, personal_id, fee_exempt',
-        )
-        .eq(
-          'id',
-          existingPayment.student_id,
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('students')
+      .select('id, name, personal_id, fee_exempt')
+      .eq('id', existingPayment.student_id)
+      .maybeSingle()
 
     if (studentError) {
       throw studentError
@@ -791,8 +786,7 @@ export async function PATCH(
     if (!student) {
       return NextResponse.json(
         {
-          error:
-            'الطالب غير موجود.',
+          error: 'الطالب غير موجود.',
         },
         { status: 404 },
       )
@@ -808,242 +802,137 @@ export async function PATCH(
       )
     }
 
-    /*
-     * جلب جميع دفعات الطالب ما عدا
-     * الدفعة التي نقوم بتعديلها.
-     */
     const {
       data: otherPayments,
       error: otherPaymentsError,
-    } =
-      await supabaseAdmin
-        .from('payments')
-        .select('amount')
-        .eq(
-          'student_id',
-          existingPayment.student_id,
-        )
-        .eq(
-          'academic_year_id',
-          currentYear.id,
-        )
-        .neq('id', paymentId)
+    } = await supabaseAdmin
+      .from('payments')
+      .select('amount')
+      .eq('student_id', existingPayment.student_id)
+      .eq('academic_year_id', currentYear.id)
+      .neq('id', paymentId)
 
     if (otherPaymentsError) {
       throw otherPaymentsError
     }
 
-    const otherPaid =
-      (
-        otherPayments ?? []
-      ).reduce(
-        (
-          total,
-          payment,
-        ) =>
-          total +
-          Number(
-            payment.amount ?? 0,
-          ),
-        0,
-      )
+    const otherPaid = (otherPayments ?? []).reduce(
+      (total, payment) =>
+        total + Number(payment.amount ?? 0),
+      0,
+    )
 
-    const annualFee =
-      Number(
-        currentYear.annual_fee ??
-          0,
-      )
+    const annualFee = Number(
+      currentYear.annual_fee ?? 0,
+    )
 
-    const newTotalPaid =
-      otherPaid + amount
+    const newTotalPaid = otherPaid + amount
 
-    /*
-     * منع تجاوز الرسوم السنوية.
-     *
-     * إذا كانت الرسوم 100 والدفعات
-     * الأخرى 50، يمكن تعديل هذه الدفعة
-     * إلى 50 فقط كحد أقصى.
-     */
     if (
       annualFee > 0 &&
       newTotalPaid > annualFee
     ) {
-      const allowedAmount =
-        Math.max(
-          annualFee -
-            otherPaid,
-          0,
-        )
+      const allowedAmount = Math.max(
+        annualFee - otherPaid,
+        0,
+      )
 
       return NextResponse.json(
         {
           error:
             'المبلغ الجديد يجعل إجمالي المدفوع أكبر من الرسوم السنوية.',
-          maxAmount:
-            allowedAmount,
+          maxAmount: allowedAmount,
         },
         { status: 400 },
       )
     }
 
-    const referenceNumber =
-      String(
-        body.reference_number ??
-          '',
-      ).trim()
+    // نحافظ على الكورس الأصلي للدفعة.
+    // وإذا كان فارغًا لأي سبب، نحاول تحديده قبل التحديث.
+    const courseId =
+      existingPayment.course_id ||
+      (await resolveCourseId(
+        student.id,
+        existingPayment.academic_year_id,
+      ))
 
-    const notes =
-      String(
-        body.notes ?? '',
-      ).trim()
+    if (!courseId) {
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحديد الكورس الخاص بالدفعة.',
+        },
+        { status: 400 },
+      )
+    }
 
-    /*
-     * تحديث سجل الدفعة نفسه.
-     */
+    const referenceNumber = String(
+      body.reference_number ?? '',
+    ).trim()
+
+    const notes = String(
+      body.notes ?? '',
+    ).trim()
+
     const {
       data: updatedPayment,
       error: updateError,
-    } =
-      await supabaseAdmin
-        .from('payments')
-        .update({
-          amount:
-            Number(
-              amount.toFixed(3),
-            ),
-          payment_method:
-            paymentMethod,
-          payment_date:
-            paymentDate,
-          reference_number:
-            referenceNumber ||
-            null,
-          notes:
-            notes || null,
-        })
-        .eq('id', paymentId)
-        .select(
-          `
-          id,
-          student_id,
-          academic_year_id,
-          amount,
-          payment_method,
-          payment_date,
-          reference_number,
-          notes,
-          created_at
-          `,
-        )
-        .single()
+    } = await supabaseAdmin
+      .from('payments')
+      .update({
+        course_id: courseId,
+        amount: Number(amount.toFixed(3)),
+        payment_method: paymentMethod,
+        payment_date: paymentDate,
+        reference_number: referenceNumber || null,
+        notes: notes || null,
+      })
+      .eq('id', paymentId)
+      .select(
+        `
+        id,
+        student_id,
+        academic_year_id,
+        course_id,
+        amount,
+        payment_method,
+        payment_date,
+        reference_number,
+        notes,
+        created_at
+        `,
+      )
+      .single()
 
     if (updateError) {
       throw updateError
     }
 
-    /*
-     * تحديث العملية المالية المرتبطة
-     * بنفس payment_id إن كانت موجودة.
-     *
-     * لا ننشئ عملية جديدة هنا؛
-     * نعدل العملية الأصلية فقط.
-     */
-    const {
-      data: financialTransaction,
-      error:
-        financialTransactionLookupError,
-    } =
-      await supabaseAdmin
-        .from(
-          'financial_transactions',
-        )
-        .select(
-          'id',
-        )
-        .eq(
-          'payment_id',
-          paymentId,
-        )
-        .maybeSingle()
-
-    if (
-      financialTransactionLookupError
-    ) {
-      console.error(
-        'Financial transaction lookup error during payment update:',
-        financialTransactionLookupError,
-      )
-    } else if (
-      financialTransaction
-    ) {
-      const {
-        error:
-          financialTransactionUpdateError,
-      } =
-        await supabaseAdmin
-          .from(
-            'financial_transactions',
-          )
-          .update({
-            amount:
-              Number(
-                amount.toFixed(3),
-              ),
-            payment_method:
-              paymentMethod,
-            reference_number:
-              referenceNumber ||
-              null,
-            note:
-              notes || null,
-          })
-          .eq(
-            'id',
-            financialTransaction.id,
-          )
-
-      if (
-        financialTransactionUpdateError
-      ) {
-        /*
-         * الدفعة الأساسية تم تعديلها.
-         * نسجل الخطأ حتى لا نخفي نجاح
-         * تعديل payment.
-         */
-        console.error(
-          'Financial transaction update error:',
-          financialTransactionUpdateError,
-        )
-      }
-    }
+    // إذا كانت المعاملة المالية موجودة، نحدّثها.
+    // وإذا لم تكن موجودة وكان الوضع student_payments،
+    // فالمزامنة تنشئها مرة واحدة بحالة pending.
+    await syncPaymentToFinancialManagement(
+      updatedPayment,
+      student,
+    )
 
     return NextResponse.json(
       {
-        payment:
-          updatedPayment,
-        totalPaid:
-          Number(
-            newTotalPaid.toFixed(3),
-          ),
-        remaining:
-          Math.max(
-            annualFee -
-              newTotalPaid,
-            0,
-          ),
+        payment: updatedPayment,
+        totalPaid: Number(newTotalPaid.toFixed(3)),
+        remaining: Math.max(
+          annualFee - newTotalPaid,
+          0,
+        ),
       },
       { status: 200 },
     )
   } catch (error) {
-    console.error(
-      'Payments API PATCH error:',
-      error,
-    )
+    console.error('Payments API PATCH error:', error)
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تعديل الدفعة.',
+        error: 'تعذر تعديل الدفعة.',
       },
       { status: 500 },
     )
