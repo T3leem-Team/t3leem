@@ -14,14 +14,15 @@ import type {
   Course,
   Student,
   TeacherAttendanceStatus,
-} from '@/app/(dashboard)/teachers/teacher-attendance'
+} from '@/app/(dashboard)/teachers/teacher-attendance-utils'
 
 import {
   attendanceStatusNames,
   formatDateForDisplay,
   getPercentageClass,
   getStatusClasses,
-} from '@/app/(dashboard)/teachers/teacher-attendance'
+} from '@/app/(dashboard)/teachers/teacher-attendance-utils'
+
 type AttendanceSummary = {
   total: number
   recorded: number
@@ -293,7 +294,6 @@ export function TeacherAttendanceView({
       {isAttendanceAvailable && (
         <div className="w-full min-w-0 pt-4">
           <div className="w-full min-w-0">
-
             {/* حالة التسجيل */}
             <div className="rounded-xl border px-4 py-3">
               <div
