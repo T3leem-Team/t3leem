@@ -3073,4 +3073,3 @@ function Detail({
     </div>
   )
 }
-ع
