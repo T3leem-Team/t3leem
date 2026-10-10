@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
-
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,12 +17,25 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let active = true
-    let recoveryVerified = false
 
-    const finishChecking = () => {
+    async function checkRecoverySession() {
+      const { data, error } = await supabase.auth.getSession()
+
       if (!active) return
+
+      if (error || !data.session) {
+        setError(
+          'رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.',
+        )
+        setReady(false)
+      } else {
+        setReady(true)
+      }
+
       setChecking(false)
     }
+
+    checkRecoverySession()
 
     const {
       data: { subscription },
@@ -31,91 +43,11 @@ export default function ResetPasswordPage() {
       if (!active) return
 
       if (event === 'PASSWORD_RECOVERY' && session) {
-        recoveryVerified = true
         setReady(true)
         setError('')
         setChecking(false)
-        return
-      }
-
-      if (event === 'SIGNED_OUT') {
-        setReady(false)
-        setChecking(false)
       }
     })
-
-    async function checkRecoverySession() {
-      try {
-        const { data, error: sessionError } =
-          await supabase.auth.getSession()
-
-        if (!active) return
-
-        const url = new URL(window.location.href)
-        const urlHasCode = url.searchParams.has('code')
-        const urlHasRecoveryType =
-          url.hash.includes('type=recovery') ||
-          url.searchParams.get('type') === 'recovery'
-
-        console.log('[RESET PASSWORD]', {
-          hasSession: Boolean(data.session),
-          sessionError: sessionError?.message ?? null,
-          urlHasCode,
-          urlHasRecoveryType,
-        })
-
-        if (sessionError) {
-          setReady(false)
-          setError(
-            'تعذر التحقق من جلسة الاستعادة. اطلب رابطًا جديدًا وحاول مرة أخرى.',
-          )
-          finishChecking()
-          return
-        }
-
-        // لا نعتبر الجلسة العادية جلسة استعادة.
-        if (recoveryVerified) {
-          setReady(true)
-          setError('')
-          finishChecking()
-          return
-        }
-
-        // نترك فرصة لمعالجة حدث PASSWORD_RECOVERY.
-        await new Promise<void>((resolve) => {
-          window.setTimeout(resolve, 1200)
-        })
-
-        if (!active) return
-
-        if (recoveryVerified) {
-          setReady(true)
-          setError('')
-        } else if (!data.session) {
-          setReady(false)
-          setError(
-            'لم يتم العثور على جلسة استعادة صالحة. اطلب رابطًا جديدًا وافتح أحدث رسالة وصلتك.',
-          )
-        } else {
-          setReady(false)
-          setError(
-            'تم العثور على جلسة، لكن لم نتأكد أنها جلسة استعادة كلمة المرور. افتح رابط الاستعادة من البريد مرة أخرى.',
-          )
-        }
-
-        finishChecking()
-      } catch (err) {
-        if (!active) return
-
-        console.error('[RESET PASSWORD] Check failed:', err)
-
-        setReady(false)
-        setError('حدث خطأ أثناء التحقق من رابط الاستعادة.')
-        finishChecking()
-      }
-    }
-
-    checkRecoverySession()
 
     return () => {
       active = false
@@ -129,9 +61,7 @@ export default function ResetPasswordPage() {
     setError('')
 
     if (!ready) {
-      setError(
-        'رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.',
-      )
+      setError('رابط الاستعادة غير صالح أو انتهت صلاحيته.')
       return
     }
 
@@ -153,18 +83,12 @@ export default function ResetPasswordPage() {
       })
 
       if (updateError) {
-        console.error(
-          '[RESET PASSWORD] Update failed:',
-          updateError.message,
-        )
-
         setError(
-          `تعذر تغيير كلمة المرور: ${updateError.message}`,
+          'تعذر تغيير كلمة المرور. قد يكون رابط الاستعادة منتهي الصلاحية؛ اطلب رابطًا جديدًا.',
         )
         return
       }
 
-      setReady(false)
       setMessage('تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.')
       setPassword('')
       setConfirmPassword('')
@@ -174,8 +98,7 @@ export default function ResetPasswordPage() {
       window.setTimeout(() => {
         router.replace('/login')
       }, 1500)
-    } catch (err) {
-      console.error('[RESET PASSWORD] Unexpected error:', err)
+    } catch {
       setError('حدث خطأ غير متوقع. حاول مرة أخرى.')
     } finally {
       setLoading(false)
@@ -229,7 +152,6 @@ export default function ResetPasswordPage() {
                   >
                     كلمة المرور الجديدة
                   </label>
-
                   <input
                     id="password"
                     type="password"
@@ -249,7 +171,6 @@ export default function ResetPasswordPage() {
                   >
                     تأكيد كلمة المرور
                   </label>
-
                   <input
                     id="confirmPassword"
                     type="password"
@@ -267,9 +188,7 @@ export default function ResetPasswordPage() {
                   disabled={loading}
                   className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading
-                    ? 'جارٍ تغيير كلمة المرور...'
-                    : 'حفظ كلمة المرور الجديدة'}
+                  {loading ? 'جارٍ تغيير كلمة المرور...' : 'حفظ كلمة المرور الجديدة'}
                 </button>
               </form>
             )}
