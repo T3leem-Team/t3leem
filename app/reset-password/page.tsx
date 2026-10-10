@@ -17,17 +17,32 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let active = true
+    let recoveryVerified = false
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return
+
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        recoveryVerified = true
+        setReady(true)
+        setError('')
+        setChecking(false)
+      }
+    })
 
     async function checkRecoverySession() {
       const { data, error } = await supabase.auth.getSession()
 
       if (!active) return
 
-      if (error || !data.session) {
-        setError(
-          'رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.',
-        )
+      // لا نعتبر وجود جلسة عادية دليلًا على صلاحية الاستعادة.
+      if (error || !data.session || !recoveryVerified) {
         setReady(false)
+        setError(
+          'تعذر التحقق من رابط الاستعادة. اطلب رابطًا جديدًا وافتحه مباشرة.',
+        )
       } else {
         setReady(true)
       }
@@ -36,18 +51,6 @@ export default function ResetPasswordPage() {
     }
 
     checkRecoverySession()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!active) return
-
-      if (event === 'PASSWORD_RECOVERY' && session) {
-        setReady(true)
-        setError('')
-        setChecking(false)
-      }
-    })
 
     return () => {
       active = false
@@ -61,7 +64,7 @@ export default function ResetPasswordPage() {
     setError('')
 
     if (!ready) {
-      setError('رابط الاستعادة غير صالح أو انتهت صلاحيته.')
+      setError('رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.')
       return
     }
 
@@ -89,6 +92,7 @@ export default function ResetPasswordPage() {
         return
       }
 
+      setReady(false)
       setMessage('تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.')
       setPassword('')
       setConfirmPassword('')
@@ -188,7 +192,9 @@ export default function ResetPasswordPage() {
                   disabled={loading}
                   className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? 'جارٍ تغيير كلمة المرور...' : 'حفظ كلمة المرور الجديدة'}
+                  {loading
+                    ? 'جارٍ تغيير كلمة المرور...'
+                    : 'حفظ كلمة المرور الجديدة'}
                 </button>
               </form>
             )}
