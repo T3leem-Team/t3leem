@@ -40,12 +40,13 @@ import {
   TeachersViewTeacherPanel,
 } from '@/app/(dashboard)/teachers/teachers-view-teacher-panel'
 
+import {
+  TeachersViewRemoveStudentDialog,
+  type RemoveMode,
+} from '@/app/(dashboard)/teachers/teachers-view-remove-student-dialog'
+
 const initialTeachersCache =
   getTeachersCache()
-
-type RemoveMode =
-  | 'assignment_only'
-  | 'assignment_and_attendance'
 
 export function TeachersView() {
   const [teachers, setTeachers] =
@@ -1910,18 +1911,14 @@ export function TeachersView() {
                       const teacherStudentIds =
                         assignments
                           .filter(
-                            (
-                              assignment,
-                            ) =>
+                            (assignment) =>
                               assignment.courseId ===
                                 currentCourse?.id &&
                               assignment.teacherId ===
                                 teacher.id,
                           )
                           .map(
-                            (
-                              assignment,
-                            ) =>
+                            (assignment) =>
                               assignment.studentId,
                           )
 
@@ -1930,9 +1927,7 @@ export function TeachersView() {
                           new Set(
                             students
                               .filter(
-                                (
-                                  student,
-                                ) =>
+                                (student) =>
                                   teacherStudentIds.includes(
                                     student.id,
                                   ) &&
@@ -1943,9 +1938,7 @@ export function TeachersView() {
                                   ),
                               )
                               .map(
-                                (
-                                  student,
-                                ) =>
+                                (student) =>
                                   student.levelName,
                               ),
                           ),
@@ -1953,18 +1946,14 @@ export function TeachersView() {
                           (a, b) => {
                             const levelA =
                               academicLevels.find(
-                                (
-                                  level,
-                                ) =>
+                                (level) =>
                                   level.name ===
                                   a,
                               )
 
                             const levelB =
                               academicLevels.find(
-                                (
-                                  level,
-                                ) =>
+                                (level) =>
                                   level.name ===
                                   b,
                               )
@@ -2009,18 +1998,14 @@ export function TeachersView() {
                           new Set(
                             teacherCourseSubjects
                               .filter(
-                                (
-                                  item,
-                                ) =>
+                                (item) =>
                                   item.courseId ===
                                     currentCourse?.id &&
                                   item.teacherId ===
                                     teacher.id,
                               )
                               .map(
-                                (
-                                  item,
-                                ) =>
+                                (item) =>
                                   item.subjectName,
                               ),
                           ),
@@ -2063,9 +2048,7 @@ export function TeachersView() {
                             0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {teacherSubjects.map(
-                                  (
-                                    subject,
-                                  ) => (
+                                  (subject) => (
                                     <span
                                       key={
                                         subject
@@ -2091,9 +2074,7 @@ export function TeachersView() {
                             0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {teacherGrades.map(
-                                  (
-                                    grade,
-                                  ) => (
+                                  (grade) => (
                                     <span
                                       key={
                                         grade
@@ -2213,6 +2194,9 @@ export function TeachersView() {
           selectedStudentIds={
             selectedStudentIds
           }
+          setSelectedStudentIds={
+            setSelectedStudentIds
+          }
           toggleStudent={
             toggleStudent
           }
@@ -2282,104 +2266,32 @@ export function TeachersView() {
         />
       )}
 
-      {pendingRemove && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div
-            className="w-full max-w-md rounded-xl border bg-background p-6 shadow-xl"
-            dir="rtl"
-          >
-            <div>
-              <h3 className="text-lg font-semibold">
-                مسح تعيين الطالب
-              </h3>
+      <TeachersViewRemoveStudentDialog
+        open={!!pendingRemove}
+        studentName={
+          pendingRemove?.student.name ?? ''
+        }
+        deleting={
+          deletingAssignmentId !== null
+        }
+        onConfirm={(mode) => {
+          const pending =
+            pendingRemove
 
-              <p className="mt-2 text-sm text-muted-foreground">
-                الطالب:{' '}
-                <span className="font-medium text-foreground">
-                  {pendingRemove.student.name}
-                </span>
-              </p>
+          if (!pending) {
+            return
+          }
 
-              <p className="mt-3 text-sm text-muted-foreground">
-                اختر الإجراء الذي تريد تنفيذه:
-              </p>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              <button
-                type="button"
-                disabled={
-                  deletingAssignmentId !==
-                  null
-                }
-                onClick={() => {
-                  const pending =
-                    pendingRemove
-
-                  void executeRemoveStudent(
-                    pending.assignment,
-                    pending.student,
-                    'assignment_only',
-                  )
-                }}
-                className="w-full rounded-lg border px-4 py-3 text-right transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <div className="font-medium">
-                  مسح التعيين فقط
-                </div>
-
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  يتم إلغاء تعيين الطالب من المعلم
-                  والمادة، مع الاحتفاظ بسجل الحضور
-                  كما هو.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={
-                  deletingAssignmentId !==
-                  null
-                }
-                onClick={() => {
-                  const pending =
-                    pendingRemove
-
-                  void executeRemoveStudent(
-                    pending.assignment,
-                    pending.student,
-                    'assignment_and_attendance',
-                  )
-                }}
-                className="w-full rounded-lg border border-destructive/30 px-4 py-3 text-right text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <div className="font-medium">
-                  مسح التعيين وسجل الحضور
-                </div>
-
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  يتم إلغاء تعيين الطالب وحذف جميع
-                  سجلات حضوره في الدورة الحالية فقط.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={
-                  deletingAssignmentId !==
-                  null
-                }
-                onClick={() =>
-                  setPendingRemove(null)
-                }
-                className="w-full rounded-lg bg-muted px-4 py-3 text-center text-sm font-medium transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          void executeRemoveStudent(
+            pending.assignment,
+            pending.student,
+            mode,
+          )
+        }}
+        onCancel={() =>
+          setPendingRemove(null)
+        }
+      />
     </div>
   )
 }
