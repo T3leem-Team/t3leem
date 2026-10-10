@@ -1175,6 +1175,78 @@ export function PaymentFinancial() {
 
   /*
    * ---------------------------------------------------------
+   * قبول / تأكيد كل العمليات المعلقة
+   * ---------------------------------------------------------
+   */
+
+  const confirmAllTransactions = async () => {
+    if (!academicYear || pendingTransactions.length === 0) return
+
+    try {
+      setSaving(true)
+      setError('')
+
+      for (const transaction of pendingTransactions) {
+        const response = await fetch(
+          '/api/financial-management/transactions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'confirm',
+              academic_year_id: academicYear.id,
+              transaction_id: transaction.id,
+            }),
+          }
+        )
+
+        const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              'تعذر تأكيد إحدى العمليات المعلقة'
+          )
+        }
+      }
+
+      const financial =
+        await loadFinancialData(
+          academicYear.id
+        )
+
+      const loadedStudents =
+        await loadStudentPayments(
+          academicYear.id,
+          financial.transactions
+        )
+
+      paymentFinancialCache = {
+        academicYear,
+        settings:
+          financial.settings,
+        transactions:
+          financial.transactions,
+        studentPayments:
+          loadedStudents,
+        summary:
+          financial.summary,
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر تأكيد جميع العمليات المعلقة'
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
    * حذف عملية
    * ---------------------------------------------------------
    */
@@ -1566,8 +1638,6 @@ export function PaymentFinancial() {
                 )}
               </div>
             </div>
-
-        
           </div>
         </div>
       )}
@@ -2111,9 +2181,25 @@ export function PaymentFinancial() {
                     </p>
                   </div>
 
-                  <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
-                    {pendingTransactions.length}{' '}
-                    معلقة
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="rounded-full bg-amber-100 px-4 py-2 text-sm font-bold text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+                      {pendingTransactions.length}{' '}
+                      معلقة
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={confirmAllTransactions}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      قبول الكل
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2987,3 +3073,4 @@ function Detail({
     </div>
   )
 }
+ع
