@@ -281,7 +281,7 @@ export async function POST(
 
   if (response) return response
 
-  if (!access) {
+  if (!access || !access.userId) {
     return jsonError(
       'غير مصرح بالوصول',
       401,
@@ -293,7 +293,6 @@ export async function POST(
     access.userId,
   )
 }
-
 /*
  * =========================================================
  * PATCH
