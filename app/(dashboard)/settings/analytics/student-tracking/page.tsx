@@ -55,6 +55,11 @@ type AnalyticsRow = {
   real_tracking_opens: number
 }
 
+type SupabaseAnalyticsRecord = Record<
+  string,
+  unknown
+>
+
 const analyticsDefinition =
   getAnalyticsDefinition(
     'student_tracking',
@@ -338,25 +343,18 @@ export default function StudentTrackingAnalyticsPage() {
   )
 
   const [rows, setRows] =
-    useState<
-      AnalyticsRow[]
-    >([])
+    useState<AnalyticsRow[]>([])
 
   const [loading, setLoading] =
     useState(true)
 
   const [error, setError] =
-    useState<
-      string | null
-    >(null)
+    useState<string | null>(null)
 
   const [
     lastUpdated,
     setLastUpdated,
-  ] =
-    useState<Date | null>(
-      null,
-    )
+  ] = useState<Date | null>(null)
 
   const range = useMemo(
     () =>
@@ -386,35 +384,33 @@ export default function StudentTrackingAnalyticsPage() {
 
         const {
           data,
-          error:
-            supabaseError,
-        } =
-          await supabase
-            .from(
-              analyticsDefinition.source,
-            )
-            .select(
-              `${analyticsDefinition.dateColumn}, ${analyticsDefinition.metrics
-                .map(
-                  (metric) =>
-                    metric.key,
-                )
-                .join(', ')}`,
-            )
-            .gte(
-              analyticsDefinition.dateColumn,
-              range.from,
-            )
-            .lte(
-              analyticsDefinition.dateColumn,
-              range.to,
-            )
-            .order(
-              analyticsDefinition.dateColumn,
-              {
-                ascending: true,
-              },
-            )
+          error: supabaseError,
+        } = await supabase
+          .from(
+            analyticsDefinition.source,
+          )
+          .select(
+            `${analyticsDefinition.dateColumn}, ${analyticsDefinition.metrics
+              .map(
+                (metric) =>
+                  metric.key,
+              )
+              .join(', ')}`,
+          )
+          .gte(
+            analyticsDefinition.dateColumn,
+            range.from,
+          )
+          .lte(
+            analyticsDefinition.dateColumn,
+            range.to,
+          )
+          .order(
+            analyticsDefinition.dateColumn,
+            {
+              ascending: true,
+            },
+          )
 
         if (supabaseError) {
           console.error(
@@ -428,28 +424,27 @@ export default function StudentTrackingAnalyticsPage() {
             'تعذر تحميل بيانات التحليلات.',
           )
         } else {
-          setRows(
-            (
-              data || []
-            ).map(
-              (row) => ({
-                tracking_date:
-                  String(
-                    row[
-                      analyticsDefinition.dateColumn
-                    ] ?? '',
-                  ),
+          const records =
+            (data ??
+              []) as unknown as SupabaseAnalyticsRecord[]
 
-                visits: Number(
-                  row.visits ??
-                    0,
+          setRows(
+            records.map(
+              (row): AnalyticsRow => ({
+                tracking_date: String(
+                  row[
+                    analyticsDefinition.dateColumn
+                  ] ?? '',
                 ),
 
-                real_tracking_opens:
-                  Number(
-                    row.real_tracking_opens ??
-                      0,
-                  ),
+                visits: Number(
+                  row['visits'] ?? 0,
+                ),
+
+                real_tracking_opens: Number(
+                  row['real_tracking_opens'] ??
+                    0,
+                ),
               }),
             ),
           )
@@ -596,9 +591,7 @@ export default function StudentTrackingAnalyticsPage() {
 
         <Button
           variant="outline"
-          onClick={
-            loadAnalytics
-          }
+          onClick={loadAnalytics}
           disabled={loading}
         >
           <RefreshCw
@@ -630,12 +623,9 @@ export default function StudentTrackingAnalyticsPage() {
               {periodOptions.map(
                 (option) => (
                   <Button
-                    key={
-                      option.value
-                    }
+                    key={option.value}
                     variant={
-                      period ===
-                      option.value
+                      period === option.value
                         ? 'default'
                         : 'outline'
                     }
@@ -734,9 +724,7 @@ export default function StudentTrackingAnalyticsPage() {
             <p className="text-3xl font-bold">
               {loading
                 ? '—'
-                : `${conversionRate.toFixed(
-                    1,
-                  )}%`}
+                : `${conversionRate.toFixed(1)}%`}
             </p>
 
             <p className="mt-1 text-xs text-muted-foreground">
@@ -760,9 +748,7 @@ export default function StudentTrackingAnalyticsPage() {
             <p className="text-3xl font-bold">
               {loading
                 ? '—'
-                : averageVisits.toFixed(
-                    1,
-                  )}
+                : averageVisits.toFixed(1)}
             </p>
 
             <p className="mt-1 text-xs text-muted-foreground">
@@ -781,8 +767,7 @@ export default function StudentTrackingAnalyticsPage() {
               </CardTitle>
 
               <CardDescription>
-                {period ===
-                'yearly'
+                {period === 'yearly'
                   ? `تجميع البيانات اليومية حسب أشهر عام ${range.year}`
                   : `عرض بيانات ${periodLabel}`}
               </CardDescription>
@@ -796,12 +781,9 @@ export default function StudentTrackingAnalyticsPage() {
 
                   return (
                     <Button
-                      key={
-                        option.value
-                      }
+                      key={option.value}
                       variant={
-                        chartType ===
-                        option.value
+                        chartType === option.value
                           ? 'default'
                           : 'outline'
                       }
@@ -835,9 +817,7 @@ export default function StudentTrackingAnalyticsPage() {
                 analyticsDefinition?.metrics ??
                 []
               }
-              formatNumber={
-                formatNumber
-              }
+              formatNumber={formatNumber}
             />
           )}
         </CardContent>
@@ -859,8 +839,7 @@ export default function StudentTrackingAnalyticsPage() {
             <div className="py-10 text-center text-sm text-muted-foreground">
               جاري تحميل البيانات...
             </div>
-          ) : chartPoints.length ===
-            0 ? (
+          ) : chartPoints.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">
               لا توجد بيانات للفترة المحددة.
             </div>
@@ -889,23 +868,16 @@ export default function StudentTrackingAnalyticsPage() {
 
                 <tbody>
                   {chartPoints.map(
-                    (
-                      point,
-                      index,
-                    ) => {
+                    (point, index) => {
                       const visits =
                         Number(
-                          point
-                            .values
-                            .visits ??
+                          point.values.visits ??
                             0,
                         )
 
                       const realTrackingOpens =
                         Number(
-                          point
-                            .values
-                            .real_tracking_opens ??
+                          point.values.real_tracking_opens ??
                             0,
                         )
 
@@ -915,9 +887,7 @@ export default function StudentTrackingAnalyticsPage() {
                           className="border-b last:border-0"
                         >
                           <td className="px-4 py-3 font-medium">
-                            {
-                              point.label
-                            }
+                            {point.label}
                           </td>
 
                           <td className="px-4 py-3">
@@ -936,9 +906,7 @@ export default function StudentTrackingAnalyticsPage() {
                             {getConversionRate(
                               visits,
                               realTrackingOpens,
-                            ).toFixed(
-                              1,
-                            )}
+                            ).toFixed(1)}
                             %
                           </td>
                         </tr>
