@@ -48,6 +48,7 @@ export async function proxy(request: NextRequest) {
   const isPublicRoute =
     pathname === '/login' ||
     pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
     pathname === '/register' ||
     pathname === '/student-status' ||
     pathname === '/api/auth/login'
