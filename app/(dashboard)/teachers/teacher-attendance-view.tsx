@@ -39,6 +39,14 @@ type DateState =
   | 'future-lesson'
   | 'valid'
 
+/**
+ * «غير منضم» حالة فعلية مستقلة في النظام،
+ * وليست إحدى حالات تسجيل الحضور المعتادة.
+ */
+type StudentAttendanceStatus =
+  | AttendanceStatusName
+  | 'غير منضم'
+
 type TeacherAttendanceViewProps = {
   currentCourse: Course
   activeDate: string
@@ -109,7 +117,7 @@ type TeacherAttendanceViewProps = {
   getStudentStatus: (
     studentId: string,
     date: string,
-  ) => AttendanceStatusName | null
+  ) => StudentAttendanceStatus | null
 
   studentCardRefs: RefObject<
     Record<string, HTMLDivElement | null>
@@ -152,10 +160,7 @@ export function TeacherAttendanceView({
   studentCardRefs,
 }: TeacherAttendanceViewProps) {
   return (
-    <div
-      dir="rtl"
-      className="w-full min-w-0"
-    >
+    <div dir="rtl" className="w-full min-w-0">
       {/* الرأس */}
       <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
@@ -174,10 +179,7 @@ export function TeacherAttendanceView({
           onChange={(event) => {
             const nextDate = event.target.value
 
-            setSelectedAttendanceDate(
-              nextDate || null,
-            )
-
+            setSelectedAttendanceDate(nextDate || null)
             setEditingStatusKey(null)
             setShowUnrecordedOnly(false)
             setShowBulkStatusMenu(false)
@@ -213,9 +215,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-1 text-xs text-muted-foreground">
             تبدأ الدورة في{' '}
-            {formatDateForDisplay(
-              currentCourse.startDate,
-            )}
+            {formatDateForDisplay(currentCourse.startDate)}
           </p>
         </div>
       )}
@@ -233,9 +233,7 @@ export function TeacherAttendanceView({
 
           <p className="mt-1 text-xs text-muted-foreground">
             انتهت الدورة في{' '}
-            {formatDateForDisplay(
-              currentCourse.endDate,
-            )}
+            {formatDateForDisplay(currentCourse.endDate)}
           </p>
         </div>
       )}
@@ -306,9 +304,7 @@ export function TeacherAttendanceView({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="shrink-0 text-lg">
-                      {attendanceSummary.allRecorded
-                        ? '✓'
-                        : '!'}
+                      {attendanceSummary.allRecorded ? '✓' : '!'}
                     </span>
 
                     <div className="min-w-0">
@@ -367,9 +363,7 @@ export function TeacherAttendanceView({
                           assignedStudents.length === 0
                         }
                         onClick={() =>
-                          setShowBulkStatusMenu(
-                            (current) => !current,
-                          )
+                          setShowBulkStatusMenu((current) => !current)
                         }
                         className="h-10 rounded-lg border bg-background px-4 text-sm font-semibold transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -385,30 +379,23 @@ export function TeacherAttendanceView({
                           </div>
 
                           <div className="space-y-1">
-                            {attendanceStatusNames.map(
-                              (statusName) => {
-                                const styles =
-                                  getStatusClasses(
-                                    statusName,
-                                  )
+                            {attendanceStatusNames.map((statusName) => {
+                              const styles = getStatusClasses(statusName)
 
-                                return (
-                                  <button
-                                    key={statusName}
-                                    type="button"
-                                    disabled={isBulkSaving}
-                                    onClick={() =>
-                                      void saveAllAttendance(
-                                        statusName,
-                                      )
-                                    }
-                                    className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
-                                  >
-                                    {statusName}
-                                  </button>
-                                )
-                              },
-                            )}
+                              return (
+                                <button
+                                  key={statusName}
+                                  type="button"
+                                  disabled={isBulkSaving}
+                                  onClick={() =>
+                                    void saveAllAttendance(statusName)
+                                  }
+                                  className={`w-full rounded-lg border px-3 py-2 text-sm font-medium transition ${styles.normal}`}
+                                >
+                                  {statusName}
+                                </button>
+                              )
+                            })}
                           </div>
                         </div>
                       )}
@@ -432,9 +419,7 @@ export function TeacherAttendanceView({
                     {showUnrecordedOnly && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowUnrecordedOnly(false)
-                        }
+                        onClick={() => setShowUnrecordedOnly(false)}
                         className="h-10 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted"
                       >
                         عرض جميع الطلاب
@@ -486,17 +471,15 @@ export function TeacherAttendanceView({
                 displayedStudents.map((student) => {
                   const key = `${activeDate}:${student.id}`
 
-                  const record =
-                    getRecordForStudent(
-                      student.id,
-                      activeDate,
-                    )
+                  const record = getRecordForStudent(
+                    student.id,
+                    activeDate,
+                  )
 
-                  const status =
-                    getStudentStatus(
-                      student.id,
-                      activeDate,
-                    )
+                  const status = getStudentStatus(
+                    student.id,
+                    activeDate,
+                  )
 
                   const note =
                     attendanceNotes[key] ??
@@ -510,23 +493,23 @@ export function TeacherAttendanceView({
                     savingKey === key ||
                     isBulkSaving
 
-                  const savingNote =
-                    savingNoteKey === key
+                  const savingNote = savingNoteKey === key
+                  const editing = editingStatusKey === key
 
-                  const editing =
-                    editingStatusKey === key
-
+                  /*
+                   * «غير منضم» حالة مستقلة:
+                   * لا نعرض أزرار تغيير الحضور لها،
+                   * ولا نسمح بتحويلها إلى حاضر أو غائب من هذه البطاقة.
+                   */
                   if (status === 'غير منضم') {
                     const selectedStyles =
-                      getStatusClasses(status)
+                      getStatusClasses('غير منضم')
 
                     return (
                       <div
                         key={student.id}
                         ref={(element) => {
-                          studentCardRefs.current[
-                            student.id
-                          ] = element
+                          studentCardRefs.current[student.id] = element
                         }}
                         className={`rounded-xl border bg-card px-4 py-4 transition-all ${
                           saving ? 'opacity-70' : ''
@@ -569,13 +552,10 @@ export function TeacherAttendanceView({
                             <textarea
                               value={note}
                               onChange={(event) =>
-                                setAttendanceNotes(
-                                  (current) => ({
-                                    ...current,
-                                    [key]:
-                                      event.target.value,
-                                  }),
-                                )
+                                setAttendanceNotes((current) => ({
+                                  ...current,
+                                  [key]: event.target.value,
+                                }))
                               }
                               onBlur={(event) =>
                                 void saveNote(
@@ -611,9 +591,7 @@ export function TeacherAttendanceView({
                       <div
                         key={student.id}
                         ref={(element) => {
-                          studentCardRefs.current[
-                            student.id
-                          ] = element
+                          studentCardRefs.current[student.id] = element
                         }}
                         className={`rounded-xl border bg-card p-4 transition-all ${
                           saving ? 'opacity-70' : ''
@@ -638,55 +616,47 @@ export function TeacherAttendanceView({
                             </div>
 
                             <div className="grid grid-cols-2 gap-2">
-                              {attendanceStatusNames.map(
-                                (statusName) => {
-                                  const styles =
-                                    getStatusClasses(
-                                      statusName,
-                                    )
+                              {attendanceStatusNames.map((statusName) => {
+                                const styles =
+                                  getStatusClasses(statusName)
 
-                                  const isSelected =
-                                    status ===
-                                    statusName
+                                const isSelected =
+                                  status === statusName
 
-                                  return (
-                                    <button
-                                      key={statusName}
-                                      type="button"
-                                      disabled={saving}
-                                      onClick={() => {
-                                        if (
-                                          isSelected &&
-                                          status
-                                        ) {
-                                          void clearAttendance(
-                                            student,
-                                            activeDate,
-                                          )
-                                          return
-                                        }
-
-                                        void saveAttendance(
+                                return (
+                                  <button
+                                    key={statusName}
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => {
+                                      if (isSelected && status) {
+                                        void clearAttendance(
                                           student,
                                           activeDate,
-                                          statusName,
                                         )
-                                      }}
-                                      className={`min-h-12 rounded-xl border px-3 py-3 text-sm font-semibold transition active:scale-[0.98] ${
-                                        isSelected
-                                          ? styles.selected
-                                          : styles.normal
-                                      } ${
-                                        saving
-                                          ? 'cursor-not-allowed opacity-50'
-                                          : ''
-                                      }`}
-                                    >
-                                      {statusName}
-                                    </button>
-                                  )
-                                },
-                              )}
+                                        return
+                                      }
+
+                                      void saveAttendance(
+                                        student,
+                                        activeDate,
+                                        statusName,
+                                      )
+                                    }}
+                                    className={`min-h-12 rounded-xl border px-3 py-3 text-sm font-semibold transition active:scale-[0.98] ${
+                                      isSelected
+                                        ? styles.selected
+                                        : styles.normal
+                                    } ${
+                                      saving
+                                        ? 'cursor-not-allowed opacity-50'
+                                        : ''
+                                    }`}
+                                  >
+                                    {statusName}
+                                  </button>
+                                )
+                              })}
                             </div>
                           </div>
 
@@ -698,13 +668,10 @@ export function TeacherAttendanceView({
                             <textarea
                               value={note}
                               onChange={(event) =>
-                                setAttendanceNotes(
-                                  (current) => ({
-                                    ...current,
-                                    [key]:
-                                      event.target.value,
-                                  }),
-                                )
+                                setAttendanceNotes((current) => ({
+                                  ...current,
+                                  [key]: event.target.value,
+                                }))
                               }
                               placeholder="اكتب ملاحظة عن الطالب..."
                               rows={3}
@@ -720,16 +687,17 @@ export function TeacherAttendanceView({
                     )
                   }
 
-                  const selectedStyles =
-                    getStatusClasses(status)
+                  /*
+                   * وصلنا إلى هنا بعد استبعاد «غير منضم».
+                   * لذلك لا نكرر المقارنات التي سببت TS2367.
+                   */
+                  const selectedStyles = getStatusClasses(status)
 
                   return (
                     <div
                       key={student.id}
                       ref={(element) => {
-                        studentCardRefs.current[
-                          student.id
-                        ] = element
+                        studentCardRefs.current[student.id] = element
                       }}
                       className={`rounded-xl border bg-card px-4 py-4 transition-all ${
                         saving ? 'opacity-70' : ''
@@ -751,22 +719,12 @@ export function TeacherAttendanceView({
 
                           <button
                             type="button"
-                            disabled={
-                              saving ||
-                              status === 'غير منضم'
-                            }
+                            disabled={saving}
                             onClick={() => {
-                              if (
-                                status === 'غير منضم'
-                              ) {
-                                return
-                              }
-
                               setEditingStatusKey(key)
                             }}
                             className={`h-10 shrink-0 rounded-lg border px-5 text-sm font-medium transition ${selectedStyles.selected} ${
-                              saving ||
-                              status === 'غير منضم'
+                              saving
                                 ? 'cursor-not-allowed opacity-50'
                                 : 'cursor-pointer'
                             }`}
@@ -780,9 +738,7 @@ export function TeacherAttendanceView({
                                 percentage,
                               )}`}
                             >
-                              {status === 'غير منضم'
-                                ? '—'
-                                : `${percentage}%`}
+                              {`${percentage}%`}
                             </span>
                           </div>
                         </div>
@@ -795,13 +751,10 @@ export function TeacherAttendanceView({
                           <textarea
                             value={note}
                             onChange={(event) =>
-                              setAttendanceNotes(
-                                (current) => ({
-                                  ...current,
-                                  [key]:
-                                    event.target.value,
-                                }),
-                              )
+                              setAttendanceNotes((current) => ({
+                                ...current,
+                                [key]: event.target.value,
+                              }))
                             }
                             onBlur={(event) =>
                               void saveNote(
@@ -839,13 +792,8 @@ export function TeacherAttendanceView({
 
       <p className="pt-2 text-xs text-muted-foreground">
         فترة الدورة:{' '}
-        {formatDateForDisplay(
-          currentCourse.startDate,
-        )}{' '}
-        —{' '}
-        {formatDateForDisplay(
-          currentCourse.endDate,
-        )}
+        {formatDateForDisplay(currentCourse.startDate)} —{' '}
+        {formatDateForDisplay(currentCourse.endDate)}
       </p>
     </div>
   )
