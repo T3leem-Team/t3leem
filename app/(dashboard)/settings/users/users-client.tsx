@@ -167,20 +167,12 @@ export default function Page() {
     void loadUsers()
   }, [])
 
-  const getRolePermissionIds = (
-    roleValue: Role,
-  ) => {
+  const getRolePermissionIds = (roleValue: Role) => {
     return Array.from(
       new Set(
         rolePermissions
-          .filter(
-            (item) =>
-              item.role === roleValue,
-          )
-          .map(
-            (item) =>
-              item.permission_id,
-          ),
+          .filter((item) => item.role === roleValue)
+          .map((item) => item.permission_id),
       ),
     )
   }
@@ -249,150 +241,186 @@ export default function Page() {
     setShowForm(true)
   }
 
-  const togglePermission = (
-    permissionId: string,
-  ) => {
+  const togglePermission = (permissionId: string) => {
     const currentRolePermissionIds =
       getRolePermissionIds(role)
 
     if (
-      currentRolePermissionIds.includes(
-        permissionId,
-      )
+      currentRolePermissionIds.includes(permissionId)
     ) {
       return
     }
 
     setSelectedPermissions((current) =>
       current.includes(permissionId)
-        ? current.filter(
-            (id) => id !== permissionId,
-          )
-        : [
-            ...current,
-            permissionId,
-          ],
+        ? current.filter((id) => id !== permissionId)
+        : [...current, permissionId],
     )
   }
 
-  const toggleSection = (
-    sectionId: string,
-  ) => {
+  const toggleSection = (sectionId: string) => {
     setSelectedSections((current) =>
       current.includes(sectionId)
-        ? current.filter(
-            (id) => id !== sectionId,
-          )
-        : [
-            ...current,
-            sectionId,
-          ],
+        ? current.filter((id) => id !== sectionId)
+        : [...current, sectionId],
     )
   }
 
-const handleSave = async () => {
-  if (!username.trim()) {
-    setError('اكتب اسم المستخدم.')
-    return
-  }
-
-  if (!email.trim()) {
-    setError('اكتب البريد الإلكتروني.')
-    return
-  }
-
-  if (!fullName.trim()) {
-    setError('اكتب الاسم الكامل.')
-    return
-  }
-
-  if (!editingId && !password) {
-    setError('اكتب كلمة المرور.')
-    return
-  }
-
-  if (password && password.length < 8) {
-    setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
-    return
-  }
-
-  try {
-    setSaving(true)
-    setError('')
-
-    const isEditing = editingId !== null
-
-    const rolePermissionIds = getRolePermissionIds(role)
-
-    const additionalPermissionIds = Array.from(
-      new Set(
-        selectedPermissions.filter(
-          (id) => !rolePermissionIds.includes(id),
-        ),
-      ),
-    )
-
-    const body = isEditing
-      ? {
-          userId: editingId,
-          email: email.trim().toLowerCase(),
-          fullName: fullName.trim(),
-          department: department.trim() || null,
-          role,
-          ...(password ? { password } : {}),
-          permissionIds: additionalPermissionIds,
-          sectionIds: selectedSections,
-        }
-      : {
-          username: username.trim(),
-          email: email.trim().toLowerCase(),
-          fullName: fullName.trim(),
-          department: department.trim() || null,
-          password,
-          role,
-          permissionIds: additionalPermissionIds,
-          sectionIds: selectedSections,
-        }
-
-    const response = await fetch('/api/admin/users', {
-      method: isEditing ? 'PATCH' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ??
-          (isEditing
-            ? 'تعذر حفظ التعديلات.'
-            : 'تعذر إنشاء المستخدم.'),
-      )
+  const handleSave = async () => {
+    if (!username.trim()) {
+      setError('اكتب اسم المستخدم.')
+      return
     }
 
-    await loadUsers()
+    if (!email.trim()) {
+      setError('اكتب البريد الإلكتروني.')
+      return
+    }
 
-    resetForm()
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'حدث خطأ غير متوقع.',
-    )
-  } finally {
-    setSaving(false)
+    if (!fullName.trim()) {
+      setError('اكتب الاسم الكامل.')
+      return
+    }
+
+    if (!editingId && !password) {
+      setError('اكتب كلمة المرور.')
+      return
+    }
+
+    if (password && password.length < 8) {
+      setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const isEditing = editingId !== null
+
+      const rolePermissionIds = getRolePermissionIds(role)
+
+      const additionalPermissionIds = Array.from(
+        new Set(
+          selectedPermissions.filter(
+            (id) => !rolePermissionIds.includes(id),
+          ),
+        ),
+      )
+
+      const body = isEditing
+        ? {
+            userId: editingId,
+            email: email.trim().toLowerCase(),
+            fullName: fullName.trim(),
+            department: department.trim() || null,
+            role,
+            ...(password ? { password } : {}),
+            permissionIds: additionalPermissionIds,
+            sectionIds: selectedSections,
+          }
+        : {
+            username: username.trim(),
+            email: email.trim().toLowerCase(),
+            fullName: fullName.trim(),
+            department: department.trim() || null,
+            password,
+            role,
+            permissionIds: additionalPermissionIds,
+            sectionIds: selectedSections,
+          }
+
+      const response = await fetch('/api/admin/users', {
+        method: isEditing ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            (isEditing
+              ? 'تعذر حفظ التعديلات.'
+              : 'تعذر إنشاء المستخدم.'),
+        )
+      }
+
+      await loadUsers()
+
+      resetForm()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'حدث خطأ غير متوقع.',
+      )
+    } finally {
+      setSaving(false)
+    }
   }
-}
+
+  // تفعيل أو تعطيل حساب المستخدم
+  const handleToggleActive = async (user: User) => {
+    const nextIsActive = !user.is_active
+
+    const actionLabel = nextIsActive
+      ? 'تفعيل'
+      : 'تعطيل'
+
+    const confirmed = window.confirm(
+      `هل تريد ${actionLabel} حساب المستخدم "${user.full_name}"؟`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          isActive: nextIsActive,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            `تعذر ${actionLabel} حساب المستخدم.`,
+        )
+      }
+
+      await loadUsers()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `حدث خطأ أثناء ${actionLabel} حساب المستخدم.`,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const selectedSectionsLabel =
     selectedSections.length === 0
       ? 'اختر أقسام لوحة التحكم'
       : selectedSections.length ===
           dashboardSections.filter(
-            (section) =>
-              section.is_active,
+            (section) => section.is_active,
           ).length
         ? 'جميع الأقسام'
         : `${selectedSections.length} قسم محدد`
@@ -404,8 +432,7 @@ const handleSave = async () => {
 
   const activeDashboardSections =
     dashboardSections.filter(
-      (section) =>
-        section.is_active,
+      (section) => section.is_active,
     )
 
   const currentRolePermissionIds =
@@ -414,14 +441,11 @@ const handleSave = async () => {
   const currentRolePermissions =
     permissions.filter(
       (permission) =>
-        currentRolePermissionIds.includes(
-          permission.id,
-        ),
+        currentRolePermissionIds.includes(permission.id),
     )
 
   const filteredUsers = useMemo(() => {
-    const value =
-      search.trim().toLowerCase()
+    const value = search.trim().toLowerCase()
 
     if (!value) {
       return users
@@ -429,77 +453,46 @@ const handleSave = async () => {
 
     return users.filter(
       (user) =>
-        user.username
-          .toLowerCase()
-          .includes(value) ||
-        user.full_name
-          .toLowerCase()
-          .includes(value) ||
-        (user.email ?? '')
-          .toLowerCase()
-          .includes(value) ||
-        (user.department ?? '')
-          .toLowerCase()
-          .includes(value),
+        user.username.toLowerCase().includes(value) ||
+        user.full_name.toLowerCase().includes(value) ||
+        (user.email ?? '').toLowerCase().includes(value) ||
+        (user.department ?? '').toLowerCase().includes(value),
     )
   }, [users, search])
 
   const activeUsers =
-    users.filter(
-      (user) => user.is_active,
-    ).length
+    users.filter((user) => user.is_active).length
 
   const inactiveUsers =
     users.length - activeUsers
 
-  const getRoleLabel = (
-    value: Role,
-  ) =>
-    roles.find(
-      (item) =>
-        item.value === value,
-    )?.label ?? value
+  const getRoleLabel = (value: Role) =>
+    roles.find((item) => item.value === value)?.label ?? value
 
-  const getPermissionName = (
-    id: string,
-  ) =>
+  const getPermissionName = (id: string) =>
     permissions.find(
-      (permission) =>
-        permission.id === id,
+      (permission) => permission.id === id,
     )?.permission_name ?? id
 
-  const getSectionName = (
-    id: string,
-  ) =>
+  const getSectionName = (id: string) =>
     dashboardSections.find(
-      (section) =>
-        section.id === id,
+      (section) => section.id === id,
     )?.section_name ?? id
 
-  const getEffectivePermissionIds =
-    (user: User) => {
-      const roleIds =
-        user.rolePermissionIds ??
-        getRolePermissionIds(
-          user.role,
-        )
+  const getEffectivePermissionIds = (user: User) => {
+    const roleIds =
+      user.rolePermissionIds ??
+      getRolePermissionIds(user.role)
 
-      const extraIds =
-        user.permissionIds ?? []
+    const extraIds = user.permissionIds ?? []
 
-      return Array.from(
-        new Set([
-          ...roleIds,
-          ...extraIds,
-        ]),
-      )
-    }
+    return Array.from(
+      new Set([...roleIds, ...extraIds]),
+    )
+  }
 
   const selectedDetailsUser =
-    users.find(
-      (user) =>
-        user.id === selectedUserId,
-    ) ?? null
+    users.find((user) => user.id === selectedUserId) ?? null
 
   const hasInternalScroll =
     filteredUsers.length > 10
@@ -591,19 +584,12 @@ const handleSave = async () => {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <input
             value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="بحث باسم المستخدم أو الاسم أو البريد أو القسم..."
             className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 sm:max-w-md"
           />
 
-          <Button
-            type="button"
-            onClick={openAddForm}
-          >
+          <Button type="button" onClick={openAddForm}>
             <UserPlus className="size-4" />
             إضافة مستخدم
           </Button>
@@ -625,32 +611,26 @@ const handleSave = async () => {
               <Loader2 className="size-5 animate-spin" />
               جاري تحميل المستخدمين...
             </div>
-          ) : filteredUsers.length ===
-            0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div className="p-12 text-center">
               <Users className="mx-auto size-10 text-muted-foreground" />
 
               <h3 className="mt-4 font-semibold">
-                {users.length ===
-                0
+                {users.length === 0
                   ? 'لا يوجد مستخدمون'
                   : 'لا توجد نتائج'}
               </h3>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                {users.length ===
-                0
+                {users.length === 0
                   ? 'اضغط على إضافة مستخدم لإنشاء أول حساب.'
                   : 'جرب البحث باستخدام كلمة مختلفة.'}
               </p>
 
-              {users.length ===
-                0 && (
+              {users.length === 0 && (
                 <Button
                   className="mt-5"
-                  onClick={
-                    openAddForm
-                  }
+                  onClick={openAddForm}
                 >
                   <UserPlus className="size-4" />
                   إضافة مستخدم
@@ -708,246 +688,192 @@ const handleSave = async () => {
                   </thead>
 
                   <tbody className="divide-y">
-                    {filteredUsers.map(
-                      (user, index) => {
-                        const effectivePermissionIds =
-                          getEffectivePermissionIds(
-                            user,
-                          )
+                    {filteredUsers.map((user, index) => {
+                      const effectivePermissionIds =
+                        getEffectivePermissionIds(user)
 
-                        const firstPermissionId =
-                          effectivePermissionIds[0]
+                      const firstPermissionId =
+                        effectivePermissionIds[0]
 
-                        const isSelected =
-                          selectedUserId ===
-                          user.id
+                      const isSelected =
+                        selectedUserId === user.id
 
-                        const sectionCount =
-                          (
-                            user.sectionIds ??
-                            []
-                          ).length
+                      const sectionCount =
+                        (user.sectionIds ?? []).length
 
-                        const permissionCount =
-                          effectivePermissionIds.length
+                      const permissionCount =
+                        effectivePermissionIds.length
 
-                        return (
-                          <tr
-                            key={
-                              user.id
-                            }
-                            onClick={() =>
-                              setSelectedUserId(
-                                user.id,
-                              )
-                            }
-                            className={`cursor-pointer transition-colors ${
-                              isSelected
-                                ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
-                                : 'hover:bg-muted/30'
-                            }`}
-                          >
-                            {/* السيريال */}
-                            <td className="px-5 py-4 text-center">
-                              <span
-                                className={`inline-flex size-8 items-center justify-center rounded-lg text-xs font-semibold ${
+                      return (
+                        <tr
+                          key={user.id}
+                          onClick={() =>
+                            setSelectedUserId(user.id)
+                          }
+                          className={`cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
+                              : 'hover:bg-muted/30'
+                          }`}
+                        >
+                          <td className="px-5 py-4 text-center">
+                            <span
+                              className={`inline-flex size-8 items-center justify-center rounded-lg text-xs font-semibold ${
+                                isSelected
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setSelectedUserId(user.id)
+                              }}
+                              className="text-right"
+                            >
+                              <p
+                                className={`font-semibold transition-colors ${
                                   isSelected
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground'
+                                    ? 'text-primary'
+                                    : 'text-foreground'
                                 }`}
                               >
-                                {index + 1}
-                              </span>
-                            </td>
+                                {user.full_name}
+                              </p>
 
-                            {/* المستخدم */}
-                            <td className="px-5 py-4">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-
-                                  setSelectedUserId(
-                                    user.id,
-                                  )
-                                }}
-                                className="text-right"
-                              >
-                                <p
-                                  className={`font-semibold transition-colors ${
-                                    isSelected
-                                      ? 'text-primary'
-                                      : 'text-foreground'
-                                  }`}
-                                >
-                                  {
-                                    user.full_name
-                                  }
-                                </p>
-
-                                <p
-                                  className="mt-1 text-xs text-muted-foreground"
-                                  dir="ltr"
-                                >
-                                  @
-                                  {
-                                    user.username
-                                  }
-                                </p>
-                              </button>
-                            </td>
-
-                            {/* البريد */}
-                            <td className="px-5 py-4">
-                              <span
-                                className="text-sm"
+                              <p
+                                className="mt-1 text-xs text-muted-foreground"
                                 dir="ltr"
                               >
-                                {user.email ||
-                                  '—'}
-                              </span>
-                            </td>
+                                @{user.username}
+                              </p>
+                            </button>
+                          </td>
 
-                            {/* الدور */}
-                            <td className="px-5 py-4">
-                              <Badge variant="neutral">
-                                {getRoleLabel(
-                                  user.role,
-                                )}
-                              </Badge>
-                            </td>
+                          <td className="px-5 py-4">
+                            <span
+                              className="text-sm"
+                              dir="ltr"
+                            >
+                              {user.email || '—'}
+                            </span>
+                          </td>
 
-                            {/* الصلاحيات */}
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-2">
-                                {firstPermissionId ? (
-                                  <Badge variant="neutral">
-                                    {getPermissionName(
-                                      firstPermissionId,
-                                    )}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">
-                                    لا توجد صلاحيات
-                                  </span>
-                                )}
+                          <td className="px-5 py-4">
+                            <Badge variant="neutral">
+                              {getRoleLabel(user.role)}
+                            </Badge>
+                          </td>
 
-                                {(sectionCount >
-                                  0 ||
-                                  permissionCount >
-                                    1) && (
-                                  <button
-                                    type="button"
-                                    onClick={(
-                                      event,
-                                    ) => {
-                                      event.stopPropagation()
-
-                                      setSelectedUserId(
-                                        user.id,
-                                      )
-
-                                      setDetailsOpen(
-                                        true,
-                                      )
-                                    }}
-                                    className="text-xs font-medium text-primary hover:underline"
-                                  >
-                                    تفاصيل
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* الحالة */}
-                            <td className="px-5 py-4">
-                              {user.is_active ? (
-                                <Badge variant="success">
-                                  نشط
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              {firstPermissionId ? (
+                                <Badge variant="neutral">
+                                  {getPermissionName(
+                                    firstPermissionId,
+                                  )}
                                 </Badge>
                               ) : (
-                                <Badge variant="neutral">
-                                  معطل
-                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد صلاحيات
+                                </span>
                               )}
-                            </td>
 
-                            {/* الإجراءات */}
-                            <td className="px-5 py-4">
-                              <div
-                                className="flex items-center gap-2"
-                                onClick={(event) =>
-                                  event.stopPropagation()
+                              {(sectionCount > 0 ||
+                                permissionCount > 1) && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setSelectedUserId(user.id)
+                                    setDetailsOpen(true)
+                                  }}
+                                  className="text-xs font-medium text-primary hover:underline"
+                                >
+                                  تفاصيل
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {user.is_active ? (
+                              <Badge variant="success">
+                                نشط
+                              </Badge>
+                            ) : (
+                              <Badge variant="neutral">
+                                معطل
+                              </Badge>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div
+                              className="flex items-center gap-2"
+                              onClick={(event) =>
+                                event.stopPropagation()
+                              }
+                            >
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                  openEditForm(user)
                                 }
+                                disabled={saving}
+                                className="border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
                               >
+                                <Edit3 className="size-4" />
+                                تعديل
+                              </Button>
+
+                              {user.is_active ? (
                                 <Button
                                   type="button"
                                   size="sm"
                                   onClick={() =>
-                                    openEditForm(
-                                      user,
-                                    )
+                                    handleToggleActive(user)
                                   }
-                                  disabled={
-                                    saving
-                                  }
-                                  className="border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                                  disabled={saving}
+                                  className="border border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
                                 >
-                                  <Edit3 className="size-4" />
-                                  تعديل
+                                  {saving ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Power className="size-4" />
+                                  )}
+                                  تعطيل
                                 </Button>
-
-                                {user.is_active ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleToggleActive(
-                                        user,
-                                      )
-                                    }
-                                    disabled={
-                                      saving
-                                    }
-                                    className="border border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
-                                  >
-                                    {saving ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Power className="size-4" />
-                                    )}
-
-                                    تعطيل
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleToggleActive(
-                                        user,
-                                      )
-                                    }
-                                    disabled={
-                                      saving
-                                    }
-                                    className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
-                                  >
-                                    {saving ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Power className="size-4" />
-                                    )}
-
-                                    تفعيل
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      },
-                    )}
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleToggleActive(user)
+                                  }
+                                  disabled={saving}
+                                  className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
+                                >
+                                  {saving ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                  ) : (
+                                    <Power className="size-4" />
+                                  )}
+                                  تفعيل
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -956,18 +882,14 @@ const handleSave = async () => {
               <div className="flex min-h-14 items-center justify-between border-t bg-muted/20 px-5 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="size-4" />
-
-                  <span>
-                    عدد المستخدمين:
-                  </span>
+                  <span>عدد المستخدمين:</span>
 
                   <span className="font-bold text-foreground">
                     {filteredUsers.length}
                   </span>
 
                   {search.trim() &&
-                    users.length !==
-                      filteredUsers.length && (
+                    users.length !== filteredUsers.length && (
                       <span className="text-xs">
                         من أصل {users.length}
                       </span>
@@ -976,17 +898,11 @@ const handleSave = async () => {
 
                 {selectedUserId && (
                   <div className="flex items-center gap-2 text-xs text-primary">
-                    <span>
-                      تم تحديد مستخدم
-                    </span>
+                    <span>تم تحديد مستخدم</span>
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setSelectedUserId(
-                          null,
-                        )
-                      }
+                      onClick={() => setSelectedUserId(null)}
                       className="rounded-md px-2 py-1 hover:bg-primary/10"
                     >
                       إلغاء التحديد
@@ -1019,7 +935,6 @@ const handleSave = async () => {
             dir="rtl"
             className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l bg-background shadow-2xl"
           >
-            {/* Header */}
             <div className="flex items-center justify-between border-b px-6 py-5">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -1043,7 +958,6 @@ const handleSave = async () => {
               </Button>
             </div>
 
-            {/* المحتوى */}
             <div className="flex-1 overflow-y-auto p-6">
               {error && (
                 <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -1052,7 +966,6 @@ const handleSave = async () => {
               )}
 
               <div className="space-y-5">
-                {/* اسم المستخدم */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     اسم المستخدم
@@ -1061,13 +974,9 @@ const handleSave = async () => {
                   <input
                     value={username}
                     onChange={(event) =>
-                      setUsername(
-                        event.target.value,
-                      )
+                      setUsername(event.target.value)
                     }
-                    disabled={
-                      editingId !== null
-                    }
+                    disabled={editingId !== null}
                     placeholder="مثال: ahmed"
                     dir="ltr"
                     className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1078,7 +987,6 @@ const handleSave = async () => {
                   </p>
                 </div>
 
-                {/* البريد */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     البريد الإلكتروني
@@ -1088,9 +996,7 @@ const handleSave = async () => {
                     type="email"
                     value={email}
                     onChange={(event) =>
-                      setEmail(
-                        event.target.value,
-                      )
+                      setEmail(event.target.value)
                     }
                     placeholder="example@email.com"
                     dir="ltr"
@@ -1102,7 +1008,6 @@ const handleSave = async () => {
                   </p>
                 </div>
 
-                {/* الاسم الكامل */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     الاسم الكامل
@@ -1111,16 +1016,13 @@ const handleSave = async () => {
                   <input
                     value={fullName}
                     onChange={(event) =>
-                      setFullName(
-                        event.target.value,
-                      )
+                      setFullName(event.target.value)
                     }
                     placeholder="مثال: أحمد محمد"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
 
-                {/* القسم */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     القسم
@@ -1129,16 +1031,13 @@ const handleSave = async () => {
                   <input
                     value={department}
                     onChange={(event) =>
-                      setDepartment(
-                        event.target.value,
-                      )
+                      setDepartment(event.target.value)
                     }
                     placeholder="اختياري"
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
 
-                {/* كلمة المرور */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     كلمة المرور
@@ -1148,9 +1047,7 @@ const handleSave = async () => {
                     type="password"
                     value={password}
                     onChange={(event) =>
-                      setPassword(
-                        event.target.value,
-                      )
+                      setPassword(event.target.value)
                     }
                     placeholder={
                       editingId
@@ -1162,7 +1059,6 @@ const handleSave = async () => {
                   />
                 </div>
 
-                {/* الدور */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     الدور
@@ -1172,44 +1068,30 @@ const handleSave = async () => {
                     value={role}
                     onChange={(event) => {
                       const newRole =
-                        event.target
-                          .value as Role
+                        event.target.value as Role
 
-                      setRole(
-                        newRole,
-                      )
+                      setRole(newRole)
 
                       const newRolePermissionIds =
-                        getRolePermissionIds(
-                          newRole,
-                        )
+                        getRolePermissionIds(newRole)
 
-                      setSelectedPermissions(
-                        (current) =>
-                          current.filter(
-                            (id) =>
-                              !newRolePermissionIds.includes(
-                                id,
-                              ),
-                          ),
+                      setSelectedPermissions((current) =>
+                        current.filter(
+                          (id) =>
+                            !newRolePermissionIds.includes(id),
+                        ),
                       )
                     }}
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
                   >
-                    {roles.map(
-                      (item) => (
-                        <option
-                          key={
-                            item.value
-                          }
-                          value={
-                            item.value
-                          }
-                        >
-                          {item.label}
-                        </option>
-                      ),
-                    )}
+                    {roles.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1222,27 +1104,21 @@ const handleSave = async () => {
                   <button
                     type="button"
                     disabled={
-                      activeDashboardSections.length ===
-                      0
+                      activeDashboardSections.length === 0
                     }
                     onClick={() =>
-                      setOpenSections(
-                        (current) =>
-                          !current,
-                      )
+                      setOpenSections((current) => !current)
                     }
                     className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
                   >
                     <span
                       className={
-                        selectedSections.length ===
-                        0
+                        selectedSections.length === 0
                           ? 'text-muted-foreground'
                           : ''
                       }
                     >
-                      {activeDashboardSections.length ===
-                      0
+                      {activeDashboardSections.length === 0
                         ? 'لا توجد أقسام متاحة'
                         : selectedSectionsLabel}
                     </span>
@@ -1251,8 +1127,7 @@ const handleSave = async () => {
                   </button>
 
                   {openSections &&
-                    activeDashboardSections.length >
-                      0 && (
+                    activeDashboardSections.length > 0 && (
                       <div className="absolute right-0 top-full z-[120] mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
                         <div className="grid gap-1 sm:grid-cols-2">
                           {activeDashboardSections.map(
@@ -1264,14 +1139,10 @@ const handleSave = async () => {
 
                               return (
                                 <button
-                                  key={
-                                    section.id
-                                  }
+                                  key={section.id}
                                   type="button"
                                   onClick={() =>
-                                    toggleSection(
-                                      section.id,
-                                    )
+                                    toggleSection(section.id)
                                   }
                                   className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
                                 >
@@ -1289,16 +1160,12 @@ const handleSave = async () => {
 
                                   <span className="min-w-0">
                                     <span className="block text-sm font-medium">
-                                      {
-                                        section.section_name
-                                      }
+                                      {section.section_name}
                                     </span>
 
                                     {section.description && (
                                       <span className="mt-0.5 block text-xs text-muted-foreground">
-                                        {
-                                          section.description
-                                        }
+                                        {section.description}
                                       </span>
                                     )}
                                   </span>
@@ -1314,9 +1181,7 @@ const handleSave = async () => {
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              setOpenSections(
-                                false,
-                              )
+                              setOpenSections(false)
                             }
                           >
                             تم
@@ -1338,28 +1203,20 @@ const handleSave = async () => {
 
                   <button
                     type="button"
-                    disabled={
-                      permissions.length ===
-                      0
-                    }
+                    disabled={permissions.length === 0}
                     onClick={() =>
-                      setOpenPermissions(
-                        (current) =>
-                          !current,
-                      )
+                      setOpenPermissions((current) => !current)
                     }
                     className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
                   >
                     <span
                       className={
-                        selectedPermissions.length ===
-                        0
+                        selectedPermissions.length === 0
                           ? 'text-muted-foreground'
                           : ''
                       }
                     >
-                      {permissions.length ===
-                      0
+                      {permissions.length === 0
                         ? 'لا توجد صلاحيات متاحة'
                         : selectedPermissionsLabel}
                     </span>
@@ -1368,11 +1225,9 @@ const handleSave = async () => {
                   </button>
 
                   {openPermissions &&
-                    permissions.length >
-                      0 && (
+                    permissions.length > 0 && (
                       <div className="absolute right-0 top-full z-[120] mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
-                        {currentRolePermissions.length >
-                          0 && (
+                        {currentRolePermissions.length > 0 && (
                           <div className="mb-4 rounded-lg border bg-muted/30 p-3">
                             <div className="mb-2">
                               <p className="text-sm font-semibold">
@@ -1386,13 +1241,9 @@ const handleSave = async () => {
 
                             <div className="grid gap-1 sm:grid-cols-2">
                               {currentRolePermissions.map(
-                                (
-                                  permission,
-                                ) => (
+                                (permission) => (
                                   <div
-                                    key={
-                                      permission.id
-                                    }
+                                    key={permission.id}
                                     className="flex items-start gap-3 rounded-md bg-background px-3 py-2.5"
                                   >
                                     <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-primary bg-primary text-primary-foreground">
@@ -1401,16 +1252,12 @@ const handleSave = async () => {
 
                                     <span className="min-w-0">
                                       <span className="block text-sm font-medium">
-                                        {
-                                          permission.permission_name
-                                        }
+                                        {permission.permission_name}
                                       </span>
 
                                       {permission.description && (
                                         <span className="mt-0.5 block text-xs text-muted-foreground">
-                                          {
-                                            permission.description
-                                          }
+                                          {permission.description}
                                         </span>
                                       )}
                                     </span>
@@ -1435,66 +1282,54 @@ const handleSave = async () => {
                           <div className="grid gap-1 sm:grid-cols-2">
                             {permissions
                               .filter(
-                                (
-                                  permission,
-                                ) =>
+                                (permission) =>
                                   !currentRolePermissionIds.includes(
                                     permission.id,
                                   ),
                               )
-                              .map(
-                                (
-                                  permission,
-                                ) => {
-                                  const selected =
-                                    selectedPermissions.includes(
-                                      permission.id,
-                                    )
-
-                                  return (
-                                    <button
-                                      key={
-                                        permission.id
-                                      }
-                                      type="button"
-                                      onClick={() =>
-                                        togglePermission(
-                                          permission.id,
-                                        )
-                                      }
-                                      className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
-                                    >
-                                      <span
-                                        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
-                                          selected
-                                            ? 'border-primary bg-primary text-primary-foreground'
-                                            : 'border-muted-foreground/40'
-                                        }`}
-                                      >
-                                        {selected && (
-                                          <Check className="size-3" />
-                                        )}
-                                      </span>
-
-                                      <span className="min-w-0">
-                                        <span className="block text-sm font-medium">
-                                          {
-                                            permission.permission_name
-                                          }
-                                        </span>
-
-                                        {permission.description && (
-                                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                                            {
-                                              permission.description
-                                            }
-                                          </span>
-                                        )}
-                                      </span>
-                                    </button>
+                              .map((permission) => {
+                                const selected =
+                                  selectedPermissions.includes(
+                                    permission.id,
                                   )
-                                },
-                              )}
+
+                                return (
+                                  <button
+                                    key={permission.id}
+                                    type="button"
+                                    onClick={() =>
+                                      togglePermission(
+                                        permission.id,
+                                      )
+                                    }
+                                    className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
+                                  >
+                                    <span
+                                      className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                        selected
+                                          ? 'border-primary bg-primary text-primary-foreground'
+                                          : 'border-muted-foreground/40'
+                                      }`}
+                                    >
+                                      {selected && (
+                                        <Check className="size-3" />
+                                      )}
+                                    </span>
+
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-medium">
+                                        {permission.permission_name}
+                                      </span>
+
+                                      {permission.description && (
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                          {permission.description}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </button>
+                                )
+                              })}
                           </div>
                         </div>
 
@@ -1504,9 +1339,7 @@ const handleSave = async () => {
                             variant="outline"
                             size="sm"
                             onClick={() =>
-                              setOpenPermissions(
-                                false,
-                              )
+                              setOpenPermissions(false)
                             }
                           >
                             تم
@@ -1522,7 +1355,6 @@ const handleSave = async () => {
               </div>
             </div>
 
-            {/* Bottom Bar */}
             <div className="flex items-center justify-end gap-2 border-t bg-background px-6 py-4">
               <Button
                 type="button"
@@ -1552,299 +1384,235 @@ const handleSave = async () => {
       )}
 
       {/* نافذة تفاصيل الصلاحيات وأقسام لوحة التحكم */}
-      {detailsOpen &&
-        selectedDetailsUser && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
-            <button
-              type="button"
-              aria-label="إغلاق"
-              onClick={() =>
-                setDetailsOpen(false)
-              }
-              className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-            />
+      {detailsOpen && selectedDetailsUser && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="إغلاق"
+            onClick={() => setDetailsOpen(false)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+          />
+
+          <div
+            dir="rtl"
+            className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Shield className="size-5" />
+                </div>
+
+                <div>
+                  <h2 className="font-semibold">
+                    الصلاحيات والوصول
+                  </h2>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedDetailsUser.full_name}
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setDetailsOpen(false)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
 
             <div
-              dir="rtl"
-              className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl"
+              className="users-details-scroll flex-1 overflow-y-auto p-6"
+              style={{
+                scrollbarColor: 'var(--primary) transparent',
+              }}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between border-b px-6 py-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Shield className="size-5" />
+              <div className="space-y-6">
+                <section>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Info className="size-4 text-primary" />
+
+                    <h3 className="font-semibold">
+                      أقسام لوحة التحكم
+                    </h3>
+
+                    <Badge variant="neutral">
+                      {(selectedDetailsUser.sectionIds ?? []).length}
+                    </Badge>
                   </div>
 
-                  <div>
-                    <h2 className="font-semibold">
-                      الصلاحيات والوصول
-                    </h2>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {
-                        selectedDetailsUser.full_name
-                      }
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() =>
-                    setDetailsOpen(
-                      false,
-                    )
-                  }
-                >
-                  <X className="size-4" />
-                </Button>
-              </div>
-
-              {/* التفاصيل */}
-              <div
-                className="users-details-scroll flex-1 overflow-y-auto p-6"
-                style={{
-                  scrollbarColor:
-                    'var(--primary) transparent',
-                }}
-              >
-                <div className="space-y-6">
-                  {/* أقسام لوحة التحكم */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Info className="size-4 text-primary" />
-
-                      <h3 className="font-semibold">
-                        أقسام لوحة التحكم
-                      </h3>
-
-                      <Badge variant="neutral">
-                        {
-                          (
-                            selectedDetailsUser.sectionIds ??
-                            []
-                          ).length
-                        }
-                      </Badge>
+                  {(selectedDetailsUser.sectionIds ?? []).length ===
+                  0 ? (
+                    <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      لا توجد أقسام مسندة لهذا المستخدم.
                     </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {(selectedDetailsUser.sectionIds ?? []).map(
+                        (sectionId, index) => {
+                          const section =
+                            dashboardSections.find(
+                              (item) => item.id === sectionId,
+                            )
 
-                    {(
-                      selectedDetailsUser.sectionIds ??
-                      []
-                    ).length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                        لا توجد أقسام مسندة لهذا المستخدم.
-                      </div>
-                    ) : (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {(
-                          selectedDetailsUser.sectionIds ??
-                          []
-                        ).map(
-                          (
-                            sectionId,
-                            index,
-                          ) => {
-                            const section =
-                              dashboardSections.find(
-                                (
-                                  item,
-                                ) =>
-                                  item.id ===
-                                  sectionId,
-                              )
+                          return (
+                            <div
+                              key={sectionId}
+                              className="rounded-xl border bg-muted/20 p-4"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                  {index + 1}
+                                </span>
 
-                            return (
-                              <div
-                                key={
-                                  sectionId
-                                }
-                                className="rounded-xl border bg-muted/20 p-4"
-                              >
-                                <div className="flex items-start gap-3">
-                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                    {index +
-                                      1}
-                                  </span>
+                                <div className="min-w-0">
+                                  <p className="font-medium">
+                                    {section?.section_name ??
+                                      sectionId}
+                                  </p>
 
-                                  <div className="min-w-0">
-                                    <p className="font-medium">
-                                      {section?.section_name ??
-                                        sectionId}
+                                  {section?.description && (
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      {section.description}
                                     </p>
-
-                                    {section?.description && (
-                                      <p className="mt-1 text-sm text-muted-foreground">
-                                        {
-                                          section.description
-                                        }
-                                      </p>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
                               </div>
-                            )
-                          },
-                        )}
-                      </div>
-                    )}
-                  </section>
-
-                  {/* الصلاحيات */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Shield className="size-4 text-primary" />
-
-                      <h3 className="font-semibold">
-                        الصلاحيات
-                      </h3>
-
-                      <Badge variant="neutral">
-                        {
-                          getEffectivePermissionIds(
-                            selectedDetailsUser,
-                          ).length
-                        }
-                      </Badge>
+                            </div>
+                          )
+                        },
+                      )}
                     </div>
+                  )}
+                </section>
 
-                    {getEffectivePermissionIds(
-                      selectedDetailsUser,
-                    ).length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                        لا توجد صلاحيات مسندة لهذا المستخدم.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {getEffectivePermissionIds(
+                <section>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Shield className="size-4 text-primary" />
+
+                    <h3 className="font-semibold">
+                      الصلاحيات
+                    </h3>
+
+                    <Badge variant="neutral">
+                      {
+                        getEffectivePermissionIds(
                           selectedDetailsUser,
-                        ).map(
-                          (
-                            permissionId,
-                            index,
-                          ) => {
-                            const permission =
-                              permissions.find(
-                                (
-                                  item,
-                                ) =>
-                                  item.id ===
-                                  permissionId,
-                              )
+                        ).length
+                      }
+                    </Badge>
+                  </div>
 
-                            const isRolePermission =
-                              (
-                                selectedDetailsUser.rolePermissionIds ??
-                                getRolePermissionIds(
-                                  selectedDetailsUser.role,
-                                )
-                              ).includes(
-                                permissionId,
-                              )
-
-                            return (
-                              <div
-                                key={
-                                  permissionId
-                                }
-                                className="rounded-xl border bg-muted/20 p-4"
-                              >
-                                <div className="flex items-start gap-3">
-                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                    {index +
-                                      1}
-                                  </span>
-
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <p className="font-medium">
-                                        {permission?.permission_name ??
-                                          permissionId}
-                                      </p>
-
-                                      <Badge
-                                        variant={
-                                          isRolePermission
-                                            ? 'neutral'
-                                            : 'success'
-                                        }
-                                      >
-                                        {isRolePermission
-                                          ? 'من الدور'
-                                          : 'إضافية'}
-                                      </Badge>
-                                    </div>
-
-                                    {permission?.description && (
-                                      <p className="mt-1 text-sm text-muted-foreground">
-                                        {
-                                          permission.description
-                                        }
-                                      </p>
-                                    )}
-
-                                    {permission?.permission_key && (
-                                      <p
-                                        className="mt-2 text-xs text-muted-foreground"
-                                        dir="ltr"
-                                      >
-                                        {
-                                          permission.permission_key
-                                        }
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          },
-                        )}
-                      </div>
-                    )}
-                  </section>
-                </div>
-              </div>
-
-              {/* Bottom */}
-              <div className="flex items-center justify-between border-t bg-muted/20 px-6 py-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>
-                    {
-                      (
-                        selectedDetailsUser.sectionIds ??
-                        []
-                      ).length
-                    } أقسام
-                  </span>
-
-                  <span>•</span>
-
-                  <span>
-                    {
-                      getEffectivePermissionIds(
+                  {getEffectivePermissionIds(
+                    selectedDetailsUser,
+                  ).length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      لا توجد صلاحيات مسندة لهذا المستخدم.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {getEffectivePermissionIds(
                         selectedDetailsUser,
-                      ).length
-                    } صلاحيات
-                  </span>
-                </div>
+                      ).map((permissionId, index) => {
+                        const permission =
+                          permissions.find(
+                            (item) => item.id === permissionId,
+                          )
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    setDetailsOpen(
-                      false,
-                    )
-                  }
-                >
-                  إغلاق
-                </Button>
+                        const isRolePermission = (
+                          selectedDetailsUser.rolePermissionIds ??
+                          getRolePermissionIds(
+                            selectedDetailsUser.role,
+                          )
+                        ).includes(permissionId)
+
+                        return (
+                          <div
+                            key={permissionId}
+                            className="rounded-xl border bg-muted/20 p-4"
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                {index + 1}
+                              </span>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-medium">
+                                    {permission?.permission_name ??
+                                      permissionId}
+                                  </p>
+
+                                  <Badge
+                                    variant={
+                                      isRolePermission
+                                        ? 'neutral'
+                                        : 'success'
+                                    }
+                                  >
+                                    {isRolePermission
+                                      ? 'من الدور'
+                                      : 'إضافية'}
+                                  </Badge>
+                                </div>
+
+                                {permission?.description && (
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    {permission.description}
+                                  </p>
+                                )}
+
+                                {permission?.permission_key && (
+                                  <p
+                                    className="mt-2 text-xs text-muted-foreground"
+                                    dir="ltr"
+                                  >
+                                    {permission.permission_key}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
               </div>
             </div>
+
+            <div className="flex items-center justify-between border-t bg-muted/20 px-6 py-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>
+                  {(selectedDetailsUser.sectionIds ?? []).length} أقسام
+                </span>
+
+                <span>•</span>
+
+                <span>
+                  {
+                    getEffectivePermissionIds(
+                      selectedDetailsUser,
+                    ).length
+                  }{' '}
+                  صلاحيات
+                </span>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDetailsOpen(false)}
+              >
+                إغلاق
+              </Button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
       <style jsx>{`
         .users-table-scroll,
