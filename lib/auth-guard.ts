@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
@@ -33,12 +32,12 @@ export type GuardResult = {
 export async function validateCurrentAccess(): Promise<GuardResult> {
   try {
     const supabase = await createSupabaseServerClient()
-
     const cookieStore = await cookies()
-    const cookieNames = cookieStore
-      .getAll()
-      .map((cookie) => cookie.name)
 
+    const allCookies = cookieStore.getAll()
+    const cookieNames = allCookies.map((cookie) => cookie.name)
+
+    // Diagnostic only: never log cookie values or authentication tokens.
     console.log('[auth-guard] Session cookie diagnostic:', {
       hasSupabaseAuthCookie: cookieNames.some(
         (name) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name),
@@ -46,6 +45,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       hasCustomSessionCookie: cookieNames.includes(SESSION_COOKIE),
       hasDeviceCookie: cookieNames.includes(DEVICE_COOKIE),
     })
+
+    console.log('[auth-guard] Supabase cookie names:',
+      allCookies
+        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name))
+        .map((cookie) => ({
+          name: cookie.name,
+          length: cookie.value.length,
+        })),
+    )
 
     const {
       data: { user },
