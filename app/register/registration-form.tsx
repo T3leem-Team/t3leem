@@ -780,7 +780,7 @@ export default function RegistrationForm(
                 className="mt-7 space-y-8 sm:mt-8"
               >
 
-                {/* بيانات الطالب                 {/* بيانات الطالب */}
+                {/* بيانات الطالب                 {/* بيانات الطالب                 {/* بيانات الطالب */}
                 <section className="space-y-5">
                   <SectionHeader
                     title="بيانات الطالب"
@@ -843,6 +843,17 @@ export default function RegistrationForm(
                             settings.required_personal_id
                           }
                         />
+
+                        {personalId.length > 0 &&
+                          personalId.length !== 9 && (
+                            <p
+                              className="mt-1.5 text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              الرقم الشخصي يجب أن يتكون من 9 أرقام.
+                              {` باقي ${9 - personalId.length} أرقام.`}
+                            </p>
+                          )}
                       </div>
                     )}
 
@@ -938,6 +949,17 @@ export default function RegistrationForm(
                             settings.required_phone
                           }
                         />
+
+                        {phone.length > 0 &&
+                          phone.length !== 8 && (
+                            <p
+                              className="mt-1.5 text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم الاتصال الأساسي يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - phone.length} أرقام.`}
+                            </p>
+                          )}
                       </div>
                     )}
 
@@ -1063,6 +1085,17 @@ export default function RegistrationForm(
                             settings.required_whatsapp
                           }
                         />
+
+                        {whatsapp.length > 0 &&
+                          whatsapp.length !== 8 && (
+                            <p
+                              className="mt-1.5 text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم التواصل الثاني يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - whatsapp.length} أرقام.`}
+                            </p>
+                          )}
                       </div>
                     )}
 
@@ -1095,6 +1128,17 @@ export default function RegistrationForm(
                             settings.required_student_phone
                           }
                         />
+
+                        {studentPhone.length > 0 &&
+                          studentPhone.length !== 8 && (
+                            <p
+                              className="mt-1.5 text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم الطالب يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - studentPhone.length} أرقام.`}
+                            </p>
+                          )}
                       </div>
                       )}
 
