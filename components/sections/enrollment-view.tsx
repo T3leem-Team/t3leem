@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+
 
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   FileArchive,
   FileSpreadsheet,
@@ -286,7 +285,7 @@ type KeyRow = {
 }
 
 export function EnrollmentView() {
-  const router = useRouter()
+  
 
   const [requests, setRequests] =
     useState<RegistrationRequest[]>(
