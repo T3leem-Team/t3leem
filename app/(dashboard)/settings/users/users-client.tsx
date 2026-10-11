@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
-  ArrowRight,
   Check,
   ChevronDown,
   Edit3,
@@ -91,9 +89,7 @@ const roles: {
   },
 ]
 
-export default function UsersClient() {
-  const router = useRouter()
-
+export default function Page() {
   const [users, setUsers] = useState<User[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [dashboardSections, setDashboardSections] = useState<
@@ -656,18 +652,6 @@ export default function UsersClient() {
         description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
       />
 
-      {/* زر العودة */}
-      <div className="flex justify-start">
-        <Button
-          type="button"
-          onClick={() => router.back()}
-          className="h-10 gap-2 bg-primary px-4 text-primary-foreground shadow-sm hover:bg-primary/90"
-        >
-          <ArrowRight className="size-4" />
-          عودة
-        </Button>
-      </div>
-
       {/* الإحصائيات */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -904,6 +888,7 @@ export default function UsersClient() {
                                 : 'hover:bg-muted/30'
                             }`}
                           >
+                            {/* السيريال */}
                             <td className="px-5 py-4 text-center">
                               <span
                                 className={`inline-flex size-8 items-center justify-center rounded-lg text-xs font-semibold ${
@@ -916,6 +901,7 @@ export default function UsersClient() {
                               </span>
                             </td>
 
+                            {/* المستخدم */}
                             <td className="px-5 py-4">
                               <button
                                 type="button"
@@ -952,6 +938,7 @@ export default function UsersClient() {
                               </button>
                             </td>
 
+                            {/* البريد */}
                             <td className="px-5 py-4">
                               <span
                                 className="text-sm"
@@ -962,6 +949,7 @@ export default function UsersClient() {
                               </span>
                             </td>
 
+                            {/* الدور */}
                             <td className="px-5 py-4">
                               <Badge variant="neutral">
                                 {getRoleLabel(
@@ -970,6 +958,7 @@ export default function UsersClient() {
                               </Badge>
                             </td>
 
+                            {/* الصلاحيات */}
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-2">
                                 {firstPermissionId ? (
@@ -1011,6 +1000,7 @@ export default function UsersClient() {
                               </div>
                             </td>
 
+                            {/* الحالة */}
                             <td className="px-5 py-4">
                               {user.is_active ? (
                                 <Badge variant="success">
@@ -1023,6 +1013,7 @@ export default function UsersClient() {
                               )}
                             </td>
 
+                            {/* الإجراءات */}
                             <td className="px-5 py-4">
                               <div
                                 className="flex items-center gap-2"
@@ -1102,6 +1093,7 @@ export default function UsersClient() {
                 </table>
               </div>
 
+              {/* Bottom Bar */}
               <div className="flex min-h-14 items-center justify-between border-t bg-muted/20 px-5 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="size-4" />
@@ -1154,10 +1146,881 @@ export default function UsersClient() {
         </CardContent>
       </Card>
 
-      {/* ملاحظة:
-          بقية الملف من عند نافذة التعديل الجانبية،
-          ونوافذ التفاصيل، و CSS يبقى كما هو تمامًا
-          في الملف الذي أرسلته. */}
+      {/* نافذة التعديل الجانبية */}
+      {showForm && (
+        <div className="fixed inset-0 z-[100]">
+          <button
+            type="button"
+            aria-label="إغلاق"
+            onClick={resetForm}
+            className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
+          />
+
+          <aside
+            dir="rtl"
+            className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l bg-background shadow-2xl"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b px-6 py-5">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  {editingId
+                    ? 'تعديل المستخدم'
+                    : 'إضافة مستخدم جديد'}
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  بيانات الحساب والصلاحيات وأقسام النظام.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={resetForm}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            {/* المحتوى */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {error && (
+                <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-5">
+                {/* اسم المستخدم */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    اسم المستخدم
+                  </label>
+
+                  <input
+                    value={username}
+                    onChange={(event) =>
+                      setUsername(
+                        event.target.value,
+                      )
+                    }
+                    disabled={
+                      editingId !== null
+                    }
+                    placeholder="مثال: ahmed"
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+
+                  <p className="text-xs text-muted-foreground">
+                    يستخدم لتسجيل الدخول إلى النظام.
+                  </p>
+                </div>
+
+                {/* البريد */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    البريد الإلكتروني
+                  </label>
+
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) =>
+                      setEmail(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="example@email.com"
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+
+                  <p className="text-xs text-muted-foreground">
+                    يستخدم لاستعادة كلمة المرور.
+                  </p>
+                </div>
+
+                {/* الاسم الكامل */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    الاسم الكامل
+                  </label>
+
+                  <input
+                    value={fullName}
+                    onChange={(event) =>
+                      setFullName(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="مثال: أحمد محمد"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                {/* القسم */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    القسم
+                  </label>
+
+                  <input
+                    value={department}
+                    onChange={(event) =>
+                      setDepartment(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="اختياري"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                {/* كلمة المرور */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    كلمة المرور
+                  </label>
+
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) =>
+                      setPassword(
+                        event.target.value,
+                      )
+                    }
+                    placeholder={
+                      editingId
+                        ? 'اتركها فارغة إذا لا تريد تغييرها'
+                        : '8 أحرف على الأقل'
+                    }
+                    dir="ltr"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-left text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                {/* الدور */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    الدور
+                  </label>
+
+                  <select
+                    value={role}
+                    onChange={(event) => {
+                      const newRole =
+                        event.target
+                          .value as Role
+
+                      setRole(
+                        newRole,
+                      )
+
+                      const newRolePermissionIds =
+                        getRolePermissionIds(
+                          newRole,
+                        )
+
+                      setSelectedPermissions(
+                        (current) =>
+                          current.filter(
+                            (id) =>
+                              !newRolePermissionIds.includes(
+                                id,
+                              ),
+                          ),
+                      )
+                    }}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    {roles.map(
+                      (item) => (
+                        <option
+                          key={
+                            item.value
+                          }
+                          value={
+                            item.value
+                          }
+                        >
+                          {item.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+
+                {/* أقسام لوحة التحكم */}
+                <div className="relative space-y-2">
+                  <label className="text-sm font-medium">
+                    أقسام لوحة التحكم
+                  </label>
+
+                  <button
+                    type="button"
+                    disabled={
+                      activeDashboardSections.length ===
+                      0
+                    }
+                    onClick={() =>
+                      setOpenSections(
+                        (current) =>
+                          !current,
+                      )
+                    }
+                    className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
+                  >
+                    <span
+                      className={
+                        selectedSections.length ===
+                        0
+                          ? 'text-muted-foreground'
+                          : ''
+                      }
+                    >
+                      {activeDashboardSections.length ===
+                      0
+                        ? 'لا توجد أقسام متاحة'
+                        : selectedSectionsLabel}
+                    </span>
+
+                    <ChevronDown className="size-4 text-muted-foreground" />
+                  </button>
+
+                  {openSections &&
+                    activeDashboardSections.length >
+                      0 && (
+                      <div className="absolute right-0 top-full z-[120] mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
+                        <div className="grid gap-1 sm:grid-cols-2">
+                          {activeDashboardSections.map(
+                            (section) => {
+                              const selected =
+                                selectedSections.includes(
+                                  section.id,
+                                )
+
+                              return (
+                                <button
+                                  key={
+                                    section.id
+                                  }
+                                  type="button"
+                                  onClick={() =>
+                                    toggleSection(
+                                      section.id,
+                                    )
+                                  }
+                                  className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
+                                >
+                                  <span
+                                    className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                      selected
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-muted-foreground/40'
+                                    }`}
+                                  >
+                                    {selected && (
+                                      <Check className="size-3" />
+                                    )}
+                                  </span>
+
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-medium">
+                                      {
+                                        section.section_name
+                                      }
+                                    </span>
+
+                                    {section.description && (
+                                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                                        {
+                                          section.description
+                                        }
+                                      </span>
+                                    )}
+                                  </span>
+                                </button>
+                              )
+                            },
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex justify-end border-t pt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setOpenSections(
+                                false,
+                              )
+                            }
+                          >
+                            تم
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                  <p className="text-xs text-muted-foreground">
+                    تحدد الصفحات الرئيسية التي يستطيع المستخدم الوصول إليها.
+                  </p>
+                </div>
+
+                {/* الصلاحيات */}
+                <div className="relative space-y-2">
+                  <label className="text-sm font-medium">
+                    الصلاحيات التفصيلية
+                  </label>
+
+                  <button
+                    type="button"
+                    disabled={
+                      permissions.length ===
+                      0
+                    }
+                    onClick={() =>
+                      setOpenPermissions(
+                        (current) =>
+                          !current,
+                      )
+                    }
+                    className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm hover:bg-muted/40 disabled:opacity-60"
+                  >
+                    <span
+                      className={
+                        selectedPermissions.length ===
+                        0
+                          ? 'text-muted-foreground'
+                          : ''
+                      }
+                    >
+                      {permissions.length ===
+                      0
+                        ? 'لا توجد صلاحيات متاحة'
+                        : selectedPermissionsLabel}
+                    </span>
+
+                    <ChevronDown className="size-4 text-muted-foreground" />
+                  </button>
+
+                  {openPermissions &&
+                    permissions.length >
+                      0 && (
+                      <div className="absolute right-0 top-full z-[120] mt-1 w-full rounded-lg border bg-background p-3 shadow-xl">
+                        {currentRolePermissions.length >
+                          0 && (
+                          <div className="mb-4 rounded-lg border bg-muted/30 p-3">
+                            <div className="mb-2">
+                              <p className="text-sm font-semibold">
+                                صلاحيات الدور
+                              </p>
+
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                تأتي تلقائيًا من الدور.
+                              </p>
+                            </div>
+
+                            <div className="grid gap-1 sm:grid-cols-2">
+                              {currentRolePermissions.map(
+                                (
+                                  permission,
+                                ) => (
+                                  <div
+                                    key={
+                                      permission.id
+                                    }
+                                    className="flex items-start gap-3 rounded-md bg-background px-3 py-2.5"
+                                  >
+                                    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border border-primary bg-primary text-primary-foreground">
+                                      <Check className="size-3" />
+                                    </span>
+
+                                    <span className="min-w-0">
+                                      <span className="block text-sm font-medium">
+                                        {
+                                          permission.permission_name
+                                        }
+                                      </span>
+
+                                      {permission.description && (
+                                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                                          {
+                                            permission.description
+                                          }
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="mb-2">
+                            <p className="text-sm font-semibold">
+                              صلاحيات إضافية للمستخدم
+                            </p>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              تضاف لهذا المستخدم فقط.
+                            </p>
+                          </div>
+
+                          <div className="grid gap-1 sm:grid-cols-2">
+                            {permissions
+                              .filter(
+                                (
+                                  permission,
+                                ) =>
+                                  !currentRolePermissionIds.includes(
+                                    permission.id,
+                                  ),
+                              )
+                              .map(
+                                (
+                                  permission,
+                                ) => {
+                                  const selected =
+                                    selectedPermissions.includes(
+                                      permission.id,
+                                    )
+
+                                  return (
+                                    <button
+                                      key={
+                                        permission.id
+                                      }
+                                      type="button"
+                                      onClick={() =>
+                                        togglePermission(
+                                          permission.id,
+                                        )
+                                      }
+                                      className="flex items-start gap-3 rounded-md px-3 py-2.5 text-right hover:bg-muted"
+                                    >
+                                      <span
+                                        className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border ${
+                                          selected
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-muted-foreground/40'
+                                        }`}
+                                      >
+                                        {selected && (
+                                          <Check className="size-3" />
+                                        )}
+                                      </span>
+
+                                      <span className="min-w-0">
+                                        <span className="block text-sm font-medium">
+                                          {
+                                            permission.permission_name
+                                          }
+                                        </span>
+
+                                        {permission.description && (
+                                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                                            {
+                                              permission.description
+                                            }
+                                          </span>
+                                        )}
+                                      </span>
+                                    </button>
+                                  )
+                                },
+                              )}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex justify-end border-t pt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setOpenPermissions(
+                                false,
+                              )
+                            }
+                          >
+                            تم
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                  <p className="text-xs text-muted-foreground">
+                    صلاحيات الدور تُطبق تلقائيًا، ويمكن إضافة صلاحيات إضافية.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Bar */}
+            <div className="flex items-center justify-end gap-2 border-t bg-background px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetForm}
+                disabled={saving}
+              >
+                إلغاء
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving && (
+                  <Loader2 className="size-4 animate-spin" />
+                )}
+
+                {editingId
+                  ? 'حفظ التعديلات'
+                  : 'إضافة المستخدم'}
+              </Button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* نافذة تفاصيل الصلاحيات وأقسام لوحة التحكم */}
+      {detailsOpen &&
+        selectedDetailsUser && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="إغلاق"
+              onClick={() =>
+                setDetailsOpen(false)
+              }
+              className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+            />
+
+            <div
+              dir="rtl"
+              className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b px-6 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Shield className="size-5" />
+                  </div>
+
+                  <div>
+                    <h2 className="font-semibold">
+                      الصلاحيات والوصول
+                    </h2>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {
+                        selectedDetailsUser.full_name
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    setDetailsOpen(
+                      false,
+                    )
+                  }
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+
+              {/* التفاصيل */}
+              <div
+                className="users-details-scroll flex-1 overflow-y-auto p-6"
+                style={{
+                  scrollbarColor:
+                    'var(--primary) transparent',
+                }}
+              >
+                <div className="space-y-6">
+                  {/* أقسام لوحة التحكم */}
+                  <section>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Info className="size-4 text-primary" />
+
+                      <h3 className="font-semibold">
+                        أقسام لوحة التحكم
+                      </h3>
+
+                      <Badge variant="neutral">
+                        {
+                          (
+                            selectedDetailsUser.sectionIds ??
+                            []
+                          ).length
+                        }
+                      </Badge>
+                    </div>
+
+                    {(
+                      selectedDetailsUser.sectionIds ??
+                      []
+                    ).length === 0 ? (
+                      <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                        لا توجد أقسام مسندة لهذا المستخدم.
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {(
+                          selectedDetailsUser.sectionIds ??
+                          []
+                        ).map(
+                          (
+                            sectionId,
+                            index,
+                          ) => {
+                            const section =
+                              dashboardSections.find(
+                                (
+                                  item,
+                                ) =>
+                                  item.id ===
+                                  sectionId,
+                              )
+
+                            return (
+                              <div
+                                key={
+                                  sectionId
+                                }
+                                className="rounded-xl border bg-muted/20 p-4"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                    {index +
+                                      1}
+                                  </span>
+
+                                  <div className="min-w-0">
+                                    <p className="font-medium">
+                                      {section?.section_name ??
+                                        sectionId}
+                                    </p>
+
+                                    {section?.description && (
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        {
+                                          section.description
+                                        }
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          },
+                        )}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* الصلاحيات */}
+                  <section>
+                    <div className="mb-3 flex items-center gap-2">
+                      <Shield className="size-4 text-primary" />
+
+                      <h3 className="font-semibold">
+                        الصلاحيات
+                      </h3>
+
+                      <Badge variant="neutral">
+                        {
+                          getEffectivePermissionIds(
+                            selectedDetailsUser,
+                          ).length
+                        }
+                      </Badge>
+                    </div>
+
+                    {getEffectivePermissionIds(
+                      selectedDetailsUser,
+                    ).length === 0 ? (
+                      <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                        لا توجد صلاحيات مسندة لهذا المستخدم.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {getEffectivePermissionIds(
+                          selectedDetailsUser,
+                        ).map(
+                          (
+                            permissionId,
+                            index,
+                          ) => {
+                            const permission =
+                              permissions.find(
+                                (
+                                  item,
+                                ) =>
+                                  item.id ===
+                                  permissionId,
+                              )
+
+                            const isRolePermission =
+                              (
+                                selectedDetailsUser.rolePermissionIds ??
+                                getRolePermissionIds(
+                                  selectedDetailsUser.role,
+                                )
+                              ).includes(
+                                permissionId,
+                              )
+
+                            return (
+                              <div
+                                key={
+                                  permissionId
+                                }
+                                className="rounded-xl border bg-muted/20 p-4"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                    {index +
+                                      1}
+                                  </span>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="font-medium">
+                                        {permission?.permission_name ??
+                                          permissionId}
+                                      </p>
+
+                                      <Badge
+                                        variant={
+                                          isRolePermission
+                                            ? 'neutral'
+                                            : 'success'
+                                        }
+                                      >
+                                        {isRolePermission
+                                          ? 'من الدور'
+                                          : 'إضافية'}
+                                      </Badge>
+                                    </div>
+
+                                    {permission?.description && (
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        {
+                                          permission.description
+                                        }
+                                      </p>
+                                    )}
+
+                                    {permission?.permission_key && (
+                                      <p
+                                        className="mt-2 text-xs text-muted-foreground"
+                                        dir="ltr"
+                                      >
+                                        {
+                                          permission.permission_key
+                                        }
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          },
+                        )}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
+
+              {/* Bottom */}
+              <div className="flex items-center justify-between border-t bg-muted/20 px-6 py-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>
+                    {
+                      (
+                        selectedDetailsUser.sectionIds ??
+                        []
+                      ).length
+                    } أقسام
+                  </span>
+
+                  <span>•</span>
+
+                  <span>
+                    {
+                      getEffectivePermissionIds(
+                        selectedDetailsUser,
+                      ).length
+                    } صلاحيات
+                  </span>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setDetailsOpen(
+                      false,
+                    )
+                  }
+                >
+                  إغلاق
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      <style jsx>{`
+        .users-table-scroll,
+        .users-details-scroll {
+          direction: rtl;
+          scrollbar-width: auto;
+          scrollbar-color: var(--primary) transparent;
+        }
+
+        .users-table-scroll::-webkit-scrollbar,
+        .users-details-scroll::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-track,
+        .users-details-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-thumb,
+        .users-details-scroll::-webkit-scrollbar-thumb {
+          background: var(--primary);
+          border: 3px solid transparent;
+          border-radius: 9999px;
+          background-clip: padding-box;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-thumb:hover,
+        .users-details-scroll::-webkit-scrollbar-thumb:hover {
+          background: var(--primary);
+          border: 2px solid transparent;
+          background-clip: padding-box;
+        }
+      `}</style>
     </div>
   )
 }
