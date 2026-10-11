@@ -840,90 +840,90 @@ export default function RegistrationSettingsPage() {
 
     const fieldIds = data.map((field) => field.id)
 
-    const {
-      data: visibilityData,
-      error: visibilityError,
-    } = await supabase
-      .from('custom_field_visibility')
-      .select(`
-        custom_field_id,
-        section,
-        is_visible,
-        is_required,
-        sort_order
-      `)
-      .in('custom_field_id', fieldIds)
+const {
+  data: visibilityData,
+  error: visibilityError,
+} = await supabase
+  .from('custom_field_visibility')
+  .select(`
+    custom_field_id,
+    section,
+    is_visible,
+    is_required,
+    sort_order
+  `)
+  .in('custom_field_id', fieldIds)
 
-    if (visibilityError) {
-      console.error(
-        'Error loading custom field visibility:',
-        visibilityError,
-      )
+if (visibilityError) {
+  console.error(
+    'Error loading custom field visibility:',
+    visibilityError,
+  )
 
-      setErrorMessage(
-        `تم تحميل الحقول ولكن تعذر تحميل إعدادات ظهورها: ${visibilityError.message}`,
-      )
+  setErrorMessage(
+    `تم تحميل الحقول ولكن تعذر تحميل إعدادات ظهورها: ${visibilityError.message}`,
+  )
+}
+
+type VisibilitySection =
+  | 'registration'
+  | 'students'
+  | 'payments'
+
+type SectionVisibility = {
+  is_visible: boolean
+  is_required: boolean
+  sort_order: number
+}
+
+const fields: CustomField[] = data.map((field) => {
+  const defaultVisibility: SectionVisibility = {
+    is_visible: false,
+    is_required: false,
+    sort_order: field.sort_order,
+  }
+
+  const visibility: Record<
+    VisibilitySection,
+    SectionVisibility
+  > = {
+    registration: { ...defaultVisibility },
+    students: { ...defaultVisibility },
+    payments: { ...defaultVisibility },
+  }
+
+  for (const row of visibilityData ?? []) {
+    if (row.custom_field_id !== field.id) {
+      continue
     }
 
-    type VisibilitySection =
-      | 'registration'
-      | 'students'
-      | 'payments'
+    const section = row.section as VisibilitySection
 
-    type SectionVisibility = {
-      is_visible: boolean
-      is_required: boolean
-      sort_order: number
+    if (
+      section !== 'registration' &&
+      section !== 'students' &&
+      section !== 'payments'
+    ) {
+      continue
     }
 
-    const fields: CustomField[] = data.map((field) => {
-      const defaultVisibility: SectionVisibility = {
-        is_visible: false,
-        is_required: false,
-        sort_order: field.sort_order,
-      }
+    visibility[section] = {
+      is_visible: row.is_visible ?? false,
+      is_required: row.is_required ?? false,
+      sort_order:
+        row.sort_order ?? field.sort_order,
+    }
+  }
 
-      const visibility: Record<
-        VisibilitySection,
-        SectionVisibility
-      > = {
-        registration: { ...defaultVisibility },
-        students: { ...defaultVisibility },
-        payments: { ...defaultVisibility },
-      }
+  return {
+    ...field,
+    visibility,
+  }
+})
 
-      for (const row of visibilityData ?? []) {
-        if (row.custom_field_id !== field.id) {
-          continue
-        }
-
-        const section = row.section
-
-        if (
-          section !== 'registration' &&
-          section !== 'students' &&
-          section !== 'payments'
-        ) {
-          continue
-        }
-
-        visibility[section] = {
-          is_visible: row.is_visible ?? false,
-          is_required: row.is_required ?? false,
-          sort_order:
-            row.sort_order ?? field.sort_order,
-        }
-      }
-
-      return {
-        ...field,
-        visibility,
-      }
-    })
-
-    setCustomFields(fields)
-  } catch (error) {
-    console.error('Error loading custom fields:', error)
+setCustomFields(fields)
+} catch (error) {
+  console.error('Error loading custom fields:', error)
 
     setErrorMessage(
       'حدث خطأ غير متوقع أثناء تحميل الحقول الإضافية.',
@@ -2399,7 +2399,7 @@ async function saveSettings() {
                           {field.name}
                         </h3>
 
-                        <Badge variant="outline">
+                        <Badge variant="neutral">
                           {
                             FIELD_TYPE_LABELS[
                               field.field_type as FieldType
