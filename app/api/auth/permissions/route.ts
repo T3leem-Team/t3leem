@@ -26,17 +26,58 @@ const PRIMARY_ADMIN_USERNAME = 'admin'
 const TEACHERS_ASSIGNMENTS_PERMISSION_ID =
   '549e42cf-2348-4750-a943-2ca4ce51177a'
 
+type SystemElement = {
+  element_key: string
+  is_active: boolean
+}
+
+type SystemElementRelation =
+  | SystemElement
+  | SystemElement[]
+  | null
+
+type UserSystemElementRow = {
+  element_id: string
+  system_elements: SystemElementRelation
+}
+
+function getActiveSystemElementKeys(
+  rows: UserSystemElementRow[],
+): string[] {
+  const keys: string[] = []
+
+  for (const row of rows) {
+    const relation = row.system_elements
+
+    const elements: SystemElement[] =
+      Array.isArray(relation)
+        ? relation
+        : relation
+          ? [relation]
+          : []
+
+    for (const element of elements) {
+      if (
+        element.is_active &&
+        typeof element.element_key === 'string' &&
+        element.element_key.length > 0
+      ) {
+        keys.push(element.element_key)
+      }
+    }
+  }
+
+  return Array.from(new Set(keys))
+}
+
 /**
- * تحميل صلاحيات المستخدم الحالية
+ * تحميل صلاحيات المستخدم الحالية.
  *
- * هنا لا نعتمد على اسم الدور كحاجز أمني.
- * الدور يستخدم فقط لجلب الصلاحيات المرتبطة به.
+ * الدور يستخدم لجلب الصلاحيات المرتبطة به،
+ * ولا يُستخدم وحده لاتخاذ قرار السماح.
  */
 async function getCurrentAccess() {
-  const {
-    access,
-    response,
-  } = await requireAuth()
+  const { access, response } = await requireAuth()
 
   if (response) {
     return {
@@ -51,8 +92,7 @@ async function getCurrentAccess() {
       response: NextResponse.json(
         {
           authenticated: false,
-          error:
-            'تعذر تحديد حساب المستخدم.',
+          error: 'تعذر تحديد حساب المستخدم.',
         },
         { status: 401 },
       ),
@@ -60,26 +100,17 @@ async function getCurrentAccess() {
   }
 
   /*
-   * نحتاج username فقط لأجل منطق
-   * system_elements القديم الخاص بالحساب الأساسي.
-   *
-   * لا نستخدم role هنا لاتخاذ قرار صلاحيات
-   * المستخدم الأساسية.
+   * نحتاج username لمنطق system_elements
+   * الخاص بالحساب الأساسي.
    */
   const {
     data: profile,
     error: profileError,
-  } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select(
-        'id, username, role, is_active',
-      )
-      .eq(
-        'id',
-        access.profileId,
-      )
-      .maybeSingle()
+  } = await supabaseAdmin
+    .from('user_profiles')
+    .select('id, username, role, is_active')
+    .eq('id', access.profileId)
+    .maybeSingle()
 
   if (profileError) {
     console.error(
@@ -91,25 +122,20 @@ async function getCurrentAccess() {
       access: null,
       response: NextResponse.json(
         {
-          error:
-            'تعذر قراءة المستخدم الحالي.',
+          error: 'تعذر قراءة المستخدم الحالي.',
         },
         { status: 500 },
       ),
     }
   }
 
-  if (
-    !profile ||
-    !profile.is_active
-  ) {
+  if (!profile || !profile.is_active) {
     return {
       access: null,
       response: NextResponse.json(
         {
           authenticated: false,
-          error:
-            'حساب المستخدم غير نشط.',
+          error: 'حساب المستخدم غير نشط.',
         },
         { status: 403 },
       ),
@@ -122,16 +148,10 @@ async function getCurrentAccess() {
   const {
     data: directRows,
     error: directError,
-  } =
-    await supabaseAdmin
-      .from('user_permissions')
-      .select(
-        'permission_id',
-      )
-      .eq(
-        'user_profile_id',
-        access.profileId,
-      )
+  } = await supabaseAdmin
+    .from('user_permissions')
+    .select('permission_id')
+    .eq('user_profile_id', access.profileId)
 
   if (directError) {
     console.error(
@@ -143,8 +163,7 @@ async function getCurrentAccess() {
       access: null,
       response: NextResponse.json(
         {
-          error:
-            'تعذر قراءة صلاحيات المستخدم.',
+          error: 'تعذر قراءة صلاحيات المستخدم.',
         },
         { status: 500 },
       ),
@@ -153,30 +172,17 @@ async function getCurrentAccess() {
 
   /*
    * صلاحيات الدور.
-   *
-   * الدور هنا مجرد وسيلة لجلب الصلاحيات
-   * المرتبطة به، وليس حاجزاً مثل:
-   *
-   * role === 'Admin'
    */
-  let roleRows: {
-    permission_id: string
-  }[] = []
+  let roleRows: { permission_id: string }[] = []
 
   if (access.role) {
     const {
       data,
       error: roleError,
-    } =
-      await supabaseAdmin
-        .from('role_permissions')
-        .select(
-          'permission_id',
-        )
-        .eq(
-          'role',
-          access.role,
-        )
+    } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id')
+      .eq('role', access.role)
 
     if (roleError) {
       console.error(
@@ -188,8 +194,7 @@ async function getCurrentAccess() {
         access: null,
         response: NextResponse.json(
           {
-            error:
-              'تعذر قراءة صلاحيات الدور.',
+            error: 'تعذر قراءة صلاحيات الدور.',
           },
           { status: 500 },
         ),
@@ -200,39 +205,33 @@ async function getCurrentAccess() {
   }
 
   /*
-   * دمج الصلاحيات المباشرة + صلاحيات الدور.
+   * دمج الصلاحيات المباشرة وصلاحيات الدور.
    */
-  const permissionIds =
-    Array.from(
-      new Set(
-        [
-          ...(directRows ?? []).map(
-            (row) =>
-              row.permission_id,
-          ),
-
-          ...roleRows.map(
-            (row) =>
-              row.permission_id,
-          ),
-        ].filter(Boolean),
+  const permissionIds = Array.from(
+    new Set(
+      [
+        ...(directRows ?? []).map(
+          (row) => row.permission_id,
+        ),
+        ...roleRows.map(
+          (row) => row.permission_id,
+        ),
+      ].filter(
+        (permissionId): permissionId is string =>
+          typeof permissionId === 'string' &&
+          permissionId.length > 0,
       ),
-    )
+    ),
+  )
 
   /*
-   * أسماء الصلاحيات المستخدمة حالياً
-   * في الواجهة.
-   *
-   * إذا كان المستخدم يملك صلاحية
-   * teachers.manage_assignments
-   * نرسل اسمها للواجهة.
+   * أسماء الصلاحيات المستخدمة في الواجهة.
    */
   const permissionNames: string[] = []
 
-  const hasManageAssignments =
-    permissionIds.includes(
-      TEACHERS_ASSIGNMENTS_PERMISSION_ID,
-    )
+  const hasManageAssignments = permissionIds.includes(
+    TEACHERS_ASSIGNMENTS_PERMISSION_ID,
+  )
 
   if (hasManageAssignments) {
     permissionNames.push(
@@ -241,35 +240,21 @@ async function getCurrentAccess() {
   }
 
   /*
-   * صلاحيات عناصر النظام
-   *
-   * هذه منفصلة عن permissions.
-   *
-   * الحساب الأساسي username = admin
-   * يحتفظ بالسلوك الحالي: يرى جميع العناصر النشطة.
-   *
-   * باقي المستخدمين يحصلون فقط على العناصر
-   * المعيّنة لهم.
+   * صلاحيات عناصر النظام.
    */
   let systemElementKeys: string[] = []
 
-  if (
-    profile.username ===
-    PRIMARY_ADMIN_USERNAME
-  ) {
+  if (profile.username === PRIMARY_ADMIN_USERNAME) {
+    /*
+     * الحساب الأساسي يرى جميع العناصر النشطة.
+     */
     const {
       data: elements,
       error: elementsError,
-    } =
-      await supabaseAdmin
-        .from('system_elements')
-        .select(
-          'element_key',
-        )
-        .eq(
-          'is_active',
-          true,
-        )
+    } = await supabaseAdmin
+      .from('system_elements')
+      .select('element_key')
+      .eq('is_active', true)
 
     if (elementsError) {
       console.error(
@@ -281,43 +266,45 @@ async function getCurrentAccess() {
         access: null,
         response: NextResponse.json(
           {
-            error:
-              'تعذر قراءة صلاحيات عناصر النظام.',
+            error: 'تعذر قراءة صلاحيات عناصر النظام.',
           },
           { status: 500 },
         ),
       }
     }
 
-    systemElementKeys =
-      Array.from(
-        new Set(
-          (elements ?? [])
-            .map(
-              (element) =>
-                element.element_key,
-            )
-            .filter(Boolean),
-        ),
-      )
+    systemElementKeys = Array.from(
+      new Set(
+        (elements ?? [])
+          .map((element) => element.element_key)
+          .filter(
+            (key): key is string =>
+              typeof key === 'string' &&
+              key.length > 0,
+          ),
+      ),
+    )
   } else {
+    /*
+     * بقية المستخدمين يحصلون على العناصر
+     * النشطة المعيّنة لهم فقط.
+     *
+     * العلاقة قد تصل كعنصر أو كمصفوفة؛
+     * لذلك نعالج الشكلين.
+     */
     const {
       data: elementRows,
       error: elementRowsError,
-    } =
-      await supabaseAdmin
-        .from('system_element_users')
-        .select(`
-          element_id,
-          system_elements!inner (
-            element_key,
-            is_active
-          )
-        `)
-        .eq(
-          'user_profile_id',
-          access.profileId,
+    } = await supabaseAdmin
+      .from('system_element_users')
+      .select(`
+        element_id,
+        system_elements!inner (
+          element_key,
+          is_active
         )
+      `)
+      .eq('user_profile_id', access.profileId)
 
     if (elementRowsError) {
       console.error(
@@ -329,30 +316,16 @@ async function getCurrentAccess() {
         access: null,
         response: NextResponse.json(
           {
-            error:
-              'تعذر قراءة صلاحيات عناصر النظام.',
+            error: 'تعذر قراءة صلاحيات عناصر النظام.',
           },
           { status: 500 },
         ),
       }
     }
 
-    systemElementKeys =
-      Array.from(
-        new Set(
-          (elementRows ?? [])
-            .filter(
-              (row) =>
-                row.system_elements &&
-                row.system_elements.is_active,
-            )
-            .map(
-              (row) =>
-                row.system_elements.element_key,
-            )
-            .filter(Boolean),
-        ),
-      )
+    systemElementKeys = getActiveSystemElementKeys(
+      (elementRows ?? []) as UserSystemElementRow[],
+    )
   }
 
   return {
@@ -375,10 +348,7 @@ async function getCurrentAccess() {
  */
 export async function GET() {
   try {
-    const {
-      access,
-      response,
-    } = await getCurrentAccess()
+    const { access, response } = await getCurrentAccess()
 
     if (response) {
       return response
@@ -396,17 +366,13 @@ export async function GET() {
     let {
       data: supervisionSettings,
       error: supervisionSettingsError,
-    } =
-      await supabaseAdmin
-        .from('supervision_settings')
-        .select(
-          'allow_teacher_transfer, allow_teacher_remove',
-        )
-        .eq(
-          'id',
-          'default',
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('supervision_settings')
+      .select(
+        'allow_teacher_transfer, allow_teacher_remove',
+      )
+      .eq('id', 'default')
+      .maybeSingle()
 
     if (supervisionSettingsError) {
       console.error(
@@ -416,8 +382,7 @@ export async function GET() {
 
       return NextResponse.json(
         {
-          error:
-            'تعذر قراءة إعدادات الإشراف.',
+          error: 'تعذر قراءة إعدادات الإشراف.',
         },
         { status: 500 },
       )
@@ -431,18 +396,17 @@ export async function GET() {
       const {
         data: createdSettings,
         error: createSettingsError,
-      } =
-        await supabaseAdmin
-          .from('supervision_settings')
-          .insert({
-            id: 'default',
-            allow_teacher_transfer: true,
-            allow_teacher_remove: true,
-          })
-          .select(
-            'allow_teacher_transfer, allow_teacher_remove',
-          )
-          .single()
+      } = await supabaseAdmin
+        .from('supervision_settings')
+        .insert({
+          id: 'default',
+          allow_teacher_transfer: true,
+          allow_teacher_remove: true,
+        })
+        .select(
+          'allow_teacher_transfer, allow_teacher_remove',
+        )
+        .single()
 
       if (createSettingsError) {
         console.error(
@@ -452,46 +416,36 @@ export async function GET() {
 
         return NextResponse.json(
           {
-            error:
-              'تعذر إنشاء إعدادات الإشراف.',
+            error: 'تعذر إنشاء إعدادات الإشراف.',
           },
           { status: 500 },
         )
       }
 
-      supervisionSettings =
-        createdSettings
+      supervisionSettings = createdSettings
     }
 
     return NextResponse.json(
       {
         authenticated: true,
 
-        role:
-          access.profile.role,
+        role: access.profile.role,
 
-        permissionIds:
-          access.permissionIds,
+        permissionIds: access.permissionIds,
 
-        permissionNames:
-          access.permissionNames,
+        permissionNames: access.permissionNames,
 
-        systemElementKeys:
-          access.systemElementKeys,
+        systemElementKeys: access.systemElementKeys,
 
         permissions: [],
 
-        allowTeacherTransfer:
-          Boolean(
-            supervisionSettings
-              ?.allow_teacher_transfer,
-          ),
+        allowTeacherTransfer: Boolean(
+          supervisionSettings?.allow_teacher_transfer,
+        ),
 
-        allowTeacherRemove:
-          Boolean(
-            supervisionSettings
-              ?.allow_teacher_remove,
-          ),
+        allowTeacherRemove: Boolean(
+          supervisionSettings?.allow_teacher_remove,
+        ),
       },
       {
         headers: {
@@ -521,26 +475,34 @@ export async function GET() {
  *
  * تعديل إعدادات الإشراف.
  *
- * الحماية هنا تعتمد على permission_key
+ * الحماية تعتمد على permission_key،
  * وليس على اسم الدور.
  */
-export async function PATCH(
-  request: Request,
-) {
+export async function PATCH(request: Request) {
   try {
-    const {
-      error: permissionError,
-    } =
-      await requirePermission(
-        'supervision.manage',
-      )
+    const { error: permissionError } =
+      await requirePermission('supervision.manage')
 
     if (permissionError) {
       return permissionError
     }
 
-    const body =
-      await request.json()
+    const body: unknown = await request.json()
+
+    if (
+      typeof body !== 'object' ||
+      body === null ||
+      Array.isArray(body)
+    ) {
+      return NextResponse.json(
+        {
+          error: 'بيانات الطلب غير صحيحة.',
+        },
+        { status: 400 },
+      )
+    }
+
+    const requestBody = body as Record<string, unknown>
 
     const updates: {
       allow_teacher_transfer?: boolean
@@ -548,28 +510,25 @@ export async function PATCH(
     } = {}
 
     if (
-      typeof body.allowTeacherTransfer ===
+      typeof requestBody.allowTeacherTransfer ===
       'boolean'
     ) {
       updates.allow_teacher_transfer =
-        body.allowTeacherTransfer
+        requestBody.allowTeacherTransfer
     }
 
     if (
-      typeof body.allowTeacherRemove ===
+      typeof requestBody.allowTeacherRemove ===
       'boolean'
     ) {
       updates.allow_teacher_remove =
-        body.allowTeacherRemove
+        requestBody.allowTeacherRemove
     }
 
-    if (
-      Object.keys(updates).length === 0
-    ) {
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
         {
-          error:
-            'لا توجد إعدادات صالحة للتحديث.',
+          error: 'لا توجد إعدادات صالحة للتحديث.',
         },
         { status: 400 },
       )
@@ -581,17 +540,13 @@ export async function PATCH(
     const {
       data: existingSettings,
       error: existingSettingsError,
-    } =
-      await supabaseAdmin
-        .from('supervision_settings')
-        .select(
-          'allow_teacher_transfer, allow_teacher_remove',
-        )
-        .eq(
-          'id',
-          'default',
-        )
-        .maybeSingle()
+    } = await supabaseAdmin
+      .from('supervision_settings')
+      .select(
+        'allow_teacher_transfer, allow_teacher_remove',
+      )
+      .eq('id', 'default')
+      .maybeSingle()
 
     if (existingSettingsError) {
       console.error(
@@ -601,8 +556,7 @@ export async function PATCH(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر قراءة إعدادات الإشراف الحالية.',
+          error: 'تعذر قراءة إعدادات الإشراف الحالية.',
         },
         { status: 500 },
       )
@@ -616,24 +570,21 @@ export async function PATCH(
       const {
         data: createdSettings,
         error: createError,
-      } =
-        await supabaseAdmin
-          .from('supervision_settings')
-          .insert({
-            id: 'default',
+      } = await supabaseAdmin
+        .from('supervision_settings')
+        .insert({
+          id: 'default',
 
-            allow_teacher_transfer:
-              updates.allow_teacher_transfer ??
-              true,
+          allow_teacher_transfer:
+            updates.allow_teacher_transfer ?? true,
 
-            allow_teacher_remove:
-              updates.allow_teacher_remove ??
-              true,
-          })
-          .select(
-            'allow_teacher_transfer, allow_teacher_remove',
-          )
-          .single()
+          allow_teacher_remove:
+            updates.allow_teacher_remove ?? true,
+        })
+        .select(
+          'allow_teacher_transfer, allow_teacher_remove',
+        )
+        .single()
 
       if (createError) {
         console.error(
@@ -643,8 +594,7 @@ export async function PATCH(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر إنشاء إعدادات الإشراف.',
+            error: 'تعذر إنشاء إعدادات الإشراف.',
           },
           { status: 500 },
         )
@@ -653,17 +603,13 @@ export async function PATCH(
       return NextResponse.json({
         success: true,
 
-        allowTeacherTransfer:
-          Boolean(
-            createdSettings
-              ?.allow_teacher_transfer,
-          ),
+        allowTeacherTransfer: Boolean(
+          createdSettings?.allow_teacher_transfer,
+        ),
 
-        allowTeacherRemove:
-          Boolean(
-            createdSettings
-              ?.allow_teacher_remove,
-          ),
+        allowTeacherRemove: Boolean(
+          createdSettings?.allow_teacher_remove,
+        ),
       })
     }
 
@@ -673,18 +619,14 @@ export async function PATCH(
     const {
       data,
       error,
-    } =
-      await supabaseAdmin
-        .from('supervision_settings')
-        .update(updates)
-        .eq(
-          'id',
-          'default',
-        )
-        .select(
-          'allow_teacher_transfer, allow_teacher_remove',
-        )
-        .single()
+    } = await supabaseAdmin
+      .from('supervision_settings')
+      .update(updates)
+      .eq('id', 'default')
+      .select(
+        'allow_teacher_transfer, allow_teacher_remove',
+      )
+      .single()
 
     if (error) {
       console.error(
@@ -694,8 +636,7 @@ export async function PATCH(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر حفظ إعدادات الإشراف.',
+          error: 'تعذر حفظ إعدادات الإشراف.',
         },
         { status: 500 },
       )
@@ -704,15 +645,13 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
 
-      allowTeacherTransfer:
-        Boolean(
-          data?.allow_teacher_transfer,
-        ),
+      allowTeacherTransfer: Boolean(
+        data?.allow_teacher_transfer,
+      ),
 
-      allowTeacherRemove:
-        Boolean(
-          data?.allow_teacher_remove,
-        ),
+      allowTeacherRemove: Boolean(
+        data?.allow_teacher_remove,
+      ),
     })
   } catch (error) {
     console.error(
@@ -722,8 +661,7 @@ export async function PATCH(
 
     return NextResponse.json(
       {
-        error:
-          'حدث خطأ أثناء حفظ إعدادات الإشراف.',
+        error: 'حدث خطأ أثناء حفظ إعدادات الإشراف.',
       },
       { status: 500 },
     )
