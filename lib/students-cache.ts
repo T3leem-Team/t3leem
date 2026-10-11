@@ -3,20 +3,19 @@
 import { supabase } from '@/lib/supabase'
 
 import type {
-StudentAttendanceSummary,
-StudentCourseStatus,
+  StudentAttendanceSummary,
+  StudentCourseStatus,
 } from '@/app/(dashboard)/students/student-details'
 
 import type {
-StudentAttendanceRecord,
+  StudentAttendanceRecord,
 } from '@/app/(dashboard)/students/student-attendance-details'
 
 import type {
-StudentDynamicField,
-StudentTableStudent,
-StudentTableCourse,
+  StudentDynamicField,
+  StudentTableStudent,
+  StudentTableCourse,
 } from '@/app/(dashboard)/students/students-table'
-
 
 export type AcademicLevel = {
   id: string
@@ -24,8 +23,9 @@ export type AcademicLevel = {
   sort_order: number
 }
 
-export type Course = StudentTableCourse & {
+export type Course = Omit<StudentTableCourse, 'days'> & {
   academic_year_id: string
+  days: string[]
 }
 
 export type TeacherStudentAssignment = {
