@@ -33,7 +33,15 @@ import {
   isCourseStudyDay,
 } from '@/app/(dashboard)/teachers/teacher-attendance-utils'
 
-
+export type {
+  AttendanceNotes,
+  AttendanceRecord,
+  AttendanceStatus,
+  AttendanceStatusName,
+  Course,
+  Student,
+  TeacherAttendanceStatus,
+} from '@/app/(dashboard)/teachers/teacher-attendance-utils'
 
 type AttendanceViewProps = {
   currentCourse: Course | null
