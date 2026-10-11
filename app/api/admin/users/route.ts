@@ -1488,53 +1488,37 @@ export async function PATCH(
       )
     }
 
-    /*
+     /*
      * --------------------------------------------------
-     * تحديث Supabase Auth
+     * تحديث Supabase Auth عند وجود تغيير فعلي فقط
      * --------------------------------------------------
      */
-    if (
-      password ||
-      isActive !== undefined ||
-      email
-    ) {
-      const authUpdate: {
-        password?: string
-        ban_duration?: string
-        email?: string
-      } = {}
+    const authUpdate: {
+      password?: string
+      ban_duration?: string
+      email?: string
+    } = {}
 
-      if (password) {
-        authUpdate.password =
-          password
-      }
+    if (password) {
+      authUpdate.password = password
+    }
 
-      if (
-        isActive !==
-        undefined
-      ) {
-        authUpdate.ban_duration =
-          isActive
-            ? 'none'
-            : '876000h'
-      }
+    if (isActive !== undefined) {
+      authUpdate.ban_duration =
+        isActive ? 'none' : '876000h'
+    }
 
-      if (
-        email &&
-        email !== targetUser.email
-      ) {
-        authUpdate.email =
-          email
-      }
+    if (email && email !== targetUser.email) {
+      authUpdate.email = email
+    }
 
+    if (Object.keys(authUpdate).length > 0) {
       const {
-        error:
-          authUpdateError,
-      } =
-        await supabaseAdmin.auth.admin.updateUserById(
-          targetUser.auth_user_id!,
-          authUpdate,
-        )
+        error: authUpdateError,
+      } = await supabaseAdmin.auth.admin.updateUserById(
+        targetUser.auth_user_id!,
+        authUpdate,
+      )
 
       if (authUpdateError) {
         console.error(
@@ -1544,8 +1528,7 @@ export async function PATCH(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحديث حساب الدخول.',
+            error: 'تعذر تحديث حساب الدخول.',
           },
           { status: 500 },
         )
