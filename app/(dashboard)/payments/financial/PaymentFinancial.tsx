@@ -34,8 +34,8 @@ import {
   money,
 } from './payment-financial.utils'
 import { SummaryCard } from './payment-financial.components'
-import { FinancialTables } from './payment-financial.tables'
-import { PaymentFinancialModals } from './payment-financial.modals'
+import FinancialTables from './payment-financial.tables'
+import PaymentFinancialModals from './payment-financial.modals'
 
 /*
  * =========================================================
@@ -1633,4 +1633,3 @@ export function PaymentFinancial() {
     </div>
   )
 }
-
