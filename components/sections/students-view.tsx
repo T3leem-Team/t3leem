@@ -1339,6 +1339,7 @@ export function StudentsView() {
                   ...editingStudent,
                   phone: editingStudent.phone ?? undefined,
                   whatsapp: editingStudent.whatsapp ?? undefined,
+                  chronicDiseases: editingStudent.chronicDiseases ?? undefined,
                   guardianRelation:
                     editingStudent.guardianRelation ?? '',
                 }
