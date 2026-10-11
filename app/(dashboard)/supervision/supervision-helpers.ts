@@ -120,12 +120,13 @@ export function getTypeIcon(
   }
 }
 
+
 export function getTypeBadgeVariant(
   type: SupervisionType,
 ) {
   switch (type) {
     case 'teacher_absent':
-      return 'destructive' as const
+      return 'danger' as const
 
     case 'day_cancelled':
     case 'lesson_cancelled':
@@ -135,6 +136,7 @@ export function getTypeBadgeVariant(
       return 'neutral' as const
   }
 }
+
 
 export function getLocalDateString() {
   const now = new Date()
