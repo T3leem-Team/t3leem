@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -39,38 +40,13 @@ function hashDeviceToken(token: string) {
 }
 
 function getCookie(
-  request: Request,
+  request: NextRequest,
   cookieName: string,
 ) {
-  const cookieHeader = request.headers.get('cookie')
-
-  if (!cookieHeader) {
-    return null
-  }
-
-  return (
-    cookieHeader
-      .split(';')
-      .map((cookie) => {
-        const index = cookie.indexOf('=')
-
-        return {
-          name:
-            index === -1
-              ? cookie.trim()
-              : cookie.slice(0, index).trim(),
-          value:
-            index === -1
-              ? ''
-              : cookie.slice(index + 1).trim(),
-        }
-      })
-      .find((cookie) => cookie.name === cookieName)
-      ?.value ?? null
-  )
+  return request.cookies.get(cookieName)?.value ?? null
 }
 
-function getIpAddress(request: Request) {
+function getIpAddress(request: NextRequest) {
   const forwardedFor =
     request.headers.get('x-forwarded-for')
 
@@ -81,7 +57,7 @@ function getIpAddress(request: Request) {
   return request.headers.get('x-real-ip') ?? null
 }
 
-function getUserAgent(request: Request) {
+function getUserAgent(request: NextRequest) {
   return request.headers.get('user-agent') ?? null
 }
 
@@ -97,7 +73,7 @@ function clearSessionCookie(response: NextResponse) {
   return response
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
@@ -335,9 +311,7 @@ export async function POST(request: Request) {
       | null = null
 
     if (existingDeviceToken) {
-      const tokenHash = hashDeviceToken(
-        existingDeviceToken,
-      )
+      const tokenHash = hashDeviceToken(existingDeviceToken)
 
       const {
         data: existingDevice,
@@ -546,30 +520,7 @@ export async function POST(request: Request) {
       {
         cookies: {
           getAll() {
-            const cookieHeader = request.headers.get('cookie')
-
-            if (!cookieHeader) {
-              return []
-            }
-
-            return cookieHeader
-              .split(';')
-              .filter(Boolean)
-              .map((cookie) => {
-                const index = cookie.indexOf('=')
-
-                return {
-                  name:
-                    index === -1
-                      ? cookie.trim()
-                      : cookie.slice(0, index).trim(),
-                  value:
-                    index === -1
-                      ? ''
-                      : cookie.slice(index + 1).trim(),
-                }
-              })
-              .filter((cookie) => cookie.name.length > 0)
+            return request.cookies.getAll()
           },
 
           setAll(cookiesToSet) {
