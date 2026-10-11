@@ -81,6 +81,7 @@ type Props = {
   assignments: Assignment[]
   teachers: Teacher[]
   students: Student[]
+  attendanceRecords: AttendanceRecord[]
   attendanceStatuses: AttendanceStatus[]
 }
 
