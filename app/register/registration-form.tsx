@@ -780,7 +780,7 @@ export default function RegistrationForm(
                 className="mt-7 space-y-8 sm:mt-8"
               >
 
-                {/* بيانات الطالب */}
+                {/* بيانات الطالب                 {/* بيانات الطالب */}
                 <section className="space-y-5">
                   <SectionHeader
                     title="بيانات الطالب"
@@ -826,11 +826,14 @@ export default function RegistrationForm(
                         <Input
                           type="tel"
                           inputMode="numeric"
-                          pattern="[0-9]*"
+                          pattern="[0-9]{9}"
+                          maxLength={9}
                           value={personalId}
                           onChange={(event) =>
                             setPersonalId(
-                              event.target.value,
+                              event.target.value
+                                .replace(/\D/g, '')
+                                .slice(0, 9),
                             )
                           }
                           placeholder="أدخل الرقم الشخصي"
@@ -917,11 +920,15 @@ export default function RegistrationForm(
 
                         <Input
                           type="tel"
-                          inputMode="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]{8}"
+                          maxLength={8}
                           value={phone}
                           onChange={(event) =>
                             setPhone(
-                              event.target.value,
+                              event.target.value
+                                .replace(/\D/g, '')
+                                .slice(0, 8),
                             )
                           }
                           placeholder="مثال: 3XXXXXXX"
@@ -1038,11 +1045,15 @@ export default function RegistrationForm(
 
                         <Input
                           type="tel"
-                          inputMode="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]{8}"
+                          maxLength={8}
                           value={whatsapp}
                           onChange={(event) =>
                             setWhatsapp(
-                              event.target.value,
+                              event.target.value
+                                .replace(/\D/g, '')
+                                .slice(0, 8),
                             )
                           }
                           placeholder="مثال: 3XXXXXXX"
@@ -1066,11 +1077,15 @@ export default function RegistrationForm(
 
                         <Input
                           type="tel"
-                          inputMode="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]{8}"
+                          maxLength={8}
                           value={studentPhone}
                           onChange={(event) =>
                             setStudentPhone(
-                              event.target.value,
+                              event.target.value
+                                .replace(/\D/g, '')
+                                .slice(0, 8),
                             )
                           }
                           placeholder="أدخل رقم الطالب"
@@ -1081,7 +1096,7 @@ export default function RegistrationForm(
                           }
                         />
                       </div>
-                    )}
+                      )}
 
                     {settings.show_level && (
                       <div>
