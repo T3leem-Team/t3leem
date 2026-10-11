@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 import { isMaintenanceMode } from '@/lib/system-control'
 
@@ -23,18 +22,6 @@ export async function requireAuth() {
       }
     }
 
-    try {
-      const supabase =
-        await createSupabaseServerClient()
-
-      await supabase.auth.signOut()
-    } catch (error) {
-      console.error(
-        'Auth cleanup error:',
-        error,
-      )
-    }
-
     const response = NextResponse.json(
       {
         authenticated: false,
@@ -44,17 +31,13 @@ export async function requireAuth() {
       { status: 401 },
     )
 
-    response.cookies.set(
-      SESSION_COOKIE,
-      '',
-      {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 0,
-      },
-    )
+    response.cookies.set(SESSION_COOKIE, '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    })
 
     return {
       access: null,
@@ -83,10 +66,7 @@ export async function requireAuth() {
       }
     }
   } catch (error) {
-    console.error(
-      'Maintenance check error:',
-      error,
-    )
+    console.error('Maintenance check error:', error)
 
     return {
       access: null,
