@@ -1,4 +1,3 @@
-
 import type {
   Summary,
   Transaction,
@@ -61,9 +60,13 @@ export const getTransactionLabel = (
     return 'مصروف'
   }
 
-  return transaction.adjustment_direction === 'plus'
-    ? 'تسوية +'
-    : 'تسوية -'
+  if (
+    transaction.adjustment_direction === 'plus'
+  ) {
+    return 'تسوية +'
+  }
+
+  return 'تسوية -'
 }
 
 export const getConfirmationLabel = (
@@ -91,7 +94,11 @@ export const getTypeClass = (
     return 'text-red-600 dark:text-red-400'
   }
 
-  return transaction.adjustment_direction === 'plus'
-    ? 'text-blue-600 dark:text-blue-400'
-    : 'text-orange-600 dark:text-orange-400'
+  if (
+    transaction.adjustment_direction === 'plus'
+  ) {
+    return 'text-blue-600 dark:text-blue-400'
+  }
+
+  return 'text-orange-600 dark:text-orange-400'
 }
