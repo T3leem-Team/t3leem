@@ -3,16 +3,20 @@
 import { supabase } from '@/lib/supabase'
 
 import type {
-  StudentAttendanceRecord,
-  StudentAttendanceSummary,
-  StudentCourseStatus,
-} from '@/components/sections/student-details'
+StudentAttendanceSummary,
+StudentCourseStatus,
+} from '@/app/(dashboard)/students/student-details'
 
 import type {
-  StudentDynamicField,
-  StudentTableStudent,
-  StudentTableCourse,
-} from '@/components/sections/students-table'
+StudentAttendanceRecord,
+} from '@/app/(dashboard)/students/student-attendance-details'
+
+import type {
+StudentDynamicField,
+StudentTableStudent,
+StudentTableCourse,
+} from '@/app/(dashboard)/students/students-table'
+
 
 export type AcademicLevel = {
   id: string
