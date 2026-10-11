@@ -143,19 +143,14 @@ function getDayIndex(value: string) {
   const aliases: Record<string, number> = {
     الاحد: 0,
     الأحد: 0,
-
     الاثنين: 1,
     الإثنين: 1,
-
     الثلاثاء: 2,
-
     الاربعاء: 3,
     الأربعاء: 3,
-
     الخميس: 4,
     الجمعة: 5,
     السبت: 6,
-
     sunday: 0,
     monday: 1,
     tuesday: 2,
@@ -263,8 +258,7 @@ function getStatusLabel(
 ) {
   const status = attendanceStatuses.find(
     (item) =>
-      normalizeId(item.id) ===
-      normalizeId(statusId),
+      normalizeId(item.id) === normalizeId(statusId),
   )
 
   return status?.name ?? 'غير معروف'
@@ -492,20 +486,11 @@ export function DashboardAttendanceExport({
                 join_date
               `,
             )
-            .eq(
-              'academic_year_id',
-              academicYear.id,
-            )
-            .in(
-              'student_id',
-              studentIds,
-            )
-            .order(
-              'join_date',
-              {
-                ascending: true,
-              },
-            )
+            .eq('academic_year_id', academicYear.id)
+            .in('student_id', studentIds)
+            .order('join_date', {
+              ascending: true,
+            })
 
           if (enrollmentError) {
             console.error(
@@ -520,23 +505,17 @@ export function DashboardAttendanceExport({
             (enrollmentData ?? []).map(
               (item) => ({
                 id: String(item.id),
-                studentId: String(
-                  item.student_id,
-                ),
+                studentId: String(item.student_id),
                 academicYearId: String(
                   item.academic_year_id,
                 ),
-                levelId:
-                  item.level_id
-                    ? String(item.level_id)
-                    : null,
-                status: String(
-                  item.status ?? '',
-                ),
-                joinDate:
-                  item.join_date
-                    ? String(item.join_date)
-                    : null,
+                levelId: item.level_id
+                  ? String(item.level_id)
+                  : null,
+                status: String(item.status ?? ''),
+                joinDate: item.join_date
+                  ? String(item.join_date)
+                  : null,
               }),
             )
         }
@@ -560,20 +539,12 @@ export function DashboardAttendanceExport({
             continue
           }
 
-          if (
-            !enrollmentMap.has(studentId)
-          ) {
-            enrollmentMap.set(
-              studentId,
-              enrollment,
-            )
+          if (!enrollmentMap.has(studentId)) {
+            enrollmentMap.set(studentId, enrollment)
           }
         }
 
         /*
-         * لا نعتمد على attendanceRecords
-         * المحملة في الصفحة.
-         *
          * نسحب بيانات الحضور مباشرة من Supabase
          * وقت إنشاء ملف Excel.
          *
@@ -606,29 +577,14 @@ export function DashboardAttendanceExport({
                 course_id
               `,
             )
-            .eq(
-              'course_id',
-              course.id,
-            )
-            .in(
-              'student_id',
-              studentIds,
-            )
-            .gte(
-              'attendance_date',
-              safeFromDate,
-            )
-            .lte(
-              'attendance_date',
-              safeToDate,
-            )
+            .eq('course_id', course.id)
+            .in('student_id', studentIds)
+            .gte('attendance_date', safeFromDate)
+            .lte('attendance_date', safeToDate)
             .range(from, to)
-            .order(
-              'attendance_date',
-              {
-                ascending: true,
-              },
-            )
+            .order('attendance_date', {
+              ascending: true,
+            })
 
           if (attendanceError) {
             console.error(
@@ -644,41 +600,25 @@ export function DashboardAttendanceExport({
           for (const item of rows) {
             const recordDate =
               normalizeAttendanceDate(
-                String(
-                  item.attendance_date ?? '',
-                ),
+                String(item.attendance_date ?? ''),
               )
 
-            if (
-              !lessonDates.includes(
-                recordDate,
-              )
-            ) {
+            if (!lessonDates.includes(recordDate)) {
               continue
             }
 
             exportedAttendanceRecords.push({
               id: String(item.id),
-              studentId: String(
-                item.student_id,
-              ),
-              enrollmentId:
-                item.enrollment_id
-                  ? String(
-                      item.enrollment_id,
-                    )
-                  : null,
-              attendanceDate:
-                recordDate,
-              statusId: String(
-                item.status_id,
-              ),
+              studentId: String(item.student_id),
+              enrollmentId: item.enrollment_id
+                ? String(item.enrollment_id)
+                : null,
+              attendanceDate: recordDate,
+              statusId: String(item.status_id),
               note: item.note
                 ? String(item.note)
                 : null,
-              courseId: String(
-                item.course_id,
-              ),
+              courseId: String(item.course_id),
             })
           }
 
@@ -737,16 +677,6 @@ export function DashboardAttendanceExport({
 
           /*
            * التاريخ الرسمي لانضمام الطالب.
-           *
-           * إذا كان:
-           * join_date = 2026-10-05
-           *
-           * الأيام قبل 2026-10-05:
-           * غير منضم
-           *
-           * من 2026-10-05:
-           * يوجد سجل = حالة الحضور
-           * لا يوجد سجل = لم يسجل
            */
           const enrollmentDate =
             enrollment?.joinDate
@@ -769,19 +699,14 @@ export function DashboardAttendanceExport({
               lessonDate,
             ].join('|')
 
-            const record =
-              recordMap.get(key)
+            const record = recordMap.get(key)
 
             /*
-             * أولوية تاريخ الانضمام مطلقة.
-             *
-             * إذا كانت الحصة قبل join_date:
+             * إذا كانت الحصة قبل تاريخ الانضمام:
              * النتيجة دائمًا غير منضم.
-             *
-             * حتى لو كان هناك سجل في attendance.
              */
             const isBeforeEnrollment =
-              Boolean(enrollmentDate) &&
+              enrollmentDate !== null &&
               lessonDate < enrollmentDate
 
             let statusLabel: string
@@ -789,17 +714,15 @@ export function DashboardAttendanceExport({
             if (isBeforeEnrollment) {
               statusLabel = 'غير منضم'
             } else if (record) {
-              statusLabel =
-                getStatusLabel(
-                  record.statusId,
-                  attendanceStatuses,
-                )
+              statusLabel = getStatusLabel(
+                record.statusId,
+                attendanceStatuses,
+              )
             } else {
               statusLabel = 'لم يسجل'
             }
 
-            const statusKey =
-              getStatusKey(statusLabel)
+            const statusKey = getStatusKey(statusLabel)
 
             if (
               statusKey === 'present' ||
@@ -814,22 +737,15 @@ export function DashboardAttendanceExport({
             detailsRows.push({
               المعلم: teacherName,
               الدورة: course.name,
-              'اسم الطالب':
-                student.name,
-              'رقم الطالب':
-                student.studentId ?? '',
-              'الرقم الشخصي':
-                student.personalId ?? '',
+              'اسم الطالب': student.name,
+              'رقم الطالب': student.studentId ?? '',
+              'الرقم الشخصي': student.personalId ?? '',
               التاريخ: lessonDate,
-              اليوم:
-                getArabicDayName(
-                  lessonDate,
-                ),
+              اليوم: getArabicDayName(lessonDate),
               الحالة: statusLabel,
-              ملاحظة:
-                isBeforeEnrollment
-                  ? ''
-                  : record?.note ?? '',
+              ملاحظة: isBeforeEnrollment
+                ? ''
+                : record?.note ?? '',
             })
           }
 
@@ -846,65 +762,46 @@ export function DashboardAttendanceExport({
 
           const attendancePercentage =
             recordedDays > 0
-              ? (attendanceDays /
-                  recordedDays) *
-                100
+              ? (attendanceDays / recordedDays) * 100
               : 0
 
           const unjoinedDays =
             lessonDates.filter(
               (lessonDate) =>
-                Boolean(enrollmentDate) &&
-                lessonDate <
-                  enrollmentDate,
+                enrollmentDate !== null &&
+                lessonDate < enrollmentDate,
             ).length
 
           summaryRows.push({
             المعلم: teacherName,
             الدورة: course.name,
-            'اسم الطالب':
-              student.name,
-            'رقم الطالب':
-              student.studentId ?? '',
-            'الرقم الشخصي':
-              student.personalId ?? '',
-            'من تاريخ':
-              safeFromDate,
-            'إلى تاريخ':
-              safeToDate,
-            'عدد أيام الدراسة':
-              lessonDates.length,
+            'اسم الطالب': student.name,
+            'رقم الطالب': student.studentId ?? '',
+            'الرقم الشخصي': student.personalId ?? '',
+            'من تاريخ': safeFromDate,
+            'إلى تاريخ': safeToDate,
+            'عدد أيام الدراسة': lessonDates.length,
             حاضر: counts.present,
             غائب: counts.absent,
             متأخر: counts.late,
             مستأذن: counts.excused,
-            'لم يسجل':
-              counts.notRecorded,
-            'الأيام غير المنضمة':
-              unjoinedDays,
-            'الأيام المسجلة':
-              recordedDays,
-            'أيام الحضور':
-              attendanceDays,
-            'نسبة الحضور':
-              formatPercentage(
-                attendancePercentage,
-              ),
+            'لم يسجل': counts.notRecorded,
+            'الأيام غير المنضمة': unjoinedDays,
+            'الأيام المسجلة': recordedDays,
+            'أيام الحضور': attendanceDays,
+            'نسبة الحضور': formatPercentage(
+              attendancePercentage,
+            ),
           })
         }
 
-        const workbook =
-          XLSX.utils.book_new()
+        const workbook = XLSX.utils.book_new()
 
         const detailsSheet =
-          XLSX.utils.json_to_sheet(
-            detailsRows,
-          )
+          XLSX.utils.json_to_sheet(detailsRows)
 
         const summarySheet =
-          XLSX.utils.json_to_sheet(
-            summaryRows,
-          )
+          XLSX.utils.json_to_sheet(summaryRows)
 
         detailsSheet['!cols'] = [
           { wch: 24 },
@@ -952,19 +849,13 @@ export function DashboardAttendanceExport({
 
         const safeCourseName =
           course.name
-            .replace(
-              /[\\/:*?"<>|]/g,
-              '-',
-            )
+            .replace(/[\\/:*?"<>|]/g, '-')
             .trim() || 'الدورة'
 
         const fileName =
           `تقرير حضور ${safeCourseName} ${safeFromDate} إلى ${safeToDate}.xlsx`
 
-        XLSX.writeFile(
-          workbook,
-          fileName,
-        )
+        XLSX.writeFile(workbook, fileName)
 
         return true
       } catch (exportError) {
@@ -1016,10 +907,7 @@ export function DashboardAttendanceExport({
 
   const handleCustomExport = async () => {
     const success =
-      await buildAndDownloadExcel(
-        fromDate,
-        toDate,
-      )
+      await buildAndDownloadExcel(fromDate, toDate)
 
     if (success) {
       setCustomModalOpen(false)
@@ -1049,7 +937,6 @@ export function DashboardAttendanceExport({
           className="h-10 w-[190px] justify-center gap-2 border border-indigo-200 bg-indigo-50 px-4 text-indigo-700 shadow-sm hover:bg-indigo-100 hover:text-indigo-800"
         >
           <CalendarRange className="size-4" />
-
           تنزيل مخصص
         </Button>
       </div>
@@ -1072,9 +959,7 @@ export function DashboardAttendanceExport({
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() =>
-                  setCustomModalOpen(false)
-                }
+                onClick={() => setCustomModalOpen(false)}
                 disabled={exporting}
               >
                 <X className="size-5" />
@@ -1093,9 +978,7 @@ export function DashboardAttendanceExport({
                   min={courseStartDate}
                   max={courseEndDate}
                   onChange={(event) =>
-                    setFromDate(
-                      event.target.value,
-                    )
+                    setFromDate(event.target.value)
                   }
                   className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
                   disabled={exporting}
@@ -1113,9 +996,7 @@ export function DashboardAttendanceExport({
                   min={courseStartDate}
                   max={courseEndDate}
                   onChange={(event) =>
-                    setToDate(
-                      event.target.value,
-                    )
+                    setToDate(event.target.value)
                   }
                   className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
                   disabled={exporting}
@@ -1136,13 +1017,9 @@ export function DashboardAttendanceExport({
                     سيتم إنشاء ملف Excel يحتوي
                     على ورقتين:
                     <br />
-                    <strong>
-                      تفاصيل الحضور
-                    </strong>
+                    <strong>تفاصيل الحضور</strong>
                     {' '}و{' '}
-                    <strong>
-                      ملخص الطلاب
-                    </strong>
+                    <strong>ملخص الطلاب</strong>
                   </span>
                 </div>
               </div>
@@ -1152,9 +1029,7 @@ export function DashboardAttendanceExport({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() =>
-                  setCustomModalOpen(false)
-                }
+                onClick={() => setCustomModalOpen(false)}
                 disabled={exporting}
               >
                 إلغاء
