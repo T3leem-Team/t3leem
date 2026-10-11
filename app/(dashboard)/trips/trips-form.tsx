@@ -48,16 +48,31 @@ type Trip = {
   course_id: string
   attendance_min: number | null
   attendance_max: number | null
-  notes_requirement:
-    | 'any'
-    | 'required'
-    | 'none'
+  notes_requirement: 'any' | 'required' | 'none'
   status:
     | 'draft'
     | 'pending_approval'
     | 'published'
     | 'rejected'
     | 'closed'
+}
+
+type TripLevel = {
+  trip_id: string
+  level_id: string
+}
+
+function isTripLevel(item: unknown): item is TripLevel {
+  if (typeof item !== 'object' || item === null) {
+    return false
+  }
+
+  return (
+    'trip_id' in item &&
+    typeof item.trip_id === 'string' &&
+    'level_id' in item &&
+    typeof item.level_id === 'string'
+  )
 }
 
 type TripsFormProps = {
@@ -78,101 +93,71 @@ export function TripsForm({
   const isEdit = Boolean(trip)
 
   const currentYear =
-    academicYears.find(
-      (year) => year.is_current,
-    ) ??
+    academicYears.find((year) => year.is_current) ??
     academicYears[0] ??
     null
 
-  const [name, setName] = useState(
-    trip?.name ?? '',
+  const [name, setName] = useState(trip?.name ?? '')
+
+  const [description, setDescription] = useState(
+    trip?.description ?? '',
   )
 
-  const [description, setDescription] =
-    useState(trip?.description ?? '')
+  const [location, setLocation] = useState(
+    trip?.location ?? '',
+  )
 
-  const [location, setLocation] =
-    useState(trip?.location ?? '')
+  const [tripDate, setTripDate] = useState(
+    trip?.trip_date ?? '',
+  )
 
-  const [tripDate, setTripDate] =
-    useState(trip?.trip_date ?? '')
+  const [meetingTime, setMeetingTime] = useState(
+    trip?.meeting_time ? trip.meeting_time.slice(0, 5) : '',
+  )
 
-  const [meetingTime, setMeetingTime] =
-    useState(
-      trip?.meeting_time
-        ? trip.meeting_time.slice(0, 5)
-        : '',
-    )
-
-  const [returnTime, setReturnTime] =
-    useState(
-      trip?.return_time
-        ? trip.return_time.slice(0, 5)
-        : '',
-    )
+  const [returnTime, setReturnTime] = useState(
+    trip?.return_time ? trip.return_time.slice(0, 5) : '',
+  )
 
   const [fee, setFee] = useState(
-    trip?.fee != null
-      ? String(trip.fee)
-      : '0',
+    trip?.fee != null ? String(trip.fee) : '0',
   )
 
-  const [note, setNote] = useState(
-    trip?.note ?? '',
-  )
+  const [note, setNote] = useState(trip?.note ?? '')
 
-  const [academicYearId, setAcademicYearId] =
-    useState(
-      trip?.academic_year_id ??
-        currentYear?.id ??
-        '',
-    )
+  const [academicYearId, setAcademicYearId] = useState(
+    trip?.academic_year_id ?? currentYear?.id ?? '',
+  )
 
   const [courseId, setCourseId] = useState(
     trip?.course_id ?? '',
   )
 
-  const [
-    selectedLevelIds,
-    setSelectedLevelIds,
-  ] = useState<string[]>([])
-
-  const [levels, setLevels] = useState<
-    Level[]
+  const [selectedLevelIds, setSelectedLevelIds] = useState<
+    string[]
   >([])
 
-  const [
-    attendanceMin,
-    setAttendanceMin,
-  ] = useState(
+  const [levels, setLevels] = useState<Level[]>([])
+
+  const [attendanceMin, setAttendanceMin] = useState(
     trip?.attendance_min != null
       ? String(trip.attendance_min)
       : '',
   )
 
-  const [
-    attendanceMax,
-    setAttendanceMax,
-  ] = useState(
+  const [attendanceMax, setAttendanceMax] = useState(
     trip?.attendance_max != null
       ? String(trip.attendance_max)
       : '',
   )
 
-  const [
-    notesRequirement,
-    setNotesRequirement,
-  ] = useState<
+  const [notesRequirement, setNotesRequirement] = useState<
     'any' | 'required' | 'none'
-  >(
-    trip?.notes_requirement ?? 'any',
-  )
+  >(trip?.notes_requirement ?? 'any')
 
-  const [loading, setLoading] =
-    useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const [loadingData, setLoadingData] =
-    useState(true)
+  const [loadingData, setLoadingData] = useState(true)
 
   const [error, setError] = useState('')
 
@@ -195,49 +180,25 @@ export function TripsForm({
 
         if (cancelled) return
 
-        const loadedLevels =
-          Array.isArray(data?.levels)
-            ? data.levels
-            : []
+        const loadedLevels = Array.isArray(data?.levels)
+          ? data.levels
+          : []
 
-        setLevels(
-          loadedLevels as Level[],
-        )
+        setLevels(loadedLevels as Level[])
 
         if (trip?.id) {
-          const tripLevels =
-            Array.isArray(
-              data?.tripLevels,
-            )
-              ? data.tripLevels
-              : []
+          const tripLevels = Array.isArray(data?.tripLevels)
+            ? data.tripLevels.filter(isTripLevel)
+            : []
 
-          const currentTripLevelIds =
-            tripLevels
-              .filter(
-                (item: {
-                  trip_id: string
-                  level_id: string
-                }) =>
-                  item.trip_id ===
-                  trip.id,
-              )
-              .map(
-                (item: {
-                  trip_id: string
-                  level_id: string
-                }) => item.level_id,
-              )
+          const currentTripLevelIds = tripLevels
+            .filter((item) => item.trip_id === trip.id)
+            .map((item) => item.level_id)
 
-          setSelectedLevelIds(
-            currentTripLevelIds,
-          )
+          setSelectedLevelIds(currentTripLevelIds)
         }
       } catch (error) {
-        console.error(
-          'Load trip form data error:',
-          error,
-        )
+        console.error('Load trip form data error:', error)
 
         if (!cancelled) {
           setError(
@@ -263,21 +224,15 @@ export function TripsForm({
   /*
    * الدورات التابعة للسنة المختارة فقط.
    */
-  const filteredCourses =
-    useMemo(() => {
-      if (!academicYearId) {
-        return []
-      }
+  const filteredCourses = useMemo(() => {
+    if (!academicYearId) {
+      return []
+    }
 
-      return courses.filter(
-        (course) =>
-          course.academic_year_id ===
-          academicYearId,
-      )
-    }, [
-      courses,
-      academicYearId,
-    ])
+    return courses.filter(
+      (course) => course.academic_year_id === academicYearId,
+    )
+  }, [courses, academicYearId])
 
   /*
    * إذا تغيرت السنة، نتأكد أن الدورة
@@ -286,46 +241,32 @@ export function TripsForm({
   useEffect(() => {
     if (!courseId) return
 
-    const exists =
-      filteredCourses.some(
-        (course) =>
-          course.id === courseId,
-      )
+    const exists = filteredCourses.some(
+      (course) => course.id === courseId,
+    )
 
     if (!exists) {
       setCourseId('')
     }
-  }, [
-    academicYearId,
-    filteredCourses,
-    courseId,
-  ])
+  }, [academicYearId, filteredCourses, courseId])
 
-  function toggleLevel(
-    levelId: string,
-  ) {
+  function toggleLevel(levelId: string) {
     setSelectedLevelIds((current) =>
       current.includes(levelId)
-        ? current.filter(
-            (id) => id !== levelId,
-          )
+        ? current.filter((id) => id !== levelId)
         : [...current, levelId],
     )
   }
 
   function selectAllLevels() {
-    setSelectedLevelIds(
-      levels.map((level) => level.id),
-    )
+    setSelectedLevelIds(levels.map((level) => level.id))
   }
 
   function clearAllLevels() {
     setSelectedLevelIds([])
   }
 
-  async function handleSubmit(
-    event: React.FormEvent,
-  ) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
 
     setError('')
@@ -338,9 +279,7 @@ export function TripsForm({
     }
 
     if (!academicYearId) {
-      setError(
-        'اختر السنة الدراسية.',
-      )
+      setError('اختر السنة الدراسية.')
       return
     }
 
@@ -350,62 +289,40 @@ export function TripsForm({
     }
 
     if (selectedLevelIds.length === 0) {
-      setError(
-        'اختر مستوى واحدًا على الأقل.',
-      )
+      setError('اختر مستوى واحدًا على الأقل.')
       return
     }
 
-    const numericFee =
-      fee.trim() === ''
-        ? 0
-        : Number(fee)
+    const numericFee = fee.trim() === '' ? 0 : Number(fee)
 
-    if (
-      !Number.isFinite(numericFee) ||
-      numericFee < 0
-    ) {
-      setError(
-        'رسوم الرحلة غير صحيحة.',
-      )
+    if (!Number.isFinite(numericFee) || numericFee < 0) {
+      setError('رسوم الرحلة غير صحيحة.')
       return
     }
 
     const numericMin =
-      attendanceMin.trim() === ''
-        ? null
-        : Number(attendanceMin)
+      attendanceMin.trim() === '' ? null : Number(attendanceMin)
 
     const numericMax =
-      attendanceMax.trim() === ''
-        ? null
-        : Number(attendanceMax)
+      attendanceMax.trim() === '' ? null : Number(attendanceMax)
 
     if (
       numericMin !== null &&
-      (!Number.isFinite(
-        numericMin,
-      ) ||
+      (!Number.isFinite(numericMin) ||
         numericMin < 0 ||
         numericMin > 100)
     ) {
-      setError(
-        'الحد الأدنى للحضور يجب أن يكون بين 0 و100.',
-      )
+      setError('الحد الأدنى للحضور يجب أن يكون بين 0 و100.')
       return
     }
 
     if (
       numericMax !== null &&
-      (!Number.isFinite(
-        numericMax,
-      ) ||
+      (!Number.isFinite(numericMax) ||
         numericMax < 0 ||
         numericMax > 100)
     ) {
-      setError(
-        'الحد الأعلى للحضور يجب أن يكون بين 0 و100.',
-      )
+      setError('الحد الأعلى للحضور يجب أن يكون بين 0 و100.')
       return
     }
 
@@ -424,52 +341,32 @@ export function TripsForm({
 
     try {
       const payload = {
-        ...(isEdit
-          ? { id: trip?.id }
-          : {}),
+        ...(isEdit ? { id: trip?.id } : {}),
         name: cleanName,
-        description:
-          description.trim() || null,
-        location:
-          location.trim() || null,
-        trip_date:
-          tripDate || null,
-        meeting_time:
-          meetingTime || null,
-        return_time:
-          returnTime || null,
+        description: description.trim() || null,
+        location: location.trim() || null,
+        trip_date: tripDate || null,
+        meeting_time: meetingTime || null,
+        return_time: returnTime || null,
         fee: numericFee,
-        note:
-          note.trim() || null,
-        academic_year_id:
-          academicYearId,
+        note: note.trim() || null,
+        academic_year_id: academicYearId,
         course_id: courseId,
-        attendance_min:
-          numericMin,
-        attendance_max:
-          numericMax,
-        notes_requirement:
-          notesRequirement,
-        level_ids:
-          selectedLevelIds,
+        attendance_min: numericMin,
+        attendance_max: numericMax,
+        notes_requirement: notesRequirement,
+        level_ids: selectedLevelIds,
       }
 
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: isEdit
-            ? 'PATCH'
-            : 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch('/api/trips', {
+        method: isEdit ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      )
+        body: JSON.stringify(payload),
+      })
 
-      const data =
-        await response.json()
+      const data = await response.json()
 
       if (!response.ok) {
         throw new Error(
@@ -482,10 +379,7 @@ export function TripsForm({
 
       onCreated()
     } catch (error) {
-      console.error(
-        'Save trip error:',
-        error,
-      )
+      console.error('Save trip error:', error)
 
       setError(
         error instanceof Error
@@ -509,9 +403,7 @@ export function TripsForm({
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
             <h2 className="text-lg font-bold">
-              {isEdit
-                ? 'تعديل الرحلة'
-                : 'إضافة رحلة'}
+              {isEdit ? 'تعديل الرحلة' : 'إضافة رحلة'}
             </h2>
 
             <p className="mt-1 text-xs text-muted-foreground">
@@ -533,10 +425,7 @@ export function TripsForm({
         </div>
 
         {/* المحتوى */}
-        <form
-          onSubmit={handleSubmit}
-          className="overflow-y-auto"
-        >
+        <form onSubmit={handleSubmit} className="overflow-y-auto">
           <div className="space-y-6 p-5">
             {error && (
               <div className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -575,9 +464,7 @@ export function TripsForm({
                         type="text"
                         value={name}
                         onChange={(event) =>
-                          setName(
-                            event.target.value,
-                          )
+                          setName(event.target.value)
                         }
                         placeholder="مثال: رحلة ترفيهية"
                         className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -591,40 +478,20 @@ export function TripsForm({
 
                       <div className="relative">
                         <select
-                          value={
-                            academicYearId
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setAcademicYearId(
-                              event.target
-                                .value,
-                            )
+                          value={academicYearId}
+                          onChange={(event) =>
+                            setAcademicYearId(event.target.value)
                           }
                           className="w-full appearance-none rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         >
-                          <option value="">
-                            اختر السنة
-                          </option>
+                          <option value="">اختر السنة</option>
 
-                          {academicYears.map(
-                            (year) => (
-                              <option
-                                key={
-                                  year.id
-                                }
-                                value={
-                                  year.id
-                                }
-                              >
-                                {year.name}
-                                {year.is_current
-                                  ? ' — الحالية'
-                                  : ''}
-                              </option>
-                            ),
-                          )}
+                          {academicYears.map((year) => (
+                            <option key={year.id} value={year.id}>
+                              {year.name}
+                              {year.is_current ? ' — الحالية' : ''}
+                            </option>
+                          ))}
                         </select>
 
                         <ChevronDown className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -639,17 +506,10 @@ export function TripsForm({
                       <div className="relative">
                         <select
                           value={courseId}
-                          onChange={(
-                            event,
-                          ) =>
-                            setCourseId(
-                              event.target
-                                .value,
-                            )
+                          onChange={(event) =>
+                            setCourseId(event.target.value)
                           }
-                          disabled={
-                            !academicYearId
-                          }
+                          disabled={!academicYearId}
                           className="w-full appearance-none rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:bg-muted"
                         >
                           <option value="">
@@ -658,20 +518,11 @@ export function TripsForm({
                               : 'اختر الدورة'}
                           </option>
 
-                          {filteredCourses.map(
-                            (course) => (
-                              <option
-                                key={
-                                  course.id
-                                }
-                                value={
-                                  course.id
-                                }
-                              >
-                                {course.name}
-                              </option>
-                            ),
-                          )}
+                          {filteredCourses.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {course.name}
+                            </option>
+                          ))}
                         </select>
 
                         <ChevronDown className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -687,9 +538,7 @@ export function TripsForm({
                         type="date"
                         value={tripDate}
                         onChange={(event) =>
-                          setTripDate(
-                            event.target.value,
-                          )
+                          setTripDate(event.target.value)
                         }
                         className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                       />
@@ -704,9 +553,7 @@ export function TripsForm({
                         type="text"
                         value={location}
                         onChange={(event) =>
-                          setLocation(
-                            event.target.value,
-                          )
+                          setLocation(event.target.value)
                         }
                         placeholder="مثال: منتزه..."
                         className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -722,9 +569,7 @@ export function TripsForm({
                         type="time"
                         value={meetingTime}
                         onChange={(event) =>
-                          setMeetingTime(
-                            event.target.value,
-                          )
+                          setMeetingTime(event.target.value)
                         }
                         className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                       />
@@ -739,9 +584,7 @@ export function TripsForm({
                         type="time"
                         value={returnTime}
                         onChange={(event) =>
-                          setReturnTime(
-                            event.target.value,
-                          )
+                          setReturnTime(event.target.value)
                         }
                         className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                       />
@@ -759,10 +602,7 @@ export function TripsForm({
                           step="0.001"
                           value={fee}
                           onChange={(event) =>
-                            setFee(
-                              event.target
-                                .value,
-                            )
+                            setFee(event.target.value)
                           }
                           className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-14 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         />
@@ -782,9 +622,7 @@ export function TripsForm({
                     <textarea
                       value={description}
                       onChange={(event) =>
-                        setDescription(
-                          event.target.value,
-                        )
+                        setDescription(event.target.value)
                       }
                       rows={3}
                       placeholder="وصف مختصر للرحلة..."
@@ -800,9 +638,7 @@ export function TripsForm({
                     <textarea
                       value={note}
                       onChange={(event) =>
-                        setNote(
-                          event.target.value,
-                        )
+                        setNote(event.target.value)
                       }
                       rows={2}
                       placeholder="أي ملاحظات إضافية..."
@@ -827,13 +663,8 @@ export function TripsForm({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={
-                          selectAllLevels
-                        }
-                        disabled={
-                          levels.length ===
-                          0
-                        }
+                        onClick={selectAllLevels}
+                        disabled={levels.length === 0}
                         className="rounded-lg border border-input px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       >
                         تحديد الكل
@@ -841,13 +672,8 @@ export function TripsForm({
 
                       <button
                         type="button"
-                        onClick={
-                          clearAllLevels
-                        }
-                        disabled={
-                          selectedLevelIds.length ===
-                          0
-                        }
+                        onClick={clearAllLevels}
+                        disabled={selectedLevelIds.length === 0}
                         className="rounded-lg border border-input px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
                       >
                         إلغاء الكل
@@ -861,58 +687,47 @@ export function TripsForm({
                     </div>
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {levels.map(
-                        (level) => {
-                          const selected =
-                            selectedLevelIds.includes(
-                              level.id,
-                            )
+                      {levels.map((level) => {
+                        const selected = selectedLevelIds.includes(
+                          level.id,
+                        )
 
-                          return (
-                            <button
-                              key={
-                                level.id
-                              }
-                              type="button"
-                              onClick={() =>
-                                toggleLevel(
-                                  level.id,
-                                )
-                              }
-                              className={`flex items-center justify-between rounded-xl border px-3 py-3 text-right transition-colors ${
+                        return (
+                          <button
+                            key={level.id}
+                            type="button"
+                            onClick={() => toggleLevel(level.id)}
+                            className={`flex items-center justify-between rounded-xl border px-3 py-3 text-right transition-colors ${
+                              selected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border bg-background hover:bg-muted'
+                            }`}
+                          >
+                            <span className="text-sm font-medium">
+                              {level.name}
+                            </span>
+
+                            <span
+                              className={`flex size-5 items-center justify-center rounded-md border ${
                                 selected
-                                  ? 'border-primary bg-primary/5'
-                                  : 'border-border bg-background hover:bg-muted'
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-input'
                               }`}
                             >
-                              <span className="text-sm font-medium">
-                                {level.name}
-                              </span>
-
-                              <span
-                                className={`flex size-5 items-center justify-center rounded-md border ${
-                                  selected
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'border-input'
-                                }`}
-                              >
-                                {selected && (
-                                  <Check className="size-3.5" />
-                                )}
-                              </span>
-                            </button>
-                          )
-                        },
-                      )}
+                              {selected && (
+                                <Check className="size-3.5" />
+                              )}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
 
                   <p className="text-xs text-muted-foreground">
                     تم اختيار{' '}
                     <span className="font-semibold text-foreground">
-                      {
-                        selectedLevelIds.length
-                      }
+                      {selectedLevelIds.length}
                     </span>{' '}
                     مستوى.
                   </p>
@@ -942,16 +757,9 @@ export function TripsForm({
                           min="0"
                           max="100"
                           step="0.01"
-                          value={
-                            attendanceMin
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setAttendanceMin(
-                              event.target
-                                .value,
-                            )
+                          value={attendanceMin}
+                          onChange={(event) =>
+                            setAttendanceMin(event.target.value)
                           }
                           placeholder="مثال: 80"
                           className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -974,16 +782,9 @@ export function TripsForm({
                           min="0"
                           max="100"
                           step="0.01"
-                          value={
-                            attendanceMax
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setAttendanceMax(
-                              event.target
-                                .value,
-                            )
+                          value={attendanceMax}
+                          onChange={(event) =>
+                            setAttendanceMax(event.target.value)
                           }
                           placeholder="مثال: 100"
                           className="w-full rounded-xl border border-input bg-background px-3 py-2.5 pe-10 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -1012,21 +813,14 @@ export function TripsForm({
                   <div className="grid gap-2 sm:grid-cols-3">
                     <button
                       type="button"
-                      onClick={() =>
-                        setNotesRequirement(
-                          'any',
-                        )
-                      }
+                      onClick={() => setNotesRequirement('any')}
                       className={`rounded-xl border px-4 py-3 text-right transition-colors ${
-                        notesRequirement ===
-                        'any'
+                        notesRequirement === 'any'
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:bg-muted'
                       }`}
                     >
-                      <div className="text-sm font-semibold">
-                        الكل
-                      </div>
+                      <div className="text-sm font-semibold">الكل</div>
 
                       <div className="mt-1 text-xs text-muted-foreground">
                         لا يوجد شرط للملاحظات
@@ -1035,14 +829,9 @@ export function TripsForm({
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setNotesRequirement(
-                          'required',
-                        )
-                      }
+                      onClick={() => setNotesRequirement('required')}
                       className={`rounded-xl border px-4 py-3 text-right transition-colors ${
-                        notesRequirement ===
-                        'required'
+                        notesRequirement === 'required'
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:bg-muted'
                       }`}
@@ -1058,14 +847,9 @@ export function TripsForm({
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setNotesRequirement(
-                          'none',
-                        )
-                      }
+                      onClick={() => setNotesRequirement('none')}
                       className={`rounded-xl border px-4 py-3 text-right transition-colors ${
-                        notesRequirement ===
-                        'none'
+                        notesRequirement === 'none'
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:bg-muted'
                       }`}
@@ -1097,19 +881,14 @@ export function TripsForm({
 
             <button
               type="submit"
-              disabled={
-                loading ||
-                loadingData
-              }
+              disabled={loading || loadingData}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && (
                 <Loader2 className="size-4 animate-spin" />
               )}
 
-              {isEdit
-                ? 'حفظ التعديلات'
-                : 'إنشاء الرحلة'}
+              {isEdit ? 'حفظ التعديلات' : 'إنشاء الرحلة'}
             </button>
           </div>
         </form>
