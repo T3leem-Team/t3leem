@@ -79,7 +79,7 @@ type Props = {
   courses: Course[]
   teachers: Teacher[]
   attendanceRecords: AttendanceRecord[]
-  statusMap: Map<string, string>
+  attendanceStatusMap: Map<string, string>
   selectedCourseId: string
   selectedDate: string
   lessonDateStatus: string
@@ -171,7 +171,7 @@ export function DashboardStudentSearch({
   courses,
   teachers,
   attendanceRecords,
-  statusMap,
+  attendanceStatusMap,
   selectedCourseId,
   selectedDate,
   lessonDateStatus,
@@ -444,12 +444,12 @@ export function DashboardStudentSearch({
 
               if (record) {
                 const rawStatus =
-                  statusMap.get(
+                  attendanceStatusMap.get(
                     normalizeId(
                       record.statusId,
                     ),
                   ) ?? ''
-
+              
                 attendanceStatus =
                   getAttendanceStatusLabel(
                     rawStatus,
@@ -474,7 +474,7 @@ export function DashboardStudentSearch({
         courses,
         teachers,
         attendanceRecords,
-        statusMap,
+        attendanceStatusMap,
         selectedCourseId,
         selectedDate,
         lessonDateStatus,
