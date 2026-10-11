@@ -1,5 +1,6 @@
+
 import type { ReactNode } from 'react'
-import { CheckCircle2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 import type { Transaction } from './payment-financial.types'
 
@@ -34,11 +35,7 @@ export function SummaryCard({
 export function StudentPaymentStatus({
   status,
 }: {
-  status:
-    | 'paid'
-    | 'partial'
-    | 'exempt'
-    | 'unpaid'
+  status: 'paid' | 'partial' | 'exempt' | 'unpaid'
 }) {
   if (status === 'paid') {
     return (
@@ -109,27 +106,14 @@ export function Modal({
   onClose: () => void
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose()
-        }
-      }}
-    >
-      <div
-        dir="rtl"
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card text-foreground shadow-2xl"
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card text-foreground shadow-2xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h3 className="font-bold">
-            {title}
-          </h3>
+          <h3 className="font-bold">{title}</h3>
 
           <button
             type="button"
             onClick={onClose}
-            aria-label="إغلاق"
             className="rounded-lg p-2 hover:bg-muted"
           >
             <X className="h-5 w-5" />
