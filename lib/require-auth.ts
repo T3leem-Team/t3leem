@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 import { isMaintenanceMode } from '@/lib/system-control'
@@ -8,6 +9,8 @@ export async function requireAuth() {
   const access = await validateCurrentAccess()
 
   if (!access.allowed) {
+    // لا نمسح كوكي الجلسة إذا كانت جلسة Supabase غير موجودة؛
+    // نحتفظ بها مؤقتًا حتى لا نفقد جزءًا إضافيًا من الجلسة.
     if (access.reason === 'guard_error') {
       return {
         access: null,
@@ -25,19 +28,24 @@ export async function requireAuth() {
     const response = NextResponse.json(
       {
         authenticated: false,
-        error: 'انتهت صلاحية الوصول إلى النظام.',
+        error:
+          access.reason === 'not_authenticated'
+            ? 'جلسة تسجيل الدخول غير متاحة. يرجى تسجيل الدخول مجددًا.'
+            : 'انتهت صلاحية الوصول إلى النظام.',
         reason: access.reason,
       },
       { status: 401 },
     )
 
-    response.cookies.set(SESSION_COOKIE, '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 0,
-    })
+    if (access.reason !== 'not_authenticated') {
+      response.cookies.set(SESSION_COOKIE, '', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 0,
+      })
+    }
 
     return {
       access: null,
