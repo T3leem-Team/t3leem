@@ -1,7 +1,15 @@
+export type FinancialMode =
+  | 'student_payments'
+  | 'manual'
 
-export type FinancialMode = 'student_payments' | 'manual'
-export type TransactionType = 'in' | 'out' | 'adjustment'
-export type AdjustmentDirection = 'plus' | 'minus'
+export type TransactionType =
+  | 'in'
+  | 'out'
+  | 'adjustment'
+
+export type AdjustmentDirection =
+  | 'plus'
+  | 'minus'
 
 export type FinancialSettings = {
   id: string
@@ -20,14 +28,21 @@ export type Transaction = {
   transaction_type: TransactionType
   amount: number
   adjustment_direction: AdjustmentDirection | null
-  source_type: 'student_payment' | 'manual' | 'adjustment' | 'opening'
+  source_type:
+    | 'student_payment'
+    | 'manual'
+    | 'adjustment'
+    | 'opening'
   source: string | null
   payment_id: string | null
   student_id: string | null
   student_request_number: string | null
   payment_method: string | null
   reference_number: string | null
-  confirmation_status: 'pending' | 'confirmed' | 'not_required'
+  confirmation_status:
+    | 'pending'
+    | 'confirmed'
+    | 'not_required'
   confirmed_by: string | null
   confirmed_at: string | null
   created_by: string | null
@@ -73,7 +88,11 @@ export type StudentPaymentRow = {
   annualFee: number
   paidAmount: number
   remaining: number
-  status: 'paid' | 'partial' | 'exempt' | 'unpaid'
+  status:
+    | 'paid'
+    | 'partial'
+    | 'exempt'
+    | 'unpaid'
   latestPaymentMethod: string | null
   latestPaymentDate: string | null
   latestPaymentId: string | null
