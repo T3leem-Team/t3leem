@@ -31,29 +31,8 @@ export type GuardResult = {
 
 export async function validateCurrentAccess(): Promise<GuardResult> {
   try {
-    const supabase = await createSupabaseServerClient()
-    const cookieStore = await cookies()
-
-    const allCookies = cookieStore.getAll()
-    const cookieNames = allCookies.map((cookie) => cookie.name)
-
-    // Diagnostic only: never log cookie values or authentication tokens.
-    console.log('[auth-guard] Session cookie diagnostic:', {
-      hasSupabaseAuthCookie: cookieNames.some(
-        (name) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name),
-      ),
-      hasCustomSessionCookie: cookieNames.includes(SESSION_COOKIE),
-      hasDeviceCookie: cookieNames.includes(DEVICE_COOKIE),
-    })
-
-    console.log('[auth-guard] Supabase cookie names:',
-      allCookies
-        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name))
-        .map((cookie) => ({
-          name: cookie.name,
-          length: cookie.value.length,
-        })),
-    )
+    const supabase =
+      await createSupabaseServerClient()
 
     const {
       data: { user },
@@ -61,21 +40,19 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      console.error('[auth-guard] getUser failed:', {
-        message: authError?.message,
-        status: authError?.status,
-        name: authError?.name,
-        hasUser: Boolean(user),
-      })
-
       return {
         allowed: false,
         reason: 'not_authenticated',
       }
     }
 
-    const sessionId = cookieStore.get(SESSION_COOKIE)?.value
-    const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
+    const cookieStore = await cookies()
+
+    const sessionId =
+      cookieStore.get(SESSION_COOKIE)?.value
+
+    const deviceToken =
+      cookieStore.get(DEVICE_COOKIE)?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -102,7 +79,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .maybeSingle()
 
     if (sessionError) {
-      console.error('Auth guard session lookup error:', sessionError)
+      console.error(
+        'Auth guard session lookup error:',
+        sessionError,
+      )
 
       return {
         allowed: false,
@@ -118,10 +98,18 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     const now = Date.now()
-    const expiresAt = new Date(session.expires_at).getTime()
 
-    if (!Number.isFinite(expiresAt) || now >= expiresAt) {
-      await closeSession(session.id, user.id)
+    const expiresAt =
+      new Date(session.expires_at).getTime()
+
+    if (
+      !Number.isFinite(expiresAt) ||
+      now >= expiresAt
+    ) {
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -129,14 +117,24 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const lastActivity = new Date(session.last_activity_at).getTime()
-    const idleTimeout = IDLE_TIMEOUT_MINUTES * 60 * 1000
+    const lastActivity =
+      new Date(
+        session.last_activity_at,
+      ).getTime()
+
+    const idleTimeout =
+      IDLE_TIMEOUT_MINUTES *
+      60 *
+      1000
 
     if (
       !Number.isFinite(lastActivity) ||
       now - lastActivity >= idleTimeout
     ) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -149,12 +147,20 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       error: profileError,
     } = await supabaseAdmin
       .from('user_profiles')
-      .select('id, username, role, is_active')
-      .eq('auth_user_id', user.id)
+      .select(
+        'id, username, role, is_active',
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
       .maybeSingle()
 
     if (profileError) {
-      console.error('Auth guard profile lookup error:', profileError)
+      console.error(
+        'Auth guard profile lookup error:',
+        profileError,
+      )
 
       return {
         allowed: false,
@@ -163,7 +169,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!profile || !profile.is_active) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -171,7 +180,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const deviceTokenHash = await sha256(deviceToken)
+    const deviceTokenHash =
+      await sha256(deviceToken)
 
     const {
       data: device,
@@ -179,14 +189,29 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     } = await supabaseAdmin
       .from('trusted_devices')
       .select('id')
-      .eq('id', session.trusted_device_id)
-      .eq('auth_user_id', user.id)
-      .eq('device_token_hash', deviceTokenHash)
-      .eq('status', 'approved')
+      .eq(
+        'id',
+        session.trusted_device_id,
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .eq(
+        'device_token_hash',
+        deviceTokenHash,
+      )
+      .eq(
+        'status',
+        'approved',
+      )
       .maybeSingle()
 
     if (deviceError) {
-      console.error('Auth guard device lookup error:', deviceError)
+      console.error(
+        'Auth guard device lookup error:',
+        deviceError,
+      )
 
       return {
         allowed: false,
@@ -195,7 +220,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!device) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -213,7 +241,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       role: profile.role,
     }
   } catch (error) {
-    console.error('Auth guard error:', error)
+    console.error(
+      'Auth guard error:',
+      error,
+    )
 
     return {
       allowed: false,
@@ -226,29 +257,59 @@ async function closeSession(
   sessionId: string,
   authUserId: string,
 ) {
-  const now = new Date().toISOString()
+  const now =
+    new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('id', sessionId)
-    .eq('auth_user_id', authUserId)
-    .eq('is_active', true)
+  const { error } =
+    await supabaseAdmin
+      .from('active_sessions')
+      .update({
+        is_active: false,
+        logout_at: now,
+        last_activity_at: now,
+      })
+      .eq(
+        'id',
+        sessionId,
+      )
+      .eq(
+        'auth_user_id',
+        authUserId,
+      )
+      .eq(
+        'is_active',
+        true,
+      )
 
   if (error) {
-    console.error('Close session error:', error)
+    console.error(
+      'Close session error:',
+      error,
+    )
   }
 }
 
-async function sha256(value: string) {
-  const data = new TextEncoder().encode(value)
-  const hash = await crypto.subtle.digest('SHA-256', data)
+async function sha256(
+  value: string,
+) {
+  const data =
+    new TextEncoder().encode(
+      value,
+    )
 
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
+  const hash =
+    await crypto.subtle.digest(
+      'SHA-256',
+      data,
+    )
+
+  return Array.from(
+    new Uint8Array(hash),
+  )
+    .map((byte) =>
+      byte
+        .toString(16)
+        .padStart(2, '0'),
+    )
     .join('')
 }
