@@ -6,8 +6,6 @@ import {
   useState,
 } from 'react'
 
-import { useRouter } from 'next/navigation'
-
 import {
   Search,
   UserPlus,
@@ -15,7 +13,6 @@ import {
   Download,
   X,
   Loader2,
-  ArrowRight,
 } from 'lucide-react'
 
 import * as XLSX from 'xlsx'
@@ -32,10 +29,12 @@ import {
 } from '@/lib/students-cache'
 
 import { PageHeader } from '@/components/dashboard/page-header'
+
 import {
   Card,
   CardContent,
 } from '@/components/ui/card'
+
 import { Button } from '@/components/ui/button'
 
 import { StudentDetails } from '@/app/(dashboard)/students/student-details'
@@ -1336,8 +1335,13 @@ export function StudentsView() {
       {isAddStudentOpen && (
         <StudentForm
           editingStudent={
-            editingStudent ??
-            null
+            editingStudent
+              ? {
+                  ...editingStudent,
+                  guardianRelation:
+                    editingStudent.guardianRelation ?? '',
+                }
+              : null
           }
           academicLevels={
             academicLevels
