@@ -1817,7 +1817,7 @@ export function EnrollmentView() {
                   ? {
                       ...item,
                       status:
-                        'rejected',
+                        'rejected'as const,
                     }
                   : item,
             )
@@ -1845,7 +1845,7 @@ export function EnrollmentView() {
             ? {
                 ...current,
                 status:
-                  'rejected',
+                  'rejected' as const,
               }
             : current,
       )
