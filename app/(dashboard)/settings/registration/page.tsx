@@ -104,7 +104,7 @@ function FieldControl({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-semibold">{title}</p>
-            <Badge variant="secondary">أساسي</Badge>
+            <Badge variant="default">أساسي</Badge>
           </div>
 
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -131,7 +131,6 @@ function FieldControl({
     </div>
   )
 }
-
 function ToggleButton({
   label,
   checked,
@@ -805,9 +804,10 @@ export default function RegistrationSettingsPage() {
     setSavingRegistrationLevel(false)
   }
 
-  async function loadCustomFields() {
-    setCustomFieldsLoading(true)
+ async function loadCustomFields() {
+  setCustomFieldsLoading(true)
 
+  try {
     const { data, error } = await supabase
       .from('custom_fields')
       .select(`
@@ -830,31 +830,29 @@ export default function RegistrationSettingsPage() {
         `تعذر تحميل الحقول الإضافية: ${error.message}`,
       )
 
-      setCustomFieldsLoading(false)
       return
     }
 
     if (!data || data.length === 0) {
       setCustomFields([])
-      setCustomFieldsLoading(false)
       return
     }
 
     const fieldIds = data.map((field) => field.id)
 
-    const { data: visibilityData, error: visibilityError } =
-      await supabase
-        .from('custom_field_visibility')
-        .select(
-          `
-          custom_field_id,
-          section,
-          is_visible,
-          is_required,
-          sort_order
-        `,
-        )
-        .in('custom_field_id', fieldIds)
+    const {
+      data: visibilityData,
+      error: visibilityError,
+    } = await supabase
+      .from('custom_field_visibility')
+      .select(`
+        custom_field_id,
+        section,
+        is_visible,
+        is_required,
+        sort_order
+      `)
+      .in('custom_field_id', fieldIds)
 
     if (visibilityError) {
       console.error(
@@ -867,39 +865,53 @@ export default function RegistrationSettingsPage() {
       )
     }
 
+    type VisibilitySection =
+      | 'registration'
+      | 'students'
+      | 'payments'
+
+    type SectionVisibility = {
+      is_visible: boolean
+      is_required: boolean
+      sort_order: number
+    }
+
     const fields: CustomField[] = data.map((field) => {
-      const visibility = {
-        registration: {
-          is_visible: false,
-          is_required: false,
-          sort_order: field.sort_order,
-        },
-        students: {
-          is_visible: false,
-          is_required: false,
-          sort_order: field.sort_order,
-        },
-        payments: {
-          is_visible: false,
-          is_required: false,
-          sort_order: field.sort_order,
-        },
+      const defaultVisibility: SectionVisibility = {
+        is_visible: false,
+        is_required: false,
+        sort_order: field.sort_order,
+      }
+
+      const visibility: Record<
+        VisibilitySection,
+        SectionVisibility
+      > = {
+        registration: { ...defaultVisibility },
+        students: { ...defaultVisibility },
+        payments: { ...defaultVisibility },
       }
 
       for (const row of visibilityData ?? []) {
-        if (row.custom_field_id !== field.id) continue
+        if (row.custom_field_id !== field.id) {
+          continue
+        }
+
+        const section = row.section
 
         if (
-          row.section === 'registration' ||
-          row.section === 'students' ||
-          row.section === 'payments'
+          section !== 'registration' &&
+          section !== 'students' &&
+          section !== 'payments'
         ) {
-          visibility[row.section] = {
-            is_visible: row.is_visible ?? false,
-            is_required: row.is_required ?? false,
-            sort_order:
-              row.sort_order ?? field.sort_order,
-          }
+          continue
+        }
+
+        visibility[section] = {
+          is_visible: row.is_visible ?? false,
+          is_required: row.is_required ?? false,
+          sort_order:
+            row.sort_order ?? field.sort_order,
         }
       }
 
@@ -910,23 +922,30 @@ export default function RegistrationSettingsPage() {
     })
 
     setCustomFields(fields)
+  } catch (error) {
+    console.error('Error loading custom fields:', error)
+
+    setErrorMessage(
+      'حدث خطأ غير متوقع أثناء تحميل الحقول الإضافية.',
+    )
+  } finally {
     setCustomFieldsLoading(false)
   }
+}
 
-  async function saveSettings() {
-    setSaving(true)
-    setErrorMessage('')
-    setSuccessMessage('')
+async function saveSettings() {
+  setSaving(true)
+  setErrorMessage('')
+  setSuccessMessage('')
 
-    const cleanEducationGroupLink =
-      educationGroupLink.trim()
+  const cleanEducationGroupLink =
+    educationGroupLink.trim()
 
-    const cleanEducationGroupDescription =
-      educationGroupDescription.trim()
+  const cleanEducationGroupDescription =
+    educationGroupDescription.trim()
 
-    const cleanPostRegistrationNotes =
-      postRegistrationNotes.trim()
-
+  const cleanPostRegistrationNotes =
+    postRegistrationNotes.trim()
     // ==========================================================
     // التحقق من دورة التسجيل
     // ==========================================================
@@ -2280,96 +2299,89 @@ export default function RegistrationSettingsPage() {
                     </Button>
                   </div>
 
-                  <div className="mt-4 space-y-2">
-                    {newFieldOptions.map(
-                      (option, index) => (
-                        <div
-                          key={index}
-                          className="flex gap-2"
-                        >
-                          <input
-                            type="text"
-                            value={option}
-                            onChange={(event) =>
-                              updateOption(
-                                index,
-                                event.target.value,
-                              )
-                            }
-                            placeholder={`الخيار ${index + 1}`}
-                            className="flex h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            disabled={savingField}
-                          />
-
-                          {newFieldOptions.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeOption(index)
-                              }
-                              disabled={savingField}
-                              className="rounded-lg border p-2 text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
-                          )}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddField(false)
-                    resetNewFieldForm()
-                  }}
-                  disabled={savingField}
-                >
-                  إلغاء
-                </Button>
-
-                <Button
-                  type="button"
-                  onClick={addCustomField}
-                  disabled={savingField}
-                >
-                  {savingField ? (
-                    <>
-                      <Loader2 className="ml-2 size-4 animate-spin" />
-                      جاري الإضافة...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="ml-2 size-4" />
-                      إضافة الحقل
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+              <div className="mt-4 space-y-2">
+              {newFieldOptions.map((option, index) => (
+              <div
+          key={index}
+          className="flex gap-2"
+        >
+          <input
+            type="text"
+            value={option}
+            onChange={(event) =>
+              updateOption(index, event.target.value)
+            }
+            placeholder={`الخيار ${index + 1}`}
+            className="flex h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            disabled={savingField}
+          />
+    
+          {newFieldOptions.length > 1 && (
+            <button
+              type="button"
+              onClick={() => removeOption(index)}
+              disabled={savingField}
+              className="rounded-lg border p-2 text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="size-4" />
+            </button>
           )}
+        </div>
+      ))}
+    </div>
+    </div>
+    )}
+    
+    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => {
+          setShowAddField(false)
+          resetNewFieldForm()
+        }}
+        disabled={savingField}
+      >
+        إلغاء
+      </Button>
+    
+      <Button
+        type="button"
+        onClick={addCustomField}
+        disabled={savingField}
+      >
+        {savingField ? (
+          <>
+            <Loader2 className="ml-2 size-4 animate-spin" />
+            جاري الإضافة...
+          </>
+        ) : (
+          <>
+            <Plus className="ml-2 size-4" />
+            إضافة الحقل
+          </>
+        )}
+      </Button>
+    </div>
+    </div>
+    )}
 
-          {customFieldsLoading ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl border p-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              جاري تحميل الحقول الإضافية...
-            </div>
-          ) : activeCustomFields.length === 0 ? (
-            <div className="rounded-2xl border border-dashed p-8 text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
-                <Plus className="size-5 text-muted-foreground" />
-              </div>
-
-              <p className="mt-3 font-medium">
-                لا توجد حقول إضافية
-              </p>
-            </div>
-          ) : (
+    {customFieldsLoading ? (
+      <div className="flex items-center justify-center gap-2 rounded-xl border p-8 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        جاري تحميل الحقول الإضافية...
+      </div>
+    ) : activeCustomFields.length === 0 ? (
+      <div className="rounded-2xl border border-dashed p-8 text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+          <Plus className="size-5 text-muted-foreground" />
+        </div>
+    
+        <p className="mt-3 font-medium">
+          لا توجد حقول إضافية
+        </p>
+      </div>
+    ) : (
             <div className="space-y-4">
               {activeCustomFields.map((field, index) => (
                 <div
