@@ -65,7 +65,6 @@ const emptyFilters: Filters = {
 }
 
 export function StudentsView() {
-  const router = useRouter()
 
   const initialCache =
     getStudentsCache()
