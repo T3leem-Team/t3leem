@@ -548,7 +548,18 @@ export async function POST(request: NextRequest) {
       access_token: session.access_token,
       refresh_token: session.refresh_token,
     })
-
+    console.log('[LOGIN_DIAGNOSTIC] Supabase session cookie write:', {
+      hasSessionError: Boolean(setSessionError),
+      cookieNames: response.cookies
+        .getAll()
+        .filter(({ name }) =>
+          /^sb-.+-auth-token(?:\.\d+)?$/.test(name)
+        )
+        .map(({ name, value }) => ({
+          name,
+          length: value.length,
+        })),
+    })
     if (setSessionError) {
       console.error('Supabase session setup error:', {
         message: setSessionError.message,
