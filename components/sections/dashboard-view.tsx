@@ -1324,15 +1324,11 @@ export function DashboardView() {
               enrollmentsResult.data ??
               []
             )
-              .filter(
+               .filter(
                 (enrollment) =>
                   normalizeId(
-                    enrollment.academicYearId ??
-                      enrollment.academic_year_id,
-                  ) ===
-                  normalizeId(
-                    currentYear.id,
-                  ),
+                    enrollment.academic_year_id,
+                  ) === normalizeId(currentYear.id),
               )
               .map(
                 (enrollment) => ({
