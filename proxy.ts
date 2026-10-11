@@ -2,6 +2,14 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const isApiRoute = pathname.startsWith('/api/')
+
+  // نترك طلبات API تتحقق من المصادقة داخل كل API نفسه
+  if (isApiRoute) {
+    return NextResponse.next({ request })
+  }
+
   let response = NextResponse.next({
     request,
   })
@@ -16,21 +24,15 @@ export async function proxy(request: NextRequest) {
         },
 
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(
-            ({ name, value, options }) => {
-              request.cookies.set(name, value)
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)
 
-              response = NextResponse.next({
-                request,
-              })
+            response = NextResponse.next({
+              request,
+            })
 
-              response.cookies.set(
-                name,
-                value,
-                options,
-              )
-            },
-          )
+            response.cookies.set(name, value, options)
+          })
         },
       },
     },
@@ -40,66 +42,25 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
-
-  const isApiRoute =
-    pathname.startsWith('/api/')
-
   const isPublicRoute =
     pathname === '/login' ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password' ||
     pathname === '/register' ||
-    pathname === '/student-status' ||
-    pathname === '/api/auth/login'
+    pathname === '/student-status'
 
-  /*
-   * ---------------------------------------------------------
-   * API
-   * ---------------------------------------------------------
-   *
-   * لا نعمل redirect للـAPI إلى /login.
-   *
-   * كل API مسؤول عن التحقق من المصادقة بنفسه
-   * عن طريق requireAuth() أو آلية الحماية الخاصة به.
-   *
-   * هذا مهم جدًا حتى لا يتحول طلب API غير مصادق
-   * إلى صفحة HTML /login.
-   */
-  if (isApiRoute) {
-    return response
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * الصفحات العامة
-   * ---------------------------------------------------------
-   */
+  // السماح بالصفحات العامة
   if (isPublicRoute) {
     return response
   }
 
-  /*
-   * ---------------------------------------------------------
-   * حماية صفحات النظام
-   * ---------------------------------------------------------
-   */
+  // حماية صفحات النظام
   if (!user) {
     return NextResponse.redirect(
       new URL('/login', request.url),
     )
   }
 
-  /*
-   * مهم:
-   *
-   * لا نعيد المستخدم من /login إلى /
-   * حتى لا ندخل في redirect loop عند انتهاء
-   * جلسة Supabase أو أثناء تنظيف جلسة T3LEEM.
-   *
-   * صفحة تسجيل الدخول تتعامل مع تسجيل الدخول
-   * بشكل مستقل.
-   */
   return response
 }
 
