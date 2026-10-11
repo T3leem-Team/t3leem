@@ -7,7 +7,16 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-async function authorizePrimaryAdmin() {
+type AuthorizationResult =
+  | {
+      allowed: true
+    }
+  | {
+      allowed: false
+      response: Response
+    }
+
+async function authorizePrimaryAdmin(): Promise<AuthorizationResult> {
   const access = await validateCurrentAccess()
 
   if (!access.allowed) {
@@ -37,11 +46,10 @@ async function authorizePrimaryAdmin() {
 
   return {
     allowed: true,
-    response: null,
   }
 }
 
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const authorization = await authorizePrimaryAdmin()
 
@@ -65,7 +73,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   try {
     const authorization = await authorizePrimaryAdmin()
 
