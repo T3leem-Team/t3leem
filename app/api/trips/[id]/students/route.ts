@@ -1336,7 +1336,7 @@ export async function POST(
       )
 
     const invalidStudentIds =
-      selectedStudentIds.filter(
+      (selectedStudentIds as string[]).filter(
         (studentId) =>
           !candidateStudentSet.has(
             studentId,
