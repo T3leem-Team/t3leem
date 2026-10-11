@@ -1,5 +1,5 @@
-
 import { NextResponse } from 'next/server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 import { isMaintenanceMode } from '@/lib/system-control'
 
@@ -9,8 +9,6 @@ export async function requireAuth() {
   const access = await validateCurrentAccess()
 
   if (!access.allowed) {
-    // لا نمسح كوكي الجلسة إذا كانت جلسة Supabase غير موجودة؛
-    // نحتفظ بها مؤقتًا حتى لا نفقد جزءًا إضافيًا من الجلسة.
     if (access.reason === 'guard_error') {
       return {
         access: null,
@@ -25,27 +23,38 @@ export async function requireAuth() {
       }
     }
 
+    try {
+      const supabase =
+        await createSupabaseServerClient()
+
+      await supabase.auth.signOut()
+    } catch (error) {
+      console.error(
+        'Auth cleanup error:',
+        error,
+      )
+    }
+
     const response = NextResponse.json(
       {
         authenticated: false,
-        error:
-          access.reason === 'not_authenticated'
-            ? 'جلسة تسجيل الدخول غير متاحة. يرجى تسجيل الدخول مجددًا.'
-            : 'انتهت صلاحية الوصول إلى النظام.',
+        error: 'انتهت صلاحية الوصول إلى النظام.',
         reason: access.reason,
       },
       { status: 401 },
     )
 
-    if (access.reason !== 'not_authenticated') {
-      response.cookies.set(SESSION_COOKIE, '', {
+    response.cookies.set(
+      SESSION_COOKIE,
+      '',
+      {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
         maxAge: 0,
-      })
-    }
+      },
+    )
 
     return {
       access: null,
@@ -74,7 +83,10 @@ export async function requireAuth() {
       }
     }
   } catch (error) {
-    console.error('Maintenance check error:', error)
+    console.error(
+      'Maintenance check error:',
+      error,
+    )
 
     return {
       access: null,
