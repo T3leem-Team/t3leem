@@ -1337,6 +1337,7 @@ export function StudentsView() {
             editingStudent
               ? {
                   ...editingStudent,
+                  phone: editingStudent.phone ?? undefined,
                   guardianRelation:
                     editingStudent.guardianRelation ?? '',
                 }
