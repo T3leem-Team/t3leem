@@ -290,102 +290,243 @@ export default function Page() {
     )
   }
 
-const handleSave = async () => {
-  if (!username.trim()) {
-    setError('اكتب اسم المستخدم.')
-    return
-  }
-
-  if (!email.trim()) {
-    setError('اكتب البريد الإلكتروني.')
-    return
-  }
-
-  if (!fullName.trim()) {
-    setError('اكتب الاسم الكامل.')
-    return
-  }
-
-  if (!editingId && !password) {
-    setError('اكتب كلمة المرور.')
-    return
-  }
-
-  if (password && password.length < 8) {
-    setError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
-    return
-  }
-
-  try {
-    setSaving(true)
-    setError('')
-
-    const isEditing = editingId !== null
-
-    const rolePermissionIds = getRolePermissionIds(role)
-
-    const additionalPermissionIds = Array.from(
-      new Set(
-        selectedPermissions.filter(
-          (id) => !rolePermissionIds.includes(id),
-        ),
-      ),
-    )
-
-    const body = isEditing
-      ? {
-          userId: editingId,
-          email: email.trim().toLowerCase(),
-          fullName: fullName.trim(),
-          department: department.trim() || null,
-          role,
-          ...(password ? { password } : {}),
-          permissionIds: additionalPermissionIds,
-          sectionIds: selectedSections,
-        }
-      : {
-          username: username.trim(),
-          email: email.trim().toLowerCase(),
-          fullName: fullName.trim(),
-          department: department.trim() || null,
-          password,
-          role,
-          permissionIds: additionalPermissionIds,
-          sectionIds: selectedSections,
-        }
-
-    const response = await fetch('/api/admin/users', {
-      method: isEditing ? 'PATCH' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ??
-          (isEditing
-            ? 'تعذر حفظ التعديلات.'
-            : 'تعذر إنشاء المستخدم.'),
-      )
+  const handleSave = async () => {
+    if (!username.trim()) {
+      setError('اكتب اسم المستخدم.')
+      return
     }
 
-    await loadUsers()
+    if (!email.trim()) {
+      setError('اكتب البريد الإلكتروني.')
+      return
+    }
 
-    resetForm()
-  } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'حدث خطأ غير متوقع.',
-    )
-  } finally {
-    setSaving(false)
+    if (!fullName.trim()) {
+      setError('اكتب الاسم الكامل.')
+      return
+    }
+
+    if (!editingId && !password) {
+      setError('اكتب كلمة المرور.')
+      return
+    }
+
+    if (
+      password &&
+      password.length < 8
+    ) {
+      setError(
+        'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
+      )
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const isEditing =
+        editingId !== null
+
+      const rolePermissionIds =
+        getRolePermissionIds(role)
+
+      const additionalPermissionIds =
+        Array.from(
+          new Set(
+            selectedPermissions.filter(
+              (id) =>
+                !rolePermissionIds.includes(
+                  id,
+                ),
+            ),
+          ),
+        )
+
+      const body = isEditing
+        ? {
+            userId: editingId,
+
+            email:
+              email
+                .trim()
+                .toLowerCase(),
+
+            fullName:
+              fullName.trim(),
+
+            department:
+              department.trim() ||
+              null,
+
+            role,
+
+            ...(password
+              ? { password }
+              : {}),
+
+            permissionIds:
+              additionalPermissionIds,
+
+            sectionIds:
+              selectedSections,
+          }
+        : {
+            username:
+              username.trim(),
+
+            email:
+              email
+                .trim()
+                .toLowerCase(),
+
+            fullName:
+              fullName.trim(),
+
+            department:
+              department.trim() ||
+              null,
+
+            password,
+
+            role,
+
+            permissionIds:
+              additionalPermissionIds,
+
+            sectionIds:
+              selectedSections,
+          }
+
+      const response =
+        await fetch(
+          '/api/admin/users',
+          {
+            method: isEditing
+              ? 'PATCH'
+              : 'POST',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify(
+                body,
+              ),
+          },
+        )
+
+      const data =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            (isEditing
+              ? 'تعذر حفظ التعديلات.'
+              : 'تعذر إنشاء المستخدم.'),
+        )
+      }
+
+      resetForm()
+
+      await loadUsers()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'حدث خطأ غير متوقع.',
+      )
+    } finally {
+      setSaving(false)
+    }
   }
-}
+
+  const handleToggleActive = async (
+    user: User,
+  ) => {
+    const action = user.is_active
+      ? 'تعطيل'
+      : 'تفعيل'
+
+    const confirmed =
+      window.confirm(
+        `هل أنت متأكد من ${action} المستخدم "${user.full_name}"؟`,
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+
+      const response =
+        await fetch(
+          '/api/admin/users',
+          {
+            method: 'PATCH',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                userId: user.id,
+
+                email:
+                  user.email,
+
+                fullName:
+                  user.full_name,
+
+                role:
+                  user.role,
+
+                department:
+                  user.department,
+
+                isActive:
+                  !user.is_active,
+
+                permissionIds:
+                  user.permissionIds ??
+                  [],
+
+                sectionIds:
+                  user.sectionIds ??
+                  [],
+              }),
+          },
+        )
+
+      const data =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ??
+            `تعذر ${action} المستخدم.`,
+        )
+      }
+
+      await loadUsers()
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `تعذر ${action} المستخدم.`,
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const selectedSectionsLabel =
     selectedSections.length === 0
       ? 'اختر أقسام لوحة التحكم'
