@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
@@ -32,7 +31,8 @@ export type GuardResult = {
 
 export async function validateCurrentAccess(): Promise<GuardResult> {
   try {
-    const supabase = await createSupabaseServerClient()
+    const supabase =
+      await createSupabaseServerClient()
 
     const {
       data: { user },
@@ -48,8 +48,11 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     const cookieStore = await cookies()
 
-    const sessionId = cookieStore.get(SESSION_COOKIE)?.value
-    const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
+    const sessionId =
+      cookieStore.get(SESSION_COOKIE)?.value
+
+    const deviceToken =
+      cookieStore.get(DEVICE_COOKIE)?.value
 
     if (!sessionId || !deviceToken) {
       return {
@@ -58,36 +61,22 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // Fetch independent data in parallel to reduce latency.
-    const [sessionResult, profileResult, deviceTokenHash] =
-      await Promise.all([
-        supabaseAdmin
-          .from('active_sessions')
-          .select(`
-            id,
-            auth_user_id,
-            trusted_device_id,
-            is_active,
-            last_activity_at,
-            expires_at
-          `)
-          .eq('id', sessionId)
-          .eq('auth_user_id', user.id)
-          .maybeSingle(),
-
-        supabaseAdmin
-          .from('user_profiles')
-          .select('id, username, role, is_active')
-          .eq('auth_user_id', user.id)
-          .maybeSingle(),
-
-        sha256(deviceToken),
-      ])
-
     const {
       data: session,
       error: sessionError,
-    } = sessionResult
+    } = await supabaseAdmin
+      .from('active_sessions')
+      .select(`
+        id,
+        auth_user_id,
+        trusted_device_id,
+        is_active,
+        last_activity_at,
+        expires_at
+      `)
+      .eq('id', sessionId)
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
 
     if (sessionError) {
       console.error(
@@ -110,13 +99,17 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     const now = Date.now()
 
-    const expiresAt = new Date(session.expires_at).getTime()
+    const expiresAt =
+      new Date(session.expires_at).getTime()
 
     if (
       !Number.isFinite(expiresAt) ||
       now >= expiresAt
     ) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -124,18 +117,24 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const lastActivity = new Date(
-      session.last_activity_at,
-    ).getTime()
+    const lastActivity =
+      new Date(
+        session.last_activity_at,
+      ).getTime()
 
     const idleTimeout =
-      IDLE_TIMEOUT_MINUTES * 60 * 1000
+      IDLE_TIMEOUT_MINUTES *
+      60 *
+      1000
 
     if (
       !Number.isFinite(lastActivity) ||
       now - lastActivity >= idleTimeout
     ) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -146,7 +145,16 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const {
       data: profile,
       error: profileError,
-    } = profileResult
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(
+        'id, username, role, is_active',
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .maybeSingle()
 
     if (profileError) {
       console.error(
@@ -161,7 +169,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!profile || !profile.is_active) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -169,17 +180,31 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // The device lookup depends on the trusted_device_id from the session.
+    const deviceTokenHash =
+      await sha256(deviceToken)
+
     const {
       data: device,
       error: deviceError,
     } = await supabaseAdmin
       .from('trusted_devices')
       .select('id')
-      .eq('id', session.trusted_device_id)
-      .eq('auth_user_id', user.id)
-      .eq('device_token_hash', deviceTokenHash)
-      .eq('status', 'approved')
+      .eq(
+        'id',
+        session.trusted_device_id,
+      )
+      .eq(
+        'auth_user_id',
+        user.id,
+      )
+      .eq(
+        'device_token_hash',
+        deviceTokenHash,
+      )
+      .eq(
+        'status',
+        'approved',
+      )
       .maybeSingle()
 
     if (deviceError) {
@@ -195,7 +220,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!device) {
-      await closeSession(session.id, user.id)
+      await closeSession(
+        session.id,
+        user.id,
+      )
 
       return {
         allowed: false,
@@ -229,18 +257,29 @@ async function closeSession(
   sessionId: string,
   authUserId: string,
 ) {
-  const now = new Date().toISOString()
+  const now =
+    new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('id', sessionId)
-    .eq('auth_user_id', authUserId)
-    .eq('is_active', true)
+  const { error } =
+    await supabaseAdmin
+      .from('active_sessions')
+      .update({
+        is_active: false,
+        logout_at: now,
+        last_activity_at: now,
+      })
+      .eq(
+        'id',
+        sessionId,
+      )
+      .eq(
+        'auth_user_id',
+        authUserId,
+      )
+      .eq(
+        'is_active',
+        true,
+      )
 
   if (error) {
     console.error(
@@ -250,17 +289,27 @@ async function closeSession(
   }
 }
 
-async function sha256(value: string): Promise<string> {
-  const data = new TextEncoder().encode(value)
+async function sha256(
+  value: string,
+) {
+  const data =
+    new TextEncoder().encode(
+      value,
+    )
 
-  const hash = await crypto.subtle.digest(
-    'SHA-256',
-    data,
+  const hash =
+    await crypto.subtle.digest(
+      'SHA-256',
+      data,
+    )
+
+  return Array.from(
+    new Uint8Array(hash),
   )
-
-  return Array.from(new Uint8Array(hash))
     .map((byte) =>
-      byte.toString(16).padStart(2, '0'),
+      byte
+        .toString(16)
+        .padStart(2, '0'),
     )
     .join('')
 }
