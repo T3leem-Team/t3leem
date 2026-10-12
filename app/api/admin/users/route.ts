@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requirePermission } from '@/lib/auth/authorization'
@@ -49,17 +50,20 @@ export async function GET() {
 
     /*
      * --------------------------------------------------
-     * تحميل المستخدمين
+     * تحميل البيانات بالتوازي
      * --------------------------------------------------
      */
-    const {
-      data: users,
-      error: usersError,
-    } =
-      await supabaseAdmin
+    const [
+      usersResult,
+      permissionsResult,
+      userPermissionsResult,
+      rolePermissionsResult,
+      dashboardSectionsResult,
+      userDashboardSectionsResult,
+    ] = await Promise.all([
+      supabaseAdmin
         .from('user_profiles')
-        .select(
-          `
+        .select(`
           id,
           auth_user_id,
           username,
@@ -70,156 +74,43 @@ export async function GET() {
           is_active,
           created_at,
           updated_at
-          `,
-        )
-        .order(
-          'created_at',
-          {
-            ascending: false,
-          },
-        )
+        `)
+        .order('created_at', {
+          ascending: false,
+        }),
 
-    if (usersError) {
-      console.error(
-        'Users lookup error:',
-        usersError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل المستخدمين.',
-        },
-        { status: 500 },
-      )
-    }
-
-    /*
-     * --------------------------------------------------
-     * تحميل جميع الصلاحيات
-     * --------------------------------------------------
-     */
-    const {
-      data: permissions,
-      error: permissionsError,
-    } =
-      await supabaseAdmin
+      supabaseAdmin
         .from('permissions')
-        .select(
-          `
+        .select(`
           id,
           permission_key,
           permission_name,
           description,
           created_at
-          `,
-        )
-        .order(
-          'permission_name',
-          {
-            ascending: true,
-          },
-        )
+        `)
+        .order('permission_name', {
+          ascending: true,
+        }),
 
-    if (permissionsError) {
-      console.error(
-        'Permissions lookup error:',
-        permissionsError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل الصلاحيات.',
-        },
-        { status: 500 },
-      )
-    }
-
-    /*
-     * --------------------------------------------------
-     * تحميل الصلاحيات الفردية للمستخدمين
-     * --------------------------------------------------
-     */
-    const {
-      data: userPermissions,
-      error:
-        userPermissionsError,
-    } =
-      await supabaseAdmin
+      supabaseAdmin
         .from('user_permissions')
-        .select(
-          `
+        .select(`
           id,
           user_profile_id,
           permission_id,
           created_at
-          `,
-        )
+        `),
 
-    if (userPermissionsError) {
-      console.error(
-        'User permissions lookup error:',
-        userPermissionsError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل صلاحيات المستخدمين.',
-        },
-        { status: 500 },
-      )
-    }
-
-    /*
-     * --------------------------------------------------
-     * تحميل صلاحيات الأدوار
-     * --------------------------------------------------
-     */
-    const {
-      data: rolePermissions,
-      error:
-        rolePermissionsError,
-    } =
-      await supabaseAdmin
+      supabaseAdmin
         .from('role_permissions')
-        .select(
-          `
+        .select(`
           role,
           permission_id
-          `,
-        )
+        `),
 
-    if (rolePermissionsError) {
-      console.error(
-        'Role permissions lookup error:',
-        rolePermissionsError,
-      )
-
-      return NextResponse.json(
-        {
-          error:
-            'تعذر تحميل صلاحيات الأدوار.',
-        },
-        { status: 500 },
-      )
-    }
-
-    /*
-     * --------------------------------------------------
-     * تحميل أقسام لوحة التحكم
-     * --------------------------------------------------
-     */
-    const {
-      data: dashboardSections,
-      error:
-        dashboardSectionsError,
-    } =
-      await supabaseAdmin
+      supabaseAdmin
         .from('dashboard_sections')
-        .select(
-          `
+        .select(`
           id,
           section_key,
           section_name,
@@ -230,59 +121,100 @@ export async function GET() {
           is_active,
           created_at,
           updated_at
-          `,
-        )
-        .order(
-          'sort_order',
-          {
-            ascending: true,
-          },
-        )
+        `)
+        .order('sort_order', {
+          ascending: true,
+        }),
 
-    if (dashboardSectionsError) {
+      supabaseAdmin
+        .from('user_dashboard_sections')
+        .select(`
+          id,
+          user_profile_id,
+          section_id,
+          created_at
+        `),
+    ])
+
+    /*
+     * --------------------------------------------------
+     * التحقق من أخطاء الاستعلامات
+     * --------------------------------------------------
+     */
+    if (usersResult.error) {
       console.error(
-        'Dashboard sections lookup error:',
-        dashboardSectionsError,
+        'Users lookup error:',
+        usersResult.error,
       )
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل أقسام لوحة التحكم.',
+          error: 'تعذر تحميل المستخدمين.',
         },
         { status: 500 },
       )
     }
 
-    /*
-     * --------------------------------------------------
-     * تحميل ربط أقسام لوحة التحكم بالمستخدمين
-     * --------------------------------------------------
-     */
-    const {
-      data: userDashboardSections,
-      error:
-        userDashboardSectionsError,
-    } =
-      await supabaseAdmin
-        .from(
-          'user_dashboard_sections',
-        )
-        .select(
-          `
-          id,
-          user_profile_id,
-          section_id,
-          created_at
-          `,
-        )
+    if (permissionsResult.error) {
+      console.error(
+        'Permissions lookup error:',
+        permissionsResult.error,
+      )
 
-    if (
-      userDashboardSectionsError
-    ) {
+      return NextResponse.json(
+        {
+          error: 'تعذر تحميل الصلاحيات.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (userPermissionsResult.error) {
+      console.error(
+        'User permissions lookup error:',
+        userPermissionsResult.error,
+      )
+
+      return NextResponse.json(
+        {
+          error: 'تعذر تحميل صلاحيات المستخدمين.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (rolePermissionsResult.error) {
+      console.error(
+        'Role permissions lookup error:',
+        rolePermissionsResult.error,
+      )
+
+      return NextResponse.json(
+        {
+          error: 'تعذر تحميل صلاحيات الأدوار.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (dashboardSectionsResult.error) {
+      console.error(
+        'Dashboard sections lookup error:',
+        dashboardSectionsResult.error,
+      )
+
+      return NextResponse.json(
+        {
+          error: 'تعذر تحميل أقسام لوحة التحكم.',
+        },
+        { status: 500 },
+      )
+    }
+
+    if (userDashboardSectionsResult.error) {
       console.error(
         'User dashboard sections lookup error:',
-        userDashboardSectionsError,
+        userDashboardSectionsResult.error,
       )
 
       return NextResponse.json(
@@ -294,199 +226,249 @@ export async function GET() {
       )
     }
 
+    const users = usersResult.data ?? []
+    const permissions = permissionsResult.data ?? []
+    const userPermissions = userPermissionsResult.data ?? []
+    const rolePermissions = rolePermissionsResult.data ?? []
+    const dashboardSections = dashboardSectionsResult.data ?? []
+    const userDashboardSections =
+      userDashboardSectionsResult.data ?? []
+
+    /*
+     * --------------------------------------------------
+     * تجهيز فهارس الصلاحيات الفردية حسب المستخدم
+     * --------------------------------------------------
+     */
+    const userPermissionIdsByUser =
+      new Map<string, Set<string>>()
+
+    for (const item of userPermissions) {
+      let permissionIds =
+        userPermissionIdsByUser.get(
+          item.user_profile_id,
+        )
+
+      if (!permissionIds) {
+        permissionIds = new Set<string>()
+
+        userPermissionIdsByUser.set(
+          item.user_profile_id,
+          permissionIds,
+        )
+      }
+
+      permissionIds.add(item.permission_id)
+    }
+
+    /*
+     * --------------------------------------------------
+     * تجهيز فهارس صلاحيات الأدوار
+     * --------------------------------------------------
+     */
+    const rolePermissionIdsByRole =
+      new Map<string, Set<string>>()
+
+    for (const item of rolePermissions) {
+      let permissionIds =
+        rolePermissionIdsByRole.get(item.role)
+
+      if (!permissionIds) {
+        permissionIds = new Set<string>()
+
+        rolePermissionIdsByRole.set(
+          item.role,
+          permissionIds,
+        )
+      }
+
+      permissionIds.add(item.permission_id)
+    }
+
+    /*
+     * --------------------------------------------------
+     * تجهيز فهارس أقسام لوحة التحكم حسب المستخدم
+     * --------------------------------------------------
+     */
+    const userSectionIdsByUser =
+      new Map<string, Set<string>>()
+
+    for (const item of userDashboardSections) {
+      let sectionIds =
+        userSectionIdsByUser.get(
+          item.user_profile_id,
+        )
+
+      if (!sectionIds) {
+        sectionIds = new Set<string>()
+
+        userSectionIdsByUser.set(
+          item.user_profile_id,
+          sectionIds,
+        )
+      }
+
+      sectionIds.add(item.section_id)
+    }
+
+    /*
+     * --------------------------------------------------
+     * تجهيز فهرس تفاصيل الصلاحيات
+     * --------------------------------------------------
+     */
+    const permissionsById =
+      new Map(
+        permissions.map((permission) => [
+          permission.id,
+          permission,
+        ]),
+      )
+
+    /*
+     * --------------------------------------------------
+     * تجهيز تفاصيل صلاحيات الأدوار مرة واحدة
+     * --------------------------------------------------
+     */
+    const rolePermissionDetailsByRole =
+      new Map<string, typeof permissions>()
+
+    for (const [role, permissionIds] of rolePermissionIdsByRole) {
+      rolePermissionDetailsByRole.set(
+        role,
+        permissions.filter((permission) =>
+          permissionIds.has(permission.id),
+        ),
+      )
+    }
+
+    /*
+     * --------------------------------------------------
+     * تجهيز فهرس تفاصيل أقسام لوحة التحكم
+     * --------------------------------------------------
+     */
+    const sectionsById =
+      new Map(
+        dashboardSections.map((section) => [
+          section.id,
+          section,
+        ]),
+      )
+
     /*
      * --------------------------------------------------
      * تجهيز بيانات المستخدمين
      * --------------------------------------------------
      */
     const usersWithPermissions =
-      (users ?? []).map(
-        (user) => {
-          /*
-           * ----------------------------------------------
-           * الصلاحيات الفردية فقط
-           * ----------------------------------------------
-           */
-          const permissionLinks =
-            (
-              userPermissions ??
-              []
-            ).filter(
-              (item) =>
-                item.user_profile_id ===
-                user.id,
+      users.map((user) => {
+        /*
+         * الصلاحيات الفردية فقط
+         */
+        const userPermissionIds = Array.from(
+          userPermissionIdsByUser.get(user.id) ??
+            new Set<string>(),
+        )
+
+        const userPermissionIdSet =
+          new Set(userPermissionIds)
+
+        const userPermissionDetails =
+          userPermissionIds
+            .map((id) => permissionsById.get(id))
+            .filter(
+              (
+                permission,
+              ): permission is (typeof permissions)[number] =>
+                permission !== undefined,
             )
 
-          const userPermissionIds =
-            Array.from(
-              new Set(
-                permissionLinks.map(
-                  (item) =>
-                    item.permission_id,
-                ),
-              ),
+        /*
+         * صلاحيات الدور
+         */
+        const rolePermissionIds = Array.from(
+          rolePermissionIdsByRole.get(user.role) ??
+            new Set<string>(),
+        )
+
+        const rolePermissionIdSet =
+          new Set(rolePermissionIds)
+
+        const rolePermissionDetails =
+          rolePermissionDetailsByRole.get(user.role) ?? []
+
+        /*
+         * جميع الصلاحيات الفعلية
+         */
+        const effectivePermissionIds =
+          Array.from(
+            new Set([
+              ...rolePermissionIds,
+              ...userPermissionIds,
+            ]),
+          )
+
+        const effectivePermissionIdSet =
+          new Set(effectivePermissionIds)
+
+        const effectivePermissionDetails =
+          permissions.filter((permission) =>
+            effectivePermissionIdSet.has(
+              permission.id,
+            ),
+          )
+
+        /*
+         * أقسام لوحة التحكم
+         */
+        const userSectionIds = Array.from(
+          userSectionIdsByUser.get(user.id) ??
+            new Set<string>(),
+        )
+
+        const userSectionDetails =
+          userSectionIds
+            .map((id) => sectionsById.get(id))
+            .filter(
+              (
+                section,
+              ): section is (typeof dashboardSections)[number] =>
+                section !== undefined,
             )
 
-          /*
-           * ----------------------------------------------
-           * صلاحيات الدور
-           * ----------------------------------------------
-           */
-          const rolePermissionIds =
-            Array.from(
-              new Set(
-                (
-                  rolePermissions ??
-                  []
-                )
-                  .filter(
-                    (item) =>
-                      item.role ===
-                      user.role,
-                  )
-                  .map(
-                    (item) =>
-                      item.permission_id,
-                  ),
-              ),
-            )
+        return {
+          ...user,
 
-          /*
-           * ----------------------------------------------
-           * جميع الصلاحيات الفعلية
-           * ----------------------------------------------
-           */
-          const effectivePermissionIds =
-            Array.from(
-              new Set([
-                ...rolePermissionIds,
-                ...userPermissionIds,
-              ]),
-            )
+          permissionIds:
+            userPermissionIds,
 
-          /*
-           * ----------------------------------------------
-           * تفاصيل الصلاحيات الفردية
-           * ----------------------------------------------
-           */
-          const userPermissionDetails =
-            (
-              permissions ??
-              []
-            ).filter(
-              (permission) =>
-                userPermissionIds.includes(
-                  permission.id,
-                ),
-            )
+          permissions:
+            userPermissionDetails,
 
-          /*
-           * ----------------------------------------------
-           * تفاصيل صلاحيات الدور
-           * ----------------------------------------------
-           */
-          const rolePermissionDetails =
-            (
-              permissions ??
-              []
-            ).filter(
-              (permission) =>
-                rolePermissionIds.includes(
-                  permission.id,
-                ),
-            )
+          rolePermissionIds:
+            rolePermissionIds,
 
-          /*
-           * ----------------------------------------------
-           * تفاصيل جميع الصلاحيات الفعلية
-           * ----------------------------------------------
-           */
-          const effectivePermissionDetails =
-            (
-              permissions ??
-              []
-            ).filter(
-              (permission) =>
-                effectivePermissionIds.includes(
-                  permission.id,
-                ),
-            )
+          rolePermissions:
+            rolePermissionDetails,
 
-          /*
-           * ----------------------------------------------
-           * أقسام لوحة التحكم
-           * ----------------------------------------------
-           */
-          const sectionLinks =
-            (
-              userDashboardSections ??
-              []
-            ).filter(
-              (item) =>
-                item.user_profile_id ===
-                user.id,
-            )
+          effectivePermissionIds:
+            effectivePermissionIds,
 
-          const userSectionIds =
-            Array.from(
-              new Set(
-                sectionLinks.map(
-                  (item) =>
-                    item.section_id,
-                ),
-              ),
-            )
+          effectivePermissions:
+            effectivePermissionDetails,
 
-          const userSectionDetails =
-            (
-              dashboardSections ??
-              []
-            ).filter(
-              (section) =>
-                userSectionIds.includes(
-                  section.id,
-                ),
-            )
+          sectionIds:
+            userSectionIds,
 
-          return {
-            ...user,
-
-            permissionIds:
-              userPermissionIds,
-
-            permissions:
-              userPermissionDetails,
-
-            rolePermissionIds:
-              rolePermissionIds,
-
-            rolePermissions:
-              rolePermissionDetails,
-
-            effectivePermissionIds:
-              effectivePermissionIds,
-
-            effectivePermissions:
-              effectivePermissionDetails,
-
-            sectionIds:
-              userSectionIds,
-
-            sections:
-              userSectionDetails,
-          }
-        },
-      )
+          sections:
+            userSectionDetails,
+        }
+      })
 
     return NextResponse.json({
-      users:
-        usersWithPermissions,
+      users: usersWithPermissions,
 
-      permissions:
-        permissions ?? [],
+      permissions,
 
-      dashboardSections:
-        dashboardSections ?? [],
+      dashboardSections,
     })
   } catch (error) {
     console.error(
@@ -529,38 +511,32 @@ export async function POST(
       await request.json()
 
     const username =
-      typeof body.username ===
-      'string'
+      typeof body.username === 'string'
         ? body.username.trim()
         : ''
 
     const fullName =
-      typeof body.fullName ===
-      'string'
+      typeof body.fullName === 'string'
         ? body.fullName.trim()
         : ''
 
     const email =
-      typeof body.email ===
-      'string'
+      typeof body.email === 'string'
         ? body.email.trim().toLowerCase()
         : ''
 
     const password =
-      typeof body.password ===
-      'string'
+      typeof body.password === 'string'
         ? body.password
         : ''
 
     const role =
-      typeof body.role ===
-      'string'
+      typeof body.role === 'string'
         ? body.role
         : ''
 
     const department =
-      typeof body.department ===
-      'string'
+      typeof body.department === 'string'
         ? body.department.trim()
         : null
 
@@ -568,15 +544,10 @@ export async function POST(
      * الصلاحيات الفردية فقط
      */
     const permissionIds =
-      Array.isArray(
-        body.permissionIds,
-      )
+      Array.isArray(body.permissionIds)
         ? body.permissionIds.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id ===
-              'string',
+            (id: unknown): id is string =>
+              typeof id === 'string',
           )
         : []
 
@@ -584,15 +555,10 @@ export async function POST(
      * أقسام لوحة التحكم
      */
     const sectionIds =
-      Array.isArray(
-        body.sectionIds,
-      )
+      Array.isArray(body.sectionIds)
         ? body.sectionIds.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id ===
-              'string',
+            (id: unknown): id is string =>
+              typeof id === 'string',
           )
         : []
 
@@ -619,14 +585,11 @@ export async function POST(
      * التحقق من البريد
      */
     if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email,
-      )
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     ) {
       return NextResponse.json(
         {
-          error:
-            'البريد الإلكتروني غير صالح.',
+          error: 'البريد الإلكتروني غير صالح.',
         },
         { status: 400 },
       )
@@ -636,14 +599,11 @@ export async function POST(
      * التحقق من الدور
      */
     if (
-      !ALLOWED_ROLES.includes(
-        role as AllowedRole,
-      )
+      !ALLOWED_ROLES.includes(role as AllowedRole)
     ) {
       return NextResponse.json(
         {
-          error:
-            'الدور المحدد غير صالح.',
+          error: 'الدور المحدد غير صالح.',
         },
         { status: 400 },
       )
@@ -652,9 +612,7 @@ export async function POST(
     /*
      * التحقق من كلمة المرور
      */
-    if (
-      password.length < 8
-    ) {
+    if (password.length < 8) {
       return NextResponse.json(
         {
           error:
@@ -665,21 +623,29 @@ export async function POST(
     }
 
     /*
-     * التحقق من اسم المستخدم
+     * التحقق من اسم المستخدم والبريد بالتوازي
      */
-    const {
-      data: existingProfile,
-      error:
-        existingProfileError,
-    } =
-      await supabaseAdmin
+    const [
+      existingProfileResult,
+      existingEmailResult,
+    ] = await Promise.all([
+      supabaseAdmin
         .from('user_profiles')
         .select('id')
-        .eq(
-          'username',
-          username,
-        )
-        .maybeSingle()
+        .eq('username', username)
+        .maybeSingle(),
+
+      supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle(),
+    ])
+
+    const {
+      data: existingProfile,
+      error: existingProfileError,
+    } = existingProfileResult
 
     if (existingProfileError) {
       console.error(
@@ -689,8 +655,7 @@ export async function POST(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر التحقق من اسم المستخدم.',
+          error: 'تعذر التحقق من اسم المستخدم.',
         },
         { status: 500 },
       )
@@ -699,29 +664,16 @@ export async function POST(
     if (existingProfile) {
       return NextResponse.json(
         {
-          error:
-            'اسم المستخدم مستخدم بالفعل.',
+          error: 'اسم المستخدم مستخدم بالفعل.',
         },
         { status: 409 },
       )
     }
 
-    /*
-     * التحقق من البريد
-     */
     const {
       data: existingEmailProfile,
-      error:
-        existingEmailError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select('id')
-        .eq(
-          'email',
-          email,
-        )
-        .maybeSingle()
+      error: existingEmailError,
+    } = existingEmailResult
 
     if (existingEmailError) {
       console.error(
@@ -731,8 +683,7 @@ export async function POST(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر التحقق من البريد الإلكتروني.',
+          error: 'تعذر التحقق من البريد الإلكتروني.',
         },
         { status: 500 },
       )
@@ -741,8 +692,7 @@ export async function POST(
     if (existingEmailProfile) {
       return NextResponse.json(
         {
-          error:
-            'البريد الإلكتروني مستخدم بالفعل.',
+          error: 'البريد الإلكتروني مستخدم بالفعل.',
         },
         { status: 409 },
       )
@@ -756,20 +706,13 @@ export async function POST(
     const {
       data: authData,
       error: authError,
-    } =
-      await supabaseAdmin.auth.admin.createUser(
-        {
-          email,
-          password,
-          email_confirm:
-            true,
-        },
-      )
+    } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    })
 
-    if (
-      authError ||
-      !authData.user
-    ) {
+    if (authError || !authData.user) {
       console.error(
         'Auth user creation error:',
         authError,
@@ -796,51 +739,33 @@ export async function POST(
     const {
       data: profile,
       error: profileError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .insert({
-          auth_user_id:
-            authUserId,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .insert({
+        auth_user_id: authUserId,
+        username,
+        email,
+        full_name: fullName,
+        role,
+        department: department || null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .select(`
+        id,
+        auth_user_id,
+        username,
+        email,
+        full_name,
+        role,
+        department,
+        is_active,
+        created_at,
+        updated_at
+      `)
+      .single()
 
-          username,
-
-          email,
-
-          full_name:
-            fullName,
-
-          role,
-
-          department:
-            department || null,
-
-          is_active:
-            true,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .select(
-          `
-          id,
-          auth_user_id,
-          username,
-          email,
-          full_name,
-          role,
-          department,
-          is_active,
-          created_at,
-          updated_at
-          `,
-        )
-        .single()
-
-    if (
-      profileError ||
-      !profile
-    ) {
+    if (profileError || !profile) {
       console.error(
         'Profile creation error:',
         profileError,
@@ -852,8 +777,7 @@ export async function POST(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر إنشاء ملف المستخدم.',
+          error: 'تعذر إنشاء ملف المستخدم.',
         },
         { status: 500 },
       )
@@ -868,28 +792,16 @@ export async function POST(
      * --------------------------------------------------
      */
     const uniquePermissionIds =
-      Array.from(
-        new Set(
-          permissionIds,
-        ),
-      )
+      Array.from(new Set(permissionIds))
 
-    if (
-      uniquePermissionIds.length >
-      0
-    ) {
+    if (uniquePermissionIds.length > 0) {
       const {
         data: validPermissions,
-        error:
-          permissionsError,
-      } =
-        await supabaseAdmin
-          .from('permissions')
-          .select('id')
-          .in(
-            'id',
-            uniquePermissionIds,
-          )
+        error: permissionsError,
+      } = await supabaseAdmin
+        .from('permissions')
+        .select('id')
+        .in('id', uniquePermissionIds)
 
       if (permissionsError) {
         console.error(
@@ -900,10 +812,7 @@ export async function POST(
         await supabaseAdmin
           .from('user_profiles')
           .delete()
-          .eq(
-            'id',
-            profile.id,
-          )
+          .eq('id', profile.id)
 
         await supabaseAdmin.auth.admin.deleteUser(
           authUserId,
@@ -911,8 +820,7 @@ export async function POST(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر التحقق من الصلاحيات.',
+            error: 'تعذر التحقق من الصلاحيات.',
           },
           { status: 500 },
         )
@@ -920,33 +828,21 @@ export async function POST(
 
       if (
         validPermissions &&
-        validPermissions.length >
-          0
+        validPermissions.length > 0
       ) {
         const rows =
-          validPermissions.map(
-            (permission) => ({
-              user_profile_id:
-                profile.id,
-
-              permission_id:
-                permission.id,
-            }),
-          )
+          validPermissions.map((permission) => ({
+            user_profile_id: profile.id,
+            permission_id: permission.id,
+          }))
 
         const {
-          error:
-            permissionInsertError,
-        } =
-          await supabaseAdmin
-            .from(
-              'user_permissions',
-            )
-            .insert(rows)
+          error: permissionInsertError,
+        } = await supabaseAdmin
+          .from('user_permissions')
+          .insert(rows)
 
-        if (
-          permissionInsertError
-        ) {
+        if (permissionInsertError) {
           console.error(
             'User permissions insert error:',
             permissionInsertError,
@@ -955,10 +851,7 @@ export async function POST(
           await supabaseAdmin
             .from('user_profiles')
             .delete()
-            .eq(
-              'id',
-              profile.id,
-            )
+            .eq('id', profile.id)
 
           await supabaseAdmin.auth.admin.deleteUser(
             authUserId,
@@ -981,31 +874,18 @@ export async function POST(
      * --------------------------------------------------
      */
     const uniqueSectionIds =
-      Array.from(
-        new Set(
-          sectionIds,
-        ),
-      )
+      Array.from(new Set(sectionIds))
 
-    let validSectionIds: string[] =
-      []
+    let validSectionIds: string[] = []
 
-    if (
-      uniqueSectionIds.length >
-      0
-    ) {
+    if (uniqueSectionIds.length > 0) {
       const {
         data: validSections,
-        error:
-          sectionsError,
-      } =
-        await supabaseAdmin
-          .from('dashboard_sections')
-          .select('id')
-          .in(
-            'id',
-            uniqueSectionIds,
-          )
+        error: sectionsError,
+      } = await supabaseAdmin
+        .from('dashboard_sections')
+        .select('id')
+        .in('id', uniqueSectionIds)
 
       if (sectionsError) {
         console.error(
@@ -1016,18 +896,12 @@ export async function POST(
         await supabaseAdmin
           .from('user_permissions')
           .delete()
-          .eq(
-            'user_profile_id',
-            profile.id,
-          )
+          .eq('user_profile_id', profile.id)
 
         await supabaseAdmin
           .from('user_profiles')
           .delete()
-          .eq(
-            'id',
-            profile.id,
-          )
+          .eq('id', profile.id)
 
         await supabaseAdmin.auth.admin.deleteUser(
           authUserId,
@@ -1043,64 +917,38 @@ export async function POST(
       }
 
       validSectionIds =
-        (
-          validSections ??
-          []
-        ).map(
-          (section) =>
-            section.id,
+        (validSections ?? []).map(
+          (section) => section.id,
         )
 
-      if (
-        validSectionIds.length >
-        0
-      ) {
+      if (validSectionIds.length > 0) {
         const rows =
-          validSectionIds.map(
-            (sectionId) => ({
-              user_profile_id:
-                profile.id,
-
-              section_id:
-                sectionId,
-            }),
-          )
+          validSectionIds.map((sectionId) => ({
+            user_profile_id: profile.id,
+            section_id: sectionId,
+          }))
 
         const {
-          error:
-            sectionInsertError,
-        } =
-          await supabaseAdmin
-            .from(
-              'user_dashboard_sections',
-            )
-            .insert(rows)
+          error: sectionInsertError,
+        } = await supabaseAdmin
+          .from('user_dashboard_sections')
+          .insert(rows)
 
-        if (
-          sectionInsertError
-        ) {
+        if (sectionInsertError) {
           console.error(
             'User dashboard sections insert error:',
             sectionInsertError,
           )
 
           await supabaseAdmin
-            .from(
-              'user_permissions',
-            )
+            .from('user_permissions')
             .delete()
-            .eq(
-              'user_profile_id',
-              profile.id,
-            )
+            .eq('user_profile_id', profile.id)
 
           await supabaseAdmin
             .from('user_profiles')
             .delete()
-            .eq(
-              'id',
-              profile.id,
-            )
+            .eq('id', profile.id)
 
           await supabaseAdmin.auth.admin.deleteUser(
             authUserId,
@@ -1124,26 +972,16 @@ export async function POST(
      */
     const {
       data: createdRolePermissions,
-    } =
-      await supabaseAdmin
-        .from('role_permissions')
-        .select(
-          'permission_id',
-        )
-        .eq(
-          'role',
-          role,
-        )
+    } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id')
+      .eq('role', role)
 
     const createdRolePermissionIds =
       Array.from(
         new Set(
-          (
-            createdRolePermissions ??
-            []
-          ).map(
-            (item) =>
-              item.permission_id,
+          (createdRolePermissions ?? []).map(
+            (item) => item.permission_id,
           ),
         ),
       )
@@ -1211,9 +1049,7 @@ export async function PATCH(
     const {
       access,
       error,
-    } = await requirePermission(
-      'users.manage',
-    )
+    } = await requirePermission('users.manage')
 
     if (error) {
       return error
@@ -1223,44 +1059,37 @@ export async function PATCH(
       await request.json()
 
     const userId =
-      typeof body.userId ===
-      'string'
+      typeof body.userId === 'string'
         ? body.userId
         : ''
 
     const fullName =
-      typeof body.fullName ===
-      'string'
+      typeof body.fullName === 'string'
         ? body.fullName.trim()
         : ''
 
     const email =
-      typeof body.email ===
-      'string'
+      typeof body.email === 'string'
         ? body.email.trim().toLowerCase()
         : ''
 
     const role =
-      typeof body.role ===
-      'string'
+      typeof body.role === 'string'
         ? body.role
         : ''
 
     const department =
-      typeof body.department ===
-      'string'
+      typeof body.department === 'string'
         ? body.department.trim()
         : null
 
     const isActive =
-      typeof body.isActive ===
-      'boolean'
+      typeof body.isActive === 'boolean'
         ? body.isActive
         : undefined
 
     const password =
-      typeof body.password ===
-      'string'
+      typeof body.password === 'string'
         ? body.password
         : ''
 
@@ -1268,15 +1097,10 @@ export async function PATCH(
      * الصلاحيات الفردية فقط
      */
     const permissionIds =
-      Array.isArray(
-        body.permissionIds,
-      )
+      Array.isArray(body.permissionIds)
         ? body.permissionIds.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id ===
-              'string',
+            (id: unknown): id is string =>
+              typeof id === 'string',
           )
         : []
 
@@ -1284,59 +1108,43 @@ export async function PATCH(
      * أقسام لوحة التحكم
      */
     const sectionIds =
-      Array.isArray(
-        body.sectionIds,
-      )
+      Array.isArray(body.sectionIds)
         ? body.sectionIds.filter(
-            (
-              id: unknown,
-            ): id is string =>
-              typeof id ===
-              'string',
+            (id: unknown): id is string =>
+              typeof id === 'string',
           )
         : []
 
     if (!userId) {
       return NextResponse.json(
         {
-          error:
-            'معرف المستخدم مطلوب.',
+          error: 'معرف المستخدم مطلوب.',
+        },
+        { status: 400 },
+      )
+    }
+
+    if (!fullName || !role) {
+      return NextResponse.json(
+        {
+          error: 'الاسم الكامل والدور مطلوبان.',
         },
         { status: 400 },
       )
     }
 
     if (
-      !fullName ||
-      !role
+      !ALLOWED_ROLES.includes(role as AllowedRole)
     ) {
       return NextResponse.json(
         {
-          error:
-            'الاسم الكامل والدور مطلوبان.',
+          error: 'الدور المحدد غير صالح.',
         },
         { status: 400 },
       )
     }
 
-    if (
-      !ALLOWED_ROLES.includes(
-        role as AllowedRole,
-      )
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'الدور المحدد غير صالح.',
-        },
-        { status: 400 },
-      )
-    }
-
-    if (
-      password &&
-      password.length < 8
-    ) {
+    if (password && password.length < 8) {
       return NextResponse.json(
         {
           error:
@@ -1348,14 +1156,11 @@ export async function PATCH(
 
     if (
       email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email,
-      )
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     ) {
       return NextResponse.json(
         {
-          error:
-            'البريد الإلكتروني غير صالح.',
+          error: 'البريد الإلكتروني غير صالح.',
         },
         { status: 400 },
       )
@@ -1368,28 +1173,21 @@ export async function PATCH(
      */
     const {
       data: targetUser,
-      error:
-        targetUserError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          `
-          id,
-          auth_user_id,
-          username,
-          email,
-          full_name,
-          role,
-          department,
-          is_active
-          `,
-        )
-        .eq(
-          'id',
-          userId,
-        )
-        .maybeSingle()
+      error: targetUserError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(`
+        id,
+        auth_user_id,
+        username,
+        email,
+        full_name,
+        role,
+        department,
+        is_active
+      `)
+      .eq('id', userId)
+      .maybeSingle()
 
     if (targetUserError) {
       console.error(
@@ -1399,8 +1197,7 @@ export async function PATCH(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر العثور على المستخدم.',
+          error: 'تعذر العثور على المستخدم.',
         },
         { status: 500 },
       )
@@ -1409,8 +1206,7 @@ export async function PATCH(
     if (!targetUser) {
       return NextResponse.json(
         {
-          error:
-            'المستخدم غير موجود.',
+          error: 'المستخدم غير موجود.',
         },
         { status: 404 },
       )
@@ -1427,21 +1223,13 @@ export async function PATCH(
     ) {
       const {
         data: existingEmailProfile,
-        error:
-          existingEmailError,
-      } =
-        await supabaseAdmin
-          .from('user_profiles')
-          .select('id')
-          .eq(
-            'email',
-            email,
-          )
-          .neq(
-            'id',
-            userId,
-          )
-          .maybeSingle()
+        error: existingEmailError,
+      } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .neq('id', userId)
+        .maybeSingle()
 
       if (existingEmailError) {
         console.error(
@@ -1451,8 +1239,7 @@ export async function PATCH(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر التحقق من البريد الإلكتروني.',
+            error: 'تعذر التحقق من البريد الإلكتروني.',
           },
           { status: 500 },
         )
@@ -1461,8 +1248,7 @@ export async function PATCH(
       if (existingEmailProfile) {
         return NextResponse.json(
           {
-            error:
-              'البريد الإلكتروني مستخدم بالفعل.',
+            error: 'البريد الإلكتروني مستخدم بالفعل.',
           },
           { status: 409 },
         )
@@ -1475,20 +1261,18 @@ export async function PATCH(
      * --------------------------------------------------
      */
     if (
-      targetUser.auth_user_id ===
-        access!.userId &&
+      targetUser.auth_user_id === access!.userId &&
       isActive === false
     ) {
       return NextResponse.json(
         {
-          error:
-            'لا يمكنك تعطيل حسابك الحالي.',
+          error: 'لا يمكنك تعطيل حسابك الحالي.',
         },
         { status: 400 },
       )
     }
 
-     /*
+    /*
      * --------------------------------------------------
      * تحديث Supabase Auth عند وجود تغيير فعلي فقط
      * --------------------------------------------------
@@ -1508,7 +1292,10 @@ export async function PATCH(
         isActive ? 'none' : '876000h'
     }
 
-    if (email && email !== targetUser.email) {
+    if (
+      email &&
+      email !== targetUser.email
+    ) {
       authUpdate.email = email
     }
 
@@ -1544,60 +1331,40 @@ export async function PATCH(
       string,
       unknown
     > = {
-      full_name:
-        fullName,
-
+      full_name: fullName,
       role,
-
-      department:
-        department || null,
-
-      updated_at:
-        new Date().toISOString(),
+      department: department || null,
+      updated_at: new Date().toISOString(),
     }
 
     if (email) {
-      profileUpdate.email =
-        email
+      profileUpdate.email = email
     }
 
-    if (
-      isActive !==
-      undefined
-    ) {
-      profileUpdate.is_active =
-        isActive
+    if (isActive !== undefined) {
+      profileUpdate.is_active = isActive
     }
 
     const {
       data: updatedProfile,
-      error:
-        profileUpdateError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .update(
-          profileUpdate,
-        )
-        .eq(
-          'id',
-          userId,
-        )
-        .select(
-          `
-          id,
-          auth_user_id,
-          username,
-          email,
-          full_name,
-          role,
-          department,
-          is_active,
-          created_at,
-          updated_at
-          `,
-        )
-        .single()
+      error: profileUpdateError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .update(profileUpdate)
+      .eq('id', userId)
+      .select(`
+        id,
+        auth_user_id,
+        username,
+        email,
+        full_name,
+        role,
+        department,
+        is_active,
+        created_at,
+        updated_at
+      `)
+      .single()
 
     if (profileUpdateError) {
       console.error(
@@ -1607,8 +1374,7 @@ export async function PATCH(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحديث بيانات المستخدم.',
+          error: 'تعذر تحديث بيانات المستخدم.',
         },
         { status: 500 },
       )
@@ -1622,31 +1388,18 @@ export async function PATCH(
      * --------------------------------------------------
      */
     const uniquePermissionIds =
-      Array.from(
-        new Set(
-          permissionIds,
-        ),
-      )
+      Array.from(new Set(permissionIds))
 
-    let validPermissionIds: string[] =
-      []
+    let validPermissionIds: string[] = []
 
-    if (
-      uniquePermissionIds.length >
-      0
-    ) {
+    if (uniquePermissionIds.length > 0) {
       const {
         data: validPermissions,
-        error:
-          permissionsError,
-      } =
-        await supabaseAdmin
-          .from('permissions')
-          .select('id')
-          .in(
-            'id',
-            uniquePermissionIds,
-          )
+        error: permissionsError,
+      } = await supabaseAdmin
+        .from('permissions')
+        .select('id')
+        .in('id', uniquePermissionIds)
 
       if (permissionsError) {
         console.error(
@@ -1656,20 +1409,15 @@ export async function PATCH(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر التحقق من الصلاحيات.',
+            error: 'تعذر التحقق من الصلاحيات.',
           },
           { status: 500 },
         )
       }
 
       validPermissionIds =
-        (
-          validPermissions ??
-          []
-        ).map(
-          (permission) =>
-            permission.id,
+        (validPermissions ?? []).map(
+          (permission) => permission.id,
         )
     }
 
@@ -1677,22 +1425,13 @@ export async function PATCH(
      * حذف الصلاحيات الفردية القديمة
      */
     const {
-      error:
-        deletePermissionsError,
-    } =
-      await supabaseAdmin
-        .from(
-          'user_permissions',
-        )
-        .delete()
-        .eq(
-          'user_profile_id',
-          userId,
-        )
+      error: deletePermissionsError,
+    } = await supabaseAdmin
+      .from('user_permissions')
+      .delete()
+      .eq('user_profile_id', userId)
 
-    if (
-      deletePermissionsError
-    ) {
+    if (deletePermissionsError) {
       console.error(
         'Old permissions delete error:',
         deletePermissionsError,
@@ -1700,8 +1439,7 @@ export async function PATCH(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحديث صلاحيات المستخدم.',
+          error: 'تعذر تحديث صلاحيات المستخدم.',
         },
         { status: 500 },
       )
@@ -1710,34 +1448,20 @@ export async function PATCH(
     /*
      * إضافة الصلاحيات الفردية الجديدة
      */
-    if (
-      validPermissionIds.length >
-      0
-    ) {
+    if (validPermissionIds.length > 0) {
       const rows =
-        validPermissionIds.map(
-          (permissionId) => ({
-            user_profile_id:
-              userId,
-
-            permission_id:
-              permissionId,
-          }),
-        )
+        validPermissionIds.map((permissionId) => ({
+          user_profile_id: userId,
+          permission_id: permissionId,
+        }))
 
       const {
-        error:
-          permissionInsertError,
-      } =
-        await supabaseAdmin
-          .from(
-            'user_permissions',
-          )
-          .insert(rows)
+        error: permissionInsertError,
+      } = await supabaseAdmin
+        .from('user_permissions')
+        .insert(rows)
 
-      if (
-        permissionInsertError
-      ) {
+      if (permissionInsertError) {
         console.error(
           'New permissions insert error:',
           permissionInsertError,
@@ -1745,8 +1469,7 @@ export async function PATCH(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر حفظ صلاحيات المستخدم.',
+            error: 'تعذر حفظ صلاحيات المستخدم.',
           },
           { status: 500 },
         )
@@ -1759,31 +1482,18 @@ export async function PATCH(
      * --------------------------------------------------
      */
     const uniqueSectionIds =
-      Array.from(
-        new Set(
-          sectionIds,
-        ),
-      )
+      Array.from(new Set(sectionIds))
 
-    let validSectionIds: string[] =
-      []
+    let validSectionIds: string[] = []
 
-    if (
-      uniqueSectionIds.length >
-      0
-    ) {
+    if (uniqueSectionIds.length > 0) {
       const {
         data: validSections,
-        error:
-          sectionsError,
-      } =
-        await supabaseAdmin
-          .from('dashboard_sections')
-          .select('id')
-          .in(
-            'id',
-            uniqueSectionIds,
-          )
+        error: sectionsError,
+      } = await supabaseAdmin
+        .from('dashboard_sections')
+        .select('id')
+        .in('id', uniqueSectionIds)
 
       if (sectionsError) {
         console.error(
@@ -1801,12 +1511,8 @@ export async function PATCH(
       }
 
       validSectionIds =
-        (
-          validSections ??
-          []
-        ).map(
-          (section) =>
-            section.id,
+        (validSections ?? []).map(
+          (section) => section.id,
         )
     }
 
@@ -1814,22 +1520,13 @@ export async function PATCH(
      * حذف الأقسام القديمة
      */
     const {
-      error:
-        deleteSectionsError,
-    } =
-      await supabaseAdmin
-        .from(
-          'user_dashboard_sections',
-        )
-        .delete()
-        .eq(
-          'user_profile_id',
-          userId,
-        )
+      error: deleteSectionsError,
+    } = await supabaseAdmin
+      .from('user_dashboard_sections')
+      .delete()
+      .eq('user_profile_id', userId)
 
-    if (
-      deleteSectionsError
-    ) {
+    if (deleteSectionsError) {
       console.error(
         'Old dashboard sections delete error:',
         deleteSectionsError,
@@ -1847,34 +1544,20 @@ export async function PATCH(
     /*
      * إضافة الأقسام الجديدة
      */
-    if (
-      validSectionIds.length >
-      0
-    ) {
+    if (validSectionIds.length > 0) {
       const rows =
-        validSectionIds.map(
-          (sectionId) => ({
-            user_profile_id:
-              userId,
-
-            section_id:
-              sectionId,
-          }),
-        )
+        validSectionIds.map((sectionId) => ({
+          user_profile_id: userId,
+          section_id: sectionId,
+        }))
 
       const {
-        error:
-          sectionInsertError,
-      } =
-        await supabaseAdmin
-          .from(
-            'user_dashboard_sections',
-          )
-          .insert(rows)
+        error: sectionInsertError,
+      } = await supabaseAdmin
+        .from('user_dashboard_sections')
+        .insert(rows)
 
-      if (
-        sectionInsertError
-      ) {
+      if (sectionInsertError) {
         console.error(
           'New dashboard sections insert error:',
           sectionInsertError,
@@ -1897,26 +1580,16 @@ export async function PATCH(
      */
     const {
       data: updatedRolePermissions,
-    } =
-      await supabaseAdmin
-        .from('role_permissions')
-        .select(
-          'permission_id',
-        )
-        .eq(
-          'role',
-          role,
-        )
+    } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id')
+      .eq('role', role)
 
     const updatedRolePermissionIds =
       Array.from(
         new Set(
-          (
-            updatedRolePermissions ??
-            []
-          ).map(
-            (item) =>
-              item.permission_id,
+          (updatedRolePermissions ?? []).map(
+            (item) => item.permission_id,
           ),
         ),
       )
@@ -1986,9 +1659,7 @@ export async function DELETE(
     const {
       access,
       error,
-    } = await requirePermission(
-      'users.manage',
-    )
+    } = await requirePermission('users.manage')
 
     if (error) {
       return error
@@ -1998,16 +1669,14 @@ export async function DELETE(
       await request.json()
 
     const userId =
-      typeof body.userId ===
-      'string'
+      typeof body.userId === 'string'
         ? body.userId
         : ''
 
     if (!userId) {
       return NextResponse.json(
         {
-          error:
-            'معرف المستخدم مطلوب.',
+          error: 'معرف المستخدم مطلوب.',
         },
         { status: 400 },
       )
@@ -2018,24 +1687,17 @@ export async function DELETE(
      */
     const {
       data: targetUser,
-      error:
-        targetUserError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          `
-          id,
-          auth_user_id,
-          username,
-          role
-          `,
-        )
-        .eq(
-          'id',
-          userId,
-        )
-        .maybeSingle()
+      error: targetUserError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(`
+        id,
+        auth_user_id,
+        username,
+        role
+      `)
+      .eq('id', userId)
+      .maybeSingle()
 
     if (targetUserError) {
       console.error(
@@ -2045,8 +1707,7 @@ export async function DELETE(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر العثور على المستخدم.',
+          error: 'تعذر العثور على المستخدم.',
         },
         { status: 500 },
       )
@@ -2055,8 +1716,7 @@ export async function DELETE(
     if (!targetUser) {
       return NextResponse.json(
         {
-          error:
-            'المستخدم غير موجود.',
+          error: 'المستخدم غير موجود.',
         },
         { status: 404 },
       )
@@ -2066,13 +1726,11 @@ export async function DELETE(
      * منع حذف الحساب الحالي
      */
     if (
-      targetUser.auth_user_id ===
-      access!.userId
+      targetUser.auth_user_id === access!.userId
     ) {
       return NextResponse.json(
         {
-          error:
-            'لا يمكنك حذف حسابك الحالي.',
+          error: 'لا يمكنك حذف حسابك الحالي.',
         },
         { status: 400 },
       )
@@ -2084,22 +1742,13 @@ export async function DELETE(
      * role_permissions لا تُحذف لأنها مرتبطة بالدور.
      */
     const {
-      error:
-        permissionsDeleteError,
-    } =
-      await supabaseAdmin
-        .from(
-          'user_permissions',
-        )
-        .delete()
-        .eq(
-          'user_profile_id',
-          targetUser.id,
-        )
+      error: permissionsDeleteError,
+    } = await supabaseAdmin
+      .from('user_permissions')
+      .delete()
+      .eq('user_profile_id', targetUser.id)
 
-    if (
-      permissionsDeleteError
-    ) {
+    if (permissionsDeleteError) {
       console.error(
         'Permissions delete error:',
         permissionsDeleteError,
@@ -2107,8 +1756,7 @@ export async function DELETE(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر حذف صلاحيات المستخدم.',
+          error: 'تعذر حذف صلاحيات المستخدم.',
         },
         { status: 500 },
       )
@@ -2118,22 +1766,13 @@ export async function DELETE(
      * حذف ربط أقسام لوحة التحكم
      */
     const {
-      error:
-        sectionsDeleteError,
-    } =
-      await supabaseAdmin
-        .from(
-          'user_dashboard_sections',
-        )
-        .delete()
-        .eq(
-          'user_profile_id',
-          targetUser.id,
-        )
+      error: sectionsDeleteError,
+    } = await supabaseAdmin
+      .from('user_dashboard_sections')
+      .delete()
+      .eq('user_profile_id', targetUser.id)
 
-    if (
-      sectionsDeleteError
-    ) {
+    if (sectionsDeleteError) {
       console.error(
         'Dashboard sections delete error:',
         sectionsDeleteError,
@@ -2141,8 +1780,7 @@ export async function DELETE(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر حذف أقسام لوحة التحكم.',
+          error: 'تعذر حذف أقسام لوحة التحكم.',
         },
         { status: 500 },
       )
@@ -2152,20 +1790,13 @@ export async function DELETE(
      * حذف Profile
      */
     const {
-      error:
-        profileDeleteError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .delete()
-        .eq(
-          'id',
-          targetUser.id,
-        )
+      error: profileDeleteError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .delete()
+      .eq('id', targetUser.id)
 
-    if (
-      profileDeleteError
-    ) {
+    if (profileDeleteError) {
       console.error(
         'Profile delete error:',
         profileDeleteError,
@@ -2173,8 +1804,7 @@ export async function DELETE(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر حذف بيانات المستخدم.',
+          error: 'تعذر حذف بيانات المستخدم.',
         },
         { status: 500 },
       )
@@ -2184,12 +1814,10 @@ export async function DELETE(
      * حذف حساب Supabase Auth
      */
     const {
-      error:
-        authDeleteError,
-    } =
-      await supabaseAdmin.auth.admin.deleteUser(
-        targetUser.auth_user_id!,
-      )
+      error: authDeleteError,
+    } = await supabaseAdmin.auth.admin.deleteUser(
+      targetUser.auth_user_id!,
+    )
 
     if (authDeleteError) {
       console.error(
