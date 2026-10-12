@@ -442,8 +442,8 @@ export default function StudentStatusPage() {
   const [respondingTripId, setRespondingTripId] =
     useState<string | null>(null)
 
-  const [activePersonalId, setActivePersonalId] =
-    useState('')
+ const [activePersonalId, setActivePersonalId] =
+  useState('')
 
   /*
    * =====================================================
@@ -457,28 +457,24 @@ export default function StudentStatusPage() {
    */
   useEffect(() => {
     let mounted = true
-
+  
     const checkPageStatus = async () => {
       try {
         const {
-          data,
+          data: enabled,
           error: settingsError,
-        } = await supabase
-          .from('student_status_settings')
-          .select('is_enabled')
-          .limit(1)
-          .maybeSingle()
-
+        } = await supabase.rpc('is_student_status_enabled')
+  
         if (!mounted) {
           return
         }
-
+  
         if (settingsError) {
           console.error(
             'Student status settings error:',
             settingsError,
           )
-
+  
           /*
            * Fail closed:
            * في حال تعذر التحقق من الإعدادات لا نفتح
@@ -490,18 +486,20 @@ export default function StudentStatusPage() {
           )
           return
         }
-
-        const enabled =
-          data?.is_enabled === true
-
-        setPageEnabled(enabled)
-
+  
+        const pageIsEnabled = enabled === true
+  
+        setPageEnabled(pageIsEnabled)
+  
         /*
          * نسجل الزيارة فقط إذا كانت الصفحة مفعلة.
          */
-        if (enabled && !visitRecordedRef.current) {
+        if (
+          pageIsEnabled &&
+          !visitRecordedRef.current
+        ) {
           visitRecordedRef.current = true
-
+  
           try {
             const { error: analyticsError } =
               await supabase.rpc(
@@ -510,7 +508,7 @@ export default function StudentStatusPage() {
                   p_type: 'visit',
                 },
               )
-
+  
             if (analyticsError) {
               console.error(
                 'Student tracking visit analytics error:',
@@ -529,56 +527,56 @@ export default function StudentStatusPage() {
           'Student status access check exception:',
           err,
         )
-
+  
         if (!mounted) {
           return
         }
-
+  
         setPageEnabled(false)
         setPageAccessError(
           'تعذر التحقق من حالة صفحة متابعة الطالب حاليًا.',
         )
       }
     }
-
+  
     void checkPageStatus()
-
+  
     return () => {
       mounted = false
     }
   }, [])
-
-  const recordRealTrackingOpen = () => {
-    if (realTrackingRecordedRef.current) {
-      return
-    }
-
-    realTrackingRecordedRef.current = true
-
-    void (async () => {
-      try {
-        const { error: analyticsError } =
-          await supabase.rpc(
-            'record_student_tracking_analytics',
-            {
-              p_type: 'real_tracking_open',
-            },
-          )
-
-        if (analyticsError) {
+    
+    const recordRealTrackingOpen = () => {
+      if (realTrackingRecordedRef.current) {
+        return
+      }
+  
+      realTrackingRecordedRef.current = true
+  
+      void (async () => {
+        try {
+          const { error: analyticsError } =
+            await supabase.rpc(
+              'record_student_tracking_analytics',
+              {
+                p_type: 'real_tracking_open',
+              },
+            )
+  
+          if (analyticsError) {
+            console.error(
+              'Real tracking open analytics error:',
+              analyticsError,
+            )
+          }
+        } catch (analyticsException) {
           console.error(
-            'Real tracking open analytics error:',
-            analyticsError,
+            'Real tracking open analytics exception:',
+            analyticsException,
           )
         }
-      } catch (analyticsException) {
-        console.error(
-          'Real tracking open analytics exception:',
-          analyticsException,
-        )
-      }
-    })()
-  }
+      })()
+    }
 
   const handleSearch = async () => {
     /*
