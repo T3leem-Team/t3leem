@@ -778,6 +778,7 @@ const saveAttendance = async (
       )
       .eq('student_id', student.id)
       .eq('attendance_date', date)
+      .eq('course_id', currentCourse.id)
       .maybeSingle()
 
     if (lookupError) {
