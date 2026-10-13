@@ -403,6 +403,7 @@ const getRecordForStudent = (
   )
 }
 
+
 const getStudentStatus = (
   studentId: string,
   date: string,
@@ -413,26 +414,44 @@ const getStudentStatus = (
     (item) => item.id === studentId,
   )
 
-  if (
-    student?.joinDate &&
-    date < student.joinDate
-  ) {
-    return 'غير منضم'
-  }
-
-  if (localStatuses[key]) {
-    return localStatuses[key]
-  }
-
   const record = getRecordForStudent(
     studentId,
     date,
   )
 
-  return getStatusName(
+  const statusFromDatabase = getStatusName(
     attendanceStatuses,
     record?.statusId,
   )
+
+  const localStatus = localStatuses[key]
+
+  const beforeJoinDate =
+    !!student?.joinDate &&
+    date < student.joinDate
+
+  const finalStatus = beforeJoinDate
+    ? 'غير منضم'
+    : localStatus || statusFromDatabase
+
+  console.log('[Attendance Status Debug]', {
+    studentId,
+    date,
+    joinDate: student?.joinDate,
+    beforeJoinDate,
+    statusId: record?.statusId,
+    availableStatuses: attendanceStatuses.map(
+      (status) => ({
+        id: status.id,
+        name: status.name,
+      }),
+    ),
+    statusFromDatabase,
+    localStatus,
+    finalStatus,
+  })
+
+  return finalStatus
 }
 
 const isStudentEligibleForAttendance = (
@@ -496,164 +515,131 @@ const attendanceSummary = useMemo(() => {
   localStatuses,
 ])
 
-  const attendancePercentages =
-    useMemo(() => {
-      if (!currentCourse) {
-        return {}
-      }
+const attendancePercentages = useMemo(() => {
+  if (!currentCourse) {
+    return {}
+  }
 
-      const result: Record<
-        string,
-        number
-      > = {}
+  const result: Record<string, number> = {}
 
-      for (const student of assignedStudents) {
-        result[student.id] =
-          getAttendancePercentage(
-            student.id,
-            currentCourse.id,
-            attendanceRecords,
-            attendanceStatuses,
-            cancelledDates,
-          )
-      }
-
-      return result
-    }, [
-      assignedStudents,
+  for (const student of assignedStudents) {
+    result[student.id] = getAttendancePercentage(
+      student.id,
+      currentCourse.id,
       attendanceRecords,
       attendanceStatuses,
-      currentCourse,
       cancelledDates,
-    ])
-
-  const filteredStudents =
-    assignedStudents.filter(
-      (student) => {
-        if (!searchTerm.trim()) {
-          return true
-        }
-
-        const search =
-          searchTerm
-            .trim()
-            .toLowerCase()
-
-        return (
-          student.name
-            .toLowerCase()
-            .includes(search) ||
-          student.studentId
-            .toLowerCase()
-            .includes(search) ||
-          student.personalId
-            .toLowerCase()
-            .includes(search)
-        )
-      },
     )
+  }
 
-  const displayedStudents =
-    showUnrecordedOnly
-      ? filteredStudents.filter(
-          (student) =>
-            isStudentEligibleForAttendance(
-              student,
-              activeDate,
-            ) &&
-            !getStudentStatus(
-              student.id,
-              activeDate,
-            ),
-        )
-      : filteredStudents
+  return result
+}, [
+  assignedStudents,
+  attendanceRecords,
+  attendanceStatuses,
+  currentCourse,
+  cancelledDates,
+])
 
-  const moveToNextStudent =
-    (
-      currentStudentId: string,
-      savedStudentName: string,
-      savedStatus: TeacherAttendanceStatus,
-    ) => {
-      const currentIndex =
-        displayedStudents.findIndex(
-          (student) =>
-            student.id ===
-            currentStudentId,
-        )
+const filteredStudents = assignedStudents.filter(
+  (student) => {
+    if (!searchTerm.trim()) {
+      return true
+    }
 
-      const nextStudent =
-        currentIndex >= 0
-          ? displayedStudents[
-              currentIndex + 1
-            ]
-          : undefined
+    const search = searchTerm.trim().toLowerCase()
 
-      const eligibleStudents =
-        assignedStudents.filter(
-          (student) =>
-            isStudentEligibleForAttendance(
-              student,
-              activeDate,
-            ),
-        )
+    return (
+      student.name.toLowerCase().includes(search) ||
+      student.studentId.toLowerCase().includes(search) ||
+      student.personalId.toLowerCase().includes(search)
+    )
+  },
+)
 
-      const allStudentsRecorded =
-        eligibleStudents.every(
-          (student) => {
-            if (
-              student.id ===
-              currentStudentId
-            ) {
-              return true
-            }
+const displayedStudents = showUnrecordedOnly
+  ? filteredStudents.filter(
+      (student) =>
+        isStudentEligibleForAttendance(
+          student,
+          activeDate,
+        ) &&
+        !getStudentStatus(
+          student.id,
+          activeDate,
+        ),
+    )
+  : filteredStudents
 
-            const status =
-              getStudentStatus(
-                student.id,
-                activeDate,
-              )
+const moveToNextStudent = (
+  currentStudentId: string,
+  savedStudentName: string,
+  savedStatus: TeacherAttendanceStatus,
+) => {
+  const currentIndex = displayedStudents.findIndex(
+    (student) => student.id === currentStudentId,
+  )
 
-            return (
-              !!status &&
-              status !== 'غير منضم'
-            )
-          },
-        )
+  const nextStudent =
+    currentIndex >= 0
+      ? displayedStudents[currentIndex + 1]
+      : undefined
 
-      if (!nextStudent) {
-        if (allStudentsRecorded) {
-          setStatusMessage(
-            `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
-          )
-        } else {
-          setStatusMessage(
-            `✓ تم تسجيل ${savedStatus} للطالب ${savedStudentName}`,
-          )
-        }
+  const eligibleStudents = assignedStudents.filter(
+    (student) =>
+      isStudentEligibleForAttendance(
+        student,
+        activeDate,
+      ),
+  )
 
-        return
+  const allStudentsRecorded = eligibleStudents.every(
+    (student) => {
+      if (student.id === currentStudentId) {
+        return true
       }
 
-      setStatusMessage(
-        `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
+      const status = getStudentStatus(
+        student.id,
+        activeDate,
       )
 
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          const element =
-            studentCardRefs.current[
-              nextStudent.id
-            ]
+      return !!status && status !== 'غير منضم'
+    },
+  )
 
-          if (element) {
-            element.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center',
-            })
-          }
-        })
-      })
+  if (!nextStudent) {
+    if (allStudentsRecorded) {
+      setStatusMessage(
+        `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
+      )
+    } else {
+      setStatusMessage(
+        `✓ تم تسجيل ${savedStatus} للطالب ${savedStudentName}`,
+      )
     }
+
+    return
+  }
+
+  setStatusMessage(
+    `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
+  )
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      const element =
+        studentCardRefs.current[nextStudent.id]
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        })
+      }
+    })
+  })
+}
 
   const checkCancellationBeforeSave =
     async (
