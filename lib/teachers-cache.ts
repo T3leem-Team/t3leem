@@ -788,14 +788,25 @@ export async function loadTeachersCache(
         )
         .in('course_id', courseIds)
 
-      if (error) {
-        throw new Error(
-          `خطأ في تحميل الحضور: ${error.message}`,
-        )
-      }
+    
+          if (error) {
+            throw new Error(
+              `خطأ في تحميل الحضور: ${error.message}`,
+            )
+          }
+          
+          console.log('ATTENDANCE LOAD CHECK', {
+            total: data?.length ?? 0,
+            matchingRows: (data ?? []).filter(
+              row =>
+                row.course_id === '27097455-819d-409b-b8b7-3a40bc44f482' &&
+                row.attendance_date === '2026-10-12'
+            ).length,
+          })
+          
+          attendanceRows = data ?? []
 
-      attendanceRows = data ?? []
-    }
+      }
 
     const attendanceRecords: AttendanceRecord[] =
       attendanceRows.map((record) => ({
