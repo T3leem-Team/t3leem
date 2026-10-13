@@ -99,9 +99,17 @@ async function refreshSections(
     )
 
     if (!response.ok) {
-      clearDashboardSections()
-      sectionsCache = null
-      router.replace('/login')
+       if (response.status === 401) {
+         clearDashboardSections()
+         sectionsCache = null
+         router.replace('/login')
+       } else {
+         console.error(
+           'Dashboard sections request failed:',
+          response.status,
+        )
+      }
+
       return
     }
 
