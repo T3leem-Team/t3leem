@@ -94,7 +94,89 @@ export function TeachersView() {
     useState(
       initialTeachersCache === null,
     )
-
+  const refreshAttendanceRecords = async () => {
+    const {
+      data: academicYear,
+      error: yearError,
+    } = await supabase
+      .from('academic_years')
+      .select('id')
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .single()
+  
+    if (yearError || !academicYear) {
+      console.error(
+        'Attendance refresh error:',
+        yearError,
+      )
+      return
+    }
+  
+    const {
+      data: courseRows,
+      error: coursesError,
+    } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('academic_year_id', academicYear.id)
+  
+    if (coursesError) {
+      console.error(
+        'Attendance courses error:',
+        coursesError,
+      )
+      return
+    }
+  
+    const courseIds = (courseRows ?? []).map(
+      (course) => course.id,
+    )
+  
+    if (courseIds.length === 0) {
+      setAttendanceRecords([])
+      updateTeachersCache({
+        attendanceRecords: [],
+      })
+      return
+    }
+  
+    const {
+      data,
+      error,
+    } = await supabase
+      .from('attendance')
+      .select(
+        'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+      )
+      .in('course_id', courseIds)
+  
+    if (error) {
+      console.error(
+        'Attendance records error:',
+        error,
+      )
+      return
+    }
+  
+    const records: AttendanceRecord[] = (
+      data ?? []
+    ).map((record) => ({
+      id: record.id,
+      studentId: record.student_id,
+      enrollmentId: record.enrollment_id,
+      courseId: record.course_id,
+      attendanceDate: record.attendance_date,
+      statusId: record.status_id,
+      note: record.note ?? '',
+    }))
+  
+    setAttendanceRecords(records)
+  
+    updateTeachersCache({
+      attendanceRecords: records,
+    })
+  }
   const [saving, setSaving] =
     useState(false)
 
@@ -506,6 +588,7 @@ export function TeachersView() {
       )
 
       setLoading(false)
+      void refreshAttendanceRecords()
 
       return
     }
