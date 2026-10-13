@@ -33,9 +33,7 @@ export default function LoginPage() {
   ) {
     event.preventDefault()
 
-    if (isBusy) {
-      return
-    }
+    if (isBusy) return
 
     setError('')
 
@@ -49,6 +47,137 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
+      /*
+       * 1. محاولة استرجاع الجهاز المعتمد إذا كانت
+       *    كوكي الجهاز مفقودة والمفتاح ما زال محفوظًا.
+       */
+      let deviceKey:
+        | Awaited<ReturnType<typeof getOrCreateDeviceKey>>
+        | null = null
+
+      try {
+        deviceKey = await getOrCreateDeviceKey()
+      } catch (keyError) {
+        console.warn(
+          'Device key unavailable:',
+          keyError,
+        )
+      }
+
+      if (deviceKey) {
+        const challengeResponse = await fetch(
+          '/api/auth/device-key/recover',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            cache: 'no-store',
+            body: JSON.stringify({
+              action: 'challenge',
+              username: cleanUsername,
+              password,
+              publicKey: deviceKey.publicKey,
+            }),
+          },
+        )
+
+        const challengeData =
+          await challengeResponse.json().catch(() => null)
+
+        if (
+          !challengeResponse.ok &&
+          challengeResponse.status !== 401
+        ) {
+          setError(
+            typeof challengeData?.error === 'string'
+              ? challengeData.error
+              : 'تعذر التحقق من الجهاز. حاول مرة أخرى.',
+          )
+          setLoading(false)
+          return
+        }
+
+        if (challengeResponse.ok) {
+          const recoveryStatus = challengeData?.status
+
+          if (recoveryStatus === 'blocked') {
+            setError(
+              'هذا الجهاز غير مصرح له بالدخول إلى النظام.',
+            )
+            setLoading(false)
+            return
+          }
+
+          if (recoveryStatus === 'challenge') {
+            if (
+              typeof challengeData.challenge !== 'string'
+            ) {
+              setError('تعذر التحقق من الجهاز.')
+              setLoading(false)
+              return
+            }
+
+            const signature =
+              await deviceKey.signChallenge(
+                challengeData.challenge,
+              )
+
+            const recoveryResponse = await fetch(
+              '/api/auth/device-key/recover',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                cache: 'no-store',
+                body: JSON.stringify({
+                  action: 'recover',
+                  username: cleanUsername,
+                  password,
+                  publicKey: deviceKey.publicKey,
+                  challenge: challengeData.challenge,
+                  signature,
+                }),
+              },
+            )
+
+            const recoveryData =
+              await recoveryResponse
+                .json()
+                .catch(() => null)
+
+            if (
+              !recoveryResponse.ok ||
+              recoveryData?.status !== 'recovered'
+            ) {
+              setError(
+                typeof recoveryData?.error === 'string'
+                  ? recoveryData.error
+                  : 'تعذر استرجاع الجهاز. حاول مرة أخرى.',
+              )
+              setLoading(false)
+              return
+            }
+          } else if (
+            recoveryStatus !== 'not_registered' &&
+            recoveryStatus !== 'already_trusted'
+          ) {
+            setError(
+              'تعذر تحديد حالة الجهاز. حاول مرة أخرى.',
+            )
+            setLoading(false)
+            return
+          }
+        }
+      }
+
+      /*
+       * 2. تسجيل الدخول المعتاد.
+       *    إذا لم يوجد مفتاح مسجل، يبقى اعتماد الجهاز الجديد مطلوبًا.
+       */
       const loginResponse = await fetch(
         '/api/auth/login',
         {
@@ -65,9 +194,8 @@ export default function LoginPage() {
         },
       )
 
-      const loginData = await loginResponse
-        .json()
-        .catch(() => null)
+      const loginData =
+        await loginResponse.json().catch(() => null)
 
       if (!loginResponse.ok) {
         setError(
@@ -75,75 +203,79 @@ export default function LoginPage() {
             ? loginData.error
             : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
         )
-
         setLoading(false)
         return
       }
 
-      // Register a device key for an already-approved device.
-      // Failure here must not block normal login.
-      try {
-        const deviceKey = await getOrCreateDeviceKey()
-
-        const challengeResponse = await fetch(
-          '/api/auth/device-key',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            cache: 'no-store',
-            body: JSON.stringify({
-              action: 'challenge',
-            }),
-          },
-        )
-
-        if (challengeResponse.ok) {
-          const challengeData =
-            await challengeResponse.json()
-
-          if (
-            typeof challengeData?.challenge === 'string'
-          ) {
-            const signature =
-              await deviceKey.signChallenge(
-                challengeData.challenge,
-              )
-
-            const registerResponse = await fetch(
-              '/api/auth/device-key',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                cache: 'no-store',
-                body: JSON.stringify({
-                  action: 'register',
-                  publicKey: deviceKey.publicKey,
-                  challenge: challengeData.challenge,
-                  signature,
-                }),
+      /*
+       * 3. تسجيل المفتاح للجهاز المعتمد إذا لم يكن مسجلًا.
+       *    فشل هذه الخطوة لا يمنع الدخول المعتاد.
+       */
+      if (deviceKey) {
+        try {
+          const challengeResponse = await fetch(
+            '/api/auth/device-key',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
               },
-            )
+              credentials: 'include',
+              cache: 'no-store',
+              body: JSON.stringify({
+                action: 'challenge',
+              }),
+            },
+          )
 
-            if (!registerResponse.ok) {
-              console.warn(
-                'Device key registration failed.',
+          if (challengeResponse.ok) {
+            const challengeData =
+              await challengeResponse.json()
+
+            if (
+              typeof challengeData?.challenge === 'string'
+            ) {
+              const signature =
+                await deviceKey.signChallenge(
+                  challengeData.challenge,
+                )
+
+              const registerResponse = await fetch(
+                '/api/auth/device-key',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  credentials: 'include',
+                  cache: 'no-store',
+                  body: JSON.stringify({
+                    action: 'register',
+                    publicKey: deviceKey.publicKey,
+                    challenge: challengeData.challenge,
+                    signature,
+                  }),
+                },
               )
+
+              if (!registerResponse.ok) {
+                console.warn(
+                  'Device key registration failed.',
+                )
+              }
             }
           }
+        } catch (keyError) {
+          console.warn(
+            'Device key registration unavailable:',
+            keyError,
+          )
         }
-      } catch (keyError) {
-        console.warn(
-          'Device key setup unavailable:',
-          keyError,
-        )
       }
 
+      /*
+       * 4. تحميل أقسام لوحة التحكم.
+       */
       const sectionsResponse = await fetch(
         '/api/auth/dashboard-sections',
         {
@@ -153,9 +285,8 @@ export default function LoginPage() {
         },
       )
 
-      const sectionsData = await sectionsResponse
-        .json()
-        .catch(() => null)
+      const sectionsData =
+        await sectionsResponse.json().catch(() => null)
 
       if (!sectionsResponse.ok) {
         setError(
@@ -163,7 +294,6 @@ export default function LoginPage() {
             ? sectionsData.error
             : 'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
         )
-
         setLoading(false)
         return
       }
@@ -208,10 +338,10 @@ export default function LoginPage() {
           .then(({ loadStudentsCache }) =>
             loadStudentsCache(),
           )
-          .catch((error) => {
+          .catch((cacheError) => {
             console.warn(
               'Students preload failed:',
-              error,
+              cacheError,
             )
           })
       }
@@ -227,10 +357,10 @@ export default function LoginPage() {
           .then(({ loadTeachersCache }) =>
             loadTeachersCache(),
           )
-          .catch((error) => {
+          .catch((cacheError) => {
             console.warn(
               'Teachers preload failed:',
-              error,
+              cacheError,
             )
           })
       }
@@ -239,14 +369,15 @@ export default function LoginPage() {
       setLoading(false)
 
       await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => {
-          resolve()
-        })
+        requestAnimationFrame(() => resolve())
       })
 
       router.replace(destination)
-    } catch (error) {
-      console.error('Login request error:', error)
+    } catch (submitError) {
+      console.error(
+        'Login request error:',
+        submitError,
+      )
 
       setError(
         'تعذر الاتصال بالخادم. حاول مرة أخرى.',
