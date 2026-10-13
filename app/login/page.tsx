@@ -1,3 +1,4 @@
+
 'use client'
 
 import { FormEvent, useState } from 'react'
@@ -13,17 +14,16 @@ import {
   saveDashboardSections,
   type DashboardSection,
 } from '@/lib/dashboard-sections-cache'
+import { getOrCreateDeviceKey } from '@/lib/device-key'
 
 export default function LoginPage() {
   const router = useRouter()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] =
-    useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [redirecting, setRedirecting] =
-    useState(false)
+  const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
 
   const isBusy = loading || redirecting
@@ -42,9 +42,7 @@ export default function LoginPage() {
     const cleanUsername = username.trim()
 
     if (!cleanUsername || !password) {
-      setError(
-        'أدخل اسم المستخدم وكلمة المرور.',
-      )
+      setError('أدخل اسم المستخدم وكلمة المرور.')
       return
     }
 
@@ -67,10 +65,9 @@ export default function LoginPage() {
         },
       )
 
-      const loginData =
-        await loginResponse
-          .json()
-          .catch(() => null)
+      const loginData = await loginResponse
+        .json()
+        .catch(() => null)
 
       if (!loginResponse.ok) {
         setError(
@@ -83,6 +80,70 @@ export default function LoginPage() {
         return
       }
 
+      // Register a device key for an already-approved device.
+      // Failure here must not block normal login.
+      try {
+        const deviceKey = await getOrCreateDeviceKey()
+
+        const challengeResponse = await fetch(
+          '/api/auth/device-key',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            cache: 'no-store',
+            body: JSON.stringify({
+              action: 'challenge',
+            }),
+          },
+        )
+
+        if (challengeResponse.ok) {
+          const challengeData =
+            await challengeResponse.json()
+
+          if (
+            typeof challengeData?.challenge === 'string'
+          ) {
+            const signature =
+              await deviceKey.signChallenge(
+                challengeData.challenge,
+              )
+
+            const registerResponse = await fetch(
+              '/api/auth/device-key',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                cache: 'no-store',
+                body: JSON.stringify({
+                  action: 'register',
+                  publicKey: deviceKey.publicKey,
+                  challenge: challengeData.challenge,
+                  signature,
+                }),
+              },
+            )
+
+            if (!registerResponse.ok) {
+              console.warn(
+                'Device key registration failed.',
+              )
+            }
+          }
+        }
+      } catch (keyError) {
+        console.warn(
+          'Device key setup unavailable:',
+          keyError,
+        )
+      }
+
       const sectionsResponse = await fetch(
         '/api/auth/dashboard-sections',
         {
@@ -92,10 +153,9 @@ export default function LoginPage() {
         },
       )
 
-      const sectionsData =
-        await sectionsResponse
-          .json()
-          .catch(() => null)
+      const sectionsData = await sectionsResponse
+        .json()
+        .catch(() => null)
 
       if (!sectionsResponse.ok) {
         setError(
@@ -109,17 +169,13 @@ export default function LoginPage() {
       }
 
       const sections: DashboardSection[] =
-        Array.isArray(
-          sectionsData?.sections,
-        )
+        Array.isArray(sectionsData?.sections)
           ? [...sectionsData.sections]
               .filter(
                 (section) =>
                   section &&
-                  typeof section.section_key ===
-                    'string' &&
-                  typeof section.href ===
-                    'string',
+                  typeof section.section_key === 'string' &&
+                  typeof section.href === 'string',
               )
               .sort(
                 (
@@ -136,28 +192,21 @@ export default function LoginPage() {
       const firstSection = sections[0]
 
       const destination =
-        typeof firstSection?.href ===
-          'string' &&
+        typeof firstSection?.href === 'string' &&
         firstSection.href.trim()
           ? firstSection.href.trim()
           : '/'
 
-      const canAccessStudents =
-        sections.some(
-          (section) =>
-            section.href.trim() ===
-              '/students' ||
-            section.section_key ===
-              'students',
-        )
+      const canAccessStudents = sections.some(
+        (section) =>
+          section.href.trim() === '/students' ||
+          section.section_key === 'students',
+      )
 
       if (canAccessStudents) {
         void import('@/lib/students-cache')
-          .then(
-            ({
-              loadStudentsCache,
-            }) =>
-              loadStudentsCache(),
+          .then(({ loadStudentsCache }) =>
+            loadStudentsCache(),
           )
           .catch((error) => {
             console.warn(
@@ -167,22 +216,16 @@ export default function LoginPage() {
           })
       }
 
-      const canAccessTeachers =
-        sections.some(
-          (section) =>
-            section.href.trim() ===
-              '/teachers' ||
-            section.section_key ===
-              'teachers',
-        )
+      const canAccessTeachers = sections.some(
+        (section) =>
+          section.href.trim() === '/teachers' ||
+          section.section_key === 'teachers',
+      )
 
       if (canAccessTeachers) {
         void import('@/lib/teachers-cache')
-          .then(
-            ({
-              loadTeachersCache,
-            }) =>
-              loadTeachersCache(),
+          .then(({ loadTeachersCache }) =>
+            loadTeachersCache(),
           )
           .catch((error) => {
             console.warn(
@@ -203,10 +246,7 @@ export default function LoginPage() {
 
       router.replace(destination)
     } catch (error) {
-      console.error(
-        'Login request error:',
-        error,
-      )
+      console.error('Login request error:', error)
 
       setError(
         'تعذر الاتصال بالخادم. حاول مرة أخرى.',
@@ -275,11 +315,7 @@ export default function LoginPage() {
               <div className="relative">
                 <input
                   id="password"
-                  type={
-                    showPassword
-                      ? 'text'
-                      : 'password'
-                  }
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(event) =>
                     setPassword(event.target.value)
@@ -293,9 +329,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowPassword(
-                      (value) => !value,
-                    )
+                    setShowPassword((value) => !value)
                   }
                   disabled={isBusy}
                   className="absolute left-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none"
@@ -348,9 +382,7 @@ export default function LoginPage() {
             <div className="text-center">
               <button
                 type="button"
-                onClick={() =>
-                  router.push('/forgot-password')
-                }
+                onClick={() => router.push('/forgot-password')}
                 disabled={isBusy}
                 className="text-sm font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-60"
               >
