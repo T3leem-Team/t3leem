@@ -761,7 +761,7 @@ export async function loadTeachersCache(
         sortOrder: status.sort_order ?? 0,
       }))
 
-    /*
+     /*
      * =====================================================
      * الحضور
      * =====================================================
@@ -778,35 +778,48 @@ export async function loadTeachersCache(
     }[] = []
 
     if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('attendance')
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .in('course_id', courseIds)
+      const pageSize = 1000
+      let from = 0
 
-    
-          if (error) {
-            throw new Error(
-              `خطأ في تحميل الحضور: ${error.message}`,
-            )
-          }
-          
-          console.log('ATTENDANCE LOAD CHECK', {
-            total: data?.length ?? 0,
-            matchingRows: (data ?? []).filter(
-              row =>
-                row.course_id === '27097455-819d-409b-b8b7-3a40bc44f482' &&
-                row.attendance_date === '2026-10-12'
-            ).length,
-          })
-          
-          attendanceRows = data ?? []
+      while (true) {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+          )
+          .in('course_id', courseIds)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
 
+        if (error) {
+          throw new Error(
+            `خطأ في تحميل الحضور: ${error.message}`,
+          )
+        }
+
+        const batch = data ?? []
+
+        attendanceRows.push(...batch)
+
+        if (batch.length < pageSize) {
+          break
+        }
+
+        from += pageSize
       }
+    }
+
+    console.log('ATTENDANCE LOAD CHECK', {
+      total: attendanceRows.length,
+      matchingRows: attendanceRows.filter(
+        row =>
+          row.course_id === '27097455-819d-409b-b8b7-3a40bc44f482' &&
+          row.attendance_date === '2026-10-12'
+      ).length,
+    })
 
     const attendanceRecords: AttendanceRecord[] =
       attendanceRows.map((record) => ({
