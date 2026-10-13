@@ -363,120 +363,138 @@ export function AttendanceView(
     isCancelled,
   ])
 
-  const isAttendanceAvailable =
-    dateState === 'valid' &&
-    !isCheckingCancellation
+  
+const isAttendanceAvailable =
+  dateState === 'valid' &&
+  !isCheckingCancellation
 
-  const getRecordForStudent = (
-    studentId: string,
-    date: string,
-  ) => {
-    if (!currentCourse) {
-      return undefined
-    }
-
-    return attendanceRecords.find(
-      (record) =>
-        record.studentId === studentId &&
-        record.courseId === currentCourse.id &&
-        record.attendanceDate === date,
-    )
+const getRecordForStudent = (
+  studentId: string,
+  date: string,
+) => {
+  if (!currentCourse) {
+    return undefined
   }
 
-  const getStudentStatus = (
-    studentId: string,
-    date: string,
-  ): AttendanceStatusName | null => {
-    const key = `${date}:${studentId}`
-
-    const student = assignedStudents.find(
-      (item) => item.id === studentId,
-    )
-
-    if (
-      student?.joinDate &&
-      date < student.joinDate
-    ) {
-      return 'غير منضم'
-    }
-
-    if (localStatuses[key]) {
-      return localStatuses[key]
-    }
-
-    const record =
-      getRecordForStudent(
-        studentId,
-        date,
+  console.log('[Attendance Debug]', {
+    studentId,
+    currentCourseId: currentCourse.id,
+    date,
+    matchingRecords: attendanceRecords
+      .filter(
+        (record) =>
+          record.studentId === studentId &&
+          record.courseId === currentCourse.id &&
+          record.attendanceDate === date,
       )
+      .map((record) => ({
+        studentId: record.studentId,
+        courseId: record.courseId,
+        attendanceDate: record.attendanceDate,
+        statusId: record.statusId,
+      })),
+  })
 
-    return getStatusName(
-      attendanceStatuses,
-      record?.statusId,
-    )
+  return attendanceRecords.find(
+    (record) =>
+      record.studentId === studentId &&
+      record.courseId === currentCourse.id &&
+      record.attendanceDate === date,
+  )
+}
+
+const getStudentStatus = (
+  studentId: string,
+  date: string,
+): AttendanceStatusName | null => {
+  const key = `${date}:${studentId}`
+
+  const student = assignedStudents.find(
+    (item) => item.id === studentId,
+  )
+
+  if (
+    student?.joinDate &&
+    date < student.joinDate
+  ) {
+    return 'غير منضم'
   }
 
-  const isStudentEligibleForAttendance = (
-    student: Student,
-    date: string,
-  ) => {
-    if (!student.joinDate) {
-      return true
+  if (localStatuses[key]) {
+    return localStatuses[key]
+  }
+
+  const record = getRecordForStudent(
+    studentId,
+    date,
+  )
+
+  return getStatusName(
+    attendanceStatuses,
+    record?.statusId,
+  )
+}
+
+const isStudentEligibleForAttendance = (
+  student: Student,
+  date: string,
+) => {
+  if (!student.joinDate) {
+    return true
+  }
+
+  return date >= student.joinDate
+}
+
+const attendanceSummary = useMemo(() => {
+  let recorded = 0
+  let total = 0
+
+  for (const student of assignedStudents) {
+    if (
+      !isStudentEligibleForAttendance(
+        student,
+        activeDate,
+      )
+    ) {
+      continue
     }
 
-    return date >= student.joinDate
+    const status = getStudentStatus(
+      student.id,
+      activeDate,
+    )
+
+    if (status === 'غير منضم') {
+      continue
+    }
+
+    total += 1
+
+    if (status) {
+      recorded += 1
+    }
   }
 
-  const attendanceSummary =
-    useMemo(() => {
-      let recorded = 0
-      let total = 0
+  const unrecorded = Math.max(
+    total - recorded,
+    0,
+  )
 
-      for (const student of assignedStudents) {
-        if (
-          !isStudentEligibleForAttendance(
-            student,
-            activeDate,
-          )
-        ) {
-          continue
-        }
-
-        const status =
-          getStudentStatus(
-            student.id,
-            activeDate,
-          )
-
-        if (status === 'غير منضم') {
-          continue
-        }
-
-        total += 1
-
-        if (status) {
-          recorded += 1
-        }
-      }
-
-      const unrecorded =
-        Math.max(total - recorded, 0)
-
-      return {
-        total,
-        recorded,
-        unrecorded,
-        allRecorded:
-          total > 0 &&
-          unrecorded === 0,
-      }
-    }, [
-      assignedStudents,
-      activeDate,
-      attendanceRecords,
-      attendanceStatuses,
-      localStatuses,
-    ])
+  return {
+    total,
+    recorded,
+    unrecorded,
+    allRecorded:
+      total > 0 && unrecorded === 0,
+  }
+}, [
+  assignedStudents,
+  activeDate,
+  attendanceRecords,
+  attendanceStatuses,
+  localStatuses,
+])
 
   const attendancePercentages =
     useMemo(() => {
