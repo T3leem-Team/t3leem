@@ -683,325 +683,238 @@ export function AttendanceView(
       )
     }
 
-  const saveAttendance = async (
-    student: Student,
-    date: string,
-    statusName: TeacherAttendanceStatus,
-  ) => {
-    if (!currentCourse) {
-      return
-    }
 
-    if (
-      isCancelled ||
-      !isAttendanceAvailable ||
-      date !== activeDate
-    ) {
-      setStatusMessage(
-        isCancelled
-          ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
-          : 'لا يمكن تسجيل الحضور في هذا اليوم.',
-      )
-      return
-    }
+const saveAttendance = async (
+  student: Student,
+  date: string,
+  statusName: TeacherAttendanceStatus,
+) => {
+  if (!currentCourse) {
+    return
+  }
 
-    if (
-      !isStudentEligibleForAttendance(
-        student,
-        date,
-      )
-    ) {
-      setStatusMessage(
-        'هذا الطالب لم يكن منضمًا في تاريخ الحضور المحدد.',
-      )
-      return
-    }
+  if (
+    isCancelled ||
+    !isAttendanceAvailable ||
+    date !== activeDate
+  ) {
+    setStatusMessage(
+      isCancelled
+        ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
+        : 'لا يمكن تسجيل الحضور في هذا اليوم.',
+    )
+    return
+  }
 
-    const statusId =
-      getStatusIdByName(
+  if (!isStudentEligibleForAttendance(student, date)) {
+    setStatusMessage(
+      'هذا الطالب لم يكن منضمًا في تاريخ الحضور المحدد.',
+    )
+    return
+  }
+
+  const statusId = getStatusIdByName(
+    attendanceStatuses,
+    statusName,
+  )
+
+  if (!statusId) {
+    setStatusMessage(
+      `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
+    )
+    return
+  }
+
+  const key = `${date}:${student.id}`
+
+  if (savingKey === key || isBulkSaving) {
+    return
+  }
+
+  const existing = getRecordForStudent(
+    student.id,
+    date,
+  )
+
+  const existingStatus = existing
+    ? getStatusName(
         attendanceStatuses,
-        statusName,
+        existing.statusId,
       )
+    : null
 
-    if (!statusId) {
-      setStatusMessage(
-        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
+  if (existingStatus === 'غير منضم') {
+    setStatusMessage(
+      'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
+    )
+    return
+  }
+
+  const previousRecords = attendanceRecords
+  const previousLocalStatus = localStatuses[key]
+
+  setSavingKey(key)
+  setEditingStatusKey(null)
+
+  try {
+    const isCancelledNow =
+      await checkCancellationBeforeSave(date)
+
+    if (isCancelledNow) {
+      throw new Error(
+        'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
       )
-      return
     }
 
-    const key = `${date}:${student.id}`
+    // التحقق من السجل مباشرة من قاعدة البيانات،
+    // لأن السجل قد لا يكون موجودًا في الذاكرة المحلية.
+    const {
+      data: databaseRecord,
+      error: lookupError,
+    } = await supabase
+      .from('attendance')
+      .select(
+        'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+      )
+      .eq('student_id', student.id)
+      .eq('attendance_date', date)
+      .maybeSingle()
 
-    if (
-      savingKey === key ||
-      isBulkSaving
-    ) {
-      return
+    if (lookupError) {
+      throw lookupError
     }
 
-    const existing =
-      getRecordForStudent(
-        student.id,
-        date,
-      )
-
-    const existingStatus = existing
-      ? getStatusName(
-          attendanceStatuses,
-          existing.statusId,
-        )
-      : null
-
     if (
-      existingStatus ===
-      'غير منضم'
+      databaseRecord &&
+      getStatusName(
+        attendanceStatuses,
+        databaseRecord.status_id,
+      ) === 'غير منضم'
     ) {
-      setStatusMessage(
+      throw new Error(
         'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
       )
-      return
     }
 
-    const previousRecords =
-      attendanceRecords
+    const noteValue =
+      attendanceNotes[key] ??
+      databaseRecord?.note ??
+      existing?.note ??
+      null
 
-    const previousLocalStatus =
-      localStatuses[key]
+    let savedData
+    let saveError
 
-    setSavingKey(key)
+    if (databaseRecord) {
+      // السجل موجود: تحديثه بدل إنشاء سجل مكرر.
+      const result = await supabase
+        .from('attendance')
+        .update({
+          status_id: statusId,
+          enrollment_id:
+            student.enrollmentId || null,
+          note: noteValue,
+        })
+        .eq('id', databaseRecord.id)
+        .select(
+          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+        )
+        .single()
 
-    setLocalStatuses(
-      (current) => ({
-        ...current,
-        [key]: statusName,
-      }),
+      savedData = result.data
+      saveError = result.error
+    } else {
+      // لا يوجد سجل: إنشاء سجل جديد.
+      const result = await supabase
+        .from('attendance')
+        .insert({
+          student_id: student.id,
+          enrollment_id:
+            student.enrollmentId || null,
+          attendance_date: date,
+          status_id: statusId,
+          note: noteValue,
+          course_id: currentCourse.id,
+        })
+        .select(
+          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+        )
+        .single()
+
+      savedData = result.data
+      saveError = result.error
+    }
+
+    if (saveError) {
+      throw saveError
+    }
+
+    if (!savedData) {
+      throw new Error(
+        'لم تُرجع قاعدة البيانات سجل الحضور بعد الحفظ.',
+      )
+    }
+
+    const savedRecord: AttendanceRecord = {
+      id: savedData.id,
+      studentId: savedData.student_id,
+      enrollmentId:
+        savedData.enrollment_id ?? null,
+      courseId: savedData.course_id,
+      attendanceDate: savedData.attendance_date,
+      statusId: savedData.status_id,
+      note: savedData.note ?? '',
+    }
+
+    // استبدال السجل في الذاكرة المحلية،
+    // ومنع بقاء نسخة مؤقتة أو سجل مكرر.
+    setAttendanceRecords((records) => {
+      const withoutDuplicate = records.filter(
+        (record) =>
+          record.id !== savedRecord.id &&
+          !(
+            record.studentId === student.id &&
+            record.attendanceDate === date
+          ),
+      )
+
+      return [...withoutDuplicate, savedRecord]
+    })
+
+    setLocalStatuses((current) => ({
+      ...current,
+      [key]: statusName,
+    }))
+
+    moveToNextStudent(
+      student.id,
+      student.name,
+      statusName,
     )
+  } catch (error: any) {
+    setAttendanceRecords(previousRecords)
 
-    setEditingStatusKey(null)
+    setLocalStatuses((current) => {
+      const next = { ...current }
 
-    const optimisticRecord: AttendanceRecord =
-      {
-        id:
-          existing?.id ??
-          `temp-${Date.now()}`,
-        studentId: student.id,
-        enrollmentId:
-          student.enrollmentId ||
-          null,
-        courseId: currentCourse.id,
-        attendanceDate: date,
-        statusId,
-        note:
-          existing?.note ??
-          attendanceNotes[key] ??
-          '',
-      }
-
-    setAttendanceRecords(
-      (records) => {
-        const existingIndex =
-          records.findIndex(
-            (record) =>
-              record.studentId ===
-                student.id &&
-              record.courseId ===
-                currentCourse.id &&
-              record.attendanceDate ===
-                date,
-          )
-
-        if (existingIndex === -1) {
-          return [
-            ...records,
-            optimisticRecord,
-          ]
-        }
-
-        return records.map(
-          (record, index) =>
-            index === existingIndex
-              ? {
-                  ...record,
-                  statusId,
-                  enrollmentId:
-                    student.enrollmentId ||
-                    record.enrollmentId ||
-                    null,
-                  note:
-                    attendanceNotes[key] ??
-                    record.note ??
-                    '',
-                }
-              : record,
-        )
-      },
-    )
-
-    try {
-      const isCancelledNow =
-        await checkCancellationBeforeSave(
-          date,
-        )
-
-      if (isCancelledNow) {
-        throw new Error(
-          'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
-        )
-      }
-
-      if (existing) {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('attendance')
-          .update({
-            status_id: statusId,
-            enrollment_id:
-              student.enrollmentId ||
-              null,
-            note:
-              attendanceNotes[key] ??
-              existing.note ??
-              null,
-          })
-          .eq('id', existing.id)
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .single()
-
-        if (error) {
-          throw error
-        }
-
-        if (data) {
-          const savedRecord: AttendanceRecord =
-            {
-              id: data.id,
-              studentId:
-                data.student_id,
-              enrollmentId:
-                data.enrollment_id ??
-                null,
-              courseId:
-                data.course_id,
-              attendanceDate:
-                data.attendance_date,
-              statusId:
-                data.status_id,
-              note:
-                data.note ?? '',
-            }
-
-          setAttendanceRecords(
-            (records) =>
-              records.map(
-                (record) =>
-                  record.id ===
-                  existing.id
-                    ? savedRecord
-                    : record,
-              ),
-          )
-        }
+      if (previousLocalStatus) {
+        next[key] = previousLocalStatus
       } else {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('attendance')
-          .insert({
-            student_id: student.id,
-            enrollment_id:
-              student.enrollmentId ||
-              null,
-            attendance_date: date,
-            status_id: statusId,
-            note:
-              attendanceNotes[key] ||
-              null,
-            course_id:
-              currentCourse.id,
-          })
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .single()
-
-        if (error) {
-          throw error
-        }
-
-        if (data) {
-          const savedRecord: AttendanceRecord =
-            {
-              id: data.id,
-              studentId:
-                data.student_id,
-              enrollmentId:
-                data.enrollment_id ??
-                null,
-              courseId:
-                data.course_id,
-              attendanceDate:
-                data.attendance_date,
-              statusId:
-                data.status_id,
-              note:
-                data.note ?? '',
-            }
-
-          setAttendanceRecords(
-            (records) =>
-              records.map(
-                (record) =>
-                  record.id ===
-                  optimisticRecord.id
-                    ? savedRecord
-                    : record,
-              ),
-          )
-        }
+        delete next[key]
       }
 
-      moveToNextStudent(
-        student.id,
-        student.name,
-        statusName,
-      )
-    } catch (error: any) {
-      setAttendanceRecords(
-        previousRecords,
-      )
+      return next
+    })
 
-      setLocalStatuses(
-        (current) => {
-          const next = {
-            ...current,
-          }
-
-          if (previousLocalStatus) {
-            next[key] =
-              previousLocalStatus
-          } else {
-            delete next[key]
-          }
-
-          return next
-        },
-      )
-
-      setStatusMessage(
-        `تعذر حفظ الحضور: ${
-          error?.message ||
-          'خطأ غير معروف'
-        }`,
-      )
-    } finally {
-      setSavingKey(null)
-    }
+    setStatusMessage(
+      `تعذر حفظ الحضور: ${
+        error?.message || 'خطأ غير معروف'
+      }`,
+    )
+  } finally {
+    setSavingKey(null)
   }
+}
 
   const saveAllAttendance =
     async (
