@@ -43,43 +43,73 @@ type StudentDatesResponse = {
   assignments: Assignment[];
 };
 
+type ApiResult = {
+  error?: string;
+  message?: string;
+  warning?: string;
+  success?: boolean;
+};
+
+type MessageType = 'success' | 'error' | 'warning';
+
+const API_URL = '/api/admin/students';
+
 export default function StudentsManagementPage() {
   const router = useRouter();
 
+  // إعداد حذف الطلاب.
   const [allowStudentDeletion, setAllowStudentDeletion] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDeletion, setIsSavingDeletion] = useState(false);
   const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState<'success' | 'error'>('success');
+  const [messageType, setMessageType] = useState<MessageType>('success');
   const [canManageDeletion, setCanManageDeletion] = useState(false);
 
+  // صلاحية إدارة التواريخ والبحث.
   const [canManageDates, setCanManageDates] = useState(false);
+  const [isCheckingDatePermission, setIsCheckingDatePermission] =
+    useState(true);
   const [search, setSearch] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [studentDates, setStudentDates] = useState<StudentDatesResponse | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(
+    null,
+  );
+  const [studentDates, setStudentDates] =
+    useState<StudentDatesResponse | null>(null);
+
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingStudent, setIsLoadingStudent] = useState(false);
-  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
-  const [enrollmentDate, setEnrollmentDate] = useState('');
-  const [assignmentDate, setAssignmentDate] = useState('');
-  const [dateMessage, setDateMessage] = useState('');
-  const [dateMessageType, setDateMessageType] = useState<'success' | 'error'>('success');
 
+  // النوع الأول: تاريخ انضمام الطالب للدورة.
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
+  const [enrollmentDate, setEnrollmentDate] = useState('');
+
+  // النوع الثاني: تاريخ انضمام الطالب للمعلم.
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
+  const [assignmentDate, setAssignmentDate] = useState('');
+
+  const [savingDate, setSavingDate] = useState(false);
+  const [dateMessage, setDateMessage] = useState('');
+  const [dateMessageType, setDateMessageType] =
+    useState<MessageType>('success');
+
+  // تحميل إعداد حذف الطلاب والتحقق من صلاحية التواريخ.
   useEffect(() => {
     let active = true;
 
     async function loadSettings() {
       try {
-        const response = await fetch('/api/admin/students', {
+        const response = await fetch(API_URL, {
           method: 'GET',
           cache: 'no-store',
         });
+
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'تعذر تحميل إعداد حذف الطلاب.');
+          throw new Error(
+            result.error || 'تعذر تحميل إعداد حذف الطلاب.',
+          );
         }
 
         if (!active) return;
@@ -90,55 +120,78 @@ export default function StudentsManagementPage() {
         if (!active) return;
 
         setMessage(
-          error instanceof Error ? error.message : 'حدث خطأ أثناء تحميل الإعداد.',
+          error instanceof Error
+            ? error.message
+            : 'حدث خطأ أثناء تحميل إعداد حذف الطلاب.',
         );
         setMessageType('error');
+        setCanManageDeletion(false);
       } finally {
         if (active) setIsLoading(false);
       }
 
-      // التحقق من صلاحية التواريخ عبر API مستقل منطقيًا.
       try {
         const response = await fetch(
-          '/api/admin/students?operation=dates&search=__permission_check__',
+          `${API_URL}?operation=dates&search=__permission_check__`,
           { cache: 'no-store' },
         );
 
-        if (active && response.ok) {
-          setCanManageDates(true);
+        if (!active) return;
+
+        if (!response.ok) {
+          const result = (await response.json().catch(() => ({}))) as ApiResult;
+
+          setCanManageDates(false);
+          setDateMessage(
+            result.error || 'ليس لديك صلاحية إدارة تواريخ الطلاب.',
+          );
+          setDateMessageType('error');
+          return;
         }
+
+        setCanManageDates(true);
       } catch {
-        // ستظهر رسالة الصلاحية عند استخدام قسم التواريخ.
+        if (!active) return;
+
+        setCanManageDates(false);
+        setDateMessage('تعذر التحقق من صلاحية إدارة تواريخ الطلاب.');
+        setDateMessageType('error');
+      } finally {
+        if (active) setIsCheckingDatePermission(false);
       }
     }
 
-    loadSettings();
+    void loadSettings();
 
     return () => {
       active = false;
     };
   }, []);
 
+  // تغيير إعداد حذف الطلاب مع التراجع عند الفشل.
   async function handleDeletionSettingChange() {
-    if (isSaving || isLoading || !canManageDeletion) return;
+    if (isSavingDeletion || isLoading || !canManageDeletion) return;
 
     const previousValue = allowStudentDeletion;
     const nextValue = !previousValue;
 
     setAllowStudentDeletion(nextValue);
-    setIsSaving(true);
+    setIsSavingDeletion(true);
     setMessage('');
 
     try {
-      const response = await fetch('/api/admin/students', {
+      const response = await fetch(API_URL, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deletionEnabled: nextValue }),
       });
+
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'تعذر حفظ إعداد حذف الطلاب.');
+        throw new Error(
+          result.error || 'تعذر حفظ إعداد حذف الطلاب.',
+        );
       }
 
       setAllowStudentDeletion(result.deletionEnabled);
@@ -151,22 +204,29 @@ export default function StudentsManagementPage() {
     } catch (error) {
       setAllowStudentDeletion(previousValue);
       setMessage(
-        error instanceof Error ? error.message : 'حدث خطأ أثناء حفظ الإعداد.',
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء حفظ إعداد حذف الطلاب.',
       );
       setMessageType('error');
     } finally {
-      setIsSaving(false);
+      setIsSavingDeletion(false);
     }
   }
 
+  // البحث عن الطلاب باستخدام API.
   async function searchStudents() {
     if (!canManageDates) {
-      setDateMessage('لا تتوفر صلاحية إدارة تواريخ الطلاب أو تعذر التحقق منها.');
+      setDateMessage(
+        'لا تتوفر صلاحية إدارة تواريخ الطلاب أو تعذر التحقق منها.',
+      );
       setDateMessageType('error');
       return;
     }
 
-    if (search.trim().length < 2) {
+    const query = search.trim();
+
+    if (query.length < 2) {
       setDateMessage('اكتب حرفين على الأقل للبحث عن الطالب.');
       setDateMessageType('error');
       return;
@@ -179,27 +239,33 @@ export default function StudentsManagementPage() {
     setStudentDates(null);
     setSelectedEnrollmentId('');
     setSelectedAssignmentId('');
+    setEnrollmentDate('');
+    setAssignmentDate('');
 
     try {
       const response = await fetch(
-        `/api/admin/students?operation=dates&search=${encodeURIComponent(search.trim())}`,
+        `${API_URL}?operation=dates&search=${encodeURIComponent(query)}`,
         { cache: 'no-store' },
       );
+
       const result = await response.json();
 
       if (!response.ok) {
         throw new Error(result.error || 'تعذر البحث عن الطلاب.');
       }
 
-      setStudents(result.students ?? []);
+      const foundStudents = (result.students ?? []) as Student[];
+      setStudents(foundStudents);
 
-      if ((result.students ?? []).length === 0) {
+      if (foundStudents.length === 0) {
         setDateMessage('لم يتم العثور على طالب مطابق.');
-        setDateMessageType('error');
+        setDateMessageType('warning');
       }
     } catch (error) {
       setDateMessage(
-        error instanceof Error ? error.message : 'حدث خطأ أثناء البحث.',
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء البحث عن الطلاب.',
       );
       setDateMessageType('error');
     } finally {
@@ -207,6 +273,8 @@ export default function StudentsManagementPage() {
     }
   }
 
+  // تحميل تسجيلات الطالب وتعييناته.
+  // لا نمسح رسائل الحفظ هنا؛ لأن الدالة تستدعى بعد نجاح الحفظ أيضًا.
   async function loadStudent(student: Student) {
     setSelectedStudent(student);
     setStudentDates(null);
@@ -214,18 +282,20 @@ export default function StudentsManagementPage() {
     setSelectedAssignmentId('');
     setEnrollmentDate('');
     setAssignmentDate('');
-    setDateMessage('');
     setIsLoadingStudent(true);
 
     try {
       const response = await fetch(
-        `/api/admin/students?operation=dates&studentId=${encodeURIComponent(student.id)}`,
+        `${API_URL}?operation=dates&studentId=${encodeURIComponent(student.id)}`,
         { cache: 'no-store' },
       );
+
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'تعذر تحميل تسجيلات الطالب.');
+        throw new Error(
+          result.error || 'تعذر تحميل تسجيلات الطالب.',
+        );
       }
 
       const data = result as StudentDatesResponse;
@@ -242,7 +312,9 @@ export default function StudentsManagementPage() {
       }
     } catch (error) {
       setDateMessage(
-        error instanceof Error ? error.message : 'تعذر تحميل بيانات الطالب.',
+        error instanceof Error
+          ? error.message
+          : 'تعذر تحميل بيانات الطالب.',
       );
       setDateMessageType('error');
     } finally {
@@ -250,24 +322,96 @@ export default function StudentsManagementPage() {
     }
   }
 
+  // اختيار تسجيل الدورة يعرض تاريخ التسجيل نفسه.
   function chooseEnrollment(id: string) {
     setSelectedEnrollmentId(id);
-    const enrollment = studentDates?.enrollments.find((item) => item.id === id);
+
+    const enrollment = studentDates?.enrollments.find(
+      (item) => item.id === id,
+    );
+
     setEnrollmentDate(enrollment?.join_date ?? '');
   }
 
+  // اختيار تعيين المعلم يعرض تاريخ التعيين نفسه.
   function chooseAssignment(id: string) {
     setSelectedAssignmentId(id);
-    const assignment = studentDates?.assignments.find((item) => item.id === id);
+
+    const assignment = studentDates?.assignments.find(
+      (item) => item.id === id,
+    );
+
     setAssignmentDate(assignment?.join_date ?? '');
   }
 
+  // تحقق مبدئي في الواجهة؛ والتحقق النهائي يتم داخل API.
+  function validateDateOrder(
+    operation: 'updateEnrollmentJoinDate' | 'updateAssignmentJoinDate',
+    joinDate: string,
+  ) {
+    if (!studentDates) return null;
+
+    if (operation === 'updateEnrollmentJoinDate') {
+      const relatedAssignments = studentDates.assignments.filter(
+        (item) =>
+          item.course_id ===
+          studentDates.enrollments.find(
+            (enrollment) => enrollment.id === selectedEnrollmentId,
+          )?.course_id &&
+          item.join_date,
+      );
+
+      const earliestAssignmentDate = relatedAssignments
+        .map((item) => item.join_date as string)
+        .sort()[0];
+
+      if (earliestAssignmentDate && joinDate > earliestAssignmentDate) {
+        return (
+          'تاريخ انضمام الدورة يجب أن يكون قبل أو يساوي تاريخ تعيين الطالب للمعلم.'
+        );
+      }
+    } else {
+      const currentAssignment = studentDates.assignments.find(
+        (item) => item.id === selectedAssignmentId,
+      );
+
+      const relatedEnrollments = studentDates.enrollments.filter(
+        (item) =>
+          item.course_id === currentAssignment?.course_id &&
+          item.join_date,
+      );
+
+      const invalidEnrollment = relatedEnrollments.some(
+        (item) => (item.join_date as string) > joinDate,
+      );
+
+      if (invalidEnrollment) {
+        return (
+          'تاريخ تعيين الطالب للمعلم يجب أن يكون بعد أو يساوي تاريخ انضمامه للدورة.'
+        );
+      }
+    }
+
+    return null;
+  }
+
+  // حفظ أي من التاريخين.
   async function saveDate(
     operation: 'updateEnrollmentJoinDate' | 'updateAssignmentJoinDate',
   ) {
     const isEnrollment = operation === 'updateEnrollmentJoinDate';
-    const recordId = isEnrollment ? selectedEnrollmentId : selectedAssignmentId;
+
+    const recordId = isEnrollment
+      ? selectedEnrollmentId
+      : selectedAssignmentId;
+
     const joinDate = isEnrollment ? enrollmentDate : assignmentDate;
+
+    if (!canManageDates) {
+      setDateMessage('ليس لديك صلاحية إدارة تواريخ الطلاب.');
+      setDateMessageType('error');
+      return;
+    }
 
     if (!recordId) {
       setDateMessage(
@@ -285,11 +429,19 @@ export default function StudentsManagementPage() {
       return;
     }
 
-    setIsSaving(true);
+    const orderError = validateDateOrder(operation, joinDate);
+
+    if (orderError) {
+      setDateMessage(orderError);
+      setDateMessageType('error');
+      return;
+    }
+
+    setSavingDate(true);
     setDateMessage('');
 
     try {
-      const response = await fetch('/api/admin/students', {
+      const response = await fetch(API_URL, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
@@ -307,31 +459,45 @@ export default function StudentsManagementPage() {
         ),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as ApiResult;
 
       if (!response.ok) {
         throw new Error(result.error || 'تعذر حفظ التاريخ.');
       }
 
-      setDateMessage(
-        result.warning
-          ? `تم حفظ التاريخ، لكن توجد ملاحظة: ${result.warning}`
-          : result.message || 'تم حفظ التاريخ بنجاح.',
-      );
-      setDateMessageType(result.warning ? 'error' : 'success');
+      const resultMessage = result.warning
+        ? `تم حفظ التاريخ، لكن توجد ملاحظة: ${result.warning}`
+        : result.message || 'تم حفظ التاريخ بنجاح.';
 
+      const resultType: MessageType = result.warning
+        ? 'warning'
+        : 'success';
+
+      // نعيد تحميل البيانات أولًا، ثم نعرض الرسالة حتى لا تختفي.
       if (selectedStudent) {
         await loadStudent(selectedStudent);
       }
+
+      setDateMessage(resultMessage);
+      setDateMessageType(resultType);
     } catch (error) {
       setDateMessage(
-        error instanceof Error ? error.message : 'حدث خطأ أثناء حفظ التاريخ.',
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء حفظ التاريخ.',
       );
       setDateMessageType('error');
     } finally {
-      setIsSaving(false);
+      setSavingDate(false);
     }
   }
+
+  const dateMessageClass =
+    dateMessageType === 'error'
+      ? 'text-destructive'
+      : dateMessageType === 'warning'
+        ? 'text-amber-600 dark:text-amber-400'
+        : 'text-primary';
 
   return (
     <div dir="rtl" className="space-y-6 p-6">
@@ -339,7 +505,7 @@ export default function StudentsManagementPage() {
         <div>
           <h1 className="text-2xl font-bold">إدارة الطلاب</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            إدارة تواريخ الطلاب والتحكم في صلاحية حذفهم من النظام.
+            إدارة تواريخ انضمام الطلاب والتحكم في صلاحية حذفهم من النظام.
           </p>
         </div>
 
@@ -354,6 +520,7 @@ export default function StudentsManagementPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
+        {/* إدارة تاريخَي الانضمام */}
         <section className="space-y-4 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" />
@@ -361,12 +528,16 @@ export default function StudentsManagementPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            ابحث عن الطالب، ثم اختر تسجيل الدورة أو تعيين المعلم لتعديل التاريخ المطلوب.
+            اختر الطالب، ثم عدّل تاريخ انضمامه للدورة أو تاريخ تعيينه للمعلم.
           </p>
 
-          {!canManageDates ? (
+          {isCheckingDatePermission ? (
             <p className="text-sm text-muted-foreground">
               جارٍ التحقق من صلاحية إدارة التواريخ...
+            </p>
+          ) : !canManageDates ? (
+            <p className="text-sm text-destructive">
+              لا تتوفر صلاحية إدارة تواريخ الطلاب أو تعذر التحقق منها.
             </p>
           ) : (
             <>
@@ -382,13 +553,14 @@ export default function StudentsManagementPage() {
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="اسم الطالب أو رقمه الشخصي"
+                    placeholder="اسم الطالب أو رقمه الشخصي أو رقم الطالب"
                     className="w-full rounded-lg border border-border bg-background py-2 pe-9 ps-3 text-sm"
                   />
                 </div>
+
                 <button
                   type="submit"
-                  disabled={isSearching}
+                  disabled={isSearching || savingDate}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                 >
                   {isSearching ? (
@@ -406,14 +578,18 @@ export default function StudentsManagementPage() {
                     <button
                       key={student.id}
                       type="button"
+                      disabled={savingDate}
                       onClick={() => void loadStudent(student)}
-                      className={`w-full rounded-md p-3 text-right transition-colors hover:bg-muted ${
+                      className={`w-full rounded-md p-3 text-right transition-colors hover:bg-muted disabled:opacity-50 ${
                         selectedStudent?.id === student.id ? 'bg-muted' : ''
                       }`}
                     >
-                      <span className="block text-sm font-medium">{student.name}</span>
+                      <span className="block text-sm font-medium">
+                        {student.name}
+                      </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        {student.personal_id || student.student_id || 'بدون رقم'}
+                        رقم الطالب: {student.student_id || '—'} · الرقم الشخصي:{' '}
+                        {student.personal_id || '—'}
                       </span>
                     </button>
                   ))}
@@ -421,20 +597,27 @@ export default function StudentsManagementPage() {
               )}
 
               {isLoadingStudent && (
-                <p className="text-sm text-muted-foreground">جارٍ تحميل بيانات الطالب...</p>
+                <p className="text-sm text-muted-foreground">
+                  جارٍ تحميل بيانات الطالب...
+                </p>
               )}
 
               {studentDates && !isLoadingStudent && (
                 <div className="space-y-5 border-t border-border pt-4">
                   <div>
-                    <p className="font-semibold">{studentDates.student.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-semibold">
+                      {studentDates.student.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
                       اختر السجل الصحيح إذا كان للطالب أكثر من تسجيل أو تعيين.
                     </p>
                   </div>
 
+                  {/* النوع الأول: تاريخ انضمام الدورة */}
                   <div className="space-y-3 rounded-lg border border-border p-4">
-                    <h3 className="text-sm font-semibold">تاريخ انضمام الطالب للدورة</h3>
+                    <h3 className="text-sm font-semibold">
+                      ١. تاريخ انضمام الطالب للدورة
+                    </h3>
 
                     {studentDates.enrollments.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
@@ -443,45 +626,71 @@ export default function StudentsManagementPage() {
                     ) : (
                       <>
                         <label className="block space-y-1">
-                          <span className="text-xs text-muted-foreground">التسجيل</span>
+                          <span className="text-xs text-muted-foreground">
+                            تسجيل الدورة
+                          </span>
                           <select
                             value={selectedEnrollmentId}
-                            onChange={(event) => chooseEnrollment(event.target.value)}
+                            onChange={(event) =>
+                              chooseEnrollment(event.target.value)
+                            }
+                            disabled={savingDate}
                             className="w-full rounded-lg border border-border bg-background p-2 text-sm"
                           >
                             {studentDates.enrollments.map((item, index) => (
                               <option key={item.id} value={item.id}>
-                                تسجيل {index + 1} — المستوى {item.level_id} — {item.status}
+                                تسجيل {index + 1} — المستوى {item.level_id} —
+                                الحالة: {item.status}
                               </option>
                             ))}
                           </select>
                         </label>
 
                         <label className="block space-y-1">
-                          <span className="text-xs text-muted-foreground">تاريخ الانضمام</span>
+                          <span className="text-xs text-muted-foreground">
+                            تاريخ الانضمام للدورة
+                          </span>
                           <input
                             type="date"
                             value={enrollmentDate}
-                            onChange={(event) => setEnrollmentDate(event.target.value)}
+                            onChange={(event) =>
+                              setEnrollmentDate(event.target.value)
+                            }
+                            disabled={savingDate}
+                            required
                             className="w-full rounded-lg border border-border bg-background p-2 text-sm"
                           />
                         </label>
 
+                        <p className="text-xs text-muted-foreground">
+                          هذا الحقل يحدّث{' '}
+                          <code>enrollments.join_date</code>.
+                        </p>
+
                         <button
                           type="button"
-                          onClick={() => void saveDate('updateEnrollmentJoinDate')}
-                          disabled={isSaving}
+                          onClick={() =>
+                            void saveDate('updateEnrollmentJoinDate')
+                          }
+                          disabled={savingDate || !selectedEnrollmentId}
                           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                         >
-                          <Save className="h-4 w-4" />
+                          {savingDate ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
                           حفظ تاريخ الدورة
                         </button>
                       </>
                     )}
                   </div>
 
+                  {/* النوع الثاني: تاريخ تعيين المعلم */}
                   <div className="space-y-3 rounded-lg border border-border p-4">
-                    <h3 className="text-sm font-semibold">تاريخ انضمام الطالب للمعلم</h3>
+                    <h3 className="text-sm font-semibold">
+                      ٢. تاريخ انضمام الطالب للمعلم
+                    </h3>
 
                     {studentDates.assignments.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
@@ -490,42 +699,71 @@ export default function StudentsManagementPage() {
                     ) : (
                       <>
                         <label className="block space-y-1">
-                          <span className="text-xs text-muted-foreground">التعيين</span>
+                          <span className="text-xs text-muted-foreground">
+                            تعيين المعلم
+                          </span>
                           <select
                             value={selectedAssignmentId}
-                            onChange={(event) => chooseAssignment(event.target.value)}
+                            onChange={(event) =>
+                              chooseAssignment(event.target.value)
+                            }
+                            disabled={savingDate}
                             className="w-full rounded-lg border border-border bg-background p-2 text-sm"
                           >
                             {studentDates.assignments.map((item, index) => (
                               <option key={item.id} value={item.id}>
-                                تعيين {index + 1} — المعلم {item.teacher_id} — المادة {item.subject_id}
+                                تعيين {index + 1} — المعلم {item.teacher_id} —
+                                المادة {item.subject_id}
                               </option>
                             ))}
                           </select>
                         </label>
 
                         <label className="block space-y-1">
-                          <span className="text-xs text-muted-foreground">تاريخ الانضمام للمعلم</span>
+                          <span className="text-xs text-muted-foreground">
+                            تاريخ الانضمام للمعلم
+                          </span>
                           <input
                             type="date"
                             value={assignmentDate}
-                            onChange={(event) => setAssignmentDate(event.target.value)}
+                            onChange={(event) =>
+                              setAssignmentDate(event.target.value)
+                            }
+                            disabled={savingDate}
+                            required
                             className="w-full rounded-lg border border-border bg-background p-2 text-sm"
                           />
                         </label>
 
+                        <p className="text-xs text-muted-foreground">
+                          هذا الحقل يحدّث{' '}
+                          <code>teacher_student_assignments.join_date</code>.
+                        </p>
+
                         <button
                           type="button"
-                          onClick={() => void saveDate('updateAssignmentJoinDate')}
-                          disabled={isSaving}
+                          onClick={() =>
+                            void saveDate('updateAssignmentJoinDate')
+                          }
+                          disabled={savingDate || !selectedAssignmentId}
                           className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
                         >
-                          <Save className="h-4 w-4" />
+                          {savingDate ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
                           حفظ تاريخ المعلم
                         </button>
                       </>
                     )}
                   </div>
+
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    قاعدة التواريخ: تاريخ انضمام الدورة يجب أن يكون قبل أو
+                    مساويًا لتاريخ تعيين المعلم. يتحقق الـ API من القاعدة
+                    قبل الحفظ أيضًا، حتى لو تجاوز المستخدم تحقق الواجهة.
+                  </p>
                 </div>
               )}
             </>
@@ -534,15 +772,15 @@ export default function StudentsManagementPage() {
           {dateMessage && (
             <p
               role="status"
-              className={`text-sm ${
-                dateMessageType === 'error' ? 'text-destructive' : 'text-primary'
-              }`}
+              aria-live="polite"
+              className={`text-sm leading-6 ${dateMessageClass}`}
             >
               {dateMessage}
             </p>
           )}
         </section>
 
+        {/* إعداد حذف الطلاب: الإبقاء على السلوك السابق */}
         <section className="space-y-4 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
@@ -554,13 +792,20 @@ export default function StudentsManagementPage() {
           </p>
 
           <label className="flex items-center justify-between gap-4">
-            <span className="text-sm font-medium">السماح بحذف الطلاب</span>
+            <span className="text-sm font-medium">
+              السماح بحذف الطلاب
+            </span>
+
             <button
               type="button"
               role="switch"
               aria-checked={allowStudentDeletion}
               aria-label="السماح بحذف الطلاب"
-              disabled={isLoading || isSaving || !canManageDeletion}
+              disabled={
+                isLoading ||
+                isSavingDeletion ||
+                !canManageDeletion
+              }
               onClick={handleDeletionSettingChange}
               className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 allowStudentDeletion ? 'bg-primary' : 'bg-muted'
@@ -577,7 +822,7 @@ export default function StudentsManagementPage() {
           <p className="text-xs text-muted-foreground">
             {isLoading
               ? 'جارٍ تحميل الإعداد...'
-              : isSaving
+              : isSavingDeletion
                 ? 'جارٍ حفظ التغيير...'
                 : !canManageDeletion
                   ? 'تعذر تحميل الإعداد أو ليست لديك صلاحية إدارته.'
@@ -589,8 +834,13 @@ export default function StudentsManagementPage() {
           {message && (
             <p
               role="status"
+              aria-live="polite"
               className={`text-sm ${
-                messageType === 'error' ? 'text-destructive' : 'text-primary'
+                messageType === 'error'
+                  ? 'text-destructive'
+                  : messageType === 'warning'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-primary'
               }`}
             >
               {message}
@@ -604,8 +854,9 @@ export default function StudentsManagementPage() {
           <Users className="h-5 w-5 text-primary" />
           <h2 className="font-semibold">قائمة الطلاب</h2>
         </div>
+
         <p className="text-sm text-muted-foreground">
-          استخدم البحث أعلاه للوصول إلى الطالب وتعديل تواريخه.
+          استخدم البحث أعلاه للوصول إلى الطالب وتعديل أحد تاريخَي الانضمام.
         </p>
       </section>
     </div>
