@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requirePermission } from '@/lib/auth/authorization';
@@ -57,14 +56,199 @@ function isValidDate(value: unknown): value is string {
   );
 }
 
+function getTodayDate() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bahrain',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
 function cleanSearch(value: string) {
   return value.replace(/[%_,()]/g, '').trim().slice(0, 100);
 }
 
 /**
- * يعيد قراءة تسجيل الطالب وتعييناته للتحقق من ترتيب التواريخ.
- * نستخدم أقدم تاريخ تعيين صالح في الدورة حتى لا يصبح تاريخ
- * انضمام الدورة بعد بداية تعيين الطالب لأي معلم في الدورة.
+ * التحقق من تاريخ الانضمام مقابل الدورة والسنة الدراسية.
+ *
+ * expectedAcademicYearId:
+ * عند التحقق من تسجيل الطالب، نقارن سنة التسجيل بسنة الدورة.
+ * وعند التحقق من تعيين المعلم، نستخدم سنة الدورة نفسها.
+ */
+async function validateDateWithinCourseAndYear(
+  courseId: string,
+  joinDate: string,
+  expectedAcademicYearId?: string | null,
+) {
+  if (joinDate > getTodayDate()) {
+    return NextResponse.json(
+      { error: 'لا يمكن اختيار تاريخ في المستقبل.' },
+      { status: 400 },
+    );
+  }
+
+  const { data: course, error: courseError } =
+    await supabaseAdmin
+      .from('courses')
+      .select('id, start_date, end_date, academic_year_id')
+      .eq('id', courseId)
+      .maybeSingle();
+
+  if (courseError) {
+    console.error('Read course for date validation:', courseError);
+
+    return NextResponse.json(
+      { error: 'تعذر التحقق من تواريخ الدورة.' },
+      { status: 500 },
+    );
+  }
+
+  if (!course) {
+    return NextResponse.json(
+      { error: 'الدورة المرتبطة غير موجودة.' },
+      { status: 400 },
+    );
+  }
+
+  if (
+    !course.start_date ||
+    !course.end_date ||
+    !isValidDate(course.start_date) ||
+    !isValidDate(course.end_date)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'تواريخ بداية الدورة ونهايتها غير مكتملة أو غير صالحة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (course.start_date > course.end_date) {
+    return NextResponse.json(
+      { error: 'تاريخ بداية الدورة يتجاوز تاريخ نهايتها.' },
+      { status: 400 },
+    );
+  }
+
+  if (
+    expectedAcademicYearId &&
+    course.academic_year_id !== expectedAcademicYearId
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'السنة الدراسية للتسجيل لا تطابق السنة الدراسية المرتبطة بالدورة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (joinDate < course.start_date) {
+    return NextResponse.json(
+      {
+        error:
+          'تاريخ الانضمام لا يمكن أن يكون قبل تاريخ بداية الدورة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (joinDate > course.end_date) {
+    return NextResponse.json(
+      {
+        error:
+          'تاريخ الانضمام لا يمكن أن يكون بعد تاريخ نهاية الدورة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (!course.academic_year_id) {
+    return NextResponse.json(
+      { error: 'الدورة غير مرتبطة بسنة دراسية.' },
+      { status: 400 },
+    );
+  }
+
+  const { data: academicYear, error: academicYearError } =
+    await supabaseAdmin
+      .from('academic_years')
+      .select('id, start_date, end_date')
+      .eq('id', course.academic_year_id)
+      .maybeSingle();
+
+  if (academicYearError) {
+    console.error(
+      'Read academic year for date validation:',
+      academicYearError,
+    );
+
+    return NextResponse.json(
+      { error: 'تعذر التحقق من تواريخ السنة الدراسية.' },
+      { status: 500 },
+    );
+  }
+
+  if (!academicYear) {
+    return NextResponse.json(
+      { error: 'السنة الدراسية المرتبطة بالدورة غير موجودة.' },
+      { status: 400 },
+    );
+  }
+
+  if (
+    !academicYear.start_date ||
+    !academicYear.end_date ||
+    !isValidDate(academicYear.start_date) ||
+    !isValidDate(academicYear.end_date)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'تواريخ بداية السنة الدراسية ونهايتها غير مكتملة أو غير صالحة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (academicYear.start_date > academicYear.end_date) {
+    return NextResponse.json(
+      {
+        error:
+          'تاريخ بداية السنة الدراسية يتجاوز تاريخ نهايتها.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (
+    joinDate < academicYear.start_date ||
+    joinDate > academicYear.end_date
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'تاريخ الانضمام يجب أن يقع ضمن السنة الدراسية المرتبطة بالدورة.',
+      },
+      { status: 400 },
+    );
+  }
+
+  return null;
+}
+
+/**
+ * يتحقق من تاريخ انضمام الطالب للدورة، ومن عدم تجاوزه
+ * أقدم تاريخ تعيين للطالب لدى معلم في الدورة نفسها.
  */
 async function validateEnrollmentJoinDate(
   enrollmentId: string,
@@ -73,12 +257,17 @@ async function validateEnrollmentJoinDate(
   const { data: enrollment, error: enrollmentError } =
     await supabaseAdmin
       .from('enrollments')
-      .select('id, student_id, course_id, join_date')
+      .select(
+        'id, student_id, course_id, academic_year_id, join_date',
+      )
       .eq('id', enrollmentId)
       .maybeSingle();
 
   if (enrollmentError) {
-    console.error('Read enrollment before date validation:', enrollmentError);
+    console.error(
+      'Read enrollment before date validation:',
+      enrollmentError,
+    );
 
     return {
       error: NextResponse.json(
@@ -95,6 +284,16 @@ async function validateEnrollmentJoinDate(
         { status: 404 },
       ),
     };
+  }
+
+  const dateError = await validateDateWithinCourseAndYear(
+    enrollment.course_id,
+    newJoinDate,
+    enrollment.academic_year_id,
+  );
+
+  if (dateError) {
+    return { error: dateError };
   }
 
   const { data: assignments, error: assignmentsError } =
@@ -394,9 +593,12 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const enrollmentId = payload.enrollmentId;
+    const joinDate = payload.joinDate;
+
     const validation = await validateEnrollmentJoinDate(
-      payload.enrollmentId,
-      payload.joinDate,
+      enrollmentId,
+      joinDate,
     );
 
     if (validation.error) {
@@ -406,8 +608,8 @@ export async function PATCH(request: Request) {
     const { data: enrollment, error: updateError } =
       await supabaseAdmin
         .from('enrollments')
-        .update({ join_date: payload.joinDate })
-        .eq('id', payload.enrollmentId)
+        .update({ join_date: joinDate })
+        .eq('id', enrollmentId)
         .select('id, student_id, course_id, join_date')
         .maybeSingle();
 
@@ -467,29 +669,23 @@ export async function PATCH(request: Request) {
       );
     }
 
-   
-    if (
-      typeof payload.assignmentId !== 'string' ||
-      typeof payload.joinDate !== 'string' ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(payload.joinDate)
-    ) {
-      return NextResponse.json(
-        { error: 'بيانات التعيين أو تاريخ الانضمام غير صالحة.' },
-        { status: 400 },
-      );
-    }
-
+    const assignmentId = payload.assignmentId;
     const joinDate = payload.joinDate;
 
-    const { data: currentAssignment, error: assignmentReadError } =
-      await supabaseAdmin
-        .from('teacher_student_assignments')
-        .select('id, student_id, course_id, join_date')
-        .eq('id', payload.assignmentId)
-        .maybeSingle();
+    const {
+      data: currentAssignment,
+      error: assignmentReadError,
+    } = await supabaseAdmin
+      .from('teacher_student_assignments')
+      .select('id, student_id, course_id, join_date')
+      .eq('id', assignmentId)
+      .maybeSingle();
 
     if (assignmentReadError) {
-      console.error('Read assignment before update:', assignmentReadError);
+      console.error(
+        'Read assignment before update:',
+        assignmentReadError,
+      );
 
       return NextResponse.json(
         { error: 'تعذر قراءة تعيين الطالب للمعلم.' },
@@ -504,14 +700,26 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // التحقق من أن تاريخ الدورة لا يتجاوز تاريخ التعيين الجديد.
-    const { data: enrollments, error: enrollmentReadError } =
-      await supabaseAdmin
-        .from('enrollments')
-        .select('id, join_date')
-        .eq('student_id', currentAssignment.student_id)
-        .eq('course_id', currentAssignment.course_id)
-        .not('join_date', 'is', null);
+    // التحقق من تاريخ التعيين بالنسبة للدورة والسنة الدراسية.
+    const dateError = await validateDateWithinCourseAndYear(
+      currentAssignment.course_id,
+      joinDate,
+    );
+
+    if (dateError) {
+      return dateError;
+    }
+
+    // قراءة تسجيلات الطالب في الدورة نفسها.
+    const {
+      data: enrollments,
+      error: enrollmentReadError,
+    } = await supabaseAdmin
+      .from('enrollments')
+      .select('id, join_date')
+      .eq('student_id', currentAssignment.student_id)
+      .eq('course_id', currentAssignment.course_id)
+      .not('join_date', 'is', null);
 
     if (enrollmentReadError) {
       console.error(
@@ -545,7 +753,7 @@ export async function PATCH(request: Request) {
       await supabaseAdmin
         .from('teacher_student_assignments')
         .update({ join_date: joinDate })
-        .eq('id', payload.assignmentId)
+        .eq('id', assignmentId)
         .select('id, student_id, course_id, join_date')
         .maybeSingle();
 
@@ -645,4 +853,3 @@ export async function PATCH(request: Request) {
     updatedAt: data.updated_at,
   });
 }
-
