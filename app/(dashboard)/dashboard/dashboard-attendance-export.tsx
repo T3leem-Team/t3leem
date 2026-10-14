@@ -75,11 +75,11 @@ type Enrollment = {
   joinDate: string | null
 }
 
-type AssignmentJoinDate = {
+type AssignmentCreatedAt = {
   id: string
   studentId: string
   courseId: string
-  joinDate: string | null
+  createdAt: string | null
 }
 
 type Props = {
@@ -350,6 +350,31 @@ function clampDate(
   return date
 }
 
+function getBahrainDate(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Bahrain',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
+
+  if (!year || !month || !day) {
+    return null
+  }
+
+  return `${year}-${month}-${day}`
+}
+
 export function DashboardAttendanceExport({
   course,
   academicYear,
@@ -575,11 +600,11 @@ export function DashboardAttendanceExport({
         }
 
         /*
-         * 2. جلب تاريخ تعيين المعلم من join_date.
-         * لا نستخدم created_at؛ فقد يكون مختلفًا
-         * عن تاريخ بدء مسؤولية المعلم عن الطالب.
+         * 2. جلب تاريخ تعيين المعلم من created_at.
+         * نستخدم تاريخ إنشاء سجل التعيين بتوقيت البحرين،
+         * ولا نعتمد على teacher_student_assignments.join_date.
          */
-        const assignmentJoinDateMap =
+        const assignmentCreatedAtMap =
           new Map<string, string>()
 
         const assignmentIds = Array.from(
@@ -594,8 +619,8 @@ export function DashboardAttendanceExport({
 
         if (assignmentIds.length > 0) {
           const {
-            data: assignmentDateData,
-            error: assignmentDateError,
+            data: assignmentData,
+            error: assignmentError,
           } = await supabase
             .from('teacher_student_assignments')
             .select(
@@ -603,40 +628,38 @@ export function DashboardAttendanceExport({
                 id,
                 student_id,
                 course_id,
-                join_date
+                created_at
               `,
             )
             .in('id', assignmentIds)
             .eq('course_id', course.id)
 
-          if (assignmentDateError) {
+          if (assignmentError) {
             console.error(
               'Attendance export assignment query error:',
-              assignmentDateError,
+              assignmentError,
             )
 
-            throw assignmentDateError
+            throw assignmentError
           }
 
-          const assignmentDates: AssignmentJoinDate[] =
-            (assignmentDateData ?? []).map(
-              (item) => ({
-                id: String(item.id),
-                studentId: String(item.student_id),
-                courseId: String(item.course_id),
-                joinDate: item.join_date
-                  ? String(item.join_date).slice(0, 10)
-                  : null,
-              }),
-            )
+          const assignmentRecords: AssignmentCreatedAt[] =
+            (assignmentData ?? []).map((item) => ({
+              id: String(item.id),
+              studentId: String(item.student_id),
+              courseId: String(item.course_id),
+              createdAt: item.created_at
+                ? String(item.created_at)
+                : null,
+            }))
 
           /*
            * إذا كان للطالب أكثر من تعيين في الدورة،
-           * نعتمد أقدم تاريخ تعيين صالح؛ لأن مسؤولية
+           * نعتمد أقدم تاريخ إنشاء صالح؛ لأن مسؤولية
            * تسجيل الحضور تبدأ من أول تعيين.
            */
-          for (const assignment of assignmentDates) {
-            if (!assignment.joinDate) {
+          for (const assignment of assignmentRecords) {
+            if (!assignment.createdAt) {
               continue
             }
 
@@ -648,16 +671,24 @@ export function DashboardAttendanceExport({
               continue
             }
 
+            const bahrainDate = getBahrainDate(
+              assignment.createdAt,
+            )
+
+            if (!bahrainDate) {
+              continue
+            }
+
             const currentDate =
-              assignmentJoinDateMap.get(studentId)
+              assignmentCreatedAtMap.get(studentId)
 
             if (
               !currentDate ||
-              assignment.joinDate < currentDate
+              bahrainDate < currentDate
             ) {
-              assignmentJoinDateMap.set(
+              assignmentCreatedAtMap.set(
                 studentId,
-                assignment.joinDate,
+                bahrainDate,
               )
             }
           }
@@ -826,8 +857,8 @@ export function DashboardAttendanceExport({
                 )
               : null
 
-          const assignmentJoinDate =
-            assignmentJoinDateMap.get(studentId) ??
+          const assignmentCreatedAtDate =
+            assignmentCreatedAtMap.get(studentId) ??
             null
 
           const counts = {
@@ -854,8 +885,8 @@ export function DashboardAttendanceExport({
               lessonDate < enrollmentDate
 
             const isBeforeAssignment =
-              assignmentJoinDate !== null &&
-              lessonDate < assignmentJoinDate
+              assignmentCreatedAtDate !== null &&
+              lessonDate < assignmentCreatedAtDate
 
             let statusLabel: string
 
@@ -869,9 +900,9 @@ export function DashboardAttendanceExport({
               /*
                * الأولوية الثانية:
                * انضم للدورة لكنه لم يصل بعد
-               * إلى تاريخ تعيينه عند المعلم.
+               * إلى تاريخ إنشاء سجل تعيينه عند المعلم.
                */
-              assignmentJoinDate !== null &&
+              assignmentCreatedAtDate !== null &&
               isBeforeAssignment
             ) {
               statusLabel = 'غير منضم'
@@ -887,8 +918,8 @@ export function DashboardAttendanceExport({
                * نعرض "لم يسجل" دون تعديل السجل الأصلي.
                */
               if (
-                assignmentJoinDate !== null &&
-                lessonDate >= assignmentJoinDate &&
+                assignmentCreatedAtDate !== null &&
+                lessonDate >= assignmentCreatedAtDate &&
                 isUnjoinedStatus(recordedStatus)
               ) {
                 statusLabel = 'لم يسجل'
