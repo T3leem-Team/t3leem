@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -158,6 +157,9 @@ export async function POST(request: NextRequest) {
 
     const userId = profile.auth_user_id
 
+    /*
+     * 1. بدء استرجاع الجهاز.
+     */
     if (action === 'challenge') {
       const currentToken =
         request.cookies.get(DEVICE_COOKIE)?.value
@@ -166,7 +168,7 @@ export async function POST(request: NextRequest) {
         const { data: currentDevice, error } =
           await supabaseAdmin
             .from('trusted_devices')
-            .select('status')
+            .select('id, status')
             .eq('auth_user_id', userId)
             .eq(
               'device_token_hash',
@@ -181,19 +183,35 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        if (currentDevice) {
-          if (currentDevice.status === 'approved') {
-            return NextResponse.json({
-              status: 'already_trusted',
-            })
-          }
+        if (currentDevice?.status === 'approved') {
+          return NextResponse.json({
+            status: 'already_trusted',
+          })
+        }
 
+        /*
+         * الجهاز المرفوض أو المسحوب الاعتماد
+         * لا يُسمح له باسترجاع هويته.
+         */
+        if (
+          currentDevice?.status === 'rejected' ||
+          currentDevice?.status === 'revoked'
+        ) {
           return NextResponse.json({
             status: 'blocked',
           })
         }
+
+        /*
+         * إذا كانت الكوكي تخص جهازًا pending،
+         * نكمل البحث عن المفتاح القديم المعتمد.
+         * لا نغيّر حالة الجهاز المعلّق ولا نعتمده.
+         */
       }
 
+      /*
+       * 2. البحث عن المفتاح المسجل لهذا المستخدم.
+       */
       const { data: keyRecord, error: keyError } =
         await supabaseAdmin
           .from('trusted_device_keys')
@@ -215,6 +233,9 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      /*
+       * 3. التأكد أن المفتاح مربوط بجهاز معتمد.
+       */
       const { data: device, error: deviceError } =
         await supabaseAdmin
           .from('trusted_devices')
@@ -237,7 +258,11 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      /*
+       * 4. إنشاء تحدٍّ مؤقت لإثبات امتلاك المفتاح.
+       */
       const challenge = randomBytes(32).toString('base64url')
+
       const expiresAt = new Date(
         Date.now() + 5 * 60 * 1000,
       ).toISOString()
@@ -270,10 +295,14 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    /*
+     * 5. التحقق من توقيع المفتاح في طلب الاسترجاع.
+     */
     const challenge =
       typeof body?.challenge === 'string'
         ? body.challenge
         : ''
+
     const signature =
       typeof body?.signature === 'string'
         ? body.signature
@@ -315,12 +344,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+     * 6. التأكد من تطابق المفتاح مع الجهاز صاحب التحدّي.
+     */
     const { data: keyRecord, error: keyError } =
       await supabaseAdmin
         .from('trusted_device_keys')
         .select('trusted_device_id')
         .eq('auth_user_id', userId)
-        .eq('trusted_device_id', challengeRow.trusted_device_id)
+        .eq(
+          'trusted_device_id',
+          challengeRow.trusted_device_id,
+        )
         .eq('public_key', publicKey)
         .maybeSingle()
 
@@ -331,6 +366,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+     * 7. التأكد من أن الجهاز لا يزال معتمدًا.
+     */
     const { data: device, error: deviceError } =
       await supabaseAdmin
         .from('trusted_devices')
@@ -354,6 +392,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+     * 8. التحقق من توقيع التحدّي باستخدام المفتاح العام.
+     */
     let validSignature = false
 
     try {
@@ -388,6 +429,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+     * 9. استهلاك التحدّي مرة واحدة فقط.
+     */
     const { data: consumed, error: consumeError } =
       await supabaseAdmin
         .from('device_key_challenges')
@@ -412,6 +456,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    /*
+     * 10. إصدار كوكي جديدة للجهاز القديم المعتمد.
+     * لا ننشئ جهازًا معتمدًا جديدًا.
+     */
     const deviceToken = randomBytes(32).toString('hex')
     const tokenHash = hashToken(deviceToken)
 
@@ -429,7 +477,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
     if (updateError || !updatedDevice) {
-      console.error('Device recovery update failed:', updateError)
+      console.error(
+        'Device recovery update failed:',
+        updateError,
+      )
 
       return NextResponse.json(
         { error: 'تعذر استرجاع الجهاز.' },
