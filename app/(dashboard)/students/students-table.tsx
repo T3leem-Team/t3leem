@@ -96,6 +96,7 @@ export type StudentTableStudent = {
 }
 
 type Props = {
+  allowStudentDeletion: boolean
   students: StudentTableStudent[]
   courses: StudentTableCourse[]
   dynamicFields: StudentDynamicField[]
@@ -368,6 +369,7 @@ function normalizeAttendanceStatus(
 }
 
 export function StudentsTable({
+  allowStudentDeletion,
   students,
   courses,
   dynamicFields,
@@ -671,16 +673,15 @@ export function StudentsTable({
     setDeleteMessage('')
   }
 
-  const openDeleteConfirmation =
-    () => {
+  const openDeleteConfirmation = () => {
       if (
-        selectedStudentIds.length ===
-          0 ||
+        !allowStudentDeletion ||
+        selectedStudentIds.length === 0 ||
         deleteSaving
       ) {
         return
       }
-
+    
       setDeleteMessage('')
       setShowDeleteConfirm(true)
     }
@@ -693,49 +694,42 @@ export function StudentsTable({
       setDeleteMessage('')
     }
 
-  const confirmDeleteSelected =
-    async () => {
-      if (
-        selectedStudentIds.length ===
-          0 ||
-        deleteSaving
-      ) {
+  const confirmDeleteSelected = async () => {
+    if (
+      !allowStudentDeletion ||
+      selectedStudentIds.length === 0 ||
+      deleteSaving
+    ) {
+      return
+    }
+  
+    setDeleteSaving(true)
+    setDeleteMessage('')
+  
+    try {
+      const ids = Array.from(
+        new Set(selectedStudentIds.filter(Boolean))
+      )
+  
+      if (ids.length === 0) {
         return
       }
-
-      setDeleteSaving(true)
-      setDeleteMessage('')
-
-      try {
-        const ids = Array.from(
-          new Set(
-            selectedStudentIds.filter(
-              Boolean
-            )
-          )
-        )
-
-        if (ids.length === 0) {
-          return
-        }
-
-        await onDeleteSelected(
-          ids
-        )
-
-        setSelectedStudentIds([])
-        setSelectionMode(false)
-        setShowDeleteConfirm(false)
-      } catch (error) {
-        setDeleteMessage(
-          error instanceof Error
-            ? error.message
-            : 'تعذر حذف الطلاب المحددين.'
-        )
-      } finally {
-        setDeleteSaving(false)
-      }
+  
+      await onDeleteSelected(ids)
+  
+      setSelectedStudentIds([])
+      setSelectionMode(false)
+      setShowDeleteConfirm(false)
+    } catch (error) {
+      setDeleteMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر حذف الطلاب المحددين.'
+      )
+    } finally {
+      setDeleteSaving(false)
     }
+  }
 
   const openPayment = (
     student: StudentTableStudent
@@ -996,7 +990,7 @@ export function StudentsTable({
 
   const totalColumns =
     1 +
-    (selectionMode ? 1 : 0) +
+    (allowStudentDeletion && selectionMode ? 1 : 0) +
     baseColumns.filter(
       (column) =>
         visibleColumns[
@@ -1016,71 +1010,65 @@ export function StudentsTable({
         )
     )
 
-  const selectedCount =
+   const selectedCount =
     selectedStudentIds.length
-
-  return (
-    <>
-      <div className="space-y-3">
-
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium">
-            الطلاب ({students.length})
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (selectionMode) {
-                  exitSelectionMode()
-                } else {
-                  setSelectionMode(
-                    true
-                  )
-                }
-              }}
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
-            >
-              {selectionMode
-                ? 'إلغاء التحديد'
-                : 'تحديد'}
-            </button>
-
-            {selectionMode && (
-              <>
+  
+    return (
+      <>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-medium">
+              الطلاب ({students.length})
+            </div>
+    
+            <div className="flex items-center gap-2">
+              {allowStudentDeletion && (
                 <button
                   type="button"
-                  onClick={
-                    toggleSelectAll
-                  }
+                  onClick={() => {
+                    if (selectionMode) {
+                      exitSelectionMode()
+                    } else {
+                      setSelectionMode(true)
+                    }
+                  }}
                   className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
                 >
-                  {allStudentsSelected
-                    ? 'إلغاء تحديد الكل'
-                    : 'تحديد الكل'}
+                  {selectionMode
+                    ? 'إلغاء التحديد'
+                    : 'تحديد'}
                 </button>
-
-                <button
-                  type="button"
-                  onClick={
-                    openDeleteConfirmation
-                  }
-                  disabled={
-                    selectedCount ===
-                      0 ||
-                    deleteSaving
-                  }
-                  className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Trash2 className="h-4 w-4" />
-
-                  {selectedCount > 0
-                    ? `مسح المحدد (${selectedCount})`
-                    : 'مسح المحدد'}
-                </button>
-              </>
-            )}
+              )}
+    
+              {allowStudentDeletion && selectionMode && (
+                <>
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+                  >
+                    {allStudentsSelected
+                      ? 'إلغاء تحديد الكل'
+                      : 'تحديد الكل'}
+                  </button>
+    
+                  <button
+                    type="button"
+                    onClick={openDeleteConfirmation}
+                    disabled={
+                      selectedCount === 0 ||
+                      deleteSaving
+                    }
+                    className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+    
+                    {selectedCount > 0
+                      ? `مسح المحدد (${selectedCount})`
+                      : 'مسح المحدد'}
+                  </button>
+                </>
+              )}
 
             <button
               type="button"
@@ -1329,7 +1317,7 @@ export function StudentsTable({
                   #
                 </TableHead>
 
-                {selectionMode && (
+                {allowStudentDeletion && selectionMode && (
                   <TableHead className="w-[55px] text-center">
                     <input
                       type="checkbox"
@@ -1528,7 +1516,7 @@ export function StudentsTable({
                         {index + 1}
                       </TableCell>
 
-                      {selectionMode && (
+                      {allowStudentDeletion && selectionMode && (
                         <TableCell className="text-center">
                           <input
                             type="checkbox"
