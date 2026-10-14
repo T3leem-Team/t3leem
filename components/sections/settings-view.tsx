@@ -110,6 +110,13 @@ const managementOptions: ManagementOption[] = [
     icon: Users,
   },
   {
+    title: 'إدارة الطلاب',
+    description:
+      'تعديل تاريخ انضمام الطلاب وتاريخ الالتحاق بالمعلم، والتحكم في السماح بحذف الطلاب من صفحة الطلاب.',
+    href: '/settings/students-management',
+    icon: Users,
+  },
+  {
     title: 'المواد الدراسية',
     description:
       'إضافة وتعديل وحذف المواد الدراسية المستخدمة في النظام.',
@@ -199,8 +206,7 @@ export function SettingsView() {
 
         /*
          * صلاحية دخول صفحة التحليلات نفسها.
-         *
-         * هذه مستقلة عن صلاحية عنصر النظام.
+         * مستقلة عن صلاحية عنصر النظام.
          */
         const {
           data,
@@ -223,9 +229,6 @@ export function SettingsView() {
 
         /*
          * جلب صلاحيات عناصر النظام.
-         *
-         * admin الأساسي يحصل عليها تلقائياً
-         * من /api/auth/permissions.
          */
         try {
           const response = await fetch(
@@ -269,7 +272,7 @@ export function SettingsView() {
         /*
          * التحقق من مدير النظام الأساسي.
          *
-         * الـ API يسمح فقط للحساب:
+         * الـ API يتحقق من:
          * username = admin
          * role = Admin
          * active
@@ -288,9 +291,7 @@ export function SettingsView() {
               response.ok,
             )
 
-            setSystemElementsChecked(
-              true,
-            )
+            setSystemElementsChecked(true)
           }
         } catch (error) {
           console.error(
@@ -344,13 +345,9 @@ export function SettingsView() {
 
       /*
        * التحليلات:
-       *
-       * admin الأساسي:
-       * analytics.view فقط كافية.
-       *
-       * باقي المستخدمين:
-       * يحتاجون analytics.view
-       * + analytics.page.view
+       * admin الأساسي يحتاج analytics.view.
+       * باقي المستخدمين يحتاجون أيضًا
+       * analytics.page.view.
        */
       if (
         item.elementKey ===
@@ -374,7 +371,7 @@ export function SettingsView() {
       }
 
       /*
-       * باقي العناصر التي لا تعتمد على
+       * العناصر التي لا تعتمد على
        * صلاحية محددة تظهر كالمعتاد.
        */
       if (!item.permission) {
