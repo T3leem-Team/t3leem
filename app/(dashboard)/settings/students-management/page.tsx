@@ -15,7 +15,10 @@ import {
 } from 'lucide-react';
 
 import { getStudentsCache } from '@/lib/students-cache';
-import { getTeachersCache } from '@/lib/teachers-cache';
+import {
+  getTeachersCache,
+  loadTeachersCache,
+} from '@/lib/teachers-cache';
 
 type Student = {
   id: string;
@@ -105,8 +108,6 @@ function mapCachedStudent(student: CachedStudent): Student {
     student.grade,
   ].filter((value): value is string => Boolean(value));
 
-  const levelIds = student.levelId ? [student.levelId] : [];
-
   return {
     id: student.id,
     student_id: student.studentId ?? null,
@@ -114,21 +115,8 @@ function mapCachedStudent(student: CachedStudent): Student {
     personal_id: student.personalId ?? null,
     grade: student.levelName ?? student.grade ?? '',
     class_name: student.className ?? '',
-    level_ids: levelIds,
+    level_ids: student.levelId ? [student.levelId] : [],
     level_names: levelNames,
-  };
-}
-
-function mapApiStudent(student: Student): Student {
-  return {
-    id: student.id,
-    student_id: student.student_id ?? null,
-    name: student.name ?? '',
-    personal_id: student.personal_id ?? null,
-    grade: student.grade ?? '',
-    class_name: student.class_name ?? '',
-    level_ids: student.level_ids ?? [],
-    level_names: student.level_names ?? [],
   };
 }
 
@@ -139,6 +127,8 @@ function mergeStudents(
   const merged = new Map<string, Student>();
 
   for (const raw of [...studentCacheRows, ...teacherCacheRows]) {
+    if (!raw?.id) continue;
+
     const student = mapCachedStudent(raw);
     const previous = merged.get(student.id);
 
@@ -204,7 +194,7 @@ export default function StudentsManagementPage() {
   const [isCheckingDatePermission, setIsCheckingDatePermission] =
     useState(true);
 
-  // واجهة الفلترة والكاش
+  // عرض إدارة التواريخ والفلاتر
   const [showDateManagement, setShowDateManagement] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>('');
   const [search, setSearch] = useState('');
@@ -218,16 +208,19 @@ export default function StudentsManagementPage() {
     useState<TeacherAssignment[]>([]);
 
   const [cacheAvailable, setCacheAvailable] = useState(false);
+  const [teacherCacheAvailable, setTeacherCacheAvailable] =
+    useState(false);
   const [searchMessage, setSearchMessage] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
+  // تفاصيل الطالب
   const [selectedStudent, setSelectedStudent] =
     useState<Student | null>(null);
   const [studentDates, setStudentDates] =
     useState<StudentDatesResponse | null>(null);
   const [isLoadingStudent, setIsLoadingStudent] = useState(false);
 
-  // تاريخ التسجيل في الدورة
+  // تاريخ الانضمام للدورة
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
   const [enrollmentDate, setEnrollmentDate] = useState('');
   const [savingEnrollmentDate, setSavingEnrollmentDate] =
@@ -245,19 +238,18 @@ export default function StudentsManagementPage() {
 
   const savingDate = savingEnrollmentDate || savingAssignmentDate;
 
-  // نقرأ الكاش الحالي فقط، ولا نشغّل محمّلات الكاش الثقيلة.
+  // قراءة الكاش المتوفر ودمج بيانات الطلاب والمعلمين.
   const refreshCachedData = useCallback(() => {
     const studentCache = getStudentsCache();
     const teacherCache = getTeachersCache();
 
-    const studentRows =
-      (studentCache?.studentList ?? []) as CachedStudent[];
+    const studentRows = (
+      studentCache?.studentList ?? []
+    ) as CachedStudent[];
 
-    const teacherStudentRows =
-      (teacherCache?.students ?? []) as unknown as CachedStudent[];
-
-    const hasStudents =
-      studentRows.length > 0 || teacherStudentRows.length > 0;
+    const teacherStudentRows = (
+      teacherCache?.students ?? []
+    ) as unknown as CachedStudent[];
 
     const mergedStudents = mergeStudents(
       studentRows,
@@ -269,9 +261,11 @@ export default function StudentsManagementPage() {
       (teacherCache?.academicLevels ?? []) as Level[],
     );
 
-    const cachedTeachers = (teacherCache?.teachers ?? []) as Teacher[];
+    const cachedTeachers = (
+      teacherCache?.teachers ?? []
+    ) as Teacher[];
 
-    const cachedAssignments = (
+    const cachedAssignments: TeacherAssignment[] = (
       teacherCache?.assignments ?? []
     ).map((assignment) => ({
       teacherId: assignment.teacherId,
@@ -282,12 +276,20 @@ export default function StudentsManagementPage() {
     setLevels(cachedLevels);
     setTeachers(cachedTeachers);
     setTeacherAssignments(cachedAssignments);
-    setCacheAvailable(hasStudents);
 
-    return hasStudents;
+    setCacheAvailable(mergedStudents.length > 0);
+    setTeacherCacheAvailable(
+      cachedTeachers.length > 0 && cachedAssignments.length > 0,
+    );
+
+    return {
+      hasStudents: mergedStudents.length > 0,
+      hasTeachers: cachedTeachers.length > 0,
+      hasAssignments: cachedAssignments.length > 0,
+    };
   }, []);
 
-  // تحميل الإعدادات والتحقق من الصلاحيات.
+  // تحميل إعداد حذف الطلاب والتحقق من صلاحية إدارة التواريخ.
   useEffect(() => {
     let active = true;
 
@@ -365,7 +367,7 @@ export default function StudentsManagementPage() {
     };
   }, [refreshCachedData]);
 
-  // ربط المستوى بالطالب، وربط المعلم بالطلاب من كاش التعيينات.
+  // تصفية الطلاب مباشرة حسب البحث والمستوى أو المعلم المختار.
   const filteredStudents = useMemo(() => {
     const query = normalizeText(search);
 
@@ -430,7 +432,8 @@ export default function StudentsManagementPage() {
     setDateMessage('');
   }
 
-  function handleFilterModeChange(mode: FilterMode) {
+  // تغيير طريقة التصفية، وتحميل كاش المعلمين عند الحاجة.
+  async function handleFilterModeChange(mode: FilterMode) {
     setFilterMode(mode);
     setSelectedLevel('');
     setSelectedTeacher('');
@@ -438,8 +441,45 @@ export default function StudentsManagementPage() {
     setSearchMessage('');
     resetSelectedStudent();
 
-    // تحديث نسخة الكاش الموجودة، دون تحميل بيانات جديدة.
-    refreshCachedData();
+    if (!mode) return;
+
+    setIsSearching(true);
+
+    try {
+      if (mode === 'teacher') {
+        let teacherCache = getTeachersCache();
+
+        if (!teacherCache?.teachers?.length) {
+          await loadTeachersCache();
+          teacherCache = getTeachersCache();
+        }
+
+        refreshCachedData();
+
+        if (!teacherCache?.teachers?.length) {
+          setSearchMessage(
+            'تعذر تحميل قائمة المعلمين. حاول تحديث البيانات.',
+          );
+          return;
+        }
+
+        if (!teacherCache.assignments?.length) {
+          setSearchMessage(
+            'قائمة المعلمين متوفرة، لكن لا توجد بيانات تعيينات متاحة للفلترة.',
+          );
+        }
+      } else {
+        refreshCachedData();
+      }
+    } catch (error) {
+      setSearchMessage(
+        error instanceof Error
+          ? `تعذر تحميل بيانات الفلترة: ${error.message}`
+          : 'تعذر تحميل بيانات الفلترة. حاول مرة أخرى.',
+      );
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   // تغيير إعداد حذف الطلاب.
@@ -472,7 +512,7 @@ export default function StudentsManagementPage() {
       setMessage(
         result.deletionEnabled
           ? 'تم تفعيل السماح بحذف الطلاب.'
-          : 'تم تعطيل حذف الطلاب بنجاح.',
+          : 'تم تعطيل السماح بحذف الطلاب.',
       );
       setMessageType('success');
     } catch (error) {
@@ -488,7 +528,7 @@ export default function StudentsManagementPage() {
     }
   }
 
-  // تحديث القائمة من الكاش، أو استخدام بحث API عند غياب الكاش.
+  // تحديث بيانات الفلترة دون عرض نتائج غير مطابقة.
   async function searchStudents() {
     if (!canManageDates) {
       setSearchMessage('لا تتوفر صلاحية إدارة تواريخ الطلاب.');
@@ -496,7 +536,7 @@ export default function StudentsManagementPage() {
     }
 
     if (!filterMode) {
-      setSearchMessage('اختر طريقة الفلترة أولًا.');
+      setSearchMessage('اختر طريقة التصفية أولًا.');
       return;
     }
 
@@ -515,25 +555,49 @@ export default function StudentsManagementPage() {
     resetSelectedStudent();
 
     try {
-      const hasCache = refreshCachedData();
+      if (filterMode === 'teacher') {
+        let teacherCache = getTeachersCache();
 
-      if (hasCache) {
-        setSearchMessage('تُعرض النتائج المطابقة للفلاتر المحددة.');
-        return;
+        if (!teacherCache?.teachers?.length) {
+          await loadTeachersCache();
+          teacherCache = getTeachersCache();
+        }
+
+        if (!teacherCache?.teachers?.length) {
+          setSearchMessage(
+            'قائمة المعلمين غير متوفرة. حاول تحديث البيانات.',
+          );
+          return;
+        }
+
+        if (!teacherCache.assignments?.length) {
+          setSearchMessage(
+            'لا توجد بيانات ربط بين المعلمين والطلاب. تأكد من تحميل تعيينات المعلمين.',
+          );
+          return;
+        }
       }
 
-      // الـ API الحالي يدعم البحث النصّي فقط، ولا يدعم الفلترة بالمستوى
-      // أو المعلم. لذلك لا نعرض نتائج غير مضمونة على أنها مطابقة للفلاتر.
-      if (filterMode === 'level') {
+      const cacheStatus = refreshCachedData();
+
+      if (!cacheStatus.hasStudents) {
         setSearchMessage(
-          'كاش الطلاب غير متوفر حاليًا. لا يمكن تطبيق فلترة المستوى من خلال API البحث الحالي.',
+          'بيانات الطلاب غير متوفرة في الكاش الحالي. تعذر تطبيق التصفية.',
         );
         return;
       }
 
-      setSearchMessage(
-        'كاش المعلمين غير متوفر حاليًا. لا يمكن تحديد الطلاب التابعين للمعلم من خلال API البحث الحالي.',
-      );
+      if (
+        filterMode === 'teacher' &&
+        !cacheStatus.hasAssignments
+      ) {
+        setSearchMessage(
+          'بيانات تعيينات المعلمين غير متوفرة، لذلك لا يمكن تحديد الطلاب المرتبطين بالمعلم.',
+        );
+        return;
+      }
+
+      setSearchMessage('تم تحديث البيانات. تظهر النتائج المطابقة أدناه.');
     } catch (error) {
       setSearchMessage(
         error instanceof Error
@@ -571,6 +635,7 @@ export default function StudentsManagementPage() {
       }
 
       const data = result as StudentDatesResponse;
+
       setStudentDates(data);
 
       if (data.enrollments?.length) {
@@ -616,7 +681,7 @@ export default function StudentsManagementPage() {
     setDateMessage('');
   }
 
-  // فحص مبدئي لترتيب التواريخ؛ الـ API هو المرجع النهائي للتحقق.
+  // فحص مبدئي لترتيب التواريخ؛ والـ API هو المرجع النهائي.
   function validateDateOrder(
     operation:
       | 'updateEnrollmentJoinDate'
@@ -640,7 +705,7 @@ export default function StudentsManagementPage() {
         .sort();
 
       if (relatedDates[0] && joinDate > relatedDates[0]) {
-        return 'تاريخ انضمام الدورة يجب أن يكون قبل أو يساوي تاريخ تعيين الطالب للمعلم.';
+        return 'تاريخ انضمام الدورة يجب أن يكون قبل أو يساوي تاريخ تعيين الطالب عند المعلم.';
       }
     } else {
       const assignment = studentDates.assignments.find(
@@ -655,13 +720,14 @@ export default function StudentsManagementPage() {
       );
 
       if (hasConflict) {
-        return 'تاريخ تعيين الطالب للمعلم يجب أن يكون بعد أو يساوي تاريخ انضمامه للدورة.';
+        return 'تاريخ تعيين الطالب عند المعلم يجب أن يكون بعد أو يساوي تاريخ انضمامه للدورة.';
       }
     }
 
     return null;
   }
 
+  // حفظ تاريخ الدورة أو تاريخ تعيين المعلم.
   async function saveDate(
     operation:
       | 'updateEnrollmentJoinDate'
@@ -782,13 +848,14 @@ export default function StudentsManagementPage() {
   function getTeacherName(teacherId: string) {
     return (
       teachers.find((teacher) => teacher.id === teacherId)?.name ??
-      teacherId
+      'اسم المعلم غير متوفر'
     );
   }
 
   function getLevelName(levelId: string) {
     return (
-      levels.find((level) => level.id === levelId)?.name ?? levelId
+      levels.find((level) => level.id === levelId)?.name ??
+      'المستوى غير محدد'
     );
   }
 
@@ -799,7 +866,7 @@ export default function StudentsManagementPage() {
         <div>
           <h1 className="text-2xl font-bold">إدارة الطلاب</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            إدارة تواريخ الطلاب وإعداد السماح بحذفهم.
+            إدارة تواريخ الطلاب والتحكم في السماح بحذفهم.
           </p>
         </div>
 
@@ -809,7 +876,7 @@ export default function StudentsManagementPage() {
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
         >
           <ArrowRight className="h-4 w-4" />
-          عودة
+          رجوع
         </button>
       </div>
 
@@ -823,7 +890,7 @@ export default function StudentsManagementPage() {
           <div>
             <h2 className="font-semibold">التحكم في حذف الطلاب</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              فعّل أو عطّل السماح بحذف الطلاب بشكل مستقل عن تعديل التواريخ.
+              فعّل أو عطّل السماح بحذف الطلاب من النظام.
             </p>
           </div>
         </div>
@@ -837,7 +904,7 @@ export default function StudentsManagementPage() {
                 : isSavingDeletion
                   ? 'جارٍ حفظ التغيير...'
                   : !canManageDeletion
-                    ? 'تعذر تحميل الإعداد أو ليست لديك صلاحية إدارته.'
+                    ? 'تعذر تحميل الإعداد أو لا تتوفر صلاحية إدارته.'
                     : allowStudentDeletion
                       ? 'حذف الطلاب مفعّل.'
                       : 'حذف الطلاب معطّل.'}
@@ -892,7 +959,7 @@ export default function StudentsManagementPage() {
           <div>
             <h2 className="font-semibold">تعديل تواريخ الطلاب</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              اختر طريقة الفرز أولًا، ثم حدد الطالب لتعديل تواريخه.
+              اختر المستوى الدراسي أو المعلم، ثم اختر الطالب لتعديل تواريخه.
             </p>
           </div>
         </div>
@@ -917,13 +984,13 @@ export default function StudentsManagementPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-primary-foreground"
               >
                 <CalendarDays className="h-4 w-4" />
-                فتح تعديل التواريخ
+                فتح إدارة التواريخ
               </button>
             ) : (
               <div className="space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-medium">
-                    كيف تبي تصفّي الطلاب؟
+                    اختر طريقة التصفية
                   </p>
 
                   <button
@@ -946,7 +1013,7 @@ export default function StudentsManagementPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => handleFilterModeChange('level')}
+                    onClick={() => void handleFilterModeChange('level')}
                     className={`flex items-center gap-3 rounded-lg border p-4 text-right transition-colors ${
                       filterMode === 'level'
                         ? 'border-primary bg-primary/5'
@@ -959,14 +1026,14 @@ export default function StudentsManagementPage() {
                         حسب المستوى الدراسي
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        اعرض الطلاب المنتمين إلى مستوى محدد.
+                        عرض الطلاب في مستوى دراسي محدد.
                       </span>
                     </div>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleFilterModeChange('teacher')}
+                    onClick={() => void handleFilterModeChange('teacher')}
                     className={`flex items-center gap-3 rounded-lg border p-4 text-right transition-colors ${
                       filterMode === 'teacher'
                         ? 'border-primary bg-primary/5'
@@ -979,7 +1046,7 @@ export default function StudentsManagementPage() {
                         حسب المعلم
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        اعرض الطلاب المعيّنين عند معلم محدد.
+                        عرض الطلاب المرتبطين بمعلم محدد.
                       </span>
                     </div>
                   </button>
@@ -992,54 +1059,51 @@ export default function StudentsManagementPage() {
                         <span className="text-sm font-medium">
                           {filterMode === 'level'
                             ? 'المستوى الدراسي'
-                            : 'المعلم'}
+                            : 'اسم المعلم'}
                         </span>
 
-                        <div className="relative">
-                          {filterMode === 'level' ? (
-                            <select
-                              value={selectedLevel}
-                              onChange={(event) => {
-                                setSelectedLevel(event.target.value);
-                                setSearchMessage('');
-                                resetSelectedStudent();
-                              }}
-                              className="w-full rounded-lg border border-border bg-background p-2.5 text-sm"
-                            >
-                              <option value="">اختر المستوى</option>
-                              {levels.map((level) => (
-                                <option key={level.id} value={level.id}>
-                                  {level.name}
+                        {filterMode === 'level' ? (
+                          <select
+                            value={selectedLevel}
+                            onChange={(event) => {
+                              setSelectedLevel(event.target.value);
+                              setSearchMessage('');
+                              resetSelectedStudent();
+                            }}
+                            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm"
+                          >
+                            <option value="">اختر المستوى الدراسي</option>
+                            {levels.map((level) => (
+                              <option key={level.id} value={level.id}>
+                                {level.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            value={selectedTeacher}
+                            onChange={(event) => {
+                              setSelectedTeacher(event.target.value);
+                              setSearchMessage('');
+                              resetSelectedStudent();
+                            }}
+                            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm"
+                          >
+                            <option value="">اختر المعلم</option>
+                            {[...teachers]
+                              .sort((a, b) =>
+                                a.name.localeCompare(b.name, 'ar'),
+                              )
+                              .map((teacher) => (
+                                <option
+                                  key={teacher.id}
+                                  value={teacher.id}
+                                >
+                                  {teacher.name}
                                 </option>
                               ))}
-                            </select>
-                          ) : (
-                            <select
-                              value={selectedTeacher}
-                              onChange={(event) => {
-                                setSelectedTeacher(event.target.value);
-                                setSearchMessage('');
-                                resetSelectedStudent();
-                              }}
-                              className="w-full rounded-lg border border-border bg-background p-2.5 text-sm"
-                            >
-                              <option value="">اختر المعلم</option>
-                              {teachers
-                                .filter((teacher) => teacher.isActive)
-                                .sort((a, b) =>
-                                  a.name.localeCompare(b.name, 'ar'),
-                                )
-                                .map((teacher) => (
-                                  <option
-                                    key={teacher.id}
-                                    value={teacher.id}
-                                  >
-                                    {teacher.name}
-                                  </option>
-                                ))}
-                            </select>
-                          )}
-                        </div>
+                          </select>
+                        )}
                       </label>
 
                       <div className="flex items-end">
@@ -1068,7 +1132,7 @@ export default function StudentsManagementPage() {
                         <input
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
-                          placeholder="ابحث بالاسم أو رقم الطالب أو الرقم الشخصي..."
+                          placeholder="اكتب اسم الطالب أو رقمه أو رقمه الشخصي"
                           className="w-full rounded-lg border border-border bg-background py-2.5 pe-9 ps-3 text-sm"
                         />
                       </div>
@@ -1076,14 +1140,36 @@ export default function StudentsManagementPage() {
 
                     {!cacheAvailable && (
                       <p className="text-sm text-amber-600 dark:text-amber-400">
-                        كاش الطلاب أو المعلمين غير متوفر حاليًا. يجب أن يكون
-                        الكاش محمّلًا في التطبيق حتى تعمل فلترة المستوى والمعلم.
-                        لم يتم تحميل الكاش الكامل تلقائيًا.
+                        بيانات الطلاب غير متوفرة في الكاش الحالي. حاول تحديث
+                        البيانات من الصفحة التي تعرض قائمة الطلاب، ثم ارجع إلى
+                        هذه الصفحة.
                       </p>
                     )}
 
+                    {filterMode === 'teacher' &&
+                      teachers.length === 0 && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          لم يتم العثور على أسماء المعلمين. اضغط «تحديث
+                          النتائج» للمحاولة مرة أخرى.
+                        </p>
+                      )}
+
+                    {filterMode === 'teacher' &&
+                      selectedTeacher &&
+                      !teacherCacheAvailable && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          بيانات ربط المعلمين بالطلاب غير متوفرة أو لا تحتوي
+                          على تعيينات. لا يمكن عرض الطلاب لهذا المعلم قبل
+                          توفر بيانات التعيينات.
+                        </p>
+                      )}
+
                     {searchMessage && (
-                      <p className="text-sm text-muted-foreground">
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        className="text-sm text-muted-foreground"
+                      >
                         {searchMessage}
                       </p>
                     )}
@@ -1099,6 +1185,7 @@ export default function StudentsManagementPage() {
                                 ? `طلاب المستوى: ${getLevelName(selectedLevel)}`
                                 : `طلاب المعلم: ${selectedTeacherName ?? ''}`}
                             </h3>
+
                             <span className="text-xs text-muted-foreground">
                               {filteredStudents.length} طالب
                             </span>
@@ -1122,15 +1209,18 @@ export default function StudentsManagementPage() {
                                     <div className="mt-0.5 rounded-full bg-muted p-2">
                                       <UserRound className="h-4 w-4 text-muted-foreground" />
                                     </div>
+
                                     <div className="min-w-0 flex-1">
                                       <span className="block text-sm font-semibold">
-                                        {student.name}
+                                        {student.name || 'اسم الطالب غير متوفر'}
                                       </span>
+
                                       <span className="mt-1 block text-xs text-muted-foreground">
                                         رقم الطالب: {student.student_id || '—'}
                                         {' · '}
                                         الرقم الشخصي: {student.personal_id || '—'}
                                       </span>
+
                                       <span className="mt-1 block text-xs text-muted-foreground">
                                         المستوى: {student.grade || 'غير محدد'}
                                         {' · '}
@@ -1148,7 +1238,7 @@ export default function StudentsManagementPage() {
                                 لا توجد نتائج مطابقة
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                غيّر اختيارك أو جرّب كلمة بحث أخرى.
+                                جرّب اختيارًا آخر أو غيّر عبارة البحث.
                               </p>
                             </div>
                           )}
@@ -1186,7 +1276,7 @@ export default function StudentsManagementPage() {
                       ١. تاريخ انضمام الطالب للدورة
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      اختر التسجيل ثم عدّل تاريخ الانضمام الخاص به.
+                      اختر تسجيل الدورة، ثم عدّل تاريخ الانضمام واحفظه.
                     </p>
                   </div>
 
@@ -1267,7 +1357,7 @@ export default function StudentsManagementPage() {
                       ٢. تاريخ تعيين الطالب عند المعلم
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      اختر تعيين المعلم ثم عدّل تاريخه.
+                      اختر تعيين المعلم، ثم عدّل تاريخه واحفظه.
                     </p>
                   </div>
 
@@ -1343,7 +1433,7 @@ export default function StudentsManagementPage() {
 
                 <p className="text-xs leading-6 text-muted-foreground">
                   يجب أن يكون تاريخ انضمام الدورة قبل أو مساويًا لتاريخ تعيين
-                  الطالب عند المعلم. يتحقق الـ API أيضًا من صلاحية التاريخ
+                  الطالب عند المعلم. ويتحقق النظام أيضًا من صلاحية التاريخ
                   ضمن الدورة والسنة الدراسية.
                 </p>
               </div>
