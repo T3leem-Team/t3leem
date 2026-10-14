@@ -75,6 +75,13 @@ type Enrollment = {
   joinDate: string | null
 }
 
+type AssignmentJoinDate = {
+  id: string
+  studentId: string
+  courseId: string
+  joinDate: string | null
+}
+
 type Props = {
   course: Course | null
   academicYear: AcademicYear | null
@@ -194,7 +201,6 @@ function getCourseLessonDates(
     )
 
   const hasConfiguredDays = configuredDays.length > 0
-
   const cursor = new Date(start)
 
   while (cursor <= end) {
@@ -268,6 +274,17 @@ function getStatusLabel(
 function getStatusKey(status: string) {
   const normalized = normalizeText(status)
 
+  if (
+    normalized.includes('لم ينضم للدورة') ||
+    normalized.includes('لم ينضم للدوره')
+  ) {
+    return 'notJoinedCourse'
+  }
+
+  if (normalized.includes('غير منضم')) {
+    return 'unjoined'
+  }
+
   if (normalized.includes('حاضر')) {
     return 'present'
   }
@@ -298,6 +315,15 @@ function getStatusKey(status: string) {
   }
 
   return 'unknown'
+}
+
+function isUnjoinedStatus(status: string) {
+  const key = getStatusKey(status)
+
+  return (
+    key === 'unjoined' ||
+    key === 'notJoinedCourse'
+  )
 }
 
 function formatPercentage(value: number) {
@@ -461,10 +487,8 @@ export function DashboardAttendanceExport({
         )
 
         /*
-         * مصدر تاريخ الانضمام الرسمي:
-         * enrollments.join_date
-         *
-         * لا نستخدم created_at.
+         * 1. جلب تاريخ انضمام الطالب للدورة.
+         * المصدر: enrollments.join_date.
          */
         let enrollments: Enrollment[] = []
 
@@ -502,28 +526,27 @@ export function DashboardAttendanceExport({
             throw enrollmentError
           }
 
-          enrollments =
-            (enrollmentData ?? []).map(
-              (item) => ({
-                id: String(item.id),
-                studentId: String(item.student_id),
-                academicYearId: String(
-                  item.academic_year_id,
-                ),
-                levelId: item.level_id
-                  ? String(item.level_id)
-                  : null,
-                status: String(item.status ?? ''),
-                joinDate: item.join_date
-                  ? String(item.join_date)
-                  : null,
-              }),
-            )
+          enrollments = (enrollmentData ?? []).map(
+            (item) => ({
+              id: String(item.id),
+              studentId: String(item.student_id),
+              academicYearId: String(
+                item.academic_year_id,
+              ),
+              levelId: item.level_id
+                ? String(item.level_id)
+                : null,
+              status: String(item.status ?? ''),
+              joinDate: item.join_date
+                ? String(item.join_date).slice(0, 10)
+                : null,
+            }),
+          )
         }
 
         /*
-         * نستخدم أقدم join_date للسنة الحالية
-         * لكل طالب.
+         * اختيار أقدم تاريخ انضمام غير فارغ
+         * لكل طالب في السنة الأكاديمية المحددة.
          */
         const enrollmentMap =
           new Map<string, Enrollment>()
@@ -540,17 +563,109 @@ export function DashboardAttendanceExport({
             continue
           }
 
-          if (!enrollmentMap.has(studentId)) {
+          const current =
+            enrollmentMap.get(studentId)
+
+          if (
+            !current?.joinDate ||
+            enrollment.joinDate < current.joinDate
+          ) {
             enrollmentMap.set(studentId, enrollment)
           }
         }
 
         /*
-         * نسحب بيانات الحضور مباشرة من Supabase
-         * وقت إنشاء ملف Excel.
-         *
-         * يتم جلب البيانات على دفعات 1000 سجل
-         * لتجنب حدود الاستعلام.
+         * 2. جلب تاريخ تعيين المعلم من join_date.
+         * لا نستخدم created_at؛ فقد يكون مختلفًا
+         * عن تاريخ بدء مسؤولية المعلم عن الطالب.
+         */
+        const assignmentJoinDateMap =
+          new Map<string, string>()
+
+        const assignmentIds = Array.from(
+          new Set(
+            courseAssignments
+              .map((assignment) =>
+                normalizeId(assignment.id),
+              )
+              .filter(Boolean),
+          ),
+        )
+
+        if (assignmentIds.length > 0) {
+          const {
+            data: assignmentDateData,
+            error: assignmentDateError,
+          } = await supabase
+            .from('teacher_student_assignments')
+            .select(
+              `
+                id,
+                student_id,
+                course_id,
+                join_date
+              `,
+            )
+            .in('id', assignmentIds)
+            .eq('course_id', course.id)
+
+          if (assignmentDateError) {
+            console.error(
+              'Attendance export assignment query error:',
+              assignmentDateError,
+            )
+
+            throw assignmentDateError
+          }
+
+          const assignmentDates: AssignmentJoinDate[] =
+            (assignmentDateData ?? []).map(
+              (item) => ({
+                id: String(item.id),
+                studentId: String(item.student_id),
+                courseId: String(item.course_id),
+                joinDate: item.join_date
+                  ? String(item.join_date).slice(0, 10)
+                  : null,
+              }),
+            )
+
+          /*
+           * إذا كان للطالب أكثر من تعيين في الدورة،
+           * نعتمد أقدم تاريخ تعيين صالح؛ لأن مسؤولية
+           * تسجيل الحضور تبدأ من أول تعيين.
+           */
+          for (const assignment of assignmentDates) {
+            if (!assignment.joinDate) {
+              continue
+            }
+
+            const studentId = normalizeId(
+              assignment.studentId,
+            )
+
+            if (!studentId) {
+              continue
+            }
+
+            const currentDate =
+              assignmentJoinDateMap.get(studentId)
+
+            if (
+              !currentDate ||
+              assignment.joinDate < currentDate
+            ) {
+              assignmentJoinDateMap.set(
+                studentId,
+                assignment.joinDate,
+              )
+            }
+          }
+        }
+
+        /*
+         * 3. سحب سجلات الحضور مباشرة من Supabase.
+         * يتم جلبها على دفعات لتجنب حدود الاستعلام.
          */
         const exportedAttendanceRecords:
           AttendanceRecord[] = []
@@ -558,95 +673,121 @@ export function DashboardAttendanceExport({
         const pageSize = 1000
         let page = 0
 
-        while (true) {
-          const from = page * pageSize
-          const to = from + pageSize - 1
+        if (studentIds.length > 0) {
+          while (true) {
+            const from = page * pageSize
+            const to = from + pageSize - 1
 
-          const {
-            data: attendanceData,
-            error: attendanceError,
-          } = await supabase
-            .from('attendance')
-            .select(
-              `
-                id,
-                student_id,
-                enrollment_id,
-                attendance_date,
-                status_id,
-                note,
-                course_id
-              `,
-            )
-            .eq('course_id', course.id)
-            .in('student_id', studentIds)
-            .gte('attendance_date', safeFromDate)
-            .lte('attendance_date', safeToDate)
-            .range(from, to)
-            .order('attendance_date', {
-              ascending: true,
-            })
+            const {
+              data: attendanceData,
+              error: attendanceError,
+            } = await supabase
+              .from('attendance')
+              .select(
+                `
+                  id,
+                  student_id,
+                  enrollment_id,
+                  attendance_date,
+                  status_id,
+                  note,
+                  course_id
+                `,
+              )
+              .eq('course_id', course.id)
+              .in('student_id', studentIds)
+              .gte('attendance_date', safeFromDate)
+              .lte('attendance_date', safeToDate)
+              .range(from, to)
+              .order('attendance_date', {
+                ascending: true,
+              })
 
-          if (attendanceError) {
-            console.error(
-              'Attendance export attendance query error:',
-              attendanceError,
-            )
-
-            throw attendanceError
-          }
-
-          const rows = attendanceData ?? []
-
-          for (const item of rows) {
-            const recordDate =
-              normalizeAttendanceDate(
-                String(item.attendance_date ?? ''),
+            if (attendanceError) {
+              console.error(
+                'Attendance export attendance query error:',
+                attendanceError,
               )
 
-            if (!lessonDates.includes(recordDate)) {
-              continue
+              throw attendanceError
             }
 
-            exportedAttendanceRecords.push({
-              id: String(item.id),
-              studentId: String(item.student_id),
-              enrollmentId: item.enrollment_id
-                ? String(item.enrollment_id)
-                : null,
-              attendanceDate: recordDate,
-              statusId: String(item.status_id),
-              note: item.note
-                ? String(item.note)
-                : null,
-              courseId: String(item.course_id),
-            })
-          }
+            const rows = attendanceData ?? []
 
-          if (rows.length < pageSize) {
-            break
-          }
+            for (const item of rows) {
+              const recordDate =
+                normalizeAttendanceDate(
+                  String(item.attendance_date ?? ''),
+                )
 
-          page += 1
+              if (!lessonDates.includes(recordDate)) {
+                continue
+              }
+
+              exportedAttendanceRecords.push({
+                id: String(item.id),
+                studentId: String(item.student_id),
+                enrollmentId: item.enrollment_id
+                  ? String(item.enrollment_id)
+                  : null,
+                attendanceDate: recordDate,
+                statusId: String(item.status_id),
+                note: item.note
+                  ? String(item.note)
+                  : null,
+                courseId: String(item.course_id),
+              })
+            }
+
+            if (rows.length < pageSize) {
+              break
+            }
+
+            page += 1
+          }
         }
 
-        const relevantRecords =
-          exportedAttendanceRecords
-
+        /*
+         * 4. إنشاء خريطة سجلات الحضور.
+         * عند وجود أكثر من سجل للطالب في اليوم نفسه،
+         * نفضّل السجل الذي لا يحمل حالة "غير منضم"
+         * حتى لا يخفي سجل قديم حالة حضور فعلية.
+         */
         const recordMap = new Map<
           string,
           AttendanceRecord
         >()
 
-        for (const record of relevantRecords) {
+        for (const record of exportedAttendanceRecords) {
           const key = [
             normalizeId(record.studentId),
+            normalizeId(record.courseId),
             normalizeAttendanceDate(
               record.attendanceDate,
             ),
           ].join('|')
 
-          if (!recordMap.has(key)) {
+          const existing = recordMap.get(key)
+
+          if (!existing) {
+            recordMap.set(key, record)
+            continue
+          }
+
+          const existingStatus = getStatusLabel(
+            existing.statusId,
+            attendanceStatuses,
+          )
+
+          const newStatus = getStatusLabel(
+            record.statusId,
+            attendanceStatuses,
+          )
+
+          if (
+            isUnjoinedStatus(existingStatus) &&
+            !isUnjoinedStatus(newStatus)
+          ) {
             recordMap.set(key, record)
           }
         }
@@ -657,9 +798,11 @@ export function DashboardAttendanceExport({
         const summaryRows:
           Record<string, unknown>[] = []
 
+        /*
+         * 5. إنشاء التفاصيل والملخص.
+         */
         for (const student of assignedStudents) {
-          const studentId =
-            normalizeId(student.id)
+          const studentId = normalizeId(student.id)
 
           const teacherNames =
             getTeacherNamesForStudent(
@@ -676,9 +819,6 @@ export function DashboardAttendanceExport({
           const enrollment =
             enrollmentMap.get(studentId)
 
-          /*
-           * التاريخ الرسمي لانضمام الطالب.
-           */
           const enrollmentDate =
             enrollment?.joinDate
               ? normalizeAttendanceDate(
@@ -686,54 +826,106 @@ export function DashboardAttendanceExport({
                 )
               : null
 
+          const assignmentJoinDate =
+            assignmentJoinDateMap.get(studentId) ??
+            null
+
           const counts = {
             present: 0,
             absent: 0,
             late: 0,
             excused: 0,
             notRecorded: 0,
+            notJoinedCourse: 0,
+            unjoined: 0,
           }
 
           for (const lessonDate of lessonDates) {
             const key = [
               studentId,
+              normalizeId(course.id),
               lessonDate,
             ].join('|')
 
             const record = recordMap.get(key)
 
-            /*
-             * إذا كانت الحصة قبل تاريخ الانضمام:
-             * النتيجة دائمًا غير منضم.
-             */
             const isBeforeEnrollment =
               enrollmentDate !== null &&
               lessonDate < enrollmentDate
 
+            const isBeforeAssignment =
+              assignmentJoinDate !== null &&
+              lessonDate < assignmentJoinDate
+
             let statusLabel: string
 
+            /*
+             * الأولوية الأولى:
+             * الطالب لم ينضم للدورة بعد.
+             */
             if (isBeforeEnrollment) {
+              statusLabel = 'لم ينضم للدورة'
+            } else if (
+              /*
+               * الأولوية الثانية:
+               * انضم للدورة لكنه لم يصل بعد
+               * إلى تاريخ تعيينه عند المعلم.
+               */
+              assignmentJoinDate !== null &&
+              isBeforeAssignment
+            ) {
               statusLabel = 'غير منضم'
             } else if (record) {
-              statusLabel = getStatusLabel(
+              const recordedStatus = getStatusLabel(
                 record.statusId,
                 attendanceStatuses,
               )
+
+              /*
+               * بعد تاريخ التعيين، السجل القديم
+               * "غير منضم" لا يُعتبر تسجيل حضور.
+               * نعرض "لم يسجل" دون تعديل السجل الأصلي.
+               */
+              if (
+                assignmentJoinDate !== null &&
+                lessonDate >= assignmentJoinDate &&
+                isUnjoinedStatus(recordedStatus)
+              ) {
+                statusLabel = 'لم يسجل'
+              } else {
+                statusLabel = recordedStatus
+              }
             } else {
+              /*
+               * لا يوجد سجل حضور في يوم الدراسة.
+               */
               statusLabel = 'لم يسجل'
             }
 
             const statusKey = getStatusKey(statusLabel)
 
-            if (
-              statusKey === 'present' ||
-              statusKey === 'absent' ||
-              statusKey === 'late' ||
-              statusKey === 'excused' ||
-              statusKey === 'notRecorded'
+            if (statusKey === 'present') {
+              counts.present += 1
+            } else if (statusKey === 'absent') {
+              counts.absent += 1
+            } else if (statusKey === 'late') {
+              counts.late += 1
+            } else if (statusKey === 'excused') {
+              counts.excused += 1
+            } else if (statusKey === 'notRecorded') {
+              counts.notRecorded += 1
+            } else if (
+              statusKey === 'notJoinedCourse'
             ) {
-              counts[statusKey] += 1
+              counts.notJoinedCourse += 1
+            } else if (statusKey === 'unjoined') {
+              counts.unjoined += 1
             }
+
+            const isNonAttendanceStatus =
+              statusKey === 'notJoinedCourse' ||
+              statusKey === 'unjoined' ||
+              statusKey === 'notRecorded'
 
             detailsRows.push({
               المعلم: teacherName,
@@ -744,12 +936,16 @@ export function DashboardAttendanceExport({
               التاريخ: lessonDate,
               اليوم: getArabicDayName(lessonDate),
               الحالة: statusLabel,
-              ملاحظة: isBeforeEnrollment
+              ملاحظة: isNonAttendanceStatus
                 ? ''
                 : record?.note ?? '',
             })
           }
 
+          /*
+           * الأيام المسجلة هي الأيام التي تحمل
+           * حالة حضور فعلية، بما فيها الغياب.
+           */
           const recordedDays =
             counts.present +
             counts.absent +
@@ -766,13 +962,6 @@ export function DashboardAttendanceExport({
               ? (attendanceDays / recordedDays) * 100
               : 0
 
-          const unjoinedDays =
-            lessonDates.filter(
-              (lessonDate) =>
-                enrollmentDate !== null &&
-                lessonDate < enrollmentDate,
-            ).length
-
           summaryRows.push({
             المعلم: teacherName,
             الدورة: course.name,
@@ -787,7 +976,8 @@ export function DashboardAttendanceExport({
             متأخر: counts.late,
             مستأذن: counts.excused,
             'لم يسجل': counts.notRecorded,
-            'الأيام غير المنضمة': unjoinedDays,
+            'لم ينضم للدورة': counts.notJoinedCourse,
+            'الأيام غير المنضمة': counts.unjoined,
             'الأيام المسجلة': recordedDays,
             'أيام الحضور': attendanceDays,
             'نسبة الحضور': formatPercentage(
@@ -796,6 +986,9 @@ export function DashboardAttendanceExport({
           })
         }
 
+        /*
+         * 6. إنشاء ملف Excel بالورقتين الأصليتين.
+         */
         const workbook = XLSX.utils.book_new()
 
         const detailsSheet =
@@ -812,7 +1005,7 @@ export function DashboardAttendanceExport({
           { wch: 18 },
           { wch: 14 },
           { wch: 14 },
-          { wch: 18 },
+          { wch: 22 },
           { wch: 30 },
         ]
 
@@ -830,6 +1023,7 @@ export function DashboardAttendanceExport({
           { wch: 10 },
           { wch: 10 },
           { wch: 12 },
+          { wch: 20 },
           { wch: 18 },
           { wch: 16 },
           { wch: 16 },
