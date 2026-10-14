@@ -35,7 +35,9 @@ async function authorize(permissionKey: string, message: string) {
 function isValidUuid(value: unknown): value is string {
   return (
     typeof value === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    )
   );
 }
 
@@ -57,6 +59,112 @@ function isValidDate(value: unknown): value is string {
 
 function cleanSearch(value: string) {
   return value.replace(/[%_,()]/g, '').trim().slice(0, 100);
+}
+
+/**
+ * يعيد قراءة تسجيل الطالب وتعييناته للتحقق من ترتيب التواريخ.
+ * نستخدم أقدم تاريخ تعيين صالح في الدورة حتى لا يصبح تاريخ
+ * انضمام الدورة بعد بداية تعيين الطالب لأي معلم في الدورة.
+ */
+async function validateEnrollmentJoinDate(
+  enrollmentId: string,
+  newJoinDate: string,
+) {
+  const { data: enrollment, error: enrollmentError } =
+    await supabaseAdmin
+      .from('enrollments')
+      .select('id, student_id, course_id, join_date')
+      .eq('id', enrollmentId)
+      .maybeSingle();
+
+  if (enrollmentError) {
+    console.error('Read enrollment before date validation:', enrollmentError);
+
+    return {
+      error: NextResponse.json(
+        { error: 'تعذر التحقق من تسجيل الطالب.' },
+        { status: 500 },
+      ),
+    };
+  }
+
+  if (!enrollment) {
+    return {
+      error: NextResponse.json(
+        { error: 'التسجيل المطلوب غير موجود.' },
+        { status: 404 },
+      ),
+    };
+  }
+
+  const { data: assignments, error: assignmentsError } =
+    await supabaseAdmin
+      .from('teacher_student_assignments')
+      .select('join_date')
+      .eq('student_id', enrollment.student_id)
+      .eq('course_id', enrollment.course_id)
+      .not('join_date', 'is', null);
+
+  if (assignmentsError) {
+    console.error('Read assignment dates:', assignmentsError);
+
+    return {
+      error: NextResponse.json(
+        { error: 'تعذر التحقق من تواريخ تعيين المعلمين.' },
+        { status: 500 },
+      ),
+    };
+  }
+
+  const assignmentDates = (assignments ?? [])
+    .map((assignment) => assignment.join_date)
+    .filter((date): date is string => Boolean(date))
+    .sort();
+
+  const earliestAssignmentDate = assignmentDates[0];
+
+  if (
+    earliestAssignmentDate &&
+    newJoinDate > earliestAssignmentDate
+  ) {
+    return {
+      error: NextResponse.json(
+        {
+          error:
+            'تاريخ انضمام الدورة يجب أن يكون قبل أو يساوي تاريخ تعيين الطالب للمعلم.',
+        },
+        { status: 400 },
+      ),
+    };
+  }
+
+  return {
+    enrollment,
+    error: null,
+  };
+}
+
+/**
+ * بعد تعديل أحد التاريخين، نشغّل معالجة «غير منضم»
+ * للتسجيل المقابل في الدورة نفسها.
+ */
+async function processUnjoinedAttendance(enrollmentId: string) {
+  const { error } = await supabaseAdmin.rpc(
+    'create_unjoined_attendance_for_enrollment',
+    { p_enrollment_id: enrollmentId },
+  );
+
+  if (error) {
+    console.error(
+      'Process unjoined attendance:',
+      enrollmentId,
+      error,
+    );
+
+    return false;
+  }
+
+  return true;
 }
 
 export async function GET(request: Request) {
@@ -93,6 +201,7 @@ export async function GET(request: Request) {
 
       if (studentError) {
         console.error('Read student:', studentError);
+
         return NextResponse.json(
           { error: 'تعذر تحميل بيانات الطالب.' },
           { status: 500 },
@@ -112,7 +221,9 @@ export async function GET(request: Request) {
       ] = await Promise.all([
         supabaseAdmin
           .from('enrollments')
-          .select('id, join_date, course_id, academic_year_id, level_id, status')
+          .select(
+            'id, join_date, course_id, academic_year_id, level_id, status',
+          )
           .eq('student_id', studentId)
           .order('created_at', { ascending: false }),
 
@@ -173,6 +284,7 @@ export async function GET(request: Request) {
 
     if (searchError) {
       console.error('Search students:', searchError);
+
       return NextResponse.json(
         { error: 'تعذر البحث عن الطلاب.' },
         { status: 500 },
@@ -220,6 +332,7 @@ export async function GET(request: Request) {
 
   if (error) {
     console.error('Read student deletion settings:', error);
+
     return NextResponse.json(
       { error: 'تعذر قراءة إعداد حذف الطلاب.' },
       { status: 500 },
@@ -281,16 +394,26 @@ export async function PATCH(request: Request) {
       );
     }
 
+    const validation = await validateEnrollmentJoinDate(
+      payload.enrollmentId,
+      payload.joinDate,
+    );
+
+    if (validation.error) {
+      return validation.error;
+    }
+
     const { data: enrollment, error: updateError } =
       await supabaseAdmin
         .from('enrollments')
         .update({ join_date: payload.joinDate })
         .eq('id', payload.enrollmentId)
-        .select('id, join_date')
+        .select('id, student_id, course_id, join_date')
         .maybeSingle();
 
     if (updateError) {
       console.error('Update enrollment join date:', updateError);
+
       return NextResponse.json(
         { error: 'تعذر حفظ تاريخ انضمام الطالب للدورة.' },
         { status: 500 },
@@ -304,31 +427,22 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // الدالة الحالية تضيف سجلات «غير منضم» المفقودة فقط.
-    // لا تحذف السجلات الموجودة ولا تصحح السجلات القديمة تلقائيًا.
-    const { error: attendanceError } = await supabaseAdmin.rpc(
-      'create_unjoined_attendance_for_enrollment',
-      { p_enrollment_id: enrollment.id },
-    );
+    const processed = await processUnjoinedAttendance(enrollment.id);
 
-    if (attendanceError) {
-      console.error(
-        'Process unjoined attendance after date update:',
-        attendanceError,
-      );
-
+    if (!processed) {
       return NextResponse.json({
         success: true,
         enrollment,
         warning:
-          'تم حفظ التاريخ، لكن تعذرت معالجة سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة. يلزم فحص الخطأ وإعادة المعالجة.',
+          'تم حفظ التاريخ، لكن تعذرت معالجة سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة.',
       });
     }
 
     return NextResponse.json({
       success: true,
       enrollment,
-      message: 'تم حفظ تاريخ انضمام الطالب للدورة وتشغيل معالجة «غير منضم».',
+      message:
+        'تم حفظ تاريخ انضمام الطالب للدورة وتشغيل معالجة «غير منضم».',
     });
   }
 
@@ -353,15 +467,77 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { data: assignment, error } = await supabaseAdmin
-      .from('teacher_student_assignments')
-      .update({ join_date: payload.joinDate })
-      .eq('id', payload.assignmentId)
-      .select('id, join_date')
-      .maybeSingle();
+    const { data: currentAssignment, error: assignmentReadError } =
+      await supabaseAdmin
+        .from('teacher_student_assignments')
+        .select('id, student_id, course_id, join_date')
+        .eq('id', payload.assignmentId)
+        .maybeSingle();
 
-    if (error) {
-      console.error('Update assignment join date:', error);
+    if (assignmentReadError) {
+      console.error('Read assignment before update:', assignmentReadError);
+
+      return NextResponse.json(
+        { error: 'تعذر قراءة تعيين الطالب للمعلم.' },
+        { status: 500 },
+      );
+    }
+
+    if (!currentAssignment) {
+      return NextResponse.json(
+        { error: 'توزيع الطالب على المعلم غير موجود.' },
+        { status: 404 },
+      );
+    }
+
+    // التحقق من أن تاريخ الدورة لا يتجاوز تاريخ التعيين الجديد.
+    const { data: enrollments, error: enrollmentReadError } =
+      await supabaseAdmin
+        .from('enrollments')
+        .select('id, join_date')
+        .eq('student_id', currentAssignment.student_id)
+        .eq('course_id', currentAssignment.course_id)
+        .not('join_date', 'is', null);
+
+    if (enrollmentReadError) {
+      console.error(
+        'Read enrollment dates before assignment update:',
+        enrollmentReadError,
+      );
+
+      return NextResponse.json(
+        { error: 'تعذر التحقق من تاريخ انضمام الطالب للدورة.' },
+        { status: 500 },
+      );
+    }
+
+    const invalidEnrollment = (enrollments ?? []).some(
+      (enrollment) =>
+        enrollment.join_date &&
+        enrollment.join_date > payload.joinDate,
+    );
+
+    if (invalidEnrollment) {
+      return NextResponse.json(
+        {
+          error:
+            'تاريخ تعيين الطالب للمعلم يجب أن يكون بعد أو يساوي تاريخ انضمامه للدورة.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const { data: assignment, error: updateError } =
+      await supabaseAdmin
+        .from('teacher_student_assignments')
+        .update({ join_date: payload.joinDate })
+        .eq('id', payload.assignmentId)
+        .select('id, student_id, course_id, join_date')
+        .maybeSingle();
+
+    if (updateError) {
+      console.error('Update assignment join date:', updateError);
+
       return NextResponse.json(
         { error: 'تعذر حفظ تاريخ انضمام الطالب للمعلم.' },
         { status: 500 },
@@ -375,11 +551,35 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // إعادة معالجة التسجيلات المطابقة لهذه الدورة.
+    const matchingEnrollmentIds = (enrollments ?? []).map(
+      (enrollment) => enrollment.id,
+    );
+
+    let allProcessed = true;
+
+    for (const enrollmentId of matchingEnrollmentIds) {
+      const processed = await processUnjoinedAttendance(enrollmentId);
+
+      if (!processed) {
+        allProcessed = false;
+      }
+    }
+
+    if (!allProcessed) {
+      return NextResponse.json({
+        success: true,
+        assignment,
+        warning:
+          'تم حفظ تاريخ التعيين، لكن تعذرت معالجة بعض سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة.',
+      });
+    }
+
     return NextResponse.json({
       success: true,
       assignment,
       message:
-        'تم حفظ تاريخ انضمام الطالب للمعلم. لم يتم تغيير آلية الحضور الحالية.',
+        'تم حفظ تاريخ انضمام الطالب للمعلم وتشغيل معالجة «غير منضم» للتسجيلات المرتبطة.',
     });
   }
 
@@ -412,6 +612,7 @@ export async function PATCH(request: Request) {
 
   if (error) {
     console.error('Update student deletion settings:', error);
+
     return NextResponse.json(
       { error: 'تعذر حفظ إعداد حذف الطلاب.' },
       { status: 500 },
