@@ -2,41 +2,62 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarDays, ShieldCheck, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  ArrowRight,
+  CalendarDays,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 
 export default function StudentsManagementPage() {
+  const router = useRouter();
   const [allowStudentDeletion, setAllowStudentDeletion] = useState(true);
 
   return (
     <div dir="rtl" className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">إدارة الطلاب</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          إدارة تواريخ الطلاب والتحكم في صلاحية حذفهم من النظام.
-        </p>
+      {/* العنوان وزر العودة */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">إدارة الطلاب</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            إدارة تواريخ الطلاب والتحكم في صلاحية حذفهم من النظام.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push('/settings')}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+        >
+          <ArrowRight className="h-4 w-4" />
+          عودة
+        </button>
       </div>
 
+      {/* تعديل تواريخ الطلاب */}
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="rounded-xl border p-5 space-y-3">
+        <section className="space-y-3 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" />
+            <CalendarDays className="h-5 w-5 text-primary" />
             <h2 className="font-semibold">تعديل تواريخ الطلاب</h2>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            تعديل تاريخ انضمام الطالب وتاريخ التحاقه بالمعلم وحفظ التغييرات
-            مباشرة في قاعدة البيانات.
+            تعديل تاريخ انضمام الطالب وتاريخ التحاقه بالمعلم
+            وحفظ التغييرات مباشرة في قاعدة البيانات.
           </p>
 
-          <p className="text-sm">
-            سيتم تفعيل التعديل بعد ربط الصفحة بجدول الطلاب وأسماء أعمدته
-            الفعلية في Supabase.
+          <p className="text-sm text-muted-foreground">
+            سيتم تفعيل التعديل بعد ربط الصفحة بجدول الطلاب
+            وأسماء الأعمدة الفعلية في Supabase.
           </p>
         </section>
 
-        <section className="rounded-xl border p-5 space-y-4">
+        {/* التحكم في حذف الطلاب */}
+        <section className="space-y-4 rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" />
+            <ShieldCheck className="h-5 w-5 text-primary" />
             <h2 className="font-semibold">التحكم في حذف الطلاب</h2>
           </div>
 
@@ -44,7 +65,7 @@ export default function StudentsManagementPage() {
             تحديد ما إذا كان مسموحًا بحذف الطلاب من صفحة الطلاب.
           </p>
 
-          <label className="flex items-center justify-between gap-4">
+          <label className="flex cursor-pointer items-center justify-between gap-4">
             <span className="text-sm font-medium">
               السماح بحذف الطلاب
             </span>
@@ -53,20 +74,21 @@ export default function StudentsManagementPage() {
               type="button"
               role="switch"
               aria-checked={allowStudentDeletion}
+              aria-label="السماح بحذف الطلاب"
               onClick={() =>
                 setAllowStudentDeletion((current) => !current)
               }
-              className={`relative h-6 w-11 rounded-full transition-colors ${
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                 allowStudentDeletion
                   ? 'bg-primary'
-                  : 'bg-gray-300'
+                  : 'bg-muted'
               }`}
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
                   allowStudentDeletion
-                    ? 'translate-x-0.5'
-                    : '-translate-x-5'
+                    ? 'left-0.5'
+                    : 'left-5'
                 }`}
               />
             </button>
@@ -80,14 +102,15 @@ export default function StudentsManagementPage() {
         </section>
       </div>
 
-      <section className="rounded-xl border p-5">
+      {/* قائمة الطلاب */}
+      <section className="space-y-3 rounded-xl border border-border bg-card p-5">
         <div className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
+          <Users className="h-5 w-5 text-primary" />
           <h2 className="font-semibold">قائمة الطلاب</h2>
         </div>
 
-        <p className="mt-2 text-sm text-muted-foreground">
-          ستظهر هنا قائمة الطلاب مع إمكانية تعديل التواريخ وحفظها.
+        <p className="text-sm text-muted-foreground">
+          ستظهر هنا قائمة الطلاب مع إمكانية تعديل تواريخهم وحفظها.
         </p>
       </section>
     </div>
