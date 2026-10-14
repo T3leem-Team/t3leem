@@ -467,6 +467,20 @@ export async function PATCH(request: Request) {
       );
     }
 
+   
+    if (
+      typeof payload.assignmentId !== 'string' ||
+      typeof payload.joinDate !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(payload.joinDate)
+    ) {
+      return NextResponse.json(
+        { error: 'بيانات التعيين أو تاريخ الانضمام غير صالحة.' },
+        { status: 400 },
+      );
+    }
+
+    const joinDate = payload.joinDate;
+
     const { data: currentAssignment, error: assignmentReadError } =
       await supabaseAdmin
         .from('teacher_student_assignments')
@@ -514,7 +528,7 @@ export async function PATCH(request: Request) {
     const invalidEnrollment = (enrollments ?? []).some(
       (enrollment) =>
         enrollment.join_date &&
-        enrollment.join_date > payload.joinDate,
+        enrollment.join_date > joinDate,
     );
 
     if (invalidEnrollment) {
@@ -530,7 +544,7 @@ export async function PATCH(request: Request) {
     const { data: assignment, error: updateError } =
       await supabaseAdmin
         .from('teacher_student_assignments')
-        .update({ join_date: payload.joinDate })
+        .update({ join_date: joinDate })
         .eq('id', payload.assignmentId)
         .select('id, student_id, course_id, join_date')
         .maybeSingle();
@@ -631,3 +645,4 @@ export async function PATCH(request: Request) {
     updatedAt: data.updated_at,
   });
 }
+
