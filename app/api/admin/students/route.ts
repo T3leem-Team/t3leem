@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requirePermission } from '@/lib/auth/authorization';
@@ -15,6 +16,15 @@ const supabaseAdmin = createClient(
 
 const DELETE_SETTING_PERMISSION = 'students.delete_setting.manage';
 const STUDENT_DATES_PERMISSION = 'students.dates.manage';
+
+type DateChangeLog = {
+  student_id: string;
+  entity_type: 'enrollment' | 'teacher_assignment';
+  entity_id: string;
+  date_field: 'join_date' | 'created_at';
+  old_date: string;
+  new_date: string;
+};
 
 async function authorize(permissionKey: string, message: string) {
   const result = await requirePermission(permissionKey);
@@ -72,7 +82,7 @@ function getTodayDate() {
 }
 
 /**
- * يحول timestamp إلى تاريخ البحرين بصيغة YYYY-MM-DD.
+ * تحويل timestamp إلى تاريخ البحرين بصيغة YYYY-MM-DD.
  */
 function getBahrainDate(value: string | null | undefined) {
   if (!value) {
@@ -105,6 +115,34 @@ function getBahrainDate(value: string | null | undefined) {
 
 function cleanSearch(value: string) {
   return value.replace(/[%_,()]/g, '').trim().slice(0, 100);
+}
+
+/**
+ * تحويل تاريخ البحرين إلى timestamp عند منتصف الليل.
+ * يحافظ على استخدام created_at كمصدر لتاريخ التعيين،
+ * ويغيّر التاريخ وفق اليوم المطلوب في البحرين.
+ */
+function getBahrainMidnightTimestamp(date: string) {
+  return new Date(`${date}T00:00:00+03:00`).toISOString();
+}
+
+/**
+ * تسجيل تعديل التاريخ.
+ *
+ * changed_by غير محدد هنا لأن authorize لا يعيد هوية المستخدم.
+ * يظل الحقل NULL إلى أن تتوفر هوية المستخدم من نظام المصادقة.
+ */
+async function insertDateChangeLog(log: DateChangeLog) {
+  const { error } = await supabaseAdmin
+    .from('student_date_change_logs')
+    .insert(log);
+
+  if (error) {
+    console.error('Insert student date change log:', error);
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -275,7 +313,7 @@ async function validateDateWithinCourseAndYear(
 }
 
 /**
- * يتحقق من تاريخ انضمام الطالب للدورة،
+ * التحقق من تاريخ انضمام الطالب للدورة،
  * ومن عدم تجاوزه تاريخ إنشاء أول تعيين للطالب لدى معلم.
  */
 async function validateEnrollmentJoinDate(
@@ -346,9 +384,7 @@ async function validateEnrollmentJoinDate(
   }
 
   const assignmentDates = (assignments ?? [])
-    .map((assignment) =>
-      getBahrainDate(assignment.created_at),
-    )
+    .map((assignment) => getBahrainDate(assignment.created_at))
     .filter((date): date is string => Boolean(date))
     .sort();
 
@@ -376,7 +412,7 @@ async function validateEnrollmentJoinDate(
 }
 
 /**
- * يشغّل معالجة سجلات «غير منضم» للتسجيل.
+ * تشغيل معالجة سجلات «غير منضم» للتسجيل.
  */
 async function processUnjoinedAttendance(enrollmentId: string) {
   const { error } = await supabaseAdmin.rpc(
@@ -477,13 +513,8 @@ export async function GET(request: Request) {
         );
       }
 
-      /*
-       * نحافظ على اسم الحقل join_date في الاستجابة
-       * لتفادي كسر الواجهة الحالية، لكن مصدره أصبح
-       * created_at المحوّل إلى تاريخ البحرين.
-       *
-       * هذا اسم في استجابة API فقط، وليس عمودًا في قاعدة البيانات.
-       */
+      // اسم join_date هنا خاص باستجابة API فقط.
+      // مصدر تاريخ التعيين هو created_at في قاعدة البيانات.
       const assignments = (assignmentRows ?? []).map(
         (assignment) => ({
           ...assignment,
@@ -623,7 +654,7 @@ export async function PATCH(request: Request) {
   const payload = body as Record<string, unknown>;
 
   /*
-   * تعديل تاريخ انضمام الطالب للدورة.
+   * تعديل تاريخ انضمام الطالب للدورة مع تسجيل التعديل.
    */
   if (payload.operation === 'updateEnrollmentJoinDate') {
     const authorization = await authorize(
@@ -660,14 +691,29 @@ export async function PATCH(request: Request) {
       return validation.error;
     }
 
+    const oldDate = validation.enrollment.join_date;
+
+    if (oldDate === joinDate) {
+      const processed = await processUnjoinedAttendance(enrollmentId);
+
+      return NextResponse.json({
+        success: true,
+        enrollment: validation.enrollment,
+        ...(processed
+          ? {}
+          : {
+              warning:
+                'لم يتغير التاريخ، لكن تعذرت معالجة سجلات «غير منضم».',
+            }),
+      });
+    }
+
     const { data: enrollment, error: updateError } =
       await supabaseAdmin
         .from('enrollments')
         .update({ join_date: joinDate })
         .eq('id', enrollmentId)
-        .select(
-          'id, student_id, course_id, join_date',
-        )
+        .select('id, student_id, course_id, join_date')
         .maybeSingle();
 
     if (updateError) {
@@ -677,10 +723,7 @@ export async function PATCH(request: Request) {
       );
 
       return NextResponse.json(
-        {
-          error:
-            'تعذر حفظ تاريخ انضمام الطالب للدورة.',
-        },
+        { error: 'تعذر حفظ تاريخ انضمام الطالب للدورة.' },
         { status: 500 },
       );
     }
@@ -689,6 +732,38 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { error: 'التسجيل المطلوب غير موجود.' },
         { status: 404 },
+      );
+    }
+
+    const logged = await insertDateChangeLog({
+      student_id: enrollment.student_id,
+      entity_type: 'enrollment',
+      entity_id: enrollment.id,
+      date_field: 'join_date',
+      old_date: oldDate,
+      new_date: joinDate,
+    });
+
+    if (!logged) {
+      // محاولة إعادة التاريخ السابق إذا تعذّر تسجيل التدقيق.
+      const { error: rollbackError } = await supabaseAdmin
+        .from('enrollments')
+        .update({ join_date: oldDate })
+        .eq('id', enrollment.id);
+
+      if (rollbackError) {
+        console.error(
+          'Rollback enrollment date after audit failure:',
+          rollbackError,
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تسجيل تعديل التاريخ في سجل التدقيق. تمت محاولة إعادة التاريخ السابق.',
+        },
+        { status: 500 },
       );
     }
 
@@ -701,7 +776,7 @@ export async function PATCH(request: Request) {
         success: true,
         enrollment,
         warning:
-          'تم حفظ التاريخ، لكن تعذرت معالجة سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة.',
+          'تم حفظ التاريخ وتسجيل التعديل، لكن تعذرت معالجة سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة.',
       });
     }
 
@@ -709,14 +784,15 @@ export async function PATCH(request: Request) {
       success: true,
       enrollment,
       message:
-        'تم حفظ تاريخ انضمام الطالب للدورة وتشغيل معالجة «غير منضم».',
+        'تم حفظ تاريخ انضمام الطالب للدورة وتسجيل التعديل وتشغيل معالجة «غير منضم».',
     });
   }
 
   /*
-   * تاريخ تعيين المعلم أصبح مشتقًا من created_at.
-   * لا نحدّث created_at عبر هذه العملية؛ لأنه تاريخ
-   * إنشاء السجل وليس حقل تاريخ انضمام قابلًا للتعديل.
+   * تعديل تاريخ تعيين الطالب عند المعلم.
+   *
+   * المصدر يظل teacher_student_assignments.created_at.
+   * نحدّث التاريخ نفسه ولا نضيف حقل تاريخ بديل.
    */
   if (payload.operation === 'updateAssignmentJoinDate') {
     const authorization = await authorize(
@@ -728,13 +804,190 @@ export async function PATCH(request: Request) {
       return authorization.response;
     }
 
-    return NextResponse.json(
-      {
-        error:
-          'تاريخ تعيين الطالب للمعلم يُحدد من تاريخ إنشاء سجل التعيين، ولم يعد حقلًا مستقلًا قابلًا للتعديل.',
-      },
-      { status: 400 },
+    if (
+      !isValidUuid(payload.assignmentId) ||
+      !isValidDate(payload.joinDate)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'معرّف التعيين أو تاريخ التعيين غير صالح.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const assignmentId = payload.assignmentId;
+    const joinDate = payload.joinDate;
+
+    const {
+      data: assignment,
+      error: assignmentError,
+    } = await supabaseAdmin
+      .from('teacher_student_assignments')
+      .select('id, student_id, course_id, created_at')
+      .eq('id', assignmentId)
+      .maybeSingle();
+
+    if (assignmentError) {
+      console.error('Read assignment before update:', assignmentError);
+
+      return NextResponse.json(
+        { error: 'تعذر قراءة سجل تعيين الطالب.' },
+        { status: 500 },
+      );
+    }
+
+    if (!assignment) {
+      return NextResponse.json(
+        { error: 'سجل تعيين الطالب غير موجود.' },
+        { status: 404 },
+      );
+    }
+
+    const oldDate = getBahrainDate(assignment.created_at);
+
+    if (!oldDate) {
+      return NextResponse.json(
+        { error: 'تاريخ التعيين الحالي غير صالح.' },
+        { status: 400 },
+      );
+    }
+
+    const dateError = await validateDateWithinCourseAndYear(
+      assignment.course_id,
+      joinDate,
     );
+
+    if (dateError) {
+      return dateError;
+    }
+
+    /*
+     * لا نسمح بأن يصبح تاريخ تعيين الطالب بعد تاريخ انضمامه للدورة.
+     */
+    const {
+      data: enrollments,
+      error: enrollmentsError,
+    } = await supabaseAdmin
+      .from('enrollments')
+      .select('id, join_date')
+      .eq('student_id', assignment.student_id)
+      .eq('course_id', assignment.course_id);
+
+    if (enrollmentsError) {
+      console.error(
+        'Read enrollments for assignment date validation:',
+        enrollmentsError,
+      );
+
+      return NextResponse.json(
+        { error: 'تعذر التحقق من تاريخ انضمام الطالب للدورة.' },
+        { status: 500 },
+      );
+    }
+
+    const conflictingEnrollment = (enrollments ?? []).find(
+      (enrollment) =>
+        enrollment.join_date &&
+        isValidDate(enrollment.join_date) &&
+        joinDate < enrollment.join_date,
+    );
+
+    if (conflictingEnrollment) {
+      return NextResponse.json(
+        {
+          error:
+            'تاريخ تعيين الطالب للمعلم لا يمكن أن يكون قبل تاريخ انضمام الطالب للدورة.',
+        },
+        { status: 400 },
+      );
+    }
+
+    if (oldDate === joinDate) {
+      return NextResponse.json({
+        success: true,
+        assignment: {
+          ...assignment,
+          join_date: oldDate,
+        },
+        message: 'التاريخ المحدد هو تاريخ التعيين الحالي.',
+      });
+    }
+
+    const previousCreatedAt = assignment.created_at;
+    const newCreatedAt = getBahrainMidnightTimestamp(joinDate);
+
+    const {
+      data: updatedAssignment,
+      error: updateError,
+    } = await supabaseAdmin
+      .from('teacher_student_assignments')
+      .update({ created_at: newCreatedAt })
+      .eq('id', assignmentId)
+      .select('id, student_id, course_id, created_at')
+      .maybeSingle();
+
+    if (updateError) {
+      console.error(
+        'Update assignment created_at:',
+        updateError,
+      );
+
+      return NextResponse.json(
+        { error: 'تعذر حفظ تاريخ تعيين الطالب عند المعلم.' },
+        { status: 500 },
+      );
+    }
+
+    if (!updatedAssignment) {
+      return NextResponse.json(
+        { error: 'سجل تعيين الطالب غير موجود.' },
+        { status: 404 },
+      );
+    }
+
+    const logged = await insertDateChangeLog({
+      student_id: assignment.student_id,
+      entity_type: 'teacher_assignment',
+      entity_id: assignment.id,
+      date_field: 'created_at',
+      old_date: oldDate,
+      new_date: joinDate,
+    });
+
+    if (!logged) {
+      // محاولة استرجاع timestamp الأصلي كاملًا، لا التاريخ فقط.
+      const { error: rollbackError } = await supabaseAdmin
+        .from('teacher_student_assignments')
+        .update({ created_at: previousCreatedAt })
+        .eq('id', assignment.id);
+
+      if (rollbackError) {
+        console.error(
+          'Rollback assignment date after audit failure:',
+          rollbackError,
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تسجيل تعديل التاريخ في سجل التدقيق. تمت محاولة إعادة تاريخ التعيين السابق.',
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      assignment: {
+        ...updatedAssignment,
+        join_date: getBahrainDate(updatedAssignment.created_at),
+      },
+      message:
+        'تم تعديل تاريخ تعيين الطالب عند المعلم وتسجيل التعديل.',
+    });
   }
 
   /*
