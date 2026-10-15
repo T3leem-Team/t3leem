@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
@@ -346,26 +347,28 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 2. التحقق من حساب Supabase Auth.
+     * 2. استخدام البريد المحفوظ في الملف الشخصي.
+     * يظل التحقق الفعلي من كلمة المرور عبر Supabase Auth.
      */
     const email =
-  typeof profile.email === 'string'
-    ? profile.email.trim()
-    : ''
+      typeof profile.email === 'string'
+        ? profile.email.trim()
+        : ''
 
-markLoginTiming('auth email from profile')
+    markLoginTiming('auth email from profile')
 
-if (!email) {
-  console.error(
-    'Login profile email missing:',
-    profile.auth_user_id,
-  )
+    if (!email) {
+      console.error(
+        'Login profile email missing:',
+        profile.auth_user_id,
+      )
 
-  return NextResponse.json(
-    { error: 'تعذر التحقق من حساب المستخدم.' },
-    { status: 500 },
-  )
-}
+      return NextResponse.json(
+        { error: 'تعذر التحقق من حساب المستخدم.' },
+        { status: 500 },
+      )
+    }
+
     /*
      * 3. التحقق من كلمة المرور.
      */
@@ -663,50 +666,34 @@ if (!email) {
     }
 
     /*
-     * 11. تهيئة نوع الأجهزة القديمة عند الحاجة.
+     * 11 و12. تحديث بيانات الجهاز المعتمد في طلب واحد.
      */
-    if (
-      !approvedType ||
-      approvedType === 'unknown'
-    ) {
-      const { error } = await supabaseAdmin
-        .from('trusted_devices')
-        .update({
-          approved_device_type: detectedType,
-          device_type_detected_at: new Date().toISOString(),
-        })
-        .eq('id', device.id)
-        .eq('auth_user_id', profile.auth_user_id)
-        .eq('status', 'approved')
+    const now = new Date().toISOString()
 
-      markLoginTiming('initialize approved device type')
-
-      if (error) {
-        console.error(
-          'Device type initialization error:',
-          error,
-        )
-
-        return NextResponse.json(
-          { error: 'تعذر التحقق من بيانات الجهاز.' },
-          { status: 500 },
-        )
-      }
+    const deviceUpdate: {
+      last_used_at: string
+      device_type_detected_at: string
+      approved_device_type?: DeviceType
+    } = {
+      last_used_at: now,
+      device_type_detected_at: now,
     }
 
-    /*
-     * 12. تحديث آخر استخدام للجهاز.
-     */
-    const { error: deviceUpdateError } =
-      await supabaseAdmin
-        .from('trusted_devices')
-        .update({
-          last_used_at: new Date().toISOString(),
-          device_type_detected_at: new Date().toISOString(),
-        })
-        .eq('id', device.id)
-        .eq('auth_user_id', profile.auth_user_id)
-        .eq('status', 'approved')
+    if (!approvedType || approvedType === 'unknown') {
+      deviceUpdate.approved_device_type = detectedType
+    }
+
+    const {
+      data: updatedDevice,
+      error: deviceUpdateError,
+    } = await supabaseAdmin
+      .from('trusted_devices')
+      .update(deviceUpdate)
+      .eq('id', device.id)
+      .eq('auth_user_id', profile.auth_user_id)
+      .eq('status', 'approved')
+      .select('id')
+      .maybeSingle()
 
     markLoginTiming('trusted device update')
 
@@ -719,6 +706,13 @@ if (!email) {
       return NextResponse.json(
         { error: 'تعذر تحديث بيانات الجهاز.' },
         { status: 500 },
+      )
+    }
+
+    if (!updatedDevice) {
+      return deviceApprovalRequiredResponse(
+        'تغيرت حالة الجهاز. حدّث الصفحة وحاول تسجيل الدخول مجددًا.',
+        device.id,
       )
     }
 
