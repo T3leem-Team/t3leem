@@ -4,17 +4,23 @@ import { useEffect, useRef } from 'react'
 
 import { clearAllCaches } from '@/lib/clear-all-caches'
 
-const ACTIVITY_THROTTLE_MS =
-  60 * 1000
+const ACTIVITY_THROTTLE_MS = 60 * 1000
+const ACTIVITY_START_DELAY_MS = 30 * 1000
 
 export function ActivityTracker() {
   const lastSentRef = useRef(0)
+  const requestInFlightRef = useRef(false)
 
   useEffect(() => {
     let stopped = false
+    let started = false
 
     async function sendActivity() {
-      if (stopped) {
+      if (
+        stopped ||
+        !started ||
+        requestInFlightRef.current
+      ) {
         return
       }
 
@@ -27,16 +33,17 @@ export function ActivityTracker() {
         return
       }
 
+      requestInFlightRef.current = true
+
       try {
-        const response =
-          await fetch(
-            '/api/auth/activity',
-            {
-              method: 'POST',
-              credentials: 'include',
-              cache: 'no-store',
-            },
-          )
+        const response = await fetch(
+          '/api/auth/activity',
+          {
+            method: 'POST',
+            credentials: 'include',
+            cache: 'no-store',
+          },
+        )
 
         if (stopped) {
           return
@@ -44,21 +51,17 @@ export function ActivityTracker() {
 
         if (response.status === 401) {
           clearAllCaches()
-
-          window.location.replace(
-            '/login',
-          )
-
+          window.location.replace('/login')
           return
         }
 
         if (response.ok) {
-          lastSentRef.current =
-            Date.now()
+          lastSentRef.current = Date.now()
         }
       } catch {
-        // لا نسجل خروج بسبب مشكلة شبكة مؤقتة.
-        // لن يتم تحديث آخر إرسال إلا بعد نجاح الطلب.
+        // لا نسجل خروج المستخدم بسبب انقطاع مؤقت.
+      } finally {
+        requestInFlightRef.current = false
       }
     }
 
@@ -71,7 +74,7 @@ export function ActivityTracker() {
       'keydown',
       'touchstart',
       'scroll',
-    ]
+    ] as const
 
     events.forEach((event) => {
       window.addEventListener(
@@ -81,8 +84,13 @@ export function ActivityTracker() {
       )
     })
 
+    const startTimer = window.setTimeout(() => {
+      started = true
+    }, ACTIVITY_START_DELAY_MS)
+
     return () => {
       stopped = true
+      window.clearTimeout(startTimer)
 
       events.forEach((event) => {
         window.removeEventListener(
