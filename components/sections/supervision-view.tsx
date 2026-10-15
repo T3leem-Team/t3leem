@@ -107,6 +107,9 @@ export function SupervisionView() {
   const [selectedTeacher, setSelectedTeacher] =
     useState('')
 
+  const [noteScope, setNoteScope] =
+    useState<'general' | 'teacher'>('general')
+
   const [selectedDate, setSelectedDate] =
     useState(today)
 
@@ -693,10 +696,11 @@ export function SupervisionView() {
                 '',
               teacher:
                 teacher?.name ??
-                (row.type ===
-                'day_cancelled'
+                (row.type === 'day_cancelled'
                   ? 'جميع المعلمين'
-                  : 'غير محدد'),
+                  : row.type === 'note'
+                    ? 'ملاحظة عامة'
+                    : 'غير محدد'),
               reason:
                 row.reason ?? '',
               note:
@@ -813,6 +817,7 @@ export function SupervisionView() {
   ) => {
     setSelectedType(type)
     setSelectedTeacher('')
+    setNoteScope('general')
     setSelectedDate(today)
     setReason('')
     setNote('')
@@ -847,14 +852,12 @@ export function SupervisionView() {
       return
     }
 
-    if (
-      selectedType !==
-        'day_cancelled' &&
-      !selectedTeacher
-    ) {
-      setError(
-        'اختر المعلم.',
-      )
+    const requiresTeacher =
+      selectedType !== 'day_cancelled' &&
+      (selectedType !== 'note' || noteScope === 'teacher')
+
+    if (requiresTeacher && !selectedTeacher) {
+      setError('اختر المعلم أولًا.')
       return
     }
 
@@ -959,10 +962,10 @@ export function SupervisionView() {
             course_id:
               selectedCourseId,
             teacher_id:
-              selectedType ===
-              'day_cancelled'
+              selectedType === 'day_cancelled' ||
+              (selectedType === 'note' && noteScope === 'general')
                 ? null
-                : selectedTeacher,
+                : selectedTeacher || null,
             type:
               selectedType,
             record_date:
@@ -986,6 +989,7 @@ export function SupervisionView() {
 
       setIsFormOpen(false)
       setSelectedTeacher('')
+      setNoteScope('general')
       setReason('')
       setNote('')
     } catch (err) {
@@ -1556,8 +1560,54 @@ export function SupervisionView() {
                   />
                 </div>
 
-                {selectedType !==
-                  'day_cancelled' && (
+                {selectedType === 'note' && (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      نوع الملاحظة
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteScope('general')
+                          setSelectedTeacher('')
+                          setError('')
+                        }}
+                        className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                          noteScope === 'general'
+                            ? 'border-primary bg-primary/10 font-medium text-primary'
+                            : 'hover:bg-muted'
+                        }`}
+                        aria-pressed={noteScope === 'general'}
+                      >
+                        ملاحظة عامة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNoteScope('teacher')
+                          setError('')
+                        }}
+                        className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                          noteScope === 'teacher'
+                            ? 'border-primary bg-primary/10 font-medium text-primary'
+                            : 'hover:bg-muted'
+                        }`}
+                        aria-pressed={noteScope === 'teacher'}
+                      >
+                        ملاحظة على معلم
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {noteScope === 'general'
+                        ? 'يمكنك حفظ الملاحظة دون اختيار معلم.'
+                        : 'اختر المعلم الذي تتعلق به الملاحظة.'}
+                    </p>
+                  </div>
+                )}
+
+                {selectedType !== 'day_cancelled' &&
+                  (selectedType !== 'note' || noteScope === 'teacher') && (
                   <div>
                     <label className="mb-2 block text-sm font-medium">
                       المعلم
@@ -1576,7 +1626,7 @@ export function SupervisionView() {
                         )
                       }
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      required
+                      required={selectedType !== 'note' || noteScope === 'teacher'}
                       disabled={
                         isLoadingTeachers ||
                         teachers.length ===
