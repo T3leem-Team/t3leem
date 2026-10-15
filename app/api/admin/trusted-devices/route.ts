@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/require-auth'
@@ -17,7 +16,11 @@ const supabaseAdmin = createClient(
 const DEFAULT_GRACE_PERIOD_DAYS = 30
 const MAX_GRACE_PERIOD_DAYS = 3650
 
-type DeviceStatus = 'pending' | 'approved'
+type DeviceAction =
+  | 'approve'
+  | 'reject'
+  | 'revoke'
+  | 'update_grace_period'
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status })
@@ -36,14 +39,18 @@ async function getAdmin() {
     return { error: response }
   }
 
-  const userId = access!.userId
+  if (!access?.userId) {
+    return {
+      error: jsonError('يجب تسجيل الدخول أولًا.', 401),
+    }
+  }
+
+  const userId = access.userId
 
   const { data: profile, error: profileError } =
     await supabaseAdmin
       .from('user_profiles')
-      .select(
-        'auth_user_id, username, full_name, role, is_active',
-      )
+      .select('auth_user_id, username, full_name, role, is_active')
       .eq('auth_user_id', userId)
       .maybeSingle()
 
@@ -74,9 +81,9 @@ async function getAdmin() {
   return { userId, profile }
 }
 
-async function attachUsers<T extends { auth_user_id: string }>(
-  devices: T[],
-) {
+async function attachUsers<
+  T extends { auth_user_id: string },
+>(devices: T[]) {
   const userIds = Array.from(
     new Set(devices.map((device) => device.auth_user_id)),
   )
@@ -143,15 +150,40 @@ async function writeAudit(
     })
 
   if (error) {
-    // لا نلغي العملية الناجحة بسبب فشل كتابة سجل التدقيق،
-    // لكن نسجل الخطأ حتى تتم مراجعته.
     console.error(`Audit log error (${eventType}):`, error)
+  }
+}
+
+/**
+ * إغلاق الجلسات النشطة المرتبطة بجهاز معين.
+ * يبقى سجل الجلسة والجهاز محفوظًا في قاعدة البيانات.
+ */
+async function closeDeviceSessions(
+  authUserId: string,
+  deviceId: string,
+) {
+  const now = new Date().toISOString()
+
+  const { error } = await supabaseAdmin
+    .from('active_sessions')
+    .update({
+      is_active: false,
+      logout_at: now,
+      last_activity_at: now,
+    })
+    .eq('auth_user_id', authUserId)
+    .eq('trusted_device_id', deviceId)
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('Close device sessions error:', error)
+    throw new Error('تعذر إغلاق الجلسات النشطة للجهاز.')
   }
 }
 
 /*
  * GET
- * إرجاع الأجهزة المعلقة والمعتمدة في مجموعتين منفصلتين.
+ * يعيد الأجهزة المعلقة والمعتمدة في قائمتين منفصلتين.
  */
 export async function GET() {
   try {
@@ -161,11 +193,11 @@ export async function GET() {
       return admin.error
     }
 
+    // مهم: لا تُضف device_token_hash إلى هذه القائمة.
     const columns = `
       id,
       auth_user_id,
       device_name,
-      device_token_hash,
       status,
       created_at,
       approved_at,
@@ -197,16 +229,13 @@ export async function GET() {
     ])
 
     if (pendingResult.error || approvedResult.error) {
-      const error =
+      const dbError =
         pendingResult.error || approvedResult.error
 
-      console.error('Trusted devices lookup error:', error)
+      console.error('Trusted devices lookup error:', dbError)
 
       return NextResponse.json(
-        {
-          error: 'تعذر تحميل الأجهزة.',
-          details: error?.message,
-        },
+        { error: 'تعذر تحميل الأجهزة.' },
         { status: 500 },
       )
     }
@@ -228,13 +257,7 @@ export async function GET() {
     console.error('Trusted devices GET error:', error)
 
     return NextResponse.json(
-      {
-        error: 'حدث خطأ أثناء تحميل الأجهزة.',
-        details:
-          error instanceof Error
-            ? error.message
-            : String(error),
-      },
+      { error: 'حدث خطأ أثناء تحميل الأجهزة.' },
       { status: 500 },
     )
   }
@@ -269,28 +292,29 @@ export async function POST(request: Request) {
       return jsonError('معرف الجهاز مطلوب.')
     }
 
-    const supportedActions = [
+    const supportedActions: DeviceAction[] = [
       'approve',
       'reject',
       'revoke',
       'update_grace_period',
     ]
 
-    if (!supportedActions.includes(action)) {
+    if (!supportedActions.includes(action as DeviceAction)) {
       return jsonError('الإجراء المطلوب غير صحيح.')
     }
+
+    const typedAction = action as DeviceAction
 
     let gracePeriodDays: number | null = null
 
     if (
-      action === 'approve' ||
-      action === 'update_grace_period'
+      typedAction === 'approve' ||
+      typedAction === 'update_grace_period'
     ) {
       const rawDays = body.gracePeriodDays
 
       gracePeriodDays =
-        rawDays === undefined &&
-        action === 'approve'
+        rawDays === undefined && typedAction === 'approve'
           ? DEFAULT_GRACE_PERIOD_DAYS
           : rawDays
 
@@ -301,7 +325,7 @@ export async function POST(request: Request) {
         gracePeriodDays > MAX_GRACE_PERIOD_DAYS
       ) {
         return jsonError(
-          `مدة السماح يجب أن تكون عددًا صحيحًا من 1 إلى ${MAX_GRACE_PERIOD_DAYS} يومًا.`,
+          `مدة الثقة يجب أن تكون عددًا صحيحًا من 1 إلى ${MAX_GRACE_PERIOD_DAYS} يومًا.`,
         )
       }
     }
@@ -326,7 +350,7 @@ export async function POST(request: Request) {
       console.error('Trusted device lookup error:', deviceError)
 
       return NextResponse.json(
-        { error: 'تعذر العثور على الجهاز.' },
+        { error: 'تعذر التحقق من الجهاز.' },
         { status: 500 },
       )
     }
@@ -338,7 +362,7 @@ export async function POST(request: Request) {
     /*
      * الموافقة على جهاز معلق.
      */
-    if (action === 'approve') {
+    if (typedAction === 'approve') {
       if (device.status !== 'pending') {
         return NextResponse.json(
           {
@@ -348,6 +372,9 @@ export async function POST(request: Request) {
           { status: 409 },
         )
       }
+
+      const approvedDeviceType =
+        device.pending_device_type || 'unknown'
 
       const approvedAt = new Date().toISOString()
       const graceExpiresAt = getGraceExpiry(gracePeriodDays!)
@@ -359,8 +386,7 @@ export async function POST(request: Request) {
             status: 'approved',
             approved_at: approvedAt,
             approved_by: adminUserId,
-            approved_device_type:
-              device.pending_device_type || 'unknown',
+            approved_device_type: approvedDeviceType,
             pending_device_type: null,
             grace_period_days: gracePeriodDays,
             grace_expires_at: graceExpiresAt,
@@ -388,10 +414,7 @@ export async function POST(request: Request) {
         console.error('Trusted device approval error:', error)
 
         return NextResponse.json(
-          {
-            error: 'تعذرت الموافقة على الجهاز.',
-            details: error.message,
-          },
+          { error: 'تعذرت الموافقة على الجهاز.' },
           { status: 500 },
         )
       }
@@ -411,8 +434,7 @@ export async function POST(request: Request) {
         {
           grace_period_days: gracePeriodDays,
           grace_expires_at: graceExpiresAt,
-          approved_device_type:
-            device.pending_device_type || 'unknown',
+          approved_device_type: approvedDeviceType,
         },
       )
 
@@ -426,7 +448,7 @@ export async function POST(request: Request) {
     /*
      * رفض جهاز معلق.
      */
-    if (action === 'reject') {
+    if (typedAction === 'reject') {
       if (device.status !== 'pending') {
         return NextResponse.json(
           {
@@ -461,10 +483,7 @@ export async function POST(request: Request) {
         console.error('Trusted device rejection error:', error)
 
         return NextResponse.json(
-          {
-            error: 'تعذر رفض الجهاز.',
-            details: error.message,
-          },
+          { error: 'تعذر رفض الجهاز.' },
           { status: 500 },
         )
       }
@@ -491,9 +510,10 @@ export async function POST(request: Request) {
     }
 
     /*
-     * إلغاء اعتماد جهاز مع الاحتفاظ بسجله.
+     * إلغاء اعتماد جهاز مع إغلاق جلساته النشطة.
+     * لا يتم حذف سجل الجهاز من قاعدة البيانات.
      */
-    if (action === 'revoke') {
+    if (typedAction === 'revoke') {
       if (device.status !== 'approved') {
         return NextResponse.json(
           {
@@ -523,10 +543,7 @@ export async function POST(request: Request) {
         console.error('Trusted device revoke error:', error)
 
         return NextResponse.json(
-          {
-            error: 'تعذر إلغاء اعتماد الجهاز.',
-            details: error.message,
-          },
+          { error: 'تعذر إلغاء اعتماد الجهاز.' },
           { status: 500 },
         )
       }
@@ -537,6 +554,12 @@ export async function POST(request: Request) {
           409,
         )
       }
+
+      // إغلاق الجلسات المرتبطة بهذا الجهاز.
+      await closeDeviceSessions(
+        device.auth_user_id,
+        device.id,
+      )
 
       await writeAudit(
         device.auth_user_id,
@@ -553,9 +576,10 @@ export async function POST(request: Request) {
     }
 
     /*
-     * تعديل مدة السماح لجهاز معتمد.
+     * تعديل مدة الثقة لجهاز معتمد.
+     * يبدأ احتساب المدة الجديدة من وقت تنفيذ العملية.
      */
-    if (action === 'update_grace_period') {
+    if (typedAction === 'update_grace_period') {
       if (device.status !== 'approved') {
         return NextResponse.json(
           {
@@ -566,8 +590,7 @@ export async function POST(request: Request) {
         )
       }
 
-      const graceExpiresAt =
-        getGraceExpiry(gracePeriodDays!)
+      const graceExpiresAt = getGraceExpiry(gracePeriodDays!)
 
       const { data: updatedDevice, error } =
         await supabaseAdmin
@@ -593,10 +616,7 @@ export async function POST(request: Request) {
         console.error('Grace period update error:', error)
 
         return NextResponse.json(
-          {
-            error: 'تعذر تعديل مدة السماح.',
-            details: error.message,
-          },
+          { error: 'تعذر تعديل مدة الثقة.' },
           { status: 500 },
         )
       }
@@ -614,6 +634,8 @@ export async function POST(request: Request) {
         'device_grace_period_updated',
         adminUserId,
         {
+          previous_grace_period_days: device.grace_period_days,
+          previous_grace_expires_at: device.grace_expires_at,
           grace_period_days: gracePeriodDays,
           grace_expires_at: graceExpiresAt,
         },
@@ -632,11 +654,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        error: 'حدث خطأ أثناء معالجة الجهاز.',
-        details:
+        error:
           error instanceof Error
             ? error.message
-            : String(error),
+            : 'حدث خطأ أثناء معالجة الجهاز.',
       },
       { status: 500 },
     )
