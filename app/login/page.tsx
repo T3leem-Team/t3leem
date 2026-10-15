@@ -56,7 +56,6 @@ export default function LoginPage() {
       lastTimingAt = now
     }
 
-    // قياس كل طلب شبكة على حدة دون تسجيل كلمات المرور أو محتوى الطلب.
     async function timedFetch(
       label: string,
       input: RequestInfo | URL,
@@ -85,7 +84,8 @@ export default function LoginPage() {
 
     try {
       /*
-       * 1. استرجاع مفتاح الجهاز.
+       * 1. تجهيز مفتاح الجهاز محليًا.
+       * لا نستدعي مسار استعادة الجهاز.
        */
       let deviceKey:
         | Awaited<ReturnType<typeof getOrCreateDeviceKey>>
@@ -104,152 +104,10 @@ export default function LoginPage() {
       }
 
       markTiming('device key preparation')
+      markTiming('device recovery skipped')
 
       /*
-       * نستخدم النتيجة لتجنب تسجيل المفتاح مرة أخرى
-       * عندما يؤكد الخادم أن كوكي الجهاز الحالية معتمدة.
-       */
-      let deviceAlreadyTrusted = false
-
-      /*
-       * 2. محاولة استرجاع الجهاز المعتمد.
-       */
-      if (deviceKey) {
-        const challengeResponse = await timedFetch(
-          'device recovery challenge',
-          '/api/auth/device-key/recover',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            cache: 'no-store',
-            body: JSON.stringify({
-              action: 'challenge',
-              username: cleanUsername,
-              password,
-              publicKey: deviceKey.publicKey,
-            }),
-          },
-        )
-
-        const challengeData =
-          await challengeResponse.json().catch(() => null)
-
-        markTiming('read recovery challenge response')
-
-        if (
-          !challengeResponse.ok &&
-          challengeResponse.status !== 401
-        ) {
-          setError(
-            typeof challengeData?.error === 'string'
-              ? challengeData.error
-              : 'تعذر التحقق من الجهاز. حاول مرة أخرى.',
-          )
-          setLoading(false)
-          markTiming('stop: recovery challenge failed')
-          return
-        }
-
-        if (challengeResponse.ok) {
-          const recoveryStatus = challengeData?.status
-
-          deviceAlreadyTrusted =
-            recoveryStatus === 'already_trusted'
-
-          if (recoveryStatus === 'blocked') {
-            setError(
-              'هذا الجهاز غير مصرح له بالدخول إلى النظام.',
-            )
-            setLoading(false)
-            markTiming('stop: device blocked')
-            return
-          }
-
-          if (recoveryStatus === 'challenge') {
-            if (
-              typeof challengeData.challenge !== 'string'
-            ) {
-              setError('تعذر التحقق من الجهاز.')
-              setLoading(false)
-              markTiming('stop: invalid recovery challenge')
-              return
-            }
-
-            const signingStartedAt = performance.now()
-
-            const signature =
-              await deviceKey.signChallenge(
-                challengeData.challenge,
-              )
-
-            console.info(
-              `[LOGIN PAGE TIMING] sign recovery challenge: ${Math.round(performance.now() - signingStartedAt)}ms`,
-            )
-
-            const recoveryResponse = await timedFetch(
-              'device recovery verification',
-              '/api/auth/device-key/recover',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                cache: 'no-store',
-                body: JSON.stringify({
-                  action: 'recover',
-                  username: cleanUsername,
-                  password,
-                  publicKey: deviceKey.publicKey,
-                  challenge: challengeData.challenge,
-                  signature,
-                }),
-              },
-            )
-
-            const recoveryData =
-              await recoveryResponse
-                .json()
-                .catch(() => null)
-
-            markTiming('read recovery verification response')
-
-            if (
-              !recoveryResponse.ok ||
-              recoveryData?.status !== 'recovered'
-            ) {
-              setError(
-                typeof recoveryData?.error === 'string'
-                  ? recoveryData.error
-                  : 'تعذر استرجاع الجهاز. حاول مرة أخرى.',
-              )
-              setLoading(false)
-              markTiming('stop: device recovery failed')
-              return
-            }
-          } else if (
-            recoveryStatus !== 'not_registered' &&
-            recoveryStatus !== 'already_trusted'
-          ) {
-            setError(
-              'تعذر تحديد حالة الجهاز. حاول مرة أخرى.',
-            )
-            setLoading(false)
-            markTiming('stop: unknown recovery status')
-            return
-          }
-
-          markTiming(`device recovery status: ${recoveryStatus}`)
-        }
-      } else {
-        markTiming('device recovery skipped: no key')
-      }
-
-      /*
-       * 3. تسجيل الدخول الأساسي.
+       * 2. تسجيل الدخول الأساسي.
        */
       const loginResponse = await timedFetch(
         'main login',
@@ -285,14 +143,10 @@ export default function LoginPage() {
       }
 
       /*
-       * 4. تسجيل مفتاح الجهاز.
-       *
-       * إذا كانت كوكي الجهاز الحالية مرتبطة بجهاز معتمد
-       * للمستخدم، نتجنب طلب التحدي والتسجيل المكررين.
-       *
-       * بقية الحالات تستخدم مسار التسجيل الحالي.
+       * 3. تسجيل مفتاح الجهاز إذا توفر.
+       * تبقى آلية التسجيل الأصلية كما هي.
        */
-      if (deviceKey && !deviceAlreadyTrusted) {
+      if (deviceKey) {
         try {
           const challengeResponse = await timedFetch(
             'device key registration challenge',
@@ -370,16 +224,12 @@ export default function LoginPage() {
         }
 
         markTiming('device key registration stage')
-      } else if (deviceAlreadyTrusted) {
-        markTiming(
-          'device key registration skipped: already trusted',
-        )
       } else {
         markTiming('device key registration skipped: no key')
       }
 
       /*
-       * 5. تحميل أقسام لوحة التحكم.
+       * 4. تحميل أقسام لوحة التحكم.
        */
       const sectionsResponse = await timedFetch(
         'dashboard sections',
@@ -483,7 +333,7 @@ export default function LoginPage() {
       markTiming('start dashboard cache preloading')
 
       /*
-       * 6. التوجيه إلى الصفحة الرئيسية المسموح بها.
+       * 5. التوجيه إلى الصفحة الرئيسية المسموح بها.
        */
       setRedirecting(true)
       setLoading(false)
@@ -496,8 +346,6 @@ export default function LoginPage() {
 
       router.replace(destination)
 
-      // هذا القياس يقيس استدعاء router.replace فقط،
-      // ولا يعني أن الصفحة الجديدة اكتمل تحميلها.
       markTiming('router.replace called')
     } catch (submitError) {
       console.error(
