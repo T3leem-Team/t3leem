@@ -1,20 +1,12 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
-import {
-  createHash,
-  randomBytes,
-} from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL!
-
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const publishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-
-const serviceRoleKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const DEVICE_COOKIE = 't3leem_device_token'
 const SESSION_COOKIE = 't3leem_session_id'
@@ -33,6 +25,26 @@ const supabaseAdmin = createClient(
   },
 )
 
+type DeviceType =
+  | 'iphone'
+  | 'ipad'
+  | 'samsung'
+  | 'android'
+  | 'windows_pc'
+  | 'mac'
+  | 'linux_pc'
+  | 'unknown'
+
+type TrustedDevice = {
+  id: string
+  status: string
+  device_name: string | null
+  approved_device_type: string | null
+  pending_device_type: string | null
+  grace_period_days: number | null
+  grace_expires_at: string | null
+}
+
 function hashDeviceToken(token: string) {
   return createHash('sha256')
     .update(token)
@@ -47,18 +59,66 @@ function getCookie(
 }
 
 function getIpAddress(request: NextRequest) {
-  const forwardedFor =
-    request.headers.get('x-forwarded-for')
+  const forwardedFor = request.headers.get('x-forwarded-for')
 
   if (forwardedFor) {
     return forwardedFor.split(',')[0].trim()
   }
 
-  return request.headers.get('x-real-ip') ?? null
+  return request.headers.get('x-real-ip')
 }
 
 function getUserAgent(request: NextRequest) {
-  return request.headers.get('user-agent') ?? null
+  return request.headers.get('user-agent') ?? ''
+}
+
+/**
+ * اكتشاف تقريبي لنوع الجهاز اعتمادًا على User-Agent.
+ *
+ * هذا التصنيف ليس بصمة جهاز مؤكدة ويمكن تغييره أو تزويره.
+ */
+function detectDeviceType(userAgent: string): DeviceType {
+  const ua = userAgent.toLowerCase()
+
+  if (!ua) return 'unknown'
+
+  if (ua.includes('iphone')) {
+    return 'iphone'
+  }
+
+  if (ua.includes('ipad')) {
+    return 'ipad'
+  }
+
+  // بعض المتصفحات تكشف عن طراز Samsung،
+  // بينما لا تكشف متصفحات أخرى عن الشركة المصنّعة.
+  if (
+    ua.includes('samsungbrowser') ||
+    /sm-[a-z0-9]+/i.test(userAgent)
+  ) {
+    return 'samsung'
+  }
+
+  if (ua.includes('android')) {
+    return 'android'
+  }
+
+  if (ua.includes('windows nt')) {
+    return 'windows_pc'
+  }
+
+  if (
+    ua.includes('macintosh') ||
+    ua.includes('mac os x')
+  ) {
+    return 'mac'
+  }
+
+  if (ua.includes('linux')) {
+    return 'linux_pc'
+  }
+
+  return 'unknown'
 }
 
 function clearSessionCookie(response: NextResponse) {
@@ -71,6 +131,150 @@ function clearSessionCookie(response: NextResponse) {
   })
 
   return response
+}
+
+function deviceApprovalRequiredResponse(
+  message: string,
+  deviceId: string,
+) {
+  const response = NextResponse.json(
+    {
+      error: message,
+      deviceStatus: 'pending',
+      deviceId,
+      approvalRequired: true,
+    },
+    { status: 403 },
+  )
+
+  return clearSessionCookie(response)
+}
+
+async function writeAudit(
+  authUserId: string,
+  eventType: string,
+  success: boolean,
+  details: {
+    deviceId?: string
+    ipAddress: string | null
+    userAgent: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const { error } = await supabaseAdmin
+    .from('auth_audit_logs')
+    .insert({
+      auth_user_id: authUserId,
+      trusted_device_id: details.deviceId ?? null,
+      event_type: eventType,
+      success,
+      ip_address: details.ipAddress,
+      user_agent: details.userAgent || null,
+      metadata: details.metadata ?? {},
+    })
+
+  if (error) {
+    console.error(`Auth audit error (${eventType}):`, error)
+  }
+}
+
+/**
+ * إغلاق جميع الجلسات النشطة التابعة للجهاز.
+ * لا نحذف سجلات الجلسات أو الجهاز.
+ */
+async function closeDeviceSessions(
+  authUserId: string,
+  deviceId: string,
+) {
+  const now = new Date().toISOString()
+
+  const { error } = await supabaseAdmin
+    .from('active_sessions')
+    .update({
+      is_active: false,
+      logout_at: now,
+      last_activity_at: now,
+    })
+    .eq('auth_user_id', authUserId)
+    .eq('trusted_device_id', deviceId)
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('Close device sessions error:', error)
+    throw new Error('تعذر إغلاق جلسات الجهاز.')
+  }
+}
+
+/**
+ * نقل الجهاز المعتمد إلى الانتظار عند انتهاء الثقة
+ * أو اختلاف نوع الجهاز.
+ */
+async function requireDeviceReapproval(
+  device: TrustedDevice,
+  authUserId: string,
+  detectedType: DeviceType,
+  reason: 'grace_expired' | 'device_type_changed',
+  ipAddress: string | null,
+  userAgent: string,
+) {
+  const now = new Date().toISOString()
+
+  const { data: updatedDevice, error } =
+    await supabaseAdmin
+      .from('trusted_devices')
+      .update({
+        status: 'pending',
+        pending_device_type: detectedType,
+        device_type_detected_at: now,
+      })
+      .eq('id', device.id)
+      .eq('auth_user_id', authUserId)
+      .eq('status', 'approved')
+      .select('id')
+      .maybeSingle()
+
+  if (error) {
+    console.error('Device reapproval update error:', error)
+    throw new Error('تعذر تحديث حالة الجهاز.')
+  }
+
+  // قد تكون عملية أخرى غيّرت الحالة بالتزامن.
+  if (!updatedDevice) {
+    return deviceApprovalRequiredResponse(
+      'تغيرت حالة الجهاز. حدّث الصفحة وحاول تسجيل الدخول مجددًا.',
+      device.id,
+    )
+  }
+
+  await closeDeviceSessions(authUserId, device.id)
+
+  await writeAudit(
+    authUserId,
+    'device_reapproval_required',
+    false,
+    {
+      deviceId: device.id,
+      ipAddress,
+      userAgent,
+      metadata: {
+        reason,
+        detected_device_type: detectedType,
+        previous_approved_device_type:
+          device.approved_device_type,
+        grace_expires_at: device.grace_expires_at,
+      },
+    },
+  )
+
+  const message =
+    reason === 'grace_expired'
+      ? 'انتهت مدة الثقة لهذا الجهاز. يحتاج الجهاز إلى موافقة جديدة من مدير النظام.'
+      : 'تم اكتشاف اختلاف في نوع الجهاز. يحتاج الجهاز إلى موافقة جديدة من مدير النظام.'
+
+  return deviceApprovalRequiredResponse(
+    message,
+    device.id,
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -98,134 +302,64 @@ export async function POST(request: NextRequest) {
 
     const ipAddress = getIpAddress(request)
     const userAgent = getUserAgent(request)
+    const detectedType = detectDeviceType(userAgent)
 
     /*
-     * 1. البحث عن ملف المستخدم
+     * 1. البحث عن المستخدم.
      */
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select(`
-        id,
-        auth_user_id,
-        username,
-        full_name,
-        role,
-        is_active
-      `)
-      .eq('username', username)
-      .maybeSingle()
+    const { data: profile, error: profileError } =
+      await supabaseAdmin
+        .from('user_profiles')
+        .select(`
+          id,
+          auth_user_id,
+          username,
+          full_name,
+          role,
+          is_active
+        `)
+        .eq('username', username)
+        .maybeSingle()
 
     if (profileError) {
-      console.error('LOGIN_DIAGNOSTIC: profile_lookup_failed', {
-        code: profileError.code,
-        message: profileError.message,
-        details: profileError.details,
-        hint: profileError.hint,
-      })
+      console.error('Login profile lookup error:', profileError)
 
       return NextResponse.json(
-        {
-          error: 'حدث خطأ أثناء تسجيل الدخول.',
-          diagnostic: {
-            stage: 'profile_lookup',
-            code: profileError.code,
-          },
-        },
+        { error: 'حدث خطأ أثناء تسجيل الدخول.' },
         { status: 500 },
       )
     }
 
-    if (!profile) {
-      console.error('LOGIN_DIAGNOSTIC: profile_not_found', {
-        username,
-      })
-
+    if (!profile || !profile.is_active) {
       return NextResponse.json(
-        {
-          error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
-          diagnostic: {
-            stage: 'profile_lookup',
-            reason: 'profile_not_found',
-          },
-        },
-        { status: 401 },
-      )
-    }
-
-    if (!profile.is_active) {
-      console.error('LOGIN_DIAGNOSTIC: profile_inactive', {
-        username: profile.username,
-        authUserId: profile.auth_user_id,
-      })
-
-      return NextResponse.json(
-        {
-          error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
-          diagnostic: {
-            stage: 'profile_lookup',
-            reason: 'profile_inactive',
-          },
-        },
+        { error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' },
         { status: 401 },
       )
     }
 
     /*
-     * 2. التحقق من وجود حساب Auth والحصول على البريد
+     * 2. التحقق من حساب Supabase Auth.
      */
-    const {
-      data: authUser,
-      error: authUserError,
-    } = await supabaseAdmin.auth.admin.getUserById(
-      profile.auth_user_id,
-    )
+    const { data: authUser, error: authUserError } =
+      await supabaseAdmin.auth.admin.getUserById(
+        profile.auth_user_id,
+      )
 
-    if (authUserError || !authUser.user) {
-      console.error('LOGIN_DIAGNOSTIC: auth_user_lookup_failed', {
-        code: authUserError?.code ?? null,
-        message: authUserError?.message ?? null,
-        status: authUserError?.status ?? null,
-        authUserId: profile.auth_user_id,
-        username: profile.username,
-      })
+    if (authUserError || !authUser.user?.email) {
+      console.error('Login Auth user lookup error:', authUserError)
 
       return NextResponse.json(
-        {
-          error: 'تعذر التحقق من حساب المستخدم.',
-          diagnostic: {
-            stage: 'auth_user_lookup',
-            code: authUserError?.code ?? null,
-            message: authUserError?.message ?? null,
-          },
-        },
+        { error: 'تعذر التحقق من حساب المستخدم.' },
         { status: 500 },
       )
     }
 
     const email = authUser.user.email
 
-    if (!email) {
-      console.error('LOGIN_DIAGNOSTIC: auth_user_email_missing', {
-        authUserId: profile.auth_user_id,
-      })
-
-      return NextResponse.json(
-        {
-          error: 'حساب المستخدم غير مكتمل.',
-          diagnostic: {
-            stage: 'auth_user_lookup',
-            reason: 'email_missing',
-          },
-        },
-        { status: 500 },
-      )
-    }
-
     /*
-     * 3. التحقق من كلمة المرور عبر Supabase Auth
+     * 3. التحقق من كلمة المرور.
+     *
+     * لا ننشئ جلسة النظام قبل اجتياز فحوص الجهاز.
      */
     const passwordClient = createClient(
       supabaseUrl,
@@ -251,87 +385,57 @@ export async function POST(request: NextRequest) {
       !passwordAuthData.user ||
       !passwordAuthData.session
     ) {
-      console.error('LOGIN_DIAGNOSTIC: password_verification_failed', {
-        username,
-        email,
-        errorCode: passwordError?.code ?? null,
-        errorMessage: passwordError?.message ?? null,
-        errorStatus: passwordError?.status ?? null,
-        hasUser: Boolean(passwordAuthData.user),
-        hasSession: Boolean(passwordAuthData.session),
-      })
-
-      void supabaseAdmin
-        .from('auth_audit_logs')
-        .insert({
-          auth_user_id: profile.auth_user_id,
-          event_type: 'login_failed',
-          success: false,
-          ip_address: ipAddress,
-          user_agent: userAgent,
+      await writeAudit(
+        profile.auth_user_id,
+        'login_failed',
+        false,
+        {
+          ipAddress,
+          userAgent,
           metadata: {
             reason: 'invalid_password',
             username: profile.username,
           },
-        })
-        .then(({ error }) => {
-          if (error) {
-            console.error('Login failure audit error:', error)
-          }
-        })
+        },
+      )
 
       return NextResponse.json(
-        {
-          error: 'فشل التحقق من كلمة المرور.',
-          diagnostic: {
-            stage: 'password_verification',
-            code: passwordError?.code ?? null,
-            message: passwordError?.message ?? null,
-            status: passwordError?.status ?? null,
-          },
-        },
+        { error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' },
         { status: 401 },
       )
     }
 
     /*
-     * 4. فحص الجهاز الحالي
+     * 4. البحث عن الجهاز باستخدام كوكي الجهاز.
      */
     const existingDeviceToken = getCookie(
       request,
       DEVICE_COOKIE,
     )
 
-    let device:
-      | {
-          id: string
-          status: string
-          device_name: string | null
-        }
-      | null = null
+    let device: TrustedDevice | null = null
 
     if (existingDeviceToken) {
       const tokenHash = hashDeviceToken(existingDeviceToken)
 
-      const {
-        data: existingDevice,
-        error: deviceLookupError,
-      } = await supabaseAdmin
-        .from('trusted_devices')
-        .select(`
-          id,
-          status,
-          device_name
-        `)
-        .eq('device_token_hash', tokenHash)
-        .eq('auth_user_id', profile.auth_user_id)
-        .maybeSingle()
+      const { data: existingDevice, error } =
+        await supabaseAdmin
+          .from('trusted_devices')
+          .select(`
+            id,
+            status,
+            device_name,
+            approved_device_type,
+            pending_device_type,
+            grace_period_days,
+            grace_expires_at
+          `)
+          .eq('device_token_hash', tokenHash)
+          .eq('auth_user_id', profile.auth_user_id)
+          .maybeSingle()
 
-      if (deviceLookupError) {
-        console.error('Trusted device lookup error:', {
-          code: deviceLookupError.code,
-          message: deviceLookupError.message,
-        })
+      if (error) {
+        console.error('Trusted device lookup error:', error)
 
         return NextResponse.json(
           { error: 'تعذر فحص الجهاز.' },
@@ -339,90 +443,96 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      if (existingDevice) {
-        device = existingDevice
-      }
+      device = existingDevice as TrustedDevice | null
     }
 
     /*
-     * 5. الجهاز مرفوض أو مسحوب
+     * 5. الجهاز مرفوض أو مسحوب الاعتماد.
      */
     if (
       device &&
       (device.status === 'rejected' ||
         device.status === 'revoked')
     ) {
-      void supabaseAdmin
-        .from('auth_audit_logs')
-        .insert({
-          auth_user_id: profile.auth_user_id,
-          trusted_device_id: device.id,
-          event_type: 'login_failed',
-          success: false,
-          ip_address: ipAddress,
-          user_agent: userAgent,
+      await writeAudit(
+        profile.auth_user_id,
+        'login_failed',
+        false,
+        {
+          deviceId: device.id,
+          ipAddress,
+          userAgent,
           metadata: {
             reason:
               device.status === 'rejected'
                 ? 'device_rejected'
                 : 'device_revoked',
-            username: profile.username,
           },
-        })
+        },
+      )
 
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           error: 'هذا الجهاز غير مصرح له بالدخول إلى النظام.',
           deviceStatus: device.status,
         },
         { status: 403 },
       )
+
+      return clearSessionCookie(response)
     }
 
     /*
-     * 6. الجهاز بانتظار الموافقة
+     * 6. الجهاز معلق بالفعل.
+     *
+     * نحدّث النوع المرصود لعرض أحدث محاولة في لوحة الإدارة.
      */
     if (device && device.status === 'pending') {
-      return NextResponse.json(
-        {
-          error: 'هذا الجهاز بانتظار موافقة مدير النظام.',
-          deviceStatus: 'pending',
-          deviceId: device.id,
-        },
-        { status: 403 },
+      const { error } = await supabaseAdmin
+        .from('trusted_devices')
+        .update({
+          pending_device_type: detectedType,
+          device_type_detected_at: new Date().toISOString(),
+        })
+        .eq('id', device.id)
+        .eq('auth_user_id', profile.auth_user_id)
+        .eq('status', 'pending')
+
+      if (error) {
+        console.error('Pending device update error:', error)
+      }
+
+      return deviceApprovalRequiredResponse(
+        'هذا الجهاز بانتظار موافقة مدير النظام.',
+        device.id,
       )
     }
 
     /*
-     * 7. تسجيل جهاز جديد
+     * 7. إنشاء سجل لجهاز جديد.
      */
     if (!device) {
       const deviceToken = randomBytes(32).toString('hex')
       const tokenHash = hashDeviceToken(deviceToken)
+      const now = new Date().toISOString()
 
-      const {
-        data: newDevice,
-        error: insertError,
-      } = await supabaseAdmin
-        .from('trusted_devices')
-        .insert({
-          auth_user_id: profile.auth_user_id,
-          device_name: 'جهاز جديد',
-          device_token_hash: tokenHash,
-          status: 'pending',
-        })
-        .select(`
-          id,
-          status,
-          device_name
-        `)
-        .single()
+      const { data: newDevice, error: insertError } =
+        await supabaseAdmin
+          .from('trusted_devices')
+          .insert({
+            auth_user_id: profile.auth_user_id,
+            device_name: 'جهاز جديد',
+            device_token_hash: tokenHash,
+            status: 'pending',
+            pending_device_type: detectedType,
+            device_type_detected_at: now,
+            grace_period_days: 30,
+          })
+          .select('id, status')
+          .single()
 
       if (insertError || !newDevice) {
-        console.error('Trusted device insert error:', {
-          code: insertError?.code ?? null,
-          message: insertError?.message ?? null,
-        })
+        console.error('Trusted device insert error:', insertError)
 
         return NextResponse.json(
           { error: 'تعذر تسجيل الجهاز الجديد.' },
@@ -430,28 +540,24 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      void supabaseAdmin
-        .from('auth_audit_logs')
-        .insert({
-          auth_user_id: profile.auth_user_id,
-          trusted_device_id: newDevice.id,
-          event_type: 'device_pending',
-          success: true,
-          ip_address: ipAddress,
-          user_agent: userAgent,
+      await writeAudit(
+        profile.auth_user_id,
+        'device_pending',
+        true,
+        {
+          deviceId: newDevice.id,
+          ipAddress,
+          userAgent,
           metadata: {
             source: 'login',
-            username: profile.username,
+            detected_device_type: detectedType,
           },
-        })
-
-      const response = NextResponse.json(
-        {
-          error: 'تم تسجيل جهازك الجديد، وهو بانتظار موافقة مدير النظام.',
-          deviceStatus: 'pending',
-          deviceId: newDevice.id,
         },
-        { status: 403 },
+      )
+
+      const response = deviceApprovalRequiredResponse(
+        'تم تسجيل جهازك الجديد، وهو بانتظار موافقة مدير النظام.',
+        newDevice.id,
       )
 
       response.cookies.set(DEVICE_COOKIE, deviceToken, {
@@ -466,40 +572,123 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 8. يجب أن يكون الجهاز معتمدًا
+     * 8. لا نسمح إلا للأجهزة المعتمدة.
      */
     if (device.status !== 'approved') {
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           error: 'لا يمكن تسجيل الدخول من هذا الجهاز.',
           deviceStatus: device.status,
         },
         { status: 403 },
       )
+
+      return clearSessionCookie(response)
     }
 
     /*
-     * 9. تحديث آخر استخدام للجهاز
+     * 9. التحقق من انتهاء مدة الثقة.
+     *
+     * تاريخ الانتهاء المفقود أو غير الصالح يعامل على أنه
+     * يحتاج إلى مراجعة، بدل السماح بثقة غير محددة المدة.
      */
-    const {
-      error: deviceUpdateError,
-    } = await supabaseAdmin
-      .from('trusted_devices')
-      .update({
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('id', device.id)
-      .eq('auth_user_id', profile.auth_user_id)
+    const graceExpiry = device.grace_expires_at
+      ? new Date(device.grace_expires_at).getTime()
+      : Number.NaN
+
+    const graceExpired =
+      !Number.isFinite(graceExpiry) ||
+      graceExpiry <= Date.now()
+
+    if (graceExpired) {
+      return await requireDeviceReapproval(
+        device,
+        profile.auth_user_id,
+        detectedType,
+        'grace_expired',
+        ipAddress,
+        userAgent,
+      )
+    }
+
+    /*
+     * 10. التحقق من نوع الجهاز.
+     */
+    const approvedType = device.approved_device_type
+
+    if (
+      approvedType &&
+      approvedType !== 'unknown' &&
+      detectedType !== approvedType
+    ) {
+      return await requireDeviceReapproval(
+        device,
+        profile.auth_user_id,
+        detectedType,
+        'device_type_changed',
+        ipAddress,
+        userAgent,
+      )
+    }
+
+    /*
+     * توافق مع الأجهزة التي اعتمدت قبل إضافة حقل النوع.
+     *
+     * عند كون النوع السابق null أو unknown، نحفظ النوع
+     * المكتشف كخط أساس للجهاز الذي سبق اعتماده.
+     */
+    if (
+      !approvedType ||
+      approvedType === 'unknown'
+    ) {
+      const { error } = await supabaseAdmin
+        .from('trusted_devices')
+        .update({
+          approved_device_type: detectedType,
+          device_type_detected_at: new Date().toISOString(),
+        })
+        .eq('id', device.id)
+        .eq('auth_user_id', profile.auth_user_id)
+        .eq('status', 'approved')
+
+      if (error) {
+        console.error('Device type initialization error:', error)
+
+        return NextResponse.json(
+          { error: 'تعذر التحقق من بيانات الجهاز.' },
+          { status: 500 },
+        )
+      }
+    }
+
+    /*
+     * 11. تحديث آخر استخدام للجهاز.
+     */
+    const { error: deviceUpdateError } =
+      await supabaseAdmin
+        .from('trusted_devices')
+        .update({
+          last_used_at: new Date().toISOString(),
+          device_type_detected_at: new Date().toISOString(),
+        })
+        .eq('id', device.id)
+        .eq('auth_user_id', profile.auth_user_id)
+        .eq('status', 'approved')
 
     if (deviceUpdateError) {
-      console.error('Trusted device update error:', {
-        code: deviceUpdateError.code,
-        message: deviceUpdateError.message,
-      })
+      console.error(
+        'Trusted device update error:',
+        deviceUpdateError,
+      )
+
+      return NextResponse.json(
+        { error: 'تعذر تحديث بيانات الجهاز.' },
+        { status: 500 },
+      )
     }
 
     /*
-     * 10. إنشاء الاستجابة
+     * 12. تجهيز جلسة Supabase.
      */
     const response = NextResponse.json({
       user: {
@@ -511,9 +700,6 @@ export async function POST(request: NextRequest) {
       deviceStatus: 'approved',
     })
 
-    /*
-     * 11. إنشاء Supabase SSR Client
-     */
     const supabase = createServerClient(
       supabaseUrl,
       publishableKey,
@@ -537,40 +723,16 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    /*
-     * 12. تثبيت جلسة Supabase Auth
-     */
     const session = passwordAuthData.session
 
-    const {
-      error: setSessionError,
-    } = await supabase.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    })
-    console.log('[LOGIN_DIAGNOSTIC] Supabase session cookie write:', {
-      hasSessionError: Boolean(setSessionError),
-      cookieNames: response.cookies
-        .getAll()
-        .filter(({ name }) =>
-          /^sb-.+-auth-token(?:\.\d+)?$/.test(name)
-        )
-        .map(({ name, value }) => ({
-          name,
-          length: value.length,
-        })),
-    })
-    if (setSessionError) {
-      console.error('Supabase session setup error:', {
-        message: setSessionError.message,
-        status: setSessionError.status,
+    const { error: setSessionError } =
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
       })
 
-      try {
-        await passwordClient.auth.signOut()
-      } catch (error) {
-        console.error('Password client cleanup error:', error)
-      }
+    if (setSessionError) {
+      console.error('Supabase session setup error:', setSessionError)
 
       return clearSessionCookie(
         NextResponse.json(
@@ -581,7 +743,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 13. إنشاء الجلسة النشطة
+     * 13. إنشاء جلسة النظام.
      */
     const loginAt = new Date()
 
@@ -590,34 +752,23 @@ export async function POST(request: NextRequest) {
         SESSION_COOKIE_MAX_DAYS * 24 * 60 * 60 * 1000,
     )
 
-    const {
-      data: activeSession,
-      error: sessionError,
-    } = await supabaseAdmin
-      .from('active_sessions')
-      .insert({
-        auth_user_id: profile.auth_user_id,
-        trusted_device_id: device.id,
-        login_at: loginAt.toISOString(),
-        last_activity_at: loginAt.toISOString(),
-        logout_at: null,
-        expires_at: expiresAt.toISOString(),
-        is_active: true,
-      })
-      .select('id')
-      .single()
+    const { data: activeSession, error: sessionError } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .insert({
+          auth_user_id: profile.auth_user_id,
+          trusted_device_id: device.id,
+          login_at: loginAt.toISOString(),
+          last_activity_at: loginAt.toISOString(),
+          logout_at: null,
+          expires_at: expiresAt.toISOString(),
+          is_active: true,
+        })
+        .select('id')
+        .single()
 
     if (sessionError || !activeSession?.id) {
-      console.error('Active session insert error:', {
-        code: sessionError?.code ?? null,
-        message: sessionError?.message ?? null,
-      })
-
-      try {
-        await supabase.auth.signOut()
-      } catch (error) {
-        console.error('Supabase cleanup error:', error)
-      }
+      console.error('Active session insert error:', sessionError)
 
       return clearSessionCookie(
         NextResponse.json(
@@ -628,31 +779,30 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 14. إغلاق الجلسات السابقة
+     * 14. إغلاق الجلسات السابقة للمستخدم.
      */
     const previousLogoutAt = new Date().toISOString()
 
-    const {
-      error: previousSessionsUpdateError,
-    } = await supabaseAdmin
-      .from('active_sessions')
-      .update({
-        is_active: false,
-        logout_at: previousLogoutAt,
-      })
-      .eq('auth_user_id', profile.auth_user_id)
-      .eq('is_active', true)
-      .neq('id', activeSession.id)
+    const { error: previousSessionsError } =
+      await supabaseAdmin
+        .from('active_sessions')
+        .update({
+          is_active: false,
+          logout_at: previousLogoutAt,
+        })
+        .eq('auth_user_id', profile.auth_user_id)
+        .eq('is_active', true)
+        .neq('id', activeSession.id)
 
-    if (previousSessionsUpdateError) {
-      console.error('Previous sessions update error:', {
-        code: previousSessionsUpdateError.code,
-        message: previousSessionsUpdateError.message,
-      })
+    if (previousSessionsError) {
+      console.error(
+        'Previous sessions update error:',
+        previousSessionsError,
+      )
     }
 
     /*
-     * 15. إعداد كوكي جلسة النظام
+     * 15. حفظ كوكي جلسة النظام.
      */
     response.cookies.set(SESSION_COOKIE, activeSession.id, {
       httpOnly: true,
@@ -663,38 +813,32 @@ export async function POST(request: NextRequest) {
     })
 
     /*
-     * 16. سجل نجاح تسجيل الدخول
+     * 16. سجل نجاح الدخول.
      */
-    void supabaseAdmin
-      .from('auth_audit_logs')
-      .insert({
-        auth_user_id: profile.auth_user_id,
-        trusted_device_id: device.id,
-        event_type: 'login_success',
-        success: true,
-        ip_address: ipAddress,
-        user_agent: userAgent,
+    await writeAudit(
+      profile.auth_user_id,
+      'login_success',
+      true,
+      {
+        deviceId: device.id,
+        ipAddress,
+        userAgent,
         metadata: {
           username: profile.username,
           active_session_id: activeSession.id,
           session_expires_at: expiresAt.toISOString(),
+          detected_device_type: detectedType,
           single_session: true,
         },
-      })
-      .then(({ error }) => {
-        if (error) {
-          console.error('Login success audit error:', error)
-        }
-      })
+      },
+    )
 
     return response
   } catch (error) {
     console.error('Login error:', error)
 
     return NextResponse.json(
-      {
-        error: 'حدث خطأ غير متوقع أثناء تسجيل الدخول.',
-      },
+      { error: 'حدث خطأ غير متوقع أثناء تسجيل الدخول.' },
       { status: 500 },
     )
   }
