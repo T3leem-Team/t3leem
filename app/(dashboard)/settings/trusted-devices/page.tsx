@@ -118,14 +118,26 @@ export default function TrustedDevicesPage() {
       const pending: TrustedDevice[] = Array.isArray(data.devices)
         ? data.devices
         : []
-
+      
       const approved: TrustedDevice[] = Array.isArray(data.approvedDevices)
         ? data.approvedDevices
         : []
-
-      setDevices(pending)
-      setApprovedDevices(approved)
-
+      
+      const sortDevicesByLatest = (items: TrustedDevice[]) =>
+        [...items].sort((a, b) => {
+          const dateA = new Date(
+            a.last_used_at || a.created_at,
+          ).getTime()
+      
+          const dateB = new Date(
+            b.last_used_at || b.created_at,
+          ).getTime()
+      
+          return dateB - dateA
+        })
+      
+      setDevices(sortDevicesByLatest(pending))
+      setApprovedDevices(sortDevicesByLatest(approved))
       setGraceDaysByDevice((previous) => {
         const next = { ...previous }
 
