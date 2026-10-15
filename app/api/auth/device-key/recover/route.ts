@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -8,14 +9,10 @@ import {
 
 export const runtime = 'nodejs'
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL!
-
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const publishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-
-const serviceRoleKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const DEVICE_COOKIE = 't3leem_device_token'
 const DEVICE_COOKIE_MAX_DAYS = 365
@@ -38,7 +35,7 @@ function hashToken(token: string) {
 async function verifyCredentials(
   username: string,
   password: string,
-) {
+): Promise<string | null> {
   const { data: profile, error: profileError } =
     await supabaseAdmin
       .from('user_profiles')
@@ -47,7 +44,7 @@ async function verifyCredentials(
       .maybeSingle()
 
   if (profileError || !profile || !profile.is_active) {
-    return false
+    return null
   }
 
   const { data: authData, error: authUserError } =
@@ -58,7 +55,7 @@ async function verifyCredentials(
   const email = authData.user?.email
 
   if (authUserError || !email) {
-    return false
+    return null
   }
 
   const passwordClient = createClient(
@@ -78,12 +75,17 @@ async function verifyCredentials(
       password,
     })
 
-  return Boolean(
-    !error &&
-    data.user &&
-    data.session &&
-    data.user.id === profile.auth_user_id,
-  )
+  if (
+    error ||
+    !data.user ||
+    !data.session ||
+    data.user.id !== profile.auth_user_id
+  ) {
+    return null
+  }
+
+  // نعيد معرف المستخدم الذي تحققنا منه بدل البحث عنه مرة أخرى.
+  return profile.auth_user_id
 }
 
 export async function POST(request: NextRequest) {
@@ -133,29 +135,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!(await verifyCredentials(username, password))) {
+    const userId = await verifyCredentials(
+      username,
+      password,
+    )
+
+    if (!userId) {
       return NextResponse.json(
         { error: 'تعذر التحقق من بيانات تسجيل الدخول.' },
         { status: 401 },
       )
     }
-
-    const { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select('auth_user_id')
-        .eq('username', username)
-        .eq('is_active', true)
-        .maybeSingle()
-
-    if (profileError || !profile) {
-      return NextResponse.json(
-        { error: 'تعذر التحقق من المستخدم.' },
-        { status: 401 },
-      )
-    }
-
-    const userId = profile.auth_user_id
 
     /*
      * 1. بدء استرجاع الجهاز.
@@ -189,10 +179,6 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        /*
-         * الجهاز المرفوض أو المسحوب الاعتماد
-         * لا يُسمح له باسترجاع هويته.
-         */
         if (
           currentDevice?.status === 'rejected' ||
           currentDevice?.status === 'revoked'
@@ -201,12 +187,6 @@ export async function POST(request: NextRequest) {
             status: 'blocked',
           })
         }
-
-        /*
-         * إذا كانت الكوكي تخص جهازًا pending،
-         * نكمل البحث عن المفتاح القديم المعتمد.
-         * لا نغيّر حالة الجهاز المعلّق ولا نعتمده.
-         */
       }
 
       /*
@@ -458,7 +438,6 @@ export async function POST(request: NextRequest) {
 
     /*
      * 10. إصدار كوكي جديدة للجهاز القديم المعتمد.
-     * لا ننشئ جهازًا معتمدًا جديدًا.
      */
     const deviceToken = randomBytes(32).toString('hex')
     const tokenHash = hashToken(deviceToken)
