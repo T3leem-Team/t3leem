@@ -73,6 +73,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
   console.info('[AUTH GUARD TIMING] entered validateCurrentAccess')
 
   try {
+    // 1. إنشاء عميل Supabase والتحقق من المستخدم.
     const supabase = await createSupabaseServerClient()
 
     markTiming('createSupabaseServerClient')
@@ -93,6 +94,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 2. قراءة ملفات تعريف الارتباط ورؤوس الطلب.
     const cookieStore = await cookies()
     const requestHeaders = await headers()
 
@@ -115,6 +117,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     markTiming('detect device type')
 
+    // 3. التحقق من الجلسة النشطة.
     const sessionQueryStartedAt = performance.now()
 
     const {
@@ -133,16 +136,19 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .eq('id', sessionId)
       .eq('auth_user_id', user.id)
       .maybeSingle()
-    
+
     console.info(
       '[AUTH GUARD TIMING] active_sessions query duration:',
       `${Math.round(performance.now() - sessionQueryStartedAt)}ms`,
     )
-    
+
     markTiming('query active_sessions')
 
     if (sessionError) {
-      console.error('Auth guard session lookup error:', sessionError)
+      console.error(
+        'Auth guard session lookup error:',
+        sessionError,
+      )
 
       markTiming('exit: session lookup error')
 
@@ -161,8 +167,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 4. التحقق من انتهاء صلاحية الجلسة.
     const now = Date.now()
-
     const expiresAt = new Date(session.expires_at).getTime()
 
     if (!Number.isFinite(expiresAt) || now >= expiresAt) {
@@ -176,8 +182,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 5. التحقق من مهلة الخمول.
     const lastActivity = new Date(session.last_activity_at).getTime()
-
     const idleTimeout = IDLE_TIMEOUT_MINUTES * 60 * 1000
 
     if (
@@ -194,19 +200,82 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabaseAdmin
+    // 6. حساب بصمة رمز الجهاز.
+    const hashStartedAt = performance.now()
+    const deviceTokenHash = await sha256(deviceToken)
+
+    console.info(
+      '[AUTH GUARD TIMING] device token hash duration:',
+      `${Math.round(performance.now() - hashStartedAt)}ms`,
+    )
+
+    markTiming('hash device token')
+
+    // 7. قراءة ملف المستخدم والجهاز بالتوازي.
+    //
+    // الاستعلامان مستقلان بعد التحقق من المستخدم والجلسة.
+    // لا يُسمح بالوصول إلا بعد نجاح جميع الفحوص أدناه.
+    const profileQueryStartedAt = performance.now()
+    const deviceQueryStartedAt = performance.now()
+
+    const profilePromise = supabaseAdmin
       .from('user_profiles')
       .select('id, username, role, is_active')
       .eq('auth_user_id', user.id)
       .maybeSingle()
+      .then((result) => {
+        console.info(
+          '[AUTH GUARD TIMING] user_profiles query duration:',
+          `${Math.round(performance.now() - profileQueryStartedAt)}ms`,
+        )
 
-    markTiming('query user_profiles')
+        return result
+      })
 
+    const devicePromise = supabaseAdmin
+      .from('trusted_devices')
+      .select(`
+        id,
+        status,
+        approved_device_type,
+        grace_period_days,
+        grace_expires_at
+      `)
+      .eq('id', session.trusted_device_id)
+      .eq('auth_user_id', user.id)
+      .eq('device_token_hash', deviceTokenHash)
+      .maybeSingle<TrustedDevice>()
+      .then((result) => {
+        console.info(
+          '[AUTH GUARD TIMING] trusted_devices query duration:',
+          `${Math.round(performance.now() - deviceQueryStartedAt)}ms`,
+        )
+
+        return result
+      })
+
+    const [
+      {
+        data: profile,
+        error: profileError,
+      },
+      {
+        data: device,
+        error: deviceError,
+      },
+    ] = await Promise.all([
+      profilePromise,
+      devicePromise,
+    ])
+
+    markTiming('parallel profile and device queries')
+
+    // 8. التحقق من ملف المستخدم.
     if (profileError) {
-      console.error('Auth guard profile lookup error:', profileError)
+      console.error(
+        'Auth guard profile lookup error:',
+        profileError,
+      )
 
       markTiming('exit: profile lookup error')
 
@@ -227,32 +296,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // التحقق من رمز الجهاز وربطه بالمستخدم والجلسة الحالية.
-    const deviceTokenHash = await sha256(deviceToken)
-
-    markTiming('hash device token')
-
-    const {
-      data: device,
-      error: deviceError,
-    } = await supabaseAdmin
-      .from('trusted_devices')
-      .select(`
-        id,
-        status,
-        approved_device_type,
-        grace_period_days,
-        grace_expires_at
-      `)
-      .eq('id', session.trusted_device_id)
-      .eq('auth_user_id', user.id)
-      .eq('device_token_hash', deviceTokenHash)
-      .maybeSingle<TrustedDevice>()
-
-    markTiming('query trusted_devices')
-
+    // 9. التحقق من الجهاز الموثوق.
     if (deviceError) {
-      console.error('Auth guard device lookup error:', deviceError)
+      console.error(
+        'Auth guard device lookup error:',
+        deviceError,
+      )
 
       markTiming('exit: device lookup error')
 
@@ -288,7 +337,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // انتهاء مدة الثقة: أعد الجهاز إلى انتظار الموافقة.
+    // 10. التحقق من انتهاء فترة الثقة.
     const graceExpiresAt = device.grace_expires_at
       ? new Date(device.grace_expires_at).getTime()
       : Number.NaN
@@ -312,6 +361,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 11. التحقق من نوع الجهاز المعتمد.
     const approvedDeviceType = normalizeDeviceType(
       device.approved_device_type,
     )
@@ -323,6 +373,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       approvedDeviceType === 'unknown'
     ) {
       if (detectedDeviceType !== 'unknown') {
+        const backfillStartedAt = performance.now()
+
         const { error: backfillError } = await supabaseAdmin
           .from('trusted_devices')
           .update({
@@ -332,6 +384,11 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
           .eq('id', device.id)
           .eq('auth_user_id', user.id)
           .eq('status', 'approved')
+
+        console.info(
+          '[AUTH GUARD TIMING] device type backfill duration:',
+          `${Math.round(performance.now() - backfillStartedAt)}ms`,
+        )
 
         markTiming('update missing approved device type')
 
@@ -369,6 +426,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
+    // 12. منح الوصول بعد اجتياز جميع الفحوص.
     markTiming('access granted')
 
     return {
