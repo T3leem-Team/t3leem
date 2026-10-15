@@ -1,4 +1,3 @@
-
 'use client'
 
 import { FormEvent, useState } from 'react'
@@ -57,7 +56,7 @@ export default function LoginPage() {
       lastTimingAt = now
     }
 
-    // قياس كل طلب شبكة على حدة، دون تسجيل كلمات المرور أو محتوى الطلب.
+    // قياس كل طلب شبكة على حدة دون تسجيل كلمات المرور أو محتوى الطلب.
     async function timedFetch(
       label: string,
       input: RequestInfo | URL,
@@ -107,6 +106,12 @@ export default function LoginPage() {
       markTiming('device key preparation')
 
       /*
+       * نستخدم النتيجة لتجنب تسجيل المفتاح مرة أخرى
+       * عندما يؤكد الخادم أن كوكي الجهاز الحالية معتمدة.
+       */
+      let deviceAlreadyTrusted = false
+
+      /*
        * 2. محاولة استرجاع الجهاز المعتمد.
        */
       if (deviceKey) {
@@ -150,6 +155,9 @@ export default function LoginPage() {
 
         if (challengeResponse.ok) {
           const recoveryStatus = challengeData?.status
+
+          deviceAlreadyTrusted =
+            recoveryStatus === 'already_trusted'
 
           if (recoveryStatus === 'blocked') {
             setError(
@@ -278,8 +286,13 @@ export default function LoginPage() {
 
       /*
        * 4. تسجيل مفتاح الجهاز.
+       *
+       * إذا كانت كوكي الجهاز الحالية مرتبطة بجهاز معتمد
+       * للمستخدم، نتجنب طلب التحدي والتسجيل المكررين.
+       *
+       * بقية الحالات تستخدم مسار التسجيل الحالي.
        */
-      if (deviceKey) {
+      if (deviceKey && !deviceAlreadyTrusted) {
         try {
           const challengeResponse = await timedFetch(
             'device key registration challenge',
@@ -357,8 +370,12 @@ export default function LoginPage() {
         }
 
         markTiming('device key registration stage')
+      } else if (deviceAlreadyTrusted) {
+        markTiming(
+          'device key registration skipped: already trusted',
+        )
       } else {
-        markTiming('device key registration skipped')
+        markTiming('device key registration skipped: no key')
       }
 
       /*
@@ -479,8 +496,8 @@ export default function LoginPage() {
 
       router.replace(destination)
 
-      // هذا القياس لا يعني أن الصفحة الجديدة اكتملت؛
-      // يقيس فقط الزمن حتى استدعاء router.replace.
+      // هذا القياس يقيس استدعاء router.replace فقط،
+      // ولا يعني أن الصفحة الجديدة اكتمل تحميلها.
       markTiming('router.replace called')
     } catch (submitError) {
       console.error(
