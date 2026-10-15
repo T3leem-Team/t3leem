@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/require-auth'
@@ -31,8 +32,9 @@ type AuthorizationResult = {
  * Checks whether the currently authenticated user
  * has a specific permission.
  *
- * Authorization is granted if the permission is assigned
- * either through the user's role or directly to the user.
+ * Permission checks are performed by one database RPC.
+ * A permission can be assigned through the user's role
+ * or directly to the user.
  */
 export async function requirePermission(
   permissionKey: string,
@@ -63,9 +65,7 @@ export async function requirePermission(
   const access = auth.access as AuthorizationAccess
 
   if (!permissionKey.trim()) {
-    console.error(
-      'Authorization error: empty permission key.',
-    )
+    console.error('Authorization error: empty permission key.')
 
     return {
       access: null,
@@ -81,30 +81,48 @@ export async function requirePermission(
   }
 
   try {
-    /*
-     * 1. Find the permission itself.
-     *
-     * A missing permission means there is a configuration/
-     * programming problem, not that the user is forbidden.
-     */
-    const {
-      data: permission,
-      error: permissionError,
-    } = await supabaseAdmin
-      .from('permissions')
-      .select('id')
-      .eq(
-        'permission_key',
-        permissionKey,
-      )
-      .limit(1)
-      .maybeSingle()
+    const { data: hasPermission, error } =
+      await supabaseAdmin.rpc('check_user_permission', {
+        p_profile_id: access.profileId,
+        p_role: access.role ?? '',
+        p_permission_key: permissionKey,
+      })
+
+    if (error) {
+      console.error('Permission lookup error:', error)
+
+      return {
+        access: null,
+        error: NextResponse.json(
+          {
+            authorized: false,
+            error: 'تعذر التحقق من الصلاحيات حالياً.',
+            reason: 'authorization_error',
+          },
+          { status: 503 },
+        ),
+      }
+    }
+
+    if (hasPermission === true) {
+      return {
+        access,
+        error: null,
+      }
+    }
+
+    // Distinguish a missing permission configuration
+    // from a valid permission that the user does not have.
+    const { data: permission, error: permissionError } =
+      await supabaseAdmin
+        .from('permissions')
+        .select('id')
+        .eq('permission_key', permissionKey)
+        .limit(1)
+        .maybeSingle()
 
     if (permissionError) {
-      console.error(
-        'Permission lookup error:',
-        permissionError,
-      )
+      console.error('Permission configuration lookup error:', permissionError)
 
       return {
         access: null,
@@ -120,9 +138,7 @@ export async function requirePermission(
     }
 
     if (!permission) {
-      console.error(
-        `Permission does not exist: ${permissionKey}`,
-      )
+      console.error(`Permission does not exist: ${permissionKey}`)
 
       return {
         access: null,
@@ -137,108 +153,6 @@ export async function requirePermission(
       }
     }
 
-    /*
-     * 2. Check permission through the user's role.
-     *
-     * We use the role only as a lookup key.
-     * We never special-case a role name such as "Admin".
-     */
-    if (access.role) {
-      const {
-        data: rolePermission,
-        error: rolePermissionError,
-      } = await supabaseAdmin
-        .from('role_permissions')
-        .select('permission_id')
-        .eq('role', access.role)
-        .eq(
-          'permission_id',
-          permission.id,
-        )
-        .limit(1)
-
-      if (rolePermissionError) {
-        console.error(
-          'Role permission lookup error:',
-          rolePermissionError,
-        )
-
-        return {
-          access: null,
-          error: NextResponse.json(
-            {
-              authorized: false,
-              error: 'تعذر التحقق من الصلاحيات حالياً.',
-              reason: 'authorization_error',
-            },
-            { status: 503 },
-          ),
-        }
-      }
-
-      if (
-        rolePermission &&
-        rolePermission.length > 0
-      ) {
-        return {
-          access,
-          error: null,
-        }
-      }
-    }
-
-    /*
-     * 3. Check permission assigned directly to the user.
-     */
-    const {
-      data: userPermission,
-      error: userPermissionError,
-    } = await supabaseAdmin
-      .from('user_permissions')
-      .select('permission_id')
-      .eq(
-        'user_profile_id',
-        access.profileId,
-      )
-      .eq(
-        'permission_id',
-        permission.id,
-      )
-      .limit(1)
-
-    if (userPermissionError) {
-      console.error(
-        'User permission lookup error:',
-        userPermissionError,
-      )
-
-      return {
-        access: null,
-        error: NextResponse.json(
-          {
-            authorized: false,
-            error: 'تعذر التحقق من الصلاحيات حالياً.',
-            reason: 'authorization_error',
-          },
-          { status: 503 },
-        ),
-      }
-    }
-
-    if (
-      userPermission &&
-      userPermission.length > 0
-    ) {
-      return {
-        access,
-        error: null,
-      }
-    }
-
-    /*
-     * 4. Authentication succeeded,
-     *    but authorization failed.
-     */
     return {
       access: null,
       error: NextResponse.json(
@@ -251,10 +165,7 @@ export async function requirePermission(
       ),
     }
   } catch (error) {
-    console.error(
-      'Authorization error:',
-      error,
-    )
+    console.error('Authorization error:', error)
 
     return {
       access: null,
@@ -277,9 +188,6 @@ export async function requirePermission(
  * Dashboard section access is managed through:
  * user_dashboard_sections
  * -> dashboard_sections
- *
- * This is separate from granular permissions such as
- * users.view, users.manage, analytics.view, etc.
  */
 export async function requireDashboardSection(
   sectionKey: string,
@@ -328,38 +236,21 @@ export async function requireDashboardSection(
   }
 
   try {
-    /*
-     * The user must have a mapping in
-     * user_dashboard_sections for the requested section.
-     *
-     * The section must also be active in dashboard_sections.
-     */
     const {
       data: userSection,
       error: userSectionError,
     } = await supabaseAdmin
       .from('user_dashboard_sections')
-      .select(
-        `
-          section_id,
-          dashboard_sections!inner (
-            section_key,
-            is_active
-          )
-        `,
-      )
-      .eq(
-        'user_profile_id',
-        access.profileId,
-      )
-      .eq(
-        'dashboard_sections.section_key',
-        sectionKey,
-      )
-      .eq(
-        'dashboard_sections.is_active',
-        true,
-      )
+      .select(`
+        section_id,
+        dashboard_sections!inner (
+          section_key,
+          is_active
+        )
+      `)
+      .eq('user_profile_id', access.profileId)
+      .eq('dashboard_sections.section_key', sectionKey)
+      .eq('dashboard_sections.is_active', true)
       .limit(1)
       .maybeSingle()
 
@@ -374,8 +265,7 @@ export async function requireDashboardSection(
         error: NextResponse.json(
           {
             authorized: false,
-            error:
-              'تعذر التحقق من صلاحية القسم حالياً.',
+            error: 'تعذر التحقق من صلاحية القسم حالياً.',
             reason: 'authorization_error',
           },
           { status: 503 },
@@ -389,8 +279,7 @@ export async function requireDashboardSection(
         error: NextResponse.json(
           {
             authorized: false,
-            error:
-              'ليس لديك صلاحية للوصول إلى هذا القسم.',
+            error: 'ليس لديك صلاحية للوصول إلى هذا القسم.',
             reason: 'forbidden',
           },
           { status: 403 },
@@ -413,8 +302,7 @@ export async function requireDashboardSection(
       error: NextResponse.json(
         {
           authorized: false,
-          error:
-            'تعذر التحقق من صلاحية القسم حالياً.',
+          error: 'تعذر التحقق من صلاحية القسم حالياً.',
           reason: 'authorization_error',
         },
         { status: 503 },
