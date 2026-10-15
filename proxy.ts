@@ -2,6 +2,37 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  const isApiRoute = pathname.startsWith('/api/')
+
+  const isPublicRoute =
+    pathname === '/login' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
+    pathname === '/register' ||
+    pathname === '/student-status' ||
+    pathname === '/api/auth/login'
+
+  /*
+   * لا نتحقق من جلسة Supabase في طلبات API هنا.
+   * كل API مسؤول عن التحقق من المصادقة والصلاحيات بنفسه.
+   */
+  if (isApiRoute) {
+    return NextResponse.next()
+  }
+
+  /*
+   * الصفحات العامة لا تحتاج فحص جلسة هنا.
+   * هذا يشمل صفحة تسجيل الدخول.
+   */
+  if (isPublicRoute) {
+    return NextResponse.next()
+  }
+
+  /*
+   * الصفحات المحمية فقط تصل إلى هذا الجزء.
+   */
   let response = NextResponse.next({
     request,
   })
@@ -20,10 +51,6 @@ export async function proxy(request: NextRequest) {
             ({ name, value, options }) => {
               request.cookies.set(name, value)
 
-              response = NextResponse.next({
-                request,
-              })
-
               response.cookies.set(
                 name,
                 value,
@@ -38,68 +65,19 @@ export async function proxy(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
-
-  const isApiRoute =
-    pathname.startsWith('/api/')
-
-  const isPublicRoute =
-    pathname === '/login' ||
-    pathname === '/forgot-password' ||
-    pathname === '/reset-password' ||
-    pathname === '/register' ||
-    pathname === '/student-status' ||
-    pathname === '/api/auth/login'
-
   /*
-   * ---------------------------------------------------------
-   * API
-   * ---------------------------------------------------------
-   *
-   * لا نعمل redirect للـAPI إلى /login.
-   *
-   * كل API مسؤول عن التحقق من المصادقة بنفسه
-   * عن طريق requireAuth() أو آلية الحماية الخاصة به.
-   *
-   * هذا مهم جدًا حتى لا يتحول طلب API غير مصادق
-   * إلى صفحة HTML /login.
+   * إذا لم توجد جلسة صالحة، نعيد المستخدم لتسجيل الدخول.
+   * لا نعتمد على وجود الكوكي وحده لإثبات صحة الجلسة.
    */
-  if (isApiRoute) {
-    return response
+  if (error || !user) {
+    const loginUrl = new URL('/login', request.url)
+
+    return NextResponse.redirect(loginUrl)
   }
 
-  /*
-   * ---------------------------------------------------------
-   * الصفحات العامة
-   * ---------------------------------------------------------
-   */
-  if (isPublicRoute) {
-    return response
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * حماية صفحات النظام
-   * ---------------------------------------------------------
-   */
-  if (!user) {
-    return NextResponse.redirect(
-      new URL('/login', request.url),
-    )
-  }
-
-  /*
-   * مهم:
-   *
-   * لا نعيد المستخدم من /login إلى /
-   * حتى لا ندخل في redirect loop عند انتهاء
-   * جلسة Supabase أو أثناء تنظيف جلسة T3LEEM.
-   *
-   * صفحة تسجيل الدخول تتعامل مع تسجيل الدخول
-   * بشكل مستقل.
-   */
   return response
 }
 
