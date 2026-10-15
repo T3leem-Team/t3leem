@@ -946,11 +946,10 @@ export default function TrustedDevicesPage() {
                           type="button"
                           aria-pressed={selected}
                           onClick={() => {
-                            // الاختيار لا يغلق القائمة ولا يلغي نفسه.
-                            // يمكن الضغط على مستخدم آخر للتبديل مباشرة.
                             setSelectedUserId(user.authUserId)
                             setDeviceFilter('all')
                             setDeviceSearch('')
+                            setShowUserList(false)
                           }}
                           className={`flex w-full items-center justify-between gap-3 border-r-4 px-3 py-3 text-right transition ${
                             selected
