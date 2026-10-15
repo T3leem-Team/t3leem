@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
@@ -786,7 +785,8 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 14. إنشاء جلسة النظام.
+     * 14. إنشاء جلسة النظام وإغلاق الجلسات السابقة
+     * داخل عملية واحدة في قاعدة البيانات.
      */
     const loginAt = new Date()
 
@@ -795,26 +795,23 @@ export async function POST(request: NextRequest) {
         SESSION_COOKIE_MAX_DAYS * 24 * 60 * 60 * 1000,
     )
 
-    const { data: activeSession, error: sessionError } =
-      await supabaseAdmin
-        .from('active_sessions')
-        .insert({
-          auth_user_id: profile.auth_user_id,
-          trusted_device_id: device.id,
-          login_at: loginAt.toISOString(),
-          last_activity_at: loginAt.toISOString(),
-          logout_at: null,
-          expires_at: expiresAt.toISOString(),
-          is_active: true,
-        })
-        .select('id')
-        .single()
+    const {
+      data: activeSessionId,
+      error: sessionError,
+    } = await supabaseAdmin.rpc(
+      'create_single_active_session',
+      {
+        p_auth_user_id: profile.auth_user_id,
+        p_trusted_device_id: device.id,
+        p_expires_at: expiresAt.toISOString(),
+      },
+    )
 
-    markLoginTiming('create active session')
+    markLoginTiming('create single active session')
 
-    if (sessionError || !activeSession?.id) {
+    if (sessionError || !activeSessionId) {
       console.error(
-        'Active session insert error:',
+        'Create single active session error:',
         sessionError,
       )
 
@@ -827,34 +824,9 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 15. إغلاق الجلسات السابقة للمستخدم.
+     * 15. حفظ كوكي جلسة النظام.
      */
-    const previousLogoutAt = new Date().toISOString()
-
-    const { error: previousSessionsError } =
-      await supabaseAdmin
-        .from('active_sessions')
-        .update({
-          is_active: false,
-          logout_at: previousLogoutAt,
-        })
-        .eq('auth_user_id', profile.auth_user_id)
-        .eq('is_active', true)
-        .neq('id', activeSession.id)
-
-    markLoginTiming('close previous sessions')
-
-    if (previousSessionsError) {
-      console.error(
-        'Previous sessions update error:',
-        previousSessionsError,
-      )
-    }
-
-    /*
-     * 16. حفظ كوكي جلسة النظام.
-     */
-    response.cookies.set(SESSION_COOKIE, activeSession.id, {
+    response.cookies.set(SESSION_COOKIE, activeSessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -863,7 +835,7 @@ export async function POST(request: NextRequest) {
     })
 
     /*
-     * 17. سجل نجاح الدخول.
+     * 16. سجل نجاح الدخول.
      */
     await writeAudit(
       profile.auth_user_id,
@@ -875,7 +847,7 @@ export async function POST(request: NextRequest) {
         userAgent,
         metadata: {
           username: profile.username,
-          active_session_id: activeSession.id,
+          active_session_id: activeSessionId,
           session_expires_at: expiresAt.toISOString(),
           detected_device_type: detectedType,
           single_session: true,
