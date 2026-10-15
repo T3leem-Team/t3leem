@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
           full_name,
           role,
           is_active,
-          eamil
+          email
         `)
         .eq('username', username)
         .maybeSingle()
