@@ -15,6 +15,7 @@ import {
   FileText,
   MessageSquareText,
   Plus,
+  Pencil,
   Settings2,
   UserX,
   UsersRound,
@@ -98,6 +99,9 @@ export function SupervisionView() {
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
+
+  const [editingRecordId, setEditingRecordId] =
+    useState<string | null>(null)
 
   const [selectedType, setSelectedType] =
     useState<SupervisionType>(
@@ -622,6 +626,7 @@ export function SupervisionView() {
         .select(
           `
             id,
+            teacher_id,
             type,
             record_date,
             reason,
@@ -686,6 +691,7 @@ export function SupervisionView() {
 
             return {
               id: row.id,
+              teacherId: row.teacher_id ?? null,
               type:
                 row.type as SupervisionType,
               date:
@@ -815,6 +821,7 @@ export function SupervisionView() {
   const openForm = (
     type: SupervisionType,
   ) => {
+    setEditingRecordId(null)
     setSelectedType(type)
     setSelectedTeacher('')
     setNoteScope('general')
@@ -825,12 +832,29 @@ export function SupervisionView() {
     setIsFormOpen(true)
   }
 
+  const openEditNote = (record: SupervisionRecord) => {
+    const recordWithTeacher = record as SupervisionRecord & {
+      teacherId?: string | null
+    }
+
+    setEditingRecordId(record.id)
+    setSelectedType('note')
+    setSelectedTeacher(recordWithTeacher.teacherId ?? '')
+    setNoteScope(recordWithTeacher.teacherId ? 'teacher' : 'general')
+    setSelectedDate(record.date)
+    setReason(record.reason ?? '')
+    setNote(record.note ?? '')
+    setError('')
+    setIsFormOpen(true)
+  }
+
   const closeForm = () => {
     if (isSaving) {
       return
     }
 
     setIsFormOpen(false)
+    setEditingRecordId(null)
   }
 
   const saveRecord = async (
@@ -949,38 +973,50 @@ export function SupervisionView() {
        * يحتاج أن يكون لدينا ربط واضح بين
        * سجل attendance والمعلم المسؤول عن الطالب.
        */
-      const {
-        error: insertError,
-      } =
-        await supabase
-          .from(
-            'supervision_records',
-          )
+      if (editingRecordId) {
+        // تعديل الملاحظة الصادرة نفسها بدل إنشاء سجل جديد.
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('supervision_records')
+          .update({
+            teacher_id: noteScope === 'general' ? null : selectedTeacher || null,
+            record_date: selectedDate,
+            reason: reason.trim(),
+            note: note.trim() || null,
+          })
+          .eq('id', editingRecordId)
+          .eq('course_id', selectedCourseId)
+          .eq('type', 'note')
+          .select('id')
+
+        if (updateError) {
+          throw updateError
+        }
+        if (!updatedRows || updatedRows.length === 0) {
+          throw new Error('لم يتم تعديل الملاحظة. تحقق من صلاحية التعديل على سجلات الإشراف.')
+        }
+      } else {
+        const {
+          error: insertError,
+        } = await supabase
+          .from('supervision_records')
           .insert({
-            academic_year_id:
-              academicYear.id,
-            course_id:
-              selectedCourseId,
+            academic_year_id: academicYear.id,
+            course_id: selectedCourseId,
             teacher_id:
               selectedType === 'day_cancelled' ||
               (selectedType === 'note' && noteScope === 'general')
                 ? null
                 : selectedTeacher || null,
-            type:
-              selectedType,
-            record_date:
-              selectedDate,
-            reason:
-              reason.trim(),
-            note:
-              note.trim() ||
-              null,
-            created_by:
-              createdBy,
+            type: selectedType,
+            record_date: selectedDate,
+            reason: reason.trim(),
+            note: note.trim() || null,
+            created_by: createdBy,
           })
 
-      if (insertError) {
-        throw insertError
+        if (insertError) {
+          throw insertError
+        }
       }
 
       await loadRecords(
@@ -988,6 +1024,7 @@ export function SupervisionView() {
       )
 
       setIsFormOpen(false)
+      setEditingRecordId(null)
       setSelectedTeacher('')
       setNoteScope('general')
       setReason('')
@@ -1428,6 +1465,19 @@ export function SupervisionView() {
                             </p>
                           </div>
                         </div>
+
+                        {record.type === 'note' && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0"
+                            onClick={() => openEditNote(record)}
+                            disabled={isSaving}
+                          >
+                            <Pencil className="size-4" />
+                            تعديل الملاحظة
+                          </Button>
+                        )}
                       </div>
                     )
                   },
@@ -1438,7 +1488,7 @@ export function SupervisionView() {
         </Card>
       </section>
 
-      {/* نموذج إضافة سجل */}
+      {/* نموذج إضافة أو تعديل سجل */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50">
           <button
@@ -1454,9 +1504,7 @@ export function SupervisionView() {
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {getTypeLabel(
-                    selectedType,
-                  )}
+                  {editingRecordId ? 'تعديل الملاحظة' : getTypeLabel(selectedType)}
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1762,7 +1810,9 @@ export function SupervisionView() {
 
                   {isSaving
                     ? 'جاري الحفظ...'
-                    : 'حفظ السجل'}
+                    : editingRecordId
+                      ? 'حفظ التعديلات'
+                      : 'حفظ السجل'}
                 </Button>
 
                 <Button
