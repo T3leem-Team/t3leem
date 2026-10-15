@@ -4,8 +4,25 @@ import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export async function GET() {
-  const { access, response } =
-    await requireAuth()
+  const startedAt = performance.now()
+  let lastTimingAt = startedAt
+
+  const markTiming = (step: string) => {
+    const now = performance.now()
+
+    console.info(
+      `[DASHBOARD SECTIONS TIMING] ${step}: ${
+        Math.round(now - lastTimingAt)
+      }ms | total: ${Math.round(now - startedAt)}ms`,
+    )
+
+    lastTimingAt = now
+  }
+
+  // المرحلة الأولى: التحقق من المستخدم
+  const { access, response } = await requireAuth()
+
+  markTiming('requireAuth')
 
   if (response) {
     return response
@@ -20,19 +37,21 @@ export async function GET() {
     )
   }
 
-  const supabase =
-    await createSupabaseServerClient()
+  // المرحلة الثانية: إنشاء عميل Supabase
+  const supabase = await createSupabaseServerClient()
 
+  markTiming('createSupabaseServerClient')
+
+  // المرحلة الثالثة: جلب الأقسام المخصصة للمستخدم
   const {
     data: userSections,
     error: userSectionsError,
   } = await supabase
     .from('user_dashboard_sections')
     .select('section_id')
-    .eq(
-      'user_profile_id',
-      access.profileId,
-    )
+    .eq('user_profile_id', access.profileId)
+
+  markTiming('query user_dashboard_sections')
 
   if (userSectionsError) {
     console.error(
@@ -42,19 +61,23 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحميل صلاحيات أقسام النظام',
+        error: 'تعذر تحميل صلاحيات أقسام النظام',
       },
       { status: 500 },
     )
   }
 
-  const sectionIds =
-    (userSections ?? []).map(
-      (item) => item.section_id,
-    )
+  const sectionIds = (userSections ?? []).map(
+    (item) => item.section_id,
+  )
+
+  console.info(
+    `[DASHBOARD SECTIONS TIMING] section count: ${sectionIds.length}`,
+  )
 
   if (sectionIds.length === 0) {
+    markTiming('no sections found')
+
     return NextResponse.json(
       {
         sections: [],
@@ -62,13 +85,13 @@ export async function GET() {
       {
         status: 200,
         headers: {
-          'Cache-Control':
-            'no-store',
+          'Cache-Control': 'no-store',
         },
       },
     )
   }
 
+  // المرحلة الرابعة: جلب تفاصيل الأقسام المسموحة
   const {
     data: sections,
     error: sectionsError,
@@ -83,6 +106,8 @@ export async function GET() {
       ascending: true,
     })
 
+  markTiming('query dashboard_sections')
+
   if (sectionsError) {
     console.error(
       'dashboard-sections data error:',
@@ -91,23 +116,25 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحميل أقسام النظام',
+        error: 'تعذر تحميل أقسام النظام',
       },
       { status: 500 },
     )
   }
 
-  return NextResponse.json(
+  const result = NextResponse.json(
     {
       sections: sections ?? [],
     },
     {
       status: 200,
       headers: {
-        'Cache-Control':
-          'no-store',
+        'Cache-Control': 'no-store',
       },
     },
   )
+
+  markTiming('response prepared')
+
+  return result
 }
