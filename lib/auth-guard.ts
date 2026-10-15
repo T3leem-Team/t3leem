@@ -115,6 +115,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     markTiming('detect device type')
 
+    const sessionQueryStartedAt = performance.now()
+
     const {
       data: session,
       error: sessionError,
@@ -131,7 +133,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .eq('id', sessionId)
       .eq('auth_user_id', user.id)
       .maybeSingle()
-
+    
+    console.info(
+      '[AUTH GUARD TIMING] active_sessions query duration:',
+      `${Math.round(performance.now() - sessionQueryStartedAt)}ms`,
+    )
+    
     markTiming('query active_sessions')
 
     if (sessionError) {
