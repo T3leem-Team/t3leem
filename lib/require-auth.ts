@@ -6,7 +6,18 @@ import { isMaintenanceMode } from '@/lib/system-control'
 const SESSION_COOKIE = 't3leem_session_id'
 
 export async function requireAuth() {
+  const startedAt = performance.now()
+
+  const markTiming = (step: string) => {
+    console.info(
+      `[REQUIRE AUTH TIMING] ${step}: ${
+        Math.round(performance.now() - startedAt)
+      }ms`,
+    )
+  }
+
   const access = await validateCurrentAccess()
+  markTiming('validateCurrentAccess')
 
   if (!access.allowed) {
     if (access.reason === 'guard_error') {
@@ -24,15 +35,10 @@ export async function requireAuth() {
     }
 
     try {
-      const supabase =
-        await createSupabaseServerClient()
-
+      const supabase = await createSupabaseServerClient()
       await supabase.auth.signOut()
     } catch (error) {
-      console.error(
-        'Auth cleanup error:',
-        error,
-      )
+      console.error('Auth cleanup error:', error)
     }
 
     const response = NextResponse.json(
@@ -44,17 +50,13 @@ export async function requireAuth() {
       { status: 401 },
     )
 
-    response.cookies.set(
-      SESSION_COOKIE,
-      '',
-      {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 0,
-      },
-    )
+    response.cookies.set(SESSION_COOKIE, '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    })
 
     return {
       access: null,
@@ -64,6 +66,7 @@ export async function requireAuth() {
 
   try {
     const maintenanceMode = await isMaintenanceMode()
+    markTiming('isMaintenanceMode')
 
     const isPrimaryAdmin =
       access.username === 'admin' &&
@@ -83,10 +86,7 @@ export async function requireAuth() {
       }
     }
   } catch (error) {
-    console.error(
-      'Maintenance check error:',
-      error,
-    )
+    console.error('Maintenance check error:', error)
 
     return {
       access: null,
@@ -99,6 +99,8 @@ export async function requireAuth() {
       ),
     }
   }
+
+  markTiming('complete')
 
   return {
     access,
