@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js'
 import { cookies, headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
@@ -28,11 +29,20 @@ type DeviceType =
   | 'linux_pc'
   | 'unknown'
 
-type TrustedDevice = {
-  id: string
-  status: string
+type AccessRecord = {
+  session_id: string
+  session_auth_user_id: string
+  trusted_device_id: string | null
+  session_is_active: boolean
+  last_activity_at: string | null
+  session_expires_at: string | null
+  profile_id: string | null
+  username: string | null
+  user_role: string | null
+  profile_is_active: boolean | null
+  device_id: string | null
+  device_status: string | null
   approved_device_type: string | null
-  grace_period_days: number | null
   grace_expires_at: string | null
 }
 
@@ -73,7 +83,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
   console.info('[AUTH GUARD TIMING] entered validateCurrentAccess')
 
   try {
-    // 1. إنشاء عميل Supabase والتحقق من المستخدم.
+    // 1. إنشاء عميل Supabase والتحقق من المستخدم الحقيقي.
+    // لا نحذف هذا التحقق حفاظًا على أمان الجلسة.
     const supabase = await createSupabaseServerClient()
 
     markTiming('createSupabaseServerClient')
@@ -117,90 +128,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     markTiming('detect device type')
 
-    // 3. التحقق من الجلسة النشطة.
-    const sessionQueryStartedAt = performance.now()
-
-    const {
-      data: session,
-      error: sessionError,
-    } = await supabaseAdmin
-      .from('active_sessions')
-      .select(`
-        id,
-        auth_user_id,
-        trusted_device_id,
-        is_active,
-        last_activity_at,
-        expires_at
-      `)
-      .eq('id', sessionId)
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-
-    console.info(
-      '[AUTH GUARD TIMING] active_sessions query duration:',
-      `${Math.round(performance.now() - sessionQueryStartedAt)}ms`,
-    )
-
-    markTiming('query active_sessions')
-
-    if (sessionError) {
-      console.error(
-        'Auth guard session lookup error:',
-        sessionError,
-      )
-
-      markTiming('exit: session lookup error')
-
-      return {
-        allowed: false,
-        reason: 'guard_error',
-      }
-    }
-
-    if (!session || !session.is_active) {
-      markTiming('exit: session inactive')
-
-      return {
-        allowed: false,
-        reason: 'session_inactive',
-      }
-    }
-
-    // 4. التحقق من انتهاء صلاحية الجلسة.
-    const now = Date.now()
-    const expiresAt = new Date(session.expires_at).getTime()
-
-    if (!Number.isFinite(expiresAt) || now >= expiresAt) {
-      await closeSession(session.id, user.id)
-
-      markTiming('close expired session')
-
-      return {
-        allowed: false,
-        reason: 'session_expired',
-      }
-    }
-
-    // 5. التحقق من مهلة الخمول.
-    const lastActivity = new Date(session.last_activity_at).getTime()
-    const idleTimeout = IDLE_TIMEOUT_MINUTES * 60 * 1000
-
-    if (
-      !Number.isFinite(lastActivity) ||
-      now - lastActivity >= idleTimeout
-    ) {
-      await closeSession(session.id, user.id)
-
-      markTiming('close idle session')
-
-      return {
-        allowed: false,
-        reason: 'idle_timeout',
-      }
-    }
-
-    // 6. حساب بصمة رمز الجهاز.
+    // 3. حساب بصمة رمز الجهاز.
     const hashStartedAt = performance.now()
     const deviceTokenHash = await sha256(deviceToken)
 
@@ -211,73 +139,34 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     markTiming('hash device token')
 
-    // 7. قراءة ملف المستخدم والجهاز بالتوازي.
-    //
-    // الاستعلامان مستقلان بعد التحقق من المستخدم والجلسة.
-    // لا يُسمح بالوصول إلا بعد نجاح جميع الفحوص أدناه.
-    const profileQueryStartedAt = performance.now()
-    const deviceQueryStartedAt = performance.now()
+    // 4. جلب الجلسة والمستخدم والجهاز باستعلام واحد.
+    // الدالة تعمل بصلاحية service_role فقط.
+    // تبقى مطابقة الجلسة للمستخدم وبصمة الجهاز إلزامية.
+    const rpcStartedAt = performance.now()
 
-    const profilePromise = supabaseAdmin
-      .from('user_profiles')
-      .select('id, username, role, is_active')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-      .then((result) => {
-        console.info(
-          '[AUTH GUARD TIMING] user_profiles query duration:',
-          `${Math.round(performance.now() - profileQueryStartedAt)}ms`,
-        )
+    const {
+      data: records,
+      error: accessError,
+    } = await supabaseAdmin.rpc('get_current_access_records', {
+      p_session_id: sessionId,
+      p_auth_user_id: user.id,
+      p_device_token_hash: deviceTokenHash,
+    })
 
-        return result
-      })
+    console.info(
+      '[AUTH GUARD TIMING] get_current_access_records duration:',
+      `${Math.round(performance.now() - rpcStartedAt)}ms`,
+    )
 
-    const devicePromise = supabaseAdmin
-      .from('trusted_devices')
-      .select(`
-        id,
-        status,
-        approved_device_type,
-        grace_period_days,
-        grace_expires_at
-      `)
-      .eq('id', session.trusted_device_id)
-      .eq('auth_user_id', user.id)
-      .eq('device_token_hash', deviceTokenHash)
-      .maybeSingle<TrustedDevice>()
-      .then((result) => {
-        console.info(
-          '[AUTH GUARD TIMING] trusted_devices query duration:',
-          `${Math.round(performance.now() - deviceQueryStartedAt)}ms`,
-        )
+    markTiming('get_current_access_records')
 
-        return result
-      })
-
-    const [
-      {
-        data: profile,
-        error: profileError,
-      },
-      {
-        data: device,
-        error: deviceError,
-      },
-    ] = await Promise.all([
-      profilePromise,
-      devicePromise,
-    ])
-
-    markTiming('parallel profile and device queries')
-
-    // 8. التحقق من ملف المستخدم.
-    if (profileError) {
+    if (accessError) {
       console.error(
-        'Auth guard profile lookup error:',
-        profileError,
+        'Auth guard access records RPC error:',
+        accessError,
       )
 
-      markTiming('exit: profile lookup error')
+      markTiming('exit: access records RPC error')
 
       return {
         allowed: false,
@@ -285,8 +174,58 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    if (!profile || !profile.is_active) {
-      await closeSession(session.id, user.id)
+    const record = (records?.[0] ?? null) as AccessRecord | null
+
+    if (!record || !record.session_is_active) {
+      markTiming('exit: session inactive')
+
+      return {
+        allowed: false,
+        reason: 'session_inactive',
+      }
+    }
+
+    // 5. التحقق من انتهاء صلاحية الجلسة.
+    const now = Date.now()
+    const expiresAt = record.session_expires_at
+      ? new Date(record.session_expires_at).getTime()
+      : Number.NaN
+
+    if (!Number.isFinite(expiresAt) || now >= expiresAt) {
+      await closeSession(record.session_id, user.id)
+
+      markTiming('close expired session')
+
+      return {
+        allowed: false,
+        reason: 'session_expired',
+      }
+    }
+
+    // 6. التحقق من مهلة الخمول.
+    const lastActivity = record.last_activity_at
+      ? new Date(record.last_activity_at).getTime()
+      : Number.NaN
+
+    const idleTimeout = IDLE_TIMEOUT_MINUTES * 60 * 1000
+
+    if (
+      !Number.isFinite(lastActivity) ||
+      now - lastActivity >= idleTimeout
+    ) {
+      await closeSession(record.session_id, user.id)
+
+      markTiming('close idle session')
+
+      return {
+        allowed: false,
+        reason: 'idle_timeout',
+      }
+    }
+
+    // 7. التحقق من ملف المستخدم.
+    if (!record.profile_id || !record.profile_is_active) {
+      await closeSession(record.session_id, user.id)
 
       markTiming('close session for inactive user')
 
@@ -296,23 +235,10 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 9. التحقق من الجهاز الموثوق.
-    if (deviceError) {
-      console.error(
-        'Auth guard device lookup error:',
-        deviceError,
-      )
-
-      markTiming('exit: device lookup error')
-
-      return {
-        allowed: false,
-        reason: 'guard_error',
-      }
-    }
-
-    if (!device) {
-      await closeSession(session.id, user.id)
+    // 8. التحقق من الجهاز الموثوق وبصمة الرمز.
+    // عدم وجود device_id يعني أن الجهاز لم يطابق البصمة المسجلة.
+    if (!record.device_id) {
+      await closeSession(record.session_id, user.id)
 
       markTiming('close session for unapproved device')
 
@@ -323,23 +249,23 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     // الجهاز مرفوض أو ملغي أو بانتظار الموافقة.
-    if (device.status !== 'approved') {
-      await closeDeviceSessions(device.id, user.id)
+    if (record.device_status !== 'approved') {
+      await closeDeviceSessions(record.device_id, user.id)
 
       markTiming('close sessions for device status')
 
       return {
         allowed: false,
         reason:
-          device.status === 'pending'
+          record.device_status === 'pending'
             ? 'device_approval_required'
             : 'device_not_approved',
       }
     }
 
-    // 10. التحقق من انتهاء فترة الثقة.
-    const graceExpiresAt = device.grace_expires_at
-      ? new Date(device.grace_expires_at).getTime()
+    // 9. التحقق من انتهاء فترة الثقة.
+    const graceExpiresAt = record.grace_expires_at
+      ? new Date(record.grace_expires_at).getTime()
       : Number.NaN
 
     if (
@@ -347,7 +273,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       now >= graceExpiresAt
     ) {
       await requireDeviceReapproval({
-        deviceId: device.id,
+        deviceId: record.device_id,
         authUserId: user.id,
         detectedDeviceType,
         reason: 'grace_period_expired',
@@ -361,15 +287,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 11. التحقق من نوع الجهاز المعتمد.
+    // 10. التحقق من نوع الجهاز المعتمد.
     const approvedDeviceType = normalizeDeviceType(
-      device.approved_device_type,
+      record.approved_device_type,
     )
 
     // للأجهزة القديمة التي لا يوجد لها نوع مسجل:
-    // احفظ النوع الحالي مرة واحدة لتجنب تعطيلها بلا داعٍ.
+    // نحفظ النوع الحالي مرة واحدة لتجنب تعطيلها بلا داعٍ.
     if (
-      !device.approved_device_type ||
+      !record.approved_device_type ||
       approvedDeviceType === 'unknown'
     ) {
       if (detectedDeviceType !== 'unknown') {
@@ -381,7 +307,7 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
             approved_device_type: detectedDeviceType,
             device_type_detected_at: new Date().toISOString(),
           })
-          .eq('id', device.id)
+          .eq('id', record.device_id)
           .eq('auth_user_id', user.id)
           .eq('status', 'approved')
 
@@ -410,9 +336,9 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       detectedDeviceType !== 'unknown' &&
       approvedDeviceType !== detectedDeviceType
     ) {
-      // تغيّر نوع الجهاز: أعده إلى انتظار الموافقة.
+      // تغيّر نوع الجهاز: نعيده إلى انتظار الموافقة.
       await requireDeviceReapproval({
-        deviceId: device.id,
+        deviceId: record.device_id,
         authUserId: user.id,
         detectedDeviceType,
         reason: 'device_type_changed',
@@ -426,17 +352,17 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       }
     }
 
-    // 12. منح الوصول بعد اجتياز جميع الفحوص.
+    // 11. منح الوصول بعد اجتياز جميع الفحوص.
     markTiming('access granted')
 
     return {
       allowed: true,
       userId: user.id,
-      username: profile.username,
-      sessionId: session.id,
-      deviceId: device.id,
-      profileId: profile.id,
-      role: profile.role,
+      username: record.username ?? undefined,
+      sessionId: record.session_id,
+      deviceId: record.device_id,
+      profileId: record.profile_id,
+      role: record.user_role ?? undefined,
     }
   } catch (error) {
     console.error('Auth guard error:', error)
@@ -486,7 +412,7 @@ async function requireDeviceReapproval({
   }
 
   // أغلق الجلسات حتى لو فشل تحديث حالة الجهاز.
-  // الحارس سيرفض السماح بالوصول في الطلب الحالي على أي حال.
+  // الحارس سيرفض الوصول في الطلب الحالي على أي حال.
   await closeDeviceSessions(deviceId, authUserId)
 
   console.warn('Device requires new approval:', {
