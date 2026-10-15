@@ -321,7 +321,8 @@ export async function POST(request: NextRequest) {
           username,
           full_name,
           role,
-          is_active
+          is_active,
+          eamil
         `)
         .eq('username', username)
         .maybeSingle()
@@ -347,27 +348,24 @@ export async function POST(request: NextRequest) {
     /*
      * 2. التحقق من حساب Supabase Auth.
      */
-    const { data: authUser, error: authUserError } =
-      await supabaseAdmin.auth.admin.getUserById(
-        profile.auth_user_id,
-      )
+    const email =
+  typeof profile.email === 'string'
+    ? profile.email.trim()
+    : ''
 
-    markLoginTiming('auth user lookup')
+markLoginTiming('auth email from profile')
 
-    if (authUserError || !authUser.user?.email) {
-      console.error(
-        'Login Auth user lookup error:',
-        authUserError,
-      )
+if (!email) {
+  console.error(
+    'Login profile email missing:',
+    profile.auth_user_id,
+  )
 
-      return NextResponse.json(
-        { error: 'تعذر التحقق من حساب المستخدم.' },
-        { status: 500 },
-      )
-    }
-
-    const email = authUser.user.email
-
+  return NextResponse.json(
+    { error: 'تعذر التحقق من حساب المستخدم.' },
+    { status: 500 },
+  )
+}
     /*
      * 3. التحقق من كلمة المرور.
      */
