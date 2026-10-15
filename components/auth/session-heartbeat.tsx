@@ -50,7 +50,7 @@ export function SessionHeartbeat() {
       }
     }
 
-    void checkSession()
+    
 
     const heartbeatTimer =
       window.setInterval(
