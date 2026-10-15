@@ -72,11 +72,76 @@ type DeviceFilter = 'all' | 'pending' | 'approved' | 'expired'
 const DEFAULT_GRACE_DAYS = 30
 const MAX_GRACE_DAYS = 3650
 
+/**
+ * تاريخ ترتيب الجهاز:
+ * 1. آخر استخدام، إن وجد.
+ * 2. تاريخ الموافقة، إن لم يوجد استخدام.
+ * 3. تاريخ التسجيل عند عدم توفر التاريخين السابقين.
+ */
+function getDeviceRecencyTimestamp(device: TrustedDevice): number {
+  const value =
+    device.last_used_at ||
+    device.approved_at ||
+    device.created_at
+
+  const timestamp = new Date(value).getTime()
+
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+/**
+ * يرجع أحدث جهاز معتمد من كل نوع.
+ *
+ * هذه الدالة للعرض فقط، ولا تحذف أي سجل من قاعدة البيانات.
+ * الأجهزة التي لا يُعرف نوعها تُجمع تحت نوع unknown.
+ */
+function getLatestApprovedDevicesByType(
+  devices: TrustedDevice[],
+): TrustedDevice[] {
+  const latestByType = new Map<string, TrustedDevice>()
+
+  for (const device of devices) {
+    if (device.status !== 'approved') {
+      continue
+    }
+
+    const rawType =
+      device.approved_device_type ||
+      device.pending_device_type ||
+      'unknown'
+
+    const typeKey = rawType.trim().toLowerCase() || 'unknown'
+
+    const current = latestByType.get(typeKey)
+
+    if (
+      !current ||
+      getDeviceRecencyTimestamp(device) >
+        getDeviceRecencyTimestamp(current)
+    ) {
+      latestByType.set(typeKey, device)
+    }
+  }
+
+  return Array.from(latestByType.values()).sort(
+    (a, b) =>
+      getDeviceRecencyTimestamp(b) -
+      getDeviceRecencyTimestamp(a),
+  )
+}
+
 export default function TrustedDevicesPage() {
   const router = useRouter()
 
+  // جميع الأجهزة المعلقة
   const [devices, setDevices] = useState<TrustedDevice[]>([])
-  const [approvedDevices, setApprovedDevices] = useState<TrustedDevice[]>([])
+
+  // جميع الأجهزة المعتمدة الموجودة في قاعدة البيانات
+  // نحتفظ بها جميعًا، لكن نعرض أحدث جهاز من كل نوع فقط.
+  const [approvedDevices, setApprovedDevices] = useState<
+    TrustedDevice[]
+  >([])
+
   const [graceDaysByDevice, setGraceDaysByDevice] = useState<
     Record<string, number>
   >({})
@@ -88,7 +153,9 @@ export default function TrustedDevicesPage() {
   const [success, setSuccess] = useState('')
 
   const [userSearch, setUserSearch] = useState('')
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(
+    null,
+  )
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all')
   const [deviceSearch, setDeviceSearch] = useState('')
   const [showUserList, setShowUserList] = useState(true)
@@ -118,26 +185,23 @@ export default function TrustedDevicesPage() {
       const pending: TrustedDevice[] = Array.isArray(data.devices)
         ? data.devices
         : []
-      
-      const approved: TrustedDevice[] = Array.isArray(data.approvedDevices)
+
+      const approved: TrustedDevice[] = Array.isArray(
+        data.approvedDevices,
+      )
         ? data.approvedDevices
         : []
-      
+
       const sortDevicesByLatest = (items: TrustedDevice[]) =>
-        [...items].sort((a, b) => {
-          const dateA = new Date(
-            a.last_used_at || a.created_at,
-          ).getTime()
-      
-          const dateB = new Date(
-            b.last_used_at || b.created_at,
-          ).getTime()
-      
-          return dateB - dateA
-        })
-      
+        [...items].sort(
+          (a, b) =>
+            getDeviceRecencyTimestamp(b) -
+            getDeviceRecencyTimestamp(a),
+        )
+
       setDevices(sortDevicesByLatest(pending))
       setApprovedDevices(sortDevicesByLatest(approved))
+
       setGraceDaysByDevice((previous) => {
         const next = { ...previous }
 
@@ -378,20 +442,44 @@ export default function TrustedDevicesPage() {
   }, [userGroups, userSearch])
 
   const selectedUser = useMemo(
-    () => userGroups.find((user) => user.authUserId === selectedUserId) ?? null,
+    () =>
+      userGroups.find((user) => user.authUserId === selectedUserId) ??
+      null,
     [userGroups, selectedUserId],
   )
 
   useEffect(() => {
-    if (selectedUserId && !userGroups.some((user) => user.authUserId === selectedUserId)) {
+    if (
+      selectedUserId &&
+      !userGroups.some((user) => user.authUserId === selectedUserId)
+    ) {
       setSelectedUserId(null)
     }
   }, [userGroups, selectedUserId])
 
+  /**
+   * الأجهزة التي ستظهر للمستخدم المختار:
+   * - جميع الأجهزة المعلقة.
+   * - أحدث جهاز معتمد من كل نوع فقط.
+   *
+   * لا يؤثر ذلك على سجلات Supabase.
+   */
   const selectedUserDevices = useMemo(() => {
     if (!selectedUser) return []
 
-    return [...selectedUser.pendingDevices, ...selectedUser.approvedDevices]
+    const latestApproved = getLatestApprovedDevicesByType(
+      selectedUser.approvedDevices,
+    )
+
+    return [...selectedUser.pendingDevices, ...latestApproved]
+  }, [selectedUser])
+
+  const selectedUserVisibleApprovedCount = useMemo(() => {
+    if (!selectedUser) return 0
+
+    return getLatestApprovedDevicesByType(
+      selectedUser.approvedDevices,
+    ).length
   }, [selectedUser])
 
   const filteredDevices = useMemo(() => {
@@ -422,7 +510,11 @@ export default function TrustedDevicesPage() {
       const name = (device.device_name ?? '').toLocaleLowerCase('ar')
       const id = device.id.toLocaleLowerCase('ar')
 
-      return type.includes(query) || name.includes(query) || id.includes(query)
+      return (
+        type.includes(query) ||
+        name.includes(query) ||
+        id.includes(query)
+      )
     })
   }, [selectedUserDevices, deviceFilter, deviceSearch])
 
@@ -543,12 +635,18 @@ export default function TrustedDevicesPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs text-muted-foreground">انتهاء الثقة</p>
-                    <p className="mt-1">{formatDate(device.grace_expires_at)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      انتهاء الثقة
+                    </p>
+                    <p className="mt-1">
+                      {formatDate(device.grace_expires_at)}
+                    </p>
                   </div>
 
                   <div>
-                    <p className="text-xs text-muted-foreground">تاريخ الموافقة</p>
+                    <p className="text-xs text-muted-foreground">
+                      تاريخ الموافقة
+                    </p>
                     <p className="mt-1">{formatDate(device.approved_at)}</p>
                   </div>
                 </>
@@ -807,7 +905,12 @@ export default function TrustedDevicesPage() {
                   {filteredUsers.map((user) => {
                     const selected = user.authUserId === selectedUserId
                     const userPendingCount = user.pendingDevices.length
-                    const userApprovedCount = user.approvedDevices.length
+
+                    // العدد المعروض: أحدث جهاز معتمد من كل نوع.
+                    const userApprovedCount =
+                      getLatestApprovedDevicesByType(
+                        user.approvedDevices,
+                      ).length
 
                     return (
                       <button
@@ -834,7 +937,9 @@ export default function TrustedDevicesPage() {
                             </p>
                             <p className="truncate text-xs text-muted-foreground">
                               @{user.username}
-                              {user.role ? ` · ${getRoleName(user.role)}` : ''}
+                              {user.role
+                                ? ` · ${getRoleName(user.role)}`
+                                : ''}
                             </p>
                           </div>
                         </div>
@@ -879,7 +984,7 @@ export default function TrustedDevicesPage() {
               </CardTitle>
               <CardDescription>
                 معلقة: {selectedUser.pendingDevices.length} · معتمدة:{' '}
-                {selectedUser.approvedDevices.length}
+                {selectedUserVisibleApprovedCount}
               </CardDescription>
             </CardHeader>
 
@@ -911,7 +1016,9 @@ export default function TrustedDevicesPage() {
                       <select
                         value={deviceFilter}
                         onChange={(event) =>
-                          setDeviceFilter(event.target.value as DeviceFilter)
+                          setDeviceFilter(
+                            event.target.value as DeviceFilter,
+                          )
                         }
                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                       >
@@ -930,7 +1037,9 @@ export default function TrustedDevicesPage() {
                       <input
                         type="search"
                         value={deviceSearch}
-                        onChange={(event) => setDeviceSearch(event.target.value)}
+                        onChange={(event) =>
+                          setDeviceSearch(event.target.value)
+                        }
                         placeholder="اسم الجهاز أو نوعه..."
                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
                       />
@@ -956,7 +1065,7 @@ export default function TrustedDevicesPage() {
             </CardContent>
           </Card>
 
-          {/* الأجهزة المعلقة */}
+          {/* الأجهزة المعلقة: تبقى جميعها ظاهرة */}
           {(deviceFilter === 'all' || deviceFilter === 'pending') && (
             <Card>
               <CardHeader className="pb-3">
@@ -964,7 +1073,11 @@ export default function TrustedDevicesPage() {
                   <Clock3 className="h-5 w-5" />
                   الأجهزة المعلقة
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                    {filteredDevices.filter((device) => device.status === 'pending').length}
+                    {
+                      filteredDevices.filter(
+                        (device) => device.status === 'pending',
+                      ).length
+                    }
                   </span>
                 </CardTitle>
                 <CardDescription>
@@ -973,7 +1086,9 @@ export default function TrustedDevicesPage() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                {filteredDevices.filter((device) => device.status === 'pending').length === 0 ? (
+                {filteredDevices.filter(
+                  (device) => device.status === 'pending',
+                ).length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
                     لا توجد أجهزة معلقة مطابقة.
                   </p>
@@ -986,7 +1101,7 @@ export default function TrustedDevicesPage() {
             </Card>
           )}
 
-          {/* الأجهزة المعتمدة */}
+          {/* الأجهزة المعتمدة: أحدث جهاز واحد من كل نوع */}
           {(deviceFilter === 'all' ||
             deviceFilter === 'approved' ||
             deviceFilter === 'expired') && (
@@ -1004,12 +1119,15 @@ export default function TrustedDevicesPage() {
                   </span>
                 </CardTitle>
                 <CardDescription>
-                  يمكنك تعديل مدة الثقة أو إلغاء اعتماد الجهاز دون حذف سجله.
+                  يظهر أحدث جهاز من كل نوع. يمكنك تعديل مدة الثقة أو إلغاء
+                  اعتماد الجهاز دون حذف سجله.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-3">
-                {filteredDevices.filter((device) => device.status === 'approved').length === 0 ? (
+                {filteredDevices.filter(
+                  (device) => device.status === 'approved',
+                ).length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
                     لا توجد أجهزة معتمدة مطابقة.
                   </p>
@@ -1033,8 +1151,10 @@ export default function TrustedDevicesPage() {
       )}
 
       <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
-        حالة الجهاز ومدة الثقة يجب التحقق منهما في الخادم أيضًا. تغيير الفلاتر
-        هنا يؤثر على العرض فقط ولا يغيّر حالة الأجهزة في قاعدة البيانات.
+        حالة الجهاز ومدة الثقة يجب التحقق منهما في الخادم أيضًا. تغيير
+        الفلاتر هنا يؤثر على العرض فقط ولا يغيّر حالة الأجهزة في قاعدة
+        البيانات. حذف الأجهزة القديمة بعد 45 يومًا يبقى مسؤولية مهمة
+        التنظيف المجدولة في Supabase.
       </div>
     </div>
   )
