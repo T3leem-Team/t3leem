@@ -47,16 +47,46 @@ export type GuardResult = {
   reason?: string
 }
 
+/**
+ * قياس زمن كل خطوة والزمن الإجمالي منذ بداية التحقق.
+ */
+function createGuardTimer() {
+  const startedAt = performance.now()
+  let lastAt = startedAt
+
+  return (step: string) => {
+    const now = performance.now()
+    const stepDuration = Math.round(now - lastAt)
+    const totalDuration = Math.round(now - startedAt)
+
+    console.info(
+      `[AUTH GUARD TIMING] ${step}: ${stepDuration}ms | total: ${totalDuration}ms`,
+    )
+
+    lastAt = now
+  }
+}
+
 export async function validateCurrentAccess(): Promise<GuardResult> {
+  const markTiming = createGuardTimer()
+
+  console.info('[AUTH GUARD TIMING] entered validateCurrentAccess')
+
   try {
     const supabase = await createSupabaseServerClient()
+
+    markTiming('createSupabaseServerClient')
 
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
+    markTiming('supabase.auth.getUser')
+
     if (authError || !user) {
+      markTiming('exit: not_authenticated')
+
       return {
         allowed: false,
         reason: 'not_authenticated',
@@ -66,10 +96,14 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const cookieStore = await cookies()
     const requestHeaders = await headers()
 
+    markTiming('cookies and headers')
+
     const sessionId = cookieStore.get(SESSION_COOKIE)?.value
     const deviceToken = cookieStore.get(DEVICE_COOKIE)?.value
 
     if (!sessionId || !deviceToken) {
+      markTiming('exit: missing_credentials')
+
       return {
         allowed: false,
         reason: 'missing_credentials',
@@ -78,6 +112,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     const userAgent = requestHeaders.get('user-agent') ?? ''
     const detectedDeviceType = detectDeviceType(userAgent)
+
+    markTiming('detect device type')
 
     const {
       data: session,
@@ -96,8 +132,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
+    markTiming('query active_sessions')
+
     if (sessionError) {
       console.error('Auth guard session lookup error:', sessionError)
+
+      markTiming('exit: session lookup error')
 
       return {
         allowed: false,
@@ -106,6 +146,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
 
     if (!session || !session.is_active) {
+      markTiming('exit: session inactive')
+
       return {
         allowed: false,
         reason: 'session_inactive',
@@ -118,6 +160,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     if (!Number.isFinite(expiresAt) || now >= expiresAt) {
       await closeSession(session.id, user.id)
+
+      markTiming('close expired session')
 
       return {
         allowed: false,
@@ -135,6 +179,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     ) {
       await closeSession(session.id, user.id)
 
+      markTiming('close idle session')
+
       return {
         allowed: false,
         reason: 'idle_timeout',
@@ -150,8 +196,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
+    markTiming('query user_profiles')
+
     if (profileError) {
       console.error('Auth guard profile lookup error:', profileError)
+
+      markTiming('exit: profile lookup error')
 
       return {
         allowed: false,
@@ -162,6 +212,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     if (!profile || !profile.is_active) {
       await closeSession(session.id, user.id)
 
+      markTiming('close session for inactive user')
+
       return {
         allowed: false,
         reason: 'user_inactive',
@@ -170,6 +222,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     // التحقق من رمز الجهاز وربطه بالمستخدم والجلسة الحالية.
     const deviceTokenHash = await sha256(deviceToken)
+
+    markTiming('hash device token')
 
     const {
       data: device,
@@ -188,8 +242,12 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       .eq('device_token_hash', deviceTokenHash)
       .maybeSingle<TrustedDevice>()
 
+    markTiming('query trusted_devices')
+
     if (deviceError) {
       console.error('Auth guard device lookup error:', deviceError)
+
+      markTiming('exit: device lookup error')
 
       return {
         allowed: false,
@@ -199,6 +257,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
 
     if (!device) {
       await closeSession(session.id, user.id)
+
+      markTiming('close session for unapproved device')
 
       return {
         allowed: false,
@@ -210,11 +270,14 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     if (device.status !== 'approved') {
       await closeDeviceSessions(device.id, user.id)
 
+      markTiming('close sessions for device status')
+
       return {
         allowed: false,
-        reason: device.status === 'pending'
-          ? 'device_approval_required'
-          : 'device_not_approved',
+        reason:
+          device.status === 'pending'
+            ? 'device_approval_required'
+            : 'device_not_approved',
       }
     }
 
@@ -233,6 +296,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
         detectedDeviceType,
         reason: 'grace_period_expired',
       })
+
+      markTiming('require device reapproval: grace period expired')
 
       return {
         allowed: false,
@@ -261,11 +326,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
           .eq('auth_user_id', user.id)
           .eq('status', 'approved')
 
+        markTiming('update missing approved device type')
+
         if (backfillError) {
           console.error(
             'Auth guard device type backfill error:',
             backfillError,
           )
+
+          markTiming('exit: device type update error')
 
           return {
             allowed: false,
@@ -285,11 +354,15 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
         reason: 'device_type_changed',
       })
 
+      markTiming('require device reapproval: device type changed')
+
       return {
         allowed: false,
         reason: 'device_approval_required',
       }
     }
+
+    markTiming('access granted')
 
     return {
       allowed: true,
@@ -302,6 +375,8 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     }
   } catch (error) {
     console.error('Auth guard error:', error)
+
+    markTiming('caught error')
 
     return {
       allowed: false,
@@ -417,7 +492,10 @@ function detectDeviceType(userAgent: string): DeviceType {
     return 'unknown'
   }
 
-  if (/ipad/.test(ua) || (/macintosh/.test(ua) && /mobile/.test(ua))) {
+  if (
+    /ipad/.test(ua) ||
+    (/macintosh/.test(ua) && /mobile/.test(ua))
+  ) {
     return 'ipad'
   }
 
