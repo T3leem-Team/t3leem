@@ -2,20 +2,23 @@
 
 import {
   ArrowRight,
+  Ban,
+  CalendarClock,
   Check,
+  ChevronDown,
   Clock3,
+  Filter,
   Loader2,
   MonitorSmartphone,
   RefreshCw,
+  Search,
   ShieldCheck,
   UserRound,
+  Users,
   X,
-  Ban,
-  CalendarClock,
-  Hourglass,
 } from 'lucide-react'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { PageHeader } from '@/components/dashboard/page-header'
@@ -55,6 +58,17 @@ type DeviceAction =
   | 'revoke'
   | 'update_grace_period'
 
+type UserGroup = {
+  authUserId: string
+  username: string
+  fullName: string | null
+  role: string
+  pendingDevices: TrustedDevice[]
+  approvedDevices: TrustedDevice[]
+}
+
+type DeviceFilter = 'all' | 'pending' | 'approved' | 'expired'
+
 const DEFAULT_GRACE_DAYS = 30
 const MAX_GRACE_DAYS = 3650
 
@@ -62,15 +76,23 @@ export default function TrustedDevicesPage() {
   const router = useRouter()
 
   const [devices, setDevices] = useState<TrustedDevice[]>([])
-  const [approvedDevices, setApprovedDevices] =
-    useState<TrustedDevice[]>([])
-  const [graceDaysByDevice, setGraceDaysByDevice] =
-    useState<Record<string, number>>({})
+  const [approvedDevices, setApprovedDevices] = useState<TrustedDevice[]>([])
+  const [graceDaysByDevice, setGraceDaysByDevice] = useState<
+    Record<string, number>
+  >({})
 
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const [userSearch, setUserSearch] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all')
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [showUserList, setShowUserList] = useState(true)
+  const [showFilters, setShowFilters] = useState(false)
 
   const loadDevices = useCallback(async () => {
     setLoading(true)
@@ -97,9 +119,7 @@ export default function TrustedDevicesPage() {
         ? data.devices
         : []
 
-      const approved: TrustedDevice[] = Array.isArray(
-        data.approvedDevices,
-      )
+      const approved: TrustedDevice[] = Array.isArray(data.approvedDevices)
         ? data.approvedDevices
         : []
 
@@ -110,10 +130,10 @@ export default function TrustedDevicesPage() {
         const next = { ...previous }
 
         for (const device of [...pending, ...approved]) {
-          if (next[device.id] === undefined) {
-            next[device.id] =
-              device.grace_period_days || DEFAULT_GRACE_DAYS
-          }
+          next[device.id] =
+            previous[device.id] ??
+            device.grace_period_days ??
+            DEFAULT_GRACE_DAYS
         }
 
         return next
@@ -152,10 +172,7 @@ export default function TrustedDevicesPage() {
       update_grace_period: 'تحديث مدة الثقة',
     }
 
-    if (
-      action === 'approve' ||
-      action === 'update_grace_period'
-    ) {
+    if (action === 'approve' || action === 'update_grace_period') {
       const days = getGraceDays(deviceId)
 
       if (
@@ -171,19 +188,23 @@ export default function TrustedDevicesPage() {
     }
 
     if (action === 'reject') {
-      const confirmed = window.confirm(
-        'هل تريد رفض هذا الجهاز؟ سيبقى سجله محفوظًا في قاعدة البيانات.',
-      )
-
-      if (!confirmed) return
+      if (
+        !window.confirm(
+          'هل تريد رفض هذا الجهاز؟ سيبقى سجله محفوظًا في قاعدة البيانات.',
+        )
+      ) {
+        return
+      }
     }
 
     if (action === 'revoke') {
-      const confirmed = window.confirm(
-        'هل تريد إلغاء اعتماد هذا الجهاز؟ سيحتاج المستخدم إلى موافقة جديدة للدخول منه.',
-      )
-
-      if (!confirmed) return
+      if (
+        !window.confirm(
+          'هل تريد إلغاء اعتماد هذا الجهاز؟ سيحتاج المستخدم إلى موافقة جديدة للدخول منه.',
+        )
+      ) {
+        return
+      }
     }
 
     setProcessingId(deviceId)
@@ -200,10 +221,7 @@ export default function TrustedDevicesPage() {
         action,
       }
 
-      if (
-        action === 'approve' ||
-        action === 'update_grace_period'
-      ) {
+      if (action === 'approve' || action === 'update_grace_period') {
         body.gracePeriodDays = getGraceDays(deviceId)
       }
 
@@ -291,56 +309,118 @@ export default function TrustedDevicesPage() {
   }
 
   function isExpired(device: TrustedDevice) {
-    if (!device.grace_expires_at) return false
+    if (!device.grace_expires_at) {
+      return true
+    }
 
     const expiry = new Date(device.grace_expires_at).getTime()
 
-    return (
-      !Number.isNaN(expiry) &&
-      expiry <= Date.now()
-    )
+    return !Number.isFinite(expiry) || expiry <= Date.now()
   }
 
-  function renderUser(device: TrustedDevice) {
+  const userGroups = useMemo<UserGroup[]>(() => {
+    const map = new Map<string, UserGroup>()
+
+    for (const device of [...devices, ...approvedDevices]) {
+      const authUserId = device.auth_user_id
+
+      if (!map.has(authUserId)) {
+        map.set(authUserId, {
+          authUserId,
+          username: device.user?.username ?? 'unknown',
+          fullName: device.user?.full_name ?? null,
+          role: device.user?.role ?? '',
+          pendingDevices: [],
+          approvedDevices: [],
+        })
+      }
+
+      const group = map.get(authUserId)!
+
+      if (device.status === 'pending') {
+        group.pendingDevices.push(device)
+      } else if (device.status === 'approved') {
+        group.approvedDevices.push(device)
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      const aName = (a.fullName || a.username).toLocaleLowerCase('ar')
+      const bName = (b.fullName || b.username).toLocaleLowerCase('ar')
+
+      return aName.localeCompare(bName, 'ar')
+    })
+  }, [devices, approvedDevices])
+
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLocaleLowerCase('ar')
+
+    if (!query) return userGroups
+
+    return userGroups.filter((user) => {
+      const fullName = (user.fullName ?? '').toLocaleLowerCase('ar')
+      const username = user.username.toLocaleLowerCase('ar')
+
+      return fullName.includes(query) || username.includes(query)
+    })
+  }, [userGroups, userSearch])
+
+  const selectedUser = useMemo(
+    () => userGroups.find((user) => user.authUserId === selectedUserId) ?? null,
+    [userGroups, selectedUserId],
+  )
+
+  useEffect(() => {
+    if (selectedUserId && !userGroups.some((user) => user.authUserId === selectedUserId)) {
+      setSelectedUserId(null)
+    }
+  }, [userGroups, selectedUserId])
+
+  const selectedUserDevices = useMemo(() => {
+    if (!selectedUser) return []
+
+    return [...selectedUser.pendingDevices, ...selectedUser.approvedDevices]
+  }, [selectedUser])
+
+  const filteredDevices = useMemo(() => {
+    const query = deviceSearch.trim().toLocaleLowerCase('ar')
+
+    return selectedUserDevices.filter((device) => {
+      if (deviceFilter === 'pending' && device.status !== 'pending') {
+        return false
+      }
+
+      if (deviceFilter === 'approved' && device.status !== 'approved') {
+        return false
+      }
+
+      if (
+        deviceFilter === 'expired' &&
+        (device.status !== 'approved' || !isExpired(device))
+      ) {
+        return false
+      }
+
+      if (!query) return true
+
+      const type = getDeviceTypeName(
+        device.pending_device_type || device.approved_device_type,
+      ).toLocaleLowerCase('ar')
+
+      const name = (device.device_name ?? '').toLocaleLowerCase('ar')
+      const id = device.id.toLocaleLowerCase('ar')
+
+      return type.includes(query) || name.includes(query) || id.includes(query)
+    })
+  }, [selectedUserDevices, deviceFilter, deviceSearch])
+
+  const pendingCount = devices.length
+  const approvedCount = approvedDevices.length
+  const expiredCount = approvedDevices.filter(isExpired).length
+
+  function renderGraceDaysInput(device: TrustedDevice, label: string) {
     return (
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-muted p-2">
-          <UserRound className="h-5 w-5" />
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
-            صاحب الجهاز
-          </p>
-
-          <p className="font-semibold">
-            {device.user?.full_name ||
-              device.user?.username ||
-              'مستخدم غير معروف'}
-          </p>
-
-          {device.user?.username && (
-            <p className="text-sm text-muted-foreground">
-              @{device.user.username}
-            </p>
-          )}
-
-          {device.user?.role && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {getRoleName(device.user.role)}
-            </p>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  function renderGraceDaysInput(
-    device: TrustedDevice,
-    label: string,
-  ) {
-    return (
-      <div className="w-full max-w-xs space-y-2">
+      <div className="space-y-2">
         <label
           htmlFor={`grace-days-${device.id}`}
           className="block text-sm font-medium"
@@ -348,7 +428,7 @@ export default function TrustedDevicesPage() {
           {label}
         </label>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             id={`grace-days-${device.id}`}
             type="number"
@@ -358,29 +438,21 @@ export default function TrustedDevicesPage() {
             value={getGraceDays(device.id)}
             onChange={(event) => {
               const value = event.target.valueAsNumber
-
-              setGraceDays(
-                device.id,
-                Number.isNaN(value) ? 0 : value,
-              )
+              setGraceDays(device.id, Number.isNaN(value) ? 0 : value)
             }}
             disabled={processingId === device.id}
-            className="w-28 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className="w-24 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
           />
 
-          <span className="text-sm text-muted-foreground">
-            يوم
-          </span>
-        </div>
+          <span className="text-sm text-muted-foreground">يوم</span>
 
-        <div className="flex flex-wrap gap-2">
           {[15, 30, 90].map((days) => (
             <button
               key={days}
               type="button"
               onClick={() => setGraceDays(device.id, days)}
               disabled={processingId === device.id}
-              className={`rounded-md border px-2.5 py-1 text-xs transition ${
+              className={`rounded-md border px-2.5 py-1.5 text-xs transition ${
                 getGraceDays(device.id) === days
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'hover:bg-muted'
@@ -394,51 +466,168 @@ export default function TrustedDevicesPage() {
     )
   }
 
-  function renderDeviceInfo(device: TrustedDevice) {
+  function renderDeviceCard(device: TrustedDevice) {
+    const pending = device.status === 'pending'
+    const expired = device.status === 'approved' && isExpired(device)
     const detectedType =
-      device.pending_device_type ||
-      device.approved_device_type
+      device.pending_device_type || device.approved_device_type
 
     return (
-      <div className="space-y-3">
-        {renderUser(device)}
+      <div
+        key={device.id}
+        className="rounded-xl border bg-background p-4"
+      >
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <MonitorSmartphone className="h-5 w-5 text-muted-foreground" />
 
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <MonitorSmartphone className="h-4 w-4 shrink-0" />
-            <span>{device.device_name || 'جهاز جديد'}</span>
-          </div>
+              <span className="font-semibold">
+                {device.device_name || 'جهاز جديد'}
+              </span>
 
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            <span>
-              نوع الجهاز: {getDeviceTypeName(detectedType)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Clock3 className="h-4 w-4 shrink-0" />
-            <span>
-              تاريخ التسجيل: {formatDate(device.created_at)}
-            </span>
-          </div>
-
-          {device.device_type_detected_at && (
-            <div className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4 shrink-0" />
-              <span>
-                آخر اكتشاف للنوع:{' '}
-                {formatDate(device.device_type_detected_at)}
+              <span
+                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                  pending
+                    ? 'bg-amber-100 text-amber-800'
+                    : expired
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-green-100 text-green-800'
+                }`}
+              >
+                {pending
+                  ? 'بانتظار الموافقة'
+                  : expired
+                    ? 'انتهت مدة الثقة'
+                    : 'معتمد'}
               </span>
             </div>
-          )}
+
+            <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">نوع الجهاز</p>
+                <p className="mt-1 font-medium">
+                  {getDeviceTypeName(detectedType)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">تاريخ التسجيل</p>
+                <p className="mt-1">{formatDate(device.created_at)}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">آخر استخدام</p>
+                <p className="mt-1">{formatDate(device.last_used_at)}</p>
+              </div>
+
+              {!pending && (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">مدة الثقة</p>
+                    <p className="mt-1 font-medium">
+                      {device.grace_period_days ?? DEFAULT_GRACE_DAYS} يومًا
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">انتهاء الثقة</p>
+                    <p className="mt-1">{formatDate(device.grace_expires_at)}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-muted-foreground">تاريخ الموافقة</p>
+                    <p className="mt-1">{formatDate(device.approved_at)}</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {device.device_type_detected_at && (
+              <p className="text-xs text-muted-foreground">
+                آخر اكتشاف لنوع الجهاز:{' '}
+                {formatDate(device.device_type_detected_at)}
+              </p>
+            )}
+
+            <div className="rounded-lg bg-muted/40 p-3">
+              {renderGraceDaysInput(
+                device,
+                pending ? 'مدة الثقة بعد الموافقة' : 'تعديل مدة الثقة',
+              )}
+
+              <p className="mt-2 text-xs text-muted-foreground">
+                {pending
+                  ? 'تبدأ المدة عند الموافقة على الجهاز.'
+                  : 'حفظ مدة جديدة يعيد احتساب تاريخ الانتهاء ابتداءً من الآن.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2 xl:w-40 xl:flex-col">
+            {pending ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleAction(device.id, 'approve')}
+                  disabled={processingId === device.id}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {processingId === device.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  موافقة
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleAction(device.id, 'reject')}
+                  disabled={processingId === device.id}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <X className="h-4 w-4" />
+                  رفض
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void handleAction(device.id, 'update_grace_period')
+                  }
+                  disabled={processingId === device.id}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  {processingId === device.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CalendarClock className="h-4 w-4" />
+                  )}
+                  حفظ المدة
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleAction(device.id, 'revoke')}
+                  disabled={processingId === device.id}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Ban className="h-4 w-4" />
+                  إلغاء الاعتماد
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div dir="rtl" className="space-y-6 p-1">
+    <div dir="rtl" className="space-y-5 p-1">
       <div className="flex justify-start">
         <button
           type="button"
@@ -452,26 +641,8 @@ export default function TrustedDevicesPage() {
 
       <PageHeader
         title="الأجهزة الموثوقة"
-        description="إدارة طلبات الأجهزة وتحديد مدة الثقة لكل جهاز ومراجعة الأجهزة المعتمدة."
+        description="اختر المستخدم لإدارة أجهزته المعتمدة والمعلقة."
       />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          معلقة: {devices.length} · معتمدة: {approvedDevices.length}
-        </p>
-
-        <button
-          type="button"
-          onClick={() => void loadDevices()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
-          />
-          تحديث
-        </button>
-      </div>
 
       {error && (
         <div
@@ -491,272 +662,367 @@ export default function TrustedDevicesPage() {
         </div>
       )}
 
-      {/* الأجهزة المعلقة */}
+      {/* ملخص صغير */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Users className="h-4 w-4" />
+            <span className="text-xs">المستخدمون</span>
+          </div>
+          <p className="mt-2 text-2xl font-bold">{userGroups.length}</p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock3 className="h-4 w-4" />
+            <span className="text-xs">أجهزة معلقة</span>
+          </div>
+          <p className="mt-2 text-2xl font-bold">{pendingCount}</p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-3">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <ShieldCheck className="h-4 w-4" />
+            <span className="text-xs">أجهزة معتمدة</span>
+          </div>
+          <p className="mt-2 text-2xl font-bold">{approvedCount}</p>
+          {expiredCount > 0 && (
+            <p className="mt-1 text-xs text-red-600">
+              منها {expiredCount} انتهت مدة ثقتها
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* اختيار المستخدم */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" />
-            طلبات الأجهزة المعلقة
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-              {devices.length}
-            </span>
-          </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <UserRound className="h-5 w-5" />
+              المستخدم
+            </CardTitle>
+
+            <button
+              type="button"
+              onClick={() => void loadDevices()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+              />
+              تحديث
+            </button>
+          </div>
 
           <CardDescription>
-            الأجهزة التي تحتاج إلى مراجعة وموافقة يدوية قبل السماح بالدخول.
-            اختر مدة الثقة قبل الموافقة.
+            ابحث باسم المستخدم أو اسمه الكامل، ثم اختره لعرض أجهزته.
           </CardDescription>
         </CardHeader>
 
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="mr-2 text-sm text-muted-foreground">
-                جارٍ تحميل الأجهزة...
-              </span>
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+            <input
+              type="search"
+              value={userSearch}
+              onChange={(event) => {
+                setUserSearch(event.target.value)
+                setShowUserList(true)
+              }}
+              onFocus={() => setShowUserList(true)}
+              placeholder="ابحث باسم المستخدم أو الاسم الكامل..."
+              className="w-full rounded-lg border bg-background py-3 pr-10 pl-4 text-sm outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+
+          {selectedUser && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  {selectedUser.fullName || selectedUser.username}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  @{selectedUser.username}
+                  {selectedUser.role
+                    ? ` · ${getRoleName(selectedUser.role)}`
+                    : ''}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUserId(null)
+                  setDeviceSearch('')
+                  setDeviceFilter('all')
+                }}
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-background"
+              >
+                إلغاء الاختيار
+              </button>
             </div>
-          ) : devices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <Check className="mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="font-medium">
-                لا توجد طلبات أجهزة معلقة
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                ستظهر هنا الأجهزة الجديدة أو الأجهزة التي تحتاج إلى موافقة مجددًا.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {devices.map((device) => (
-                <div
-                  key={device.id}
-                  className="rounded-xl border p-4"
-                >
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      {renderDeviceInfo(device)}
+          )}
 
-                      <div className="mt-4 rounded-lg bg-muted/50 p-3">
-                        {renderGraceDaysInput(
-                          device,
-                          'مدة الثقة بعد الموافقة',
-                        )}
+          {showUserList && (
+            <div className="overflow-hidden rounded-lg border">
+              <button
+                type="button"
+                onClick={() => setShowUserList(false)}
+                className="flex w-full items-center justify-between bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
+              >
+                <span>
+                  {loading
+                    ? 'جارٍ تحميل المستخدمين...'
+                    : `${filteredUsers.length} مستخدم`}
+                </span>
+                <ChevronDown className="h-4 w-4 rotate-180" />
+              </button>
 
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          تبدأ المدة من وقت الموافقة على الجهاز.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleAction(device.id, 'reject')
-                        }
-                        disabled={processingId === device.id}
-                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {processingId === device.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <X className="h-4 w-4" />
-                        )}
-                        رفض
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleAction(device.id, 'approve')
-                        }
-                        disabled={processingId === device.id}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {processingId === device.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Check className="h-4 w-4" />
-                        )}
-                        موافقة
-                      </button>
-                    </div>
-                  </div>
+              {loading ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  جارٍ تحميل البيانات...
                 </div>
-              ))}
+              ) : filteredUsers.length === 0 ? (
+                <p className="p-5 text-center text-sm text-muted-foreground">
+                  لا يوجد مستخدمون مطابقون للبحث.
+                </p>
+              ) : (
+                <div className="max-h-64 divide-y overflow-y-auto">
+                  {filteredUsers.map((user) => {
+                    const selected = user.authUserId === selectedUserId
+                    const userPendingCount = user.pendingDevices.length
+                    const userApprovedCount = user.approvedDevices.length
+
+                    return (
+                      <button
+                        key={user.authUserId}
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserId(user.authUserId)
+                          setDeviceFilter('all')
+                          setDeviceSearch('')
+                          setShowUserList(false)
+                        }}
+                        className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-right transition hover:bg-muted/60 ${
+                          selected ? 'bg-primary/5' : 'bg-background'
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="rounded-lg bg-muted p-2">
+                            <UserRound className="h-4 w-4" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {user.fullName || user.username}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              @{user.username}
+                              {user.role ? ` · ${getRoleName(user.role)}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2 text-xs">
+                          {userPendingCount > 0 && (
+                            <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800">
+                              {userPendingCount} معلق
+                            </span>
+                          )}
+                          <span className="rounded-full bg-green-100 px-2 py-1 text-green-800">
+                            {userApprovedCount} معتمد
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
+          )}
+
+          {!showUserList && (
+            <button
+              type="button"
+              onClick={() => setShowUserList(true)}
+              className="w-full rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+            >
+              عرض قائمة المستخدمين
+            </button>
           )}
         </CardContent>
       </Card>
 
-      {/* الأجهزة المعتمدة */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Check className="h-5 w-5" />
-            الأجهزة المعتمدة
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-              {approvedDevices.length}
-            </span>
-          </CardTitle>
+      {/* أجهزة المستخدم المختار */}
+      {selectedUser ? (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                أجهزة {selectedUser.fullName || selectedUser.username}
+              </CardTitle>
+              <CardDescription>
+                معلقة: {selectedUser.pendingDevices.length} · معتمدة:{' '}
+                {selectedUser.approvedDevices.length}
+              </CardDescription>
+            </CardHeader>
 
-          <CardDescription>
-            الأجهزة التي تمت الموافقة عليها. يمكنك تعديل مدة الثقة أو إلغاء اعتماد الجهاز دون حذف سجله.
-          </CardDescription>
-        </CardHeader>
+            <CardContent className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowFilters((value) => !value)}
+                className="flex w-full items-center justify-between rounded-lg border px-3 py-3 text-sm hover:bg-muted"
+              >
+                <span className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  فلاتر الأجهزة
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    showFilters ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
 
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="mr-2 text-sm text-muted-foreground">
-                جارٍ تحميل الأجهزة...
-              </span>
-            </div>
-          ) : approvedDevices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <MonitorSmartphone className="mb-3 h-10 w-10 text-muted-foreground" />
-              <p className="font-medium">
-                لا توجد أجهزة معتمدة حاليًا
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                ستظهر الأجهزة هنا بعد الموافقة عليها.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {approvedDevices.map((device) => {
-                const expired = isExpired(device)
+              {showFilters && (
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium">
+                        حالة الجهاز
+                      </label>
 
-                return (
-                  <div
-                    key={device.id}
-                    className="rounded-xl border p-4"
-                  >
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0 flex-1">
-                        {renderDeviceInfo(device)}
+                      <select
+                        value={deviceFilter}
+                        onChange={(event) =>
+                          setDeviceFilter(event.target.value as DeviceFilter)
+                        }
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="all">كل الأجهزة</option>
+                        <option value="pending">الأجهزة المعلقة</option>
+                        <option value="approved">الأجهزة المعتمدة</option>
+                        <option value="expired">منتهية الثقة</option>
+                      </select>
+                    </div>
 
-                        <div className="mt-4 flex flex-wrap gap-3">
-                          <div className="rounded-lg border px-3 py-2 text-sm">
-                            <p className="text-xs text-muted-foreground">
-                              مدة الثقة
-                            </p>
-                            <p className="mt-1 font-semibold">
-                              {device.grace_period_days ??
-                                DEFAULT_GRACE_DAYS}{' '}
-                              يومًا
-                            </p>
-                          </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium">
+                        البحث داخل الأجهزة
+                      </label>
 
-                          <div
-                            className={`rounded-lg border px-3 py-2 text-sm ${
-                              expired
-                                ? 'border-red-200 bg-red-50 text-red-700'
-                                : 'bg-muted/30'
-                            }`}
-                          >
-                            <p className="text-xs opacity-80">
-                              انتهاء الثقة
-                            </p>
-                            <p className="mt-1 font-semibold">
-                              {formatDate(device.grace_expires_at)}
-                            </p>
-                            {expired && (
-                              <p className="mt-1 text-xs font-medium">
-                                انتهت المدة؛ تحقق من حالة الجهاز على الخادم.
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="rounded-lg border px-3 py-2 text-sm">
-                            <p className="text-xs text-muted-foreground">
-                              آخر استخدام
-                            </p>
-                            <p className="mt-1 font-semibold">
-                              {formatDate(device.last_used_at)}
-                            </p>
-                          </div>
-
-                          <div className="rounded-lg border px-3 py-2 text-sm">
-                            <p className="text-xs text-muted-foreground">
-                              تاريخ الموافقة
-                            </p>
-                            <p className="mt-1 font-semibold">
-                              {formatDate(device.approved_at)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 rounded-lg bg-muted/50 p-3">
-                          {renderGraceDaysInput(
-                            device,
-                            'تغيير مدة الثقة وتجديدها',
-                          )}
-
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            عند حفظ المدة الجديدة، يُحتسب تاريخ انتهاء جديد ابتداءً من الآن.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleAction(
-                              device.id,
-                              'update_grace_period',
-                            )
-                          }
-                          disabled={processingId === device.id}
-                          className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {processingId === device.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CalendarClock className="h-4 w-4" />
-                          )}
-                          حفظ المدة
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleAction(device.id, 'revoke')
-                          }
-                          disabled={processingId === device.id}
-                          className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {processingId === device.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Ban className="h-4 w-4" />
-                          )}
-                          إلغاء الاعتماد
-                        </button>
-                      </div>
+                      <input
+                        type="search"
+                        value={deviceSearch}
+                        onChange={(event) => setDeviceSearch(event.target.value)}
+                        placeholder="اسم الجهاز أو نوعه..."
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                      />
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        <div className="flex items-start gap-2">
-          <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            ملاحظة: ظهور الجهاز في القسم المعتمد لا يعني أن انتهاء المدة
-            أو اختلاف نوع الجهاز سيُعالَج تلقائيًا من الواجهة وحدها.
-            يجب أن يتحقق مسار تسجيل الدخول وحارس الجلسة في الخادم من
-            انتهاء المدة ونوع الجهاز، ويعيد الجهاز إلى حالة انتظار
-            الموافقة عند الحاجة.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeviceFilter('all')
+                      setDeviceSearch('')
+                    }}
+                    className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                  >
+                    مسح الفلاتر
+                  </button>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                عدد الأجهزة المطابقة: {filteredDevices.length}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* الأجهزة المعلقة */}
+          {(deviceFilter === 'all' || deviceFilter === 'pending') && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Clock3 className="h-5 w-5" />
+                  الأجهزة المعلقة
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                    {filteredDevices.filter((device) => device.status === 'pending').length}
+                  </span>
+                </CardTitle>
+                <CardDescription>
+                  الأجهزة التي تحتاج إلى موافقة يدوية.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                {filteredDevices.filter((device) => device.status === 'pending').length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    لا توجد أجهزة معلقة مطابقة.
+                  </p>
+                ) : (
+                  filteredDevices
+                    .filter((device) => device.status === 'pending')
+                    .map(renderDeviceCard)
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* الأجهزة المعتمدة */}
+          {(deviceFilter === 'all' ||
+            deviceFilter === 'approved' ||
+            deviceFilter === 'expired') && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-5 w-5" />
+                  الأجهزة المعتمدة
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                    {
+                      filteredDevices.filter(
+                        (device) => device.status === 'approved',
+                      ).length
+                    }
+                  </span>
+                </CardTitle>
+                <CardDescription>
+                  يمكنك تعديل مدة الثقة أو إلغاء اعتماد الجهاز دون حذف سجله.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                {filteredDevices.filter((device) => device.status === 'approved').length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    لا توجد أجهزة معتمدة مطابقة.
+                  </p>
+                ) : (
+                  filteredDevices
+                    .filter((device) => device.status === 'approved')
+                    .map(renderDeviceCard)
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed p-10 text-center">
+          <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          <p className="font-medium">اختر مستخدمًا لعرض أجهزته</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            ستظهر هنا أجهزته المعلقة والمعتمدة وفلاتر إدارتها.
           </p>
         </div>
+      )}
+
+      <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
+        حالة الجهاز ومدة الثقة يجب التحقق منهما في الخادم أيضًا. تغيير الفلاتر
+        هنا يؤثر على العرض فقط ولا يغيّر حالة الأجهزة في قاعدة البيانات.
       </div>
     </div>
   )
