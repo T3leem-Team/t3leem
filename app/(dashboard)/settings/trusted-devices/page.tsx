@@ -73,10 +73,8 @@ const DEFAULT_GRACE_DAYS = 30
 const MAX_GRACE_DAYS = 3650
 
 /**
- * تاريخ ترتيب الجهاز:
- * 1. آخر استخدام، إن وجد.
- * 2. تاريخ الموافقة، إن لم يوجد استخدام.
- * 3. تاريخ التسجيل عند عدم توفر التاريخين السابقين.
+ * ترتيب الجهاز:
+ * آخر استخدام، ثم الموافقة، ثم الإنشاء.
  */
 function getDeviceRecencyTimestamp(device: TrustedDevice): number {
   const value =
@@ -90,10 +88,8 @@ function getDeviceRecencyTimestamp(device: TrustedDevice): number {
 }
 
 /**
- * يرجع أحدث جهاز معتمد من كل نوع.
- *
- * هذه الدالة للعرض فقط، ولا تحذف أي سجل من قاعدة البيانات.
- * الأجهزة التي لا يُعرف نوعها تُجمع تحت نوع unknown.
+ * عرض أحدث جهاز معتمد من كل نوع فقط.
+ * هذه الدالة لا تحذف أي سجل من قاعدة البيانات.
  */
 function getLatestApprovedDevicesByType(
   devices: TrustedDevice[],
@@ -101,9 +97,7 @@ function getLatestApprovedDevicesByType(
   const latestByType = new Map<string, TrustedDevice>()
 
   for (const device of devices) {
-    if (device.status !== 'approved') {
-      continue
-    }
+    if (device.status !== 'approved') continue
 
     const rawType =
       device.approved_device_type ||
@@ -111,7 +105,6 @@ function getLatestApprovedDevicesByType(
       'unknown'
 
     const typeKey = rawType.trim().toLowerCase() || 'unknown'
-
     const current = latestByType.get(typeKey)
 
     if (
@@ -133,11 +126,7 @@ function getLatestApprovedDevicesByType(
 export default function TrustedDevicesPage() {
   const router = useRouter()
 
-  // جميع الأجهزة المعلقة
   const [devices, setDevices] = useState<TrustedDevice[]>([])
-
-  // جميع الأجهزة المعتمدة الموجودة في قاعدة البيانات
-  // نحتفظ بها جميعًا، لكن نعرض أحدث جهاز من كل نوع فقط.
   const [approvedDevices, setApprovedDevices] = useState<
     TrustedDevice[]
   >([])
@@ -158,7 +147,9 @@ export default function TrustedDevicesPage() {
   )
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all')
   const [deviceSearch, setDeviceSearch] = useState('')
-  const [showUserList, setShowUserList] = useState(true)
+
+  // القائمة مغلقة عند فتح الصفحة، والسهم هو المتحكم بفتحها وإغلاقها.
+  const [showUserList, setShowUserList] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
   const loadDevices = useCallback(async () => {
@@ -367,9 +358,7 @@ export default function TrustedDevicesPage() {
   }
 
   function getDeviceTypeName(type: string | null) {
-    if (!type || type === 'unknown') {
-      return 'غير محدد'
-    }
+    if (!type || type === 'unknown') return 'غير محدد'
 
     const types: Record<string, string> = {
       iphone: 'iPhone',
@@ -385,9 +374,7 @@ export default function TrustedDevicesPage() {
   }
 
   function isExpired(device: TrustedDevice) {
-    if (!device.grace_expires_at) {
-      return true
-    }
+    if (!device.grace_expires_at) return true
 
     const expiry = new Date(device.grace_expires_at).getTime()
 
@@ -457,13 +444,6 @@ export default function TrustedDevicesPage() {
     }
   }, [userGroups, selectedUserId])
 
-  /**
-   * الأجهزة التي ستظهر للمستخدم المختار:
-   * - جميع الأجهزة المعلقة.
-   * - أحدث جهاز معتمد من كل نوع فقط.
-   *
-   * لا يؤثر ذلك على سجلات Supabase.
-   */
   const selectedUserDevices = useMemo(() => {
     if (!selectedUser) return []
 
@@ -545,7 +525,7 @@ export default function TrustedDevicesPage() {
               setGraceDays(device.id, Number.isNaN(value) ? 0 : value)
             }}
             disabled={processingId === device.id}
-            className="w-24 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            className="w-24 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-300 disabled:opacity-50"
           />
 
           <span className="text-sm text-muted-foreground">يوم</span>
@@ -558,7 +538,7 @@ export default function TrustedDevicesPage() {
               disabled={processingId === device.id}
               className={`rounded-md border px-2.5 py-1.5 text-xs transition ${
                 getGraceDays(device.id) === days
-                  ? 'border-primary bg-primary/10 text-primary'
+                  ? 'border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200'
                   : 'hover:bg-muted'
               }`}
             >
@@ -573,18 +553,35 @@ export default function TrustedDevicesPage() {
   function renderDeviceCard(device: TrustedDevice) {
     const pending = device.status === 'pending'
     const expired = device.status === 'approved' && isExpired(device)
+
     const detectedType =
       device.pending_device_type || device.approved_device_type
 
     return (
       <div
         key={device.id}
-        className="rounded-xl border bg-background p-4"
+        className={`rounded-xl border p-4 transition-colors ${
+          pending
+            ? 'border-amber-200/80 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/10'
+            : expired
+              ? 'border-red-200/80 bg-red-50/30 dark:border-red-900 dark:bg-red-950/10'
+              : 'border-emerald-200/70 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/10'
+        }`}
       >
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <MonitorSmartphone className="h-5 w-5 text-muted-foreground" />
+              <div
+                className={`rounded-lg p-2 ${
+                  pending
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    : expired
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                }`}
+              >
+                <MonitorSmartphone className="h-5 w-5" />
+              </div>
 
               <span className="font-semibold">
                 {device.device_name || 'جهاز جديد'}
@@ -593,10 +590,10 @@ export default function TrustedDevicesPage() {
               <span
                 className={`rounded-full px-2 py-1 text-xs font-medium ${
                   pending
-                    ? 'bg-amber-100 text-amber-800'
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                     : expired
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-green-100 text-green-800'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                 }`}
               >
                 {pending
@@ -660,7 +657,7 @@ export default function TrustedDevicesPage() {
               </p>
             )}
 
-            <div className="rounded-lg bg-muted/40 p-3">
+            <div className="rounded-lg border border-purple-100 bg-purple-50/70 p-3 dark:border-purple-900 dark:bg-purple-950/20">
               {renderGraceDaysInput(
                 device,
                 pending ? 'مدة الثقة بعد الموافقة' : 'تعديل مدة الثقة',
@@ -681,7 +678,7 @@ export default function TrustedDevicesPage() {
                   type="button"
                   onClick={() => void handleAction(device.id, 'approve')}
                   disabled={processingId === device.id}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {processingId === device.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -695,7 +692,7 @@ export default function TrustedDevicesPage() {
                   type="button"
                   onClick={() => void handleAction(device.id, 'reject')}
                   disabled={processingId === device.id}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:bg-transparent dark:hover:bg-red-950/30"
                 >
                   <X className="h-4 w-4" />
                   رفض
@@ -709,7 +706,7 @@ export default function TrustedDevicesPage() {
                     void handleAction(device.id, 'update_grace_period')
                   }
                   disabled={processingId === device.id}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800 transition hover:bg-purple-100 disabled:opacity-50 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-200 dark:hover:bg-purple-950/60"
                 >
                   {processingId === device.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -723,7 +720,7 @@ export default function TrustedDevicesPage() {
                   type="button"
                   onClick={() => void handleAction(device.id, 'revoke')}
                   disabled={processingId === device.id}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950/30"
                 >
                   <Ban className="h-4 w-4" />
                   إلغاء الاعتماد
@@ -757,7 +754,7 @@ export default function TrustedDevicesPage() {
       {error && (
         <div
           role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
         >
           {error}
         </div>
@@ -766,38 +763,50 @@ export default function TrustedDevicesPage() {
       {success && (
         <div
           role="status"
-          className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
         >
           {success}
         </div>
       )}
 
-      {/* ملخص صغير */}
+      {/* الملخص بالألوان */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border bg-card p-3">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span className="text-xs">المستخدمون</span>
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-3 dark:border-indigo-900 dark:bg-indigo-950/25">
+          <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
+            <div className="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/60">
+              <Users className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-medium">المستخدمون</span>
           </div>
-          <p className="mt-2 text-2xl font-bold">{userGroups.length}</p>
+          <p className="mt-2 text-2xl font-bold text-indigo-950 dark:text-indigo-100">
+            {userGroups.length}
+          </p>
         </div>
 
-        <div className="rounded-xl border bg-card p-3">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Clock3 className="h-4 w-4" />
-            <span className="text-xs">أجهزة معلقة</span>
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/25">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <div className="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/60">
+              <Clock3 className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-medium">أجهزة معلقة</span>
           </div>
-          <p className="mt-2 text-2xl font-bold">{pendingCount}</p>
+          <p className="mt-2 text-2xl font-bold text-amber-950 dark:text-amber-100">
+            {pendingCount}
+          </p>
         </div>
 
-        <div className="rounded-xl border bg-card p-3">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <ShieldCheck className="h-4 w-4" />
-            <span className="text-xs">أجهزة معتمدة</span>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/25">
+          <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+            <div className="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/60">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <span className="text-xs font-medium">أجهزة معتمدة</span>
           </div>
-          <p className="mt-2 text-2xl font-bold">{approvedCount}</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-950 dark:text-emerald-100">
+            {approvedCount}
+          </p>
           {expiredCount > 0 && (
-            <p className="mt-1 text-xs text-red-600">
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
               منها {expiredCount} انتهت مدة ثقتها
             </p>
           )}
@@ -805,11 +814,13 @@ export default function TrustedDevicesPage() {
       </div>
 
       {/* اختيار المستخدم */}
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="overflow-hidden border-indigo-200/70 dark:border-indigo-900/70">
+        <CardHeader className="border-b border-indigo-100 bg-indigo-50/50 pb-3 dark:border-indigo-900/60 dark:bg-indigo-950/20">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <UserRound className="h-5 w-5" />
+              <span className="rounded-lg bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+                <UserRound className="h-5 w-5" />
+              </span>
               المستخدم
             </CardTitle>
 
@@ -817,7 +828,7 @@ export default function TrustedDevicesPage() {
               type="button"
               onClick={() => void loadDevices()}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm transition hover:bg-indigo-50 disabled:opacity-50 dark:border-indigo-900 dark:bg-background dark:hover:bg-indigo-950/40"
             >
               <RefreshCw
                 className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
@@ -831,35 +842,40 @@ export default function TrustedDevicesPage() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 pt-4">
           <div className="relative">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
 
             <input
               type="search"
               value={userSearch}
-              onChange={(event) => {
-                setUserSearch(event.target.value)
-                setShowUserList(true)
-              }}
-              onFocus={() => setShowUserList(true)}
+              onChange={(event) => setUserSearch(event.target.value)}
               placeholder="ابحث باسم المستخدم أو الاسم الكامل..."
-              className="w-full rounded-lg border bg-background py-3 pr-10 pl-4 text-sm outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border border-indigo-200 bg-background py-3 pr-10 pl-4 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 dark:border-indigo-900 dark:focus:ring-indigo-950"
             />
           </div>
 
           {selectedUser && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
-              <div className="min-w-0">
-                <p className="font-semibold">
-                  {selectedUser.fullName || selectedUser.username}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  @{selectedUser.username}
-                  {selectedUser.role
-                    ? ` · ${getRoleName(selectedUser.role)}`
-                    : ''}
-                </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-900 dark:bg-indigo-950/30">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="rounded-xl bg-indigo-100 p-2.5 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                  <UserRound className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    {selectedUser.fullName || selectedUser.username}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    @{selectedUser.username}
+                    {selectedUser.role
+                      ? ` · ${getRoleName(selectedUser.role)}`
+                      : ''}
+                  </p>
+                  <p className="mt-1 text-xs text-indigo-700 dark:text-indigo-300">
+                    المستخدم المحدد حاليًا
+                  </p>
+                </div>
               </div>
 
               <button
@@ -869,144 +885,168 @@ export default function TrustedDevicesPage() {
                   setDeviceSearch('')
                   setDeviceFilter('all')
                 }}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-background"
+                className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm transition hover:bg-indigo-100 dark:border-indigo-800 dark:bg-background dark:hover:bg-indigo-950"
               >
                 إلغاء الاختيار
               </button>
             </div>
           )}
 
-          {showUserList && (
-            <div className="overflow-hidden rounded-lg border">
-              <button
-                type="button"
-                onClick={() => setShowUserList(false)}
-                className="flex w-full items-center justify-between bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-muted"
-              >
-                <span>
-                  {loading
-                    ? 'جارٍ تحميل المستخدمين...'
-                    : `${filteredUsers.length} مستخدم`}
-                </span>
-                <ChevronDown className="h-4 w-4 rotate-180" />
-              </button>
-
-              {loading ? (
-                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  جارٍ تحميل البيانات...
-                </div>
-              ) : filteredUsers.length === 0 ? (
-                <p className="p-5 text-center text-sm text-muted-foreground">
-                  لا يوجد مستخدمون مطابقون للبحث.
-                </p>
-              ) : (
-                <div className="max-h-64 divide-y overflow-y-auto">
-                  {filteredUsers.map((user) => {
-                    const selected = user.authUserId === selectedUserId
-                    const userPendingCount = user.pendingDevices.length
-
-                    // العدد المعروض: أحدث جهاز معتمد من كل نوع.
-                    const userApprovedCount =
-                      getLatestApprovedDevicesByType(
-                        user.approvedDevices,
-                      ).length
-
-                    return (
-                      <button
-                        key={user.authUserId}
-                        type="button"
-                        onClick={() => {
-                          setSelectedUserId(user.authUserId)
-                          setDeviceFilter('all')
-                          setDeviceSearch('')
-                          setShowUserList(false)
-                        }}
-                        className={`flex w-full items-center justify-between gap-3 px-3 py-3 text-right transition hover:bg-muted/60 ${
-                          selected ? 'bg-primary/5' : 'bg-background'
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="rounded-lg bg-muted p-2">
-                            <UserRound className="h-4 w-4" />
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {user.fullName || user.username}
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              @{user.username}
-                              {user.role
-                                ? ` · ${getRoleName(user.role)}`
-                                : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2 text-xs">
-                          {userPendingCount > 0 && (
-                            <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800">
-                              {userPendingCount} معلق
-                            </span>
-                          )}
-                          <span className="rounded-full bg-green-100 px-2 py-1 text-green-800">
-                            {userApprovedCount} معتمد
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {!showUserList && (
+          {/* السهم وحده يتحكم بفتح القائمة وإغلاقها */}
+          <div className="overflow-hidden rounded-lg border border-indigo-200 dark:border-indigo-900">
             <button
               type="button"
-              onClick={() => setShowUserList(true)}
-              className="w-full rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+              aria-expanded={showUserList}
+              onClick={() => setShowUserList((value) => !value)}
+              className="flex w-full items-center justify-between bg-indigo-50/80 px-3 py-3 text-sm transition hover:bg-indigo-100/80 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/60"
             >
-              عرض قائمة المستخدمين
+              <span className="flex items-center gap-2 font-medium text-indigo-900 dark:text-indigo-200">
+                <Users className="h-4 w-4" />
+                {loading
+                  ? 'جارٍ تحميل المستخدمين...'
+                  : showUserList
+                    ? `${filteredUsers.length} مستخدم — اضغط لإغلاق القائمة`
+                    : selectedUser
+                      ? 'تغيير المستخدم'
+                      : `${filteredUsers.length} مستخدم — عرض القائمة`}
+              </span>
+
+              <ChevronDown
+                className={`h-5 w-5 text-indigo-700 transition-transform duration-200 dark:text-indigo-300 ${
+                  showUserList ? 'rotate-180' : ''
+                }`}
+              />
             </button>
-          )}
+
+            {showUserList && (
+              <>
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    جارٍ تحميل البيانات...
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <p className="p-5 text-center text-sm text-muted-foreground">
+                    لا يوجد مستخدمون مطابقون للبحث.
+                  </p>
+                ) : (
+                  <div className="max-h-72 divide-y divide-indigo-100 overflow-y-auto dark:divide-indigo-950">
+                    {filteredUsers.map((user) => {
+                      const selected = user.authUserId === selectedUserId
+                      const userPendingCount = user.pendingDevices.length
+
+                      const userApprovedCount =
+                        getLatestApprovedDevicesByType(
+                          user.approvedDevices,
+                        ).length
+
+                      return (
+                        <button
+                          key={user.authUserId}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => {
+                            // الاختيار لا يغلق القائمة ولا يلغي نفسه.
+                            // يمكن الضغط على مستخدم آخر للتبديل مباشرة.
+                            setSelectedUserId(user.authUserId)
+                            setDeviceFilter('all')
+                            setDeviceSearch('')
+                          }}
+                          className={`flex w-full items-center justify-between gap-3 border-r-4 px-3 py-3 text-right transition ${
+                            selected
+                              ? 'border-r-indigo-600 bg-indigo-100/80 dark:border-r-indigo-400 dark:bg-indigo-950/70'
+                              : 'border-r-transparent bg-background hover:bg-indigo-50/70 dark:hover:bg-indigo-950/30'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className={`rounded-xl p-2.5 transition ${
+                                selected
+                                  ? 'bg-indigo-200 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+                                  : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300'
+                              }`}
+                            >
+                              <UserRound className="h-4 w-4" />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">
+                                {user.fullName || user.username}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                @{user.username}
+                                {user.role
+                                  ? ` · ${getRoleName(user.role)}`
+                                  : ''}
+                              </p>
+                              {selected && (
+                                <p className="mt-1 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                                  <Check className="ml-1 inline h-3.5 w-3.5" />
+                                  محدد
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 text-xs">
+                            {userPendingCount > 0 && (
+                              <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                {userPendingCount} معلق
+                              </span>
+                            )}
+
+                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              {userApprovedCount} معتمد
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       {/* أجهزة المستخدم المختار */}
       {selectedUser ? (
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
+          <Card className="border-purple-200/70 dark:border-purple-900/70">
+            <CardHeader className="border-b border-purple-100 bg-purple-50/50 pb-3 dark:border-purple-900/60 dark:bg-purple-950/20">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="rounded-lg bg-purple-100 p-2 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
+                  <MonitorSmartphone className="h-5 w-5" />
+                </span>
                 أجهزة {selectedUser.fullName || selectedUser.username}
               </CardTitle>
+
               <CardDescription>
                 معلقة: {selectedUser.pendingDevices.length} · معتمدة:{' '}
                 {selectedUserVisibleApprovedCount}
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 pt-4">
               <button
                 type="button"
                 onClick={() => setShowFilters((value) => !value)}
-                className="flex w-full items-center justify-between rounded-lg border px-3 py-3 text-sm hover:bg-muted"
+                className="flex w-full items-center justify-between rounded-lg border border-purple-200 bg-purple-50/70 px-3 py-3 text-sm transition hover:bg-purple-100/70 dark:border-purple-900 dark:bg-purple-950/20 dark:hover:bg-purple-950/50"
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 font-medium text-purple-800 dark:text-purple-200">
                   <Filter className="h-4 w-4" />
                   فلاتر الأجهزة
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 transition-transform ${
+                  className={`h-4 w-4 text-purple-700 transition-transform dark:text-purple-300 ${
                     showFilters ? 'rotate-180' : ''
                   }`}
                 />
               </button>
 
               {showFilters && (
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/40 p-3 dark:border-purple-900 dark:bg-purple-950/10">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-xs font-medium">
@@ -1020,7 +1060,7 @@ export default function TrustedDevicesPage() {
                             event.target.value as DeviceFilter,
                           )
                         }
-                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-300 dark:focus:ring-purple-900"
                       >
                         <option value="all">كل الأجهزة</option>
                         <option value="pending">الأجهزة المعلقة</option>
@@ -1041,7 +1081,7 @@ export default function TrustedDevicesPage() {
                           setDeviceSearch(event.target.value)
                         }
                         placeholder="اسم الجهاز أو نوعه..."
-                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-purple-300 dark:focus:ring-purple-900"
                       />
                     </div>
                   </div>
@@ -1052,7 +1092,7 @@ export default function TrustedDevicesPage() {
                       setDeviceFilter('all')
                       setDeviceSearch('')
                     }}
-                    className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                    className="text-xs text-purple-700 underline underline-offset-4 transition hover:text-purple-950 dark:text-purple-300 dark:hover:text-purple-100"
                   >
                     مسح الفلاتر
                   </button>
@@ -1065,14 +1105,16 @@ export default function TrustedDevicesPage() {
             </CardContent>
           </Card>
 
-          {/* الأجهزة المعلقة: تبقى جميعها ظاهرة */}
+          {/* جميع الأجهزة المعلقة */}
           {(deviceFilter === 'all' || deviceFilter === 'pending') && (
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="overflow-hidden border-amber-200/80 dark:border-amber-900/70">
+              <CardHeader className="border-b border-amber-100 bg-amber-50/70 pb-3 dark:border-amber-900/60 dark:bg-amber-950/20">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Clock3 className="h-5 w-5" />
+                  <span className="rounded-lg bg-amber-100 p-2 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                    <Clock3 className="h-5 w-5" />
+                  </span>
                   الأجهزة المعلقة
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                  <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-900 dark:text-amber-200">
                     {
                       filteredDevices.filter(
                         (device) => device.status === 'pending',
@@ -1080,12 +1122,13 @@ export default function TrustedDevicesPage() {
                     }
                   </span>
                 </CardTitle>
+
                 <CardDescription>
                   الأجهزة التي تحتاج إلى موافقة يدوية.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 pt-4">
                 {filteredDevices.filter(
                   (device) => device.status === 'pending',
                 ).length === 0 ? (
@@ -1101,16 +1144,18 @@ export default function TrustedDevicesPage() {
             </Card>
           )}
 
-          {/* الأجهزة المعتمدة: أحدث جهاز واحد من كل نوع */}
+          {/* أحدث جهاز معتمد من كل نوع */}
           {(deviceFilter === 'all' ||
             deviceFilter === 'approved' ||
             deviceFilter === 'expired') && (
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="overflow-hidden border-emerald-200/80 dark:border-emerald-900/70">
+              <CardHeader className="border-b border-emerald-100 bg-emerald-50/70 pb-3 dark:border-emerald-900/60 dark:bg-emerald-950/20">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck className="h-5 w-5" />
+                  <span className="rounded-lg bg-emerald-100 p-2 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                    <ShieldCheck className="h-5 w-5" />
+                  </span>
                   الأجهزة المعتمدة
-                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
+                  <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-xs text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200">
                     {
                       filteredDevices.filter(
                         (device) => device.status === 'approved',
@@ -1118,13 +1163,14 @@ export default function TrustedDevicesPage() {
                     }
                   </span>
                 </CardTitle>
+
                 <CardDescription>
                   يظهر أحدث جهاز من كل نوع. يمكنك تعديل مدة الثقة أو إلغاء
                   اعتماد الجهاز دون حذف سجله.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 pt-4">
                 {filteredDevices.filter(
                   (device) => device.status === 'approved',
                 ).length === 0 ? (
@@ -1141,16 +1187,18 @@ export default function TrustedDevicesPage() {
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed p-10 text-center">
-          <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+        <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-10 text-center dark:border-indigo-900 dark:bg-indigo-950/10">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+            <Users className="h-9 w-9" />
+          </div>
           <p className="font-medium">اختر مستخدمًا لعرض أجهزته</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            ستظهر هنا أجهزته المعلقة والمعتمدة وفلاتر إدارتها.
+            افتح القائمة من السهم، ثم اضغط على المستخدم المطلوب.
           </p>
         </div>
       )}
 
-      <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-xs leading-6 text-muted-foreground dark:border-slate-800 dark:bg-slate-900/30">
         حالة الجهاز ومدة الثقة يجب التحقق منهما في الخادم أيضًا. تغيير
         الفلاتر هنا يؤثر على العرض فقط ولا يغيّر حالة الأجهزة في قاعدة
         البيانات. حذف الأجهزة القديمة بعد 45 يومًا يبقى مسؤولية مهمة
