@@ -82,19 +82,21 @@ function detectDeviceType(userAgent: string): DeviceType {
 
   if (!ua) return 'unknown'
 
-  if (ua.includes('iphone')) {
-    return 'iphone'
-  }
-
-  if (ua.includes('ipad')) {
+  if (
+    ua.includes('ipad') ||
+    (ua.includes('macintosh') && ua.includes('mobile'))
+  ) {
     return 'ipad'
   }
 
-  // بعض المتصفحات تكشف عن طراز Samsung،
-  // بينما لا تكشف متصفحات أخرى عن الشركة المصنّعة.
+  if (ua.includes('iphone') || ua.includes('ipod')) {
+    return 'iphone'
+  }
+
   if (
     ua.includes('samsungbrowser') ||
-    /sm-[a-z0-9]+/i.test(userAgent)
+    /\bsm-[a-z0-9]+/i.test(userAgent) ||
+    /\bgt-[a-z0-9]+/i.test(userAgent)
   ) {
     return 'samsung'
   }
@@ -120,7 +122,6 @@ function detectDeviceType(userAgent: string): DeviceType {
 
   return 'unknown'
 }
-
 function clearSessionCookie(response: NextResponse) {
   response.cookies.set(SESSION_COOKIE, '', {
     httpOnly: true,
@@ -616,9 +617,10 @@ export async function POST(request: NextRequest) {
      */
     const approvedType = device.approved_device_type
 
-    if (
+   if (
       approvedType &&
       approvedType !== 'unknown' &&
+      detectedType !== 'unknown' &&
       detectedType !== approvedType
     ) {
       return await requireDeviceReapproval(
