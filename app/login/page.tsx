@@ -44,28 +44,74 @@ export default function LoginPage() {
       return
     }
 
+    const startedAt = performance.now()
+    let lastTimingAt = startedAt
+
+    const markTiming = (step: string) => {
+      const now = performance.now()
+
+      console.info(
+        `[LOGIN PAGE TIMING] ${step}: ${Math.round(now - lastTimingAt)}ms | total: ${Math.round(now - startedAt)}ms`,
+      )
+
+      lastTimingAt = now
+    }
+
+    // قياس كل طلب شبكة على حدة، دون تسجيل كلمات المرور أو محتوى الطلب.
+    async function timedFetch(
+      label: string,
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> {
+      const requestStartedAt = performance.now()
+
+      try {
+        const response = await fetch(input, init)
+
+        console.info(
+          `[LOGIN FETCH] ${label}: ${Math.round(performance.now() - requestStartedAt)}ms | status: ${response.status}`,
+        )
+
+        return response
+      } catch (fetchError) {
+        console.info(
+          `[LOGIN FETCH] ${label}: failed after ${Math.round(performance.now() - requestStartedAt)}ms`,
+        )
+
+        throw fetchError
+      }
+    }
+
     setLoading(true)
 
     try {
       /*
-       * 1. محاولة استرجاع الجهاز المعتمد إذا كانت
-       *    كوكي الجهاز مفقودة والمفتاح ما زال محفوظًا.
+       * 1. استرجاع مفتاح الجهاز.
        */
       let deviceKey:
         | Awaited<ReturnType<typeof getOrCreateDeviceKey>>
         | null = null
 
       try {
+        const keyStartedAt = performance.now()
+
         deviceKey = await getOrCreateDeviceKey()
-      } catch (keyError) {
-        console.warn(
-          'Device key unavailable:',
-          keyError,
+
+        console.info(
+          `[LOGIN PAGE TIMING] getOrCreateDeviceKey: ${Math.round(performance.now() - keyStartedAt)}ms`,
         )
+      } catch (keyError) {
+        console.warn('Device key unavailable:', keyError)
       }
 
+      markTiming('device key preparation')
+
+      /*
+       * 2. محاولة استرجاع الجهاز المعتمد.
+       */
       if (deviceKey) {
-        const challengeResponse = await fetch(
+        const challengeResponse = await timedFetch(
+          'device recovery challenge',
           '/api/auth/device-key/recover',
           {
             method: 'POST',
@@ -86,6 +132,8 @@ export default function LoginPage() {
         const challengeData =
           await challengeResponse.json().catch(() => null)
 
+        markTiming('read recovery challenge response')
+
         if (
           !challengeResponse.ok &&
           challengeResponse.status !== 401
@@ -96,6 +144,7 @@ export default function LoginPage() {
               : 'تعذر التحقق من الجهاز. حاول مرة أخرى.',
           )
           setLoading(false)
+          markTiming('stop: recovery challenge failed')
           return
         }
 
@@ -107,6 +156,7 @@ export default function LoginPage() {
               'هذا الجهاز غير مصرح له بالدخول إلى النظام.',
             )
             setLoading(false)
+            markTiming('stop: device blocked')
             return
           }
 
@@ -116,15 +166,23 @@ export default function LoginPage() {
             ) {
               setError('تعذر التحقق من الجهاز.')
               setLoading(false)
+              markTiming('stop: invalid recovery challenge')
               return
             }
+
+            const signingStartedAt = performance.now()
 
             const signature =
               await deviceKey.signChallenge(
                 challengeData.challenge,
               )
 
-            const recoveryResponse = await fetch(
+            console.info(
+              `[LOGIN PAGE TIMING] sign recovery challenge: ${Math.round(performance.now() - signingStartedAt)}ms`,
+            )
+
+            const recoveryResponse = await timedFetch(
+              'device recovery verification',
               '/api/auth/device-key/recover',
               {
                 method: 'POST',
@@ -149,6 +207,8 @@ export default function LoginPage() {
                 .json()
                 .catch(() => null)
 
+            markTiming('read recovery verification response')
+
             if (
               !recoveryResponse.ok ||
               recoveryData?.status !== 'recovered'
@@ -159,6 +219,7 @@ export default function LoginPage() {
                   : 'تعذر استرجاع الجهاز. حاول مرة أخرى.',
               )
               setLoading(false)
+              markTiming('stop: device recovery failed')
               return
             }
           } else if (
@@ -169,16 +230,21 @@ export default function LoginPage() {
               'تعذر تحديد حالة الجهاز. حاول مرة أخرى.',
             )
             setLoading(false)
+            markTiming('stop: unknown recovery status')
             return
           }
+
+          markTiming(`device recovery status: ${recoveryStatus}`)
         }
+      } else {
+        markTiming('device recovery skipped: no key')
       }
 
       /*
-       * 2. تسجيل الدخول المعتاد.
-       *    إذا لم يوجد مفتاح مسجل، يبقى اعتماد الجهاز الجديد مطلوبًا.
+       * 3. تسجيل الدخول الأساسي.
        */
-      const loginResponse = await fetch(
+      const loginResponse = await timedFetch(
+        'main login',
         '/api/auth/login',
         {
           method: 'POST',
@@ -197,6 +263,8 @@ export default function LoginPage() {
       const loginData =
         await loginResponse.json().catch(() => null)
 
+      markTiming('read main login response')
+
       if (!loginResponse.ok) {
         setError(
           typeof loginData?.error === 'string'
@@ -204,16 +272,17 @@ export default function LoginPage() {
             : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
         )
         setLoading(false)
+        markTiming('stop: main login failed')
         return
       }
 
       /*
-       * 3. تسجيل المفتاح للجهاز المعتمد إذا لم يكن مسجلًا.
-       *    فشل هذه الخطوة لا يمنع الدخول المعتاد.
+       * 4. تسجيل مفتاح الجهاز.
        */
       if (deviceKey) {
         try {
-          const challengeResponse = await fetch(
+          const challengeResponse = await timedFetch(
+            'device key registration challenge',
             '/api/auth/device-key',
             {
               method: 'POST',
@@ -232,15 +301,24 @@ export default function LoginPage() {
             const challengeData =
               await challengeResponse.json()
 
+            markTiming('read device registration challenge')
+
             if (
               typeof challengeData?.challenge === 'string'
             ) {
+              const signingStartedAt = performance.now()
+
               const signature =
                 await deviceKey.signChallenge(
                   challengeData.challenge,
                 )
 
-              const registerResponse = await fetch(
+              console.info(
+                `[LOGIN PAGE TIMING] sign registration challenge: ${Math.round(performance.now() - signingStartedAt)}ms`,
+              )
+
+              const registerResponse = await timedFetch(
+                'device key registration',
                 '/api/auth/device-key',
                 {
                   method: 'POST',
@@ -263,7 +341,13 @@ export default function LoginPage() {
                   'Device key registration failed.',
                 )
               }
+
+              markTiming('device key registration finished')
             }
+          } else {
+            console.warn(
+              'Device key registration challenge failed.',
+            )
           }
         } catch (keyError) {
           console.warn(
@@ -271,12 +355,17 @@ export default function LoginPage() {
             keyError,
           )
         }
+
+        markTiming('device key registration stage')
+      } else {
+        markTiming('device key registration skipped')
       }
 
       /*
-       * 4. تحميل أقسام لوحة التحكم.
+       * 5. تحميل أقسام لوحة التحكم.
        */
-      const sectionsResponse = await fetch(
+      const sectionsResponse = await timedFetch(
+        'dashboard sections',
         '/api/auth/dashboard-sections',
         {
           method: 'GET',
@@ -288,6 +377,8 @@ export default function LoginPage() {
       const sectionsData =
         await sectionsResponse.json().catch(() => null)
 
+      markTiming('read dashboard sections response')
+
       if (!sectionsResponse.ok) {
         setError(
           typeof sectionsData?.error === 'string'
@@ -295,6 +386,7 @@ export default function LoginPage() {
             : 'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
         )
         setLoading(false)
+        markTiming('stop: dashboard sections failed')
         return
       }
 
@@ -317,7 +409,13 @@ export default function LoginPage() {
               )
           : []
 
+      const cacheStartedAt = performance.now()
+
       saveDashboardSections(sections)
+
+      console.info(
+        `[LOGIN PAGE TIMING] save dashboard sections cache: ${Math.round(performance.now() - cacheStartedAt)}ms`,
+      )
 
       const firstSection = sections[0]
 
@@ -365,6 +463,11 @@ export default function LoginPage() {
           })
       }
 
+      markTiming('start dashboard cache preloading')
+
+      /*
+       * 6. التوجيه إلى الصفحة الرئيسية المسموح بها.
+       */
       setRedirecting(true)
       setLoading(false)
 
@@ -372,7 +475,13 @@ export default function LoginPage() {
         requestAnimationFrame(() => resolve())
       })
 
+      markTiming(`before router.replace: ${destination}`)
+
       router.replace(destination)
+
+      // هذا القياس لا يعني أن الصفحة الجديدة اكتملت؛
+      // يقيس فقط الزمن حتى استدعاء router.replace.
+      markTiming('router.replace called')
     } catch (submitError) {
       console.error(
         'Login request error:',
@@ -385,6 +494,7 @@ export default function LoginPage() {
 
       setLoading(false)
       setRedirecting(false)
+      markTiming('login flow exception')
     }
   }
 
