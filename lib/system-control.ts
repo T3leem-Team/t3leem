@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -11,7 +12,22 @@ const supabaseAdmin = createClient(
   },
 )
 
+const MAINTENANCE_CACHE_TTL_MS = 3_000
+
+let cachedMaintenanceMode: boolean | null = null
+let cacheExpiresAt = 0
+
 export async function isMaintenanceMode(): Promise<boolean> {
+  const now = Date.now()
+
+  // استخدام القيمة المحفوظة إذا كانت لا تزال صالحة
+  if (
+    cachedMaintenanceMode !== null &&
+    now < cacheExpiresAt
+  ) {
+    return cachedMaintenanceMode
+  }
+
   const { data, error } = await supabaseAdmin
     .from('system_settings')
     .select('system_enabled')
@@ -20,10 +36,16 @@ export async function isMaintenanceMode(): Promise<boolean> {
 
   if (error || !data) {
     console.error('System settings lookup error:', error)
+
     throw new Error('تعذر التحقق من حالة النظام.')
   }
 
-  return data.system_enabled === false
+  const maintenanceMode = data.system_enabled === false
+
+  cachedMaintenanceMode = maintenanceMode
+  cacheExpiresAt = Date.now() + MAINTENANCE_CACHE_TTL_MS
+
+  return maintenanceMode
 }
 
 export async function setMaintenanceMode(
@@ -39,6 +61,11 @@ export async function setMaintenanceMode(
 
   if (error) {
     console.error('System settings update error:', error)
+
     throw new Error('تعذر تحديث حالة النظام.')
   }
+
+  // تحديث الذاكرة المؤقتة فور نجاح التغيير
+  cachedMaintenanceMode = enabled
+  cacheExpiresAt = Date.now() + MAINTENANCE_CACHE_TTL_MS
 }
