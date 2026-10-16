@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Check,
   Menu,
@@ -92,6 +92,10 @@ type NotificationItem = {
   createdAt: string
 }
 
+type LogoutWindow = Window & {
+  __t3leemLogoutPromise?: Promise<void>
+}
+
 function getInitials(name: string) {
   const cleanName = name.trim()
 
@@ -159,6 +163,7 @@ export function Header({
   onMenuClick: () => void
 }) {
   const pathname = usePathname()
+  const router = useRouter()
 
   const [open, setOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -183,38 +188,26 @@ export function Header({
     useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
-
   const profileRef = useRef<HTMLDivElement>(null)
-
-  const notificationsRef =
-    useRef<HTMLDivElement>(null)
+  const notificationsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const savedMode =
-      localStorage.getItem('t3leem-mode')
-
-    const savedTheme =
-      localStorage.getItem('t3leem-theme')
+    const savedMode = localStorage.getItem('t3leem-mode')
+    const savedTheme = localStorage.getItem('t3leem-theme')
 
     const initialMode =
-      savedMode === 'dark'
-        ? 'dark'
-        : 'light'
+      savedMode === 'dark' ? 'dark' : 'light'
 
-    const initialTheme =
-      themes.some(
-        (item) => item.value === savedTheme,
-      )
-        ? savedTheme!
-        : 'green'
+    const initialTheme = themes.some(
+      (item) => item.value === savedTheme,
+    )
+      ? savedTheme!
+      : 'green'
 
     setMode(initialMode)
     setTheme(initialTheme)
 
-    applyTheme(
-      initialMode,
-      initialTheme,
-    )
+    applyTheme(initialMode, initialTheme)
   }, [])
 
   useEffect(() => {
@@ -231,24 +224,14 @@ export function Header({
           return
         }
 
-        const { data, error } =
-          await supabase
-            .from('user_profiles')
-            .select(
-              'username, full_name, role',
-            )
-            .eq(
-              'auth_user_id',
-              user.id,
-            )
-            .maybeSingle()
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('username, full_name, role')
+          .eq('auth_user_id', user.id)
+          .maybeSingle()
 
         if (error) {
-          console.error(
-            'Profile load error:',
-            error,
-          )
-
+          console.error('Profile load error:', error)
           return
         }
 
@@ -256,10 +239,7 @@ export function Header({
           setProfile(data)
         }
       } catch (error) {
-        console.error(
-          'Profile request error:',
-          error,
-        )
+        console.error('Profile request error:', error)
       } finally {
         setLoadingProfile(false)
       }
@@ -268,176 +248,131 @@ export function Header({
     loadProfile()
   }, [])
 
-  const loadNotifications =
-    useCallback(async () => {
-      try {
-        setLoadingNotifications(true)
+  const loadNotifications = useCallback(async () => {
+    try {
+      setLoadingNotifications(true)
 
-        const now = new Date()
+      const now = new Date()
 
-        const bahrainDate =
-          new Intl.DateTimeFormat(
-            'en-CA',
-            {
-              timeZone: 'Asia/Bahrain',
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-            },
-          ).format(now)
+      const bahrainDate = new Intl.DateTimeFormat(
+        'en-CA',
+        {
+          timeZone: 'Asia/Bahrain',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        },
+      ).format(now)
 
-        const startOfDay = new Date(
-          `${bahrainDate}T00:00:00+03:00`,
-        )
+      const startOfDay = new Date(
+        `${bahrainDate}T00:00:00+03:00`,
+      )
 
-        const endOfDay = new Date(
-          `${bahrainDate}T23:59:59.999+03:00`,
-        )
+      const endOfDay = new Date(
+        `${bahrainDate}T23:59:59.999+03:00`,
+      )
 
-        const {
-          data: logs,
-          error: logsError,
-        } = await supabase
+      const { data: logs, error: logsError } =
+        await supabase
           .from('auth_audit_logs')
-          .select(
-            `
+          .select(`
             id,
             auth_user_id,
             event_type,
             success,
             created_at
-            `,
-          )
-          .eq(
-            'event_type',
-            'login_success',
-          )
-          .eq(
-            'success',
-            true,
-          )
-          .gte(
-            'created_at',
-            startOfDay.toISOString(),
-          )
-          .lte(
-            'created_at',
-            endOfDay.toISOString(),
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            },
-          )
+          `)
+          .eq('event_type', 'login_success')
+          .eq('success', true)
+          .gte('created_at', startOfDay.toISOString())
+          .lte('created_at', endOfDay.toISOString())
+          .order('created_at', {
+            ascending: false,
+          })
 
-        if (logsError) {
-          console.error(
-            'Notifications load error:',
-            logsError,
-          )
-
-          setNotifications([])
-          return
-        }
-
-        if (!logs || logs.length === 0) {
-          setNotifications([])
-          return
-        }
-
-        const userIds = [
-          ...new Set(
-            logs.map(
-              (log: AuditLog) =>
-                log.auth_user_id,
-            ),
-          ),
-        ]
-
-        const {
-          data: profiles,
-          error: profilesError,
-        } =
-          await supabase
-            .from('user_profiles')
-            .select(
-              `
-              auth_user_id,
-              username,
-              full_name
-              `,
-            )
-            .in(
-              'auth_user_id',
-              userIds,
-            )
-
-        if (profilesError) {
-          console.error(
-            'Notification profiles load error:',
-            profilesError,
-          )
-        }
-
-        const profileMap =
-          new Map<
-            string,
-            {
-              username: string
-              full_name: string
-            }
-          >()
-
-        ;(profiles ?? []).forEach(
-          (item) => {
-            profileMap.set(
-              item.auth_user_id,
-              {
-                username:
-                  item.username,
-                full_name:
-                  item.full_name,
-              },
-            )
-          },
-        )
-
-        const items: NotificationItem[] =
-          logs.map(
-            (log: AuditLog) => {
-              const userProfile =
-                profileMap.get(
-                  log.auth_user_id,
-                )
-
-              return {
-                id: log.id,
-                userName:
-                  userProfile?.full_name ||
-                  userProfile?.username ||
-                  'مستخدم',
-                username:
-                  userProfile?.username ||
-                  '',
-                createdAt:
-                  log.created_at,
-              }
-            },
-          )
-
-        setNotifications(items)
-      } catch (error) {
+      if (logsError) {
         console.error(
-          'Notifications request error:',
-          error,
+          'Notifications load error:',
+          logsError,
         )
 
         setNotifications([])
-      } finally {
-        setLoadingNotifications(false)
+        return
       }
-    }, [])
+
+      if (!logs || logs.length === 0) {
+        setNotifications([])
+        return
+      }
+
+      const userIds = [
+        ...new Set(
+          logs.map((log: AuditLog) => log.auth_user_id),
+        ),
+      ]
+
+      const { data: profiles, error: profilesError } =
+        await supabase
+          .from('user_profiles')
+          .select(`
+            auth_user_id,
+            username,
+            full_name
+          `)
+          .in('auth_user_id', userIds)
+
+      if (profilesError) {
+        console.error(
+          'Notification profiles load error:',
+          profilesError,
+        )
+      }
+
+      const profileMap = new Map<
+        string,
+        {
+          username: string
+          full_name: string
+        }
+      >()
+
+      ;(profiles ?? []).forEach((item) => {
+        profileMap.set(item.auth_user_id, {
+          username: item.username,
+          full_name: item.full_name,
+        })
+      })
+
+      const items: NotificationItem[] = logs.map(
+        (log: AuditLog) => {
+          const userProfile = profileMap.get(
+            log.auth_user_id,
+          )
+
+          return {
+            id: log.id,
+            userName:
+              userProfile?.full_name ||
+              userProfile?.username ||
+              'مستخدم',
+            username: userProfile?.username || '',
+            createdAt: log.created_at,
+          }
+        },
+      )
+
+      setNotifications(items)
+    } catch (error) {
+      console.error(
+        'Notifications request error:',
+        error,
+      )
+
+      setNotifications([])
+    } finally {
+      setLoadingNotifications(false)
+    }
+  }, [])
 
   useEffect(() => {
     void loadNotifications()
@@ -446,70 +381,56 @@ export function Header({
   useEffect(() => {
     let mounted = true
 
-    const channel =
-      supabase
-        .channel(
-          't3leem-login-notifications',
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'auth_audit_logs',
-            filter:
-              'event_type=eq.login_success',
-          },
-          async (payload) => {
-            if (!mounted) {
-              return
-            }
-
-            const newLog =
-              payload.new as AuditLog
-
-            if (
-              newLog.event_type !==
-                'login_success' ||
-              !newLog.success
-            ) {
-              return
-            }
-
-            await loadNotifications()
-          },
-        )
-        .subscribe((status) => {
-          if (
-            status === 'CHANNEL_ERROR'
-          ) {
-            console.error(
-              'Login notifications realtime channel error',
-            )
+    const channel = supabase
+      .channel('t3leem-login-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'auth_audit_logs',
+          filter: 'event_type=eq.login_success',
+        },
+        async (payload) => {
+          if (!mounted) {
+            return
           }
 
+          const newLog = payload.new as AuditLog
+
           if (
-            status === 'TIMED_OUT'
+            newLog.event_type !== 'login_success' ||
+            !newLog.success
           ) {
-            console.error(
-              'Login notifications realtime channel timed out',
-            )
+            return
           }
-        })
+
+          await loadNotifications()
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error(
+            'Login notifications realtime channel error',
+          )
+        }
+
+        if (status === 'TIMED_OUT') {
+          console.error(
+            'Login notifications realtime channel timed out',
+          )
+        }
+      })
 
     return () => {
       mounted = false
-
       supabase.removeChannel(channel)
     }
   }, [loadNotifications])
 
   useEffect(() => {
-    function handleClickOutside(
-      event: MouseEvent,
-    ) {
-      const target =
-        event.target as Node
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node
 
       if (
         menuRef.current &&
@@ -520,18 +441,14 @@ export function Header({
 
       if (
         profileRef.current &&
-        !profileRef.current.contains(
-          target,
-        )
+        !profileRef.current.contains(target)
       ) {
         setProfileOpen(false)
       }
 
       if (
         notificationsRef.current &&
-        !notificationsRef.current.contains(
-          target,
-        )
+        !notificationsRef.current.contains(target)
       ) {
         setNotificationsOpen(false)
       }
@@ -555,16 +472,14 @@ export function Header({
     selectedTheme: string,
   ) {
     const selected = themes.find(
-      (item) =>
-        item.value === selectedTheme,
+      (item) => item.value === selectedTheme,
     )
 
     if (!selected) {
       return
     }
 
-    const root =
-      document.documentElement
+    const root = document.documentElement
 
     root.classList.toggle(
       'dark',
@@ -581,30 +496,11 @@ export function Header({
         ? selected.dark
         : selected.light
 
-    root.style.setProperty(
-      '--primary',
-      primary,
-    )
-
-    root.style.setProperty(
-      '--ring',
-      primary,
-    )
-
-    root.style.setProperty(
-      '--sidebar-primary',
-      primary,
-    )
-
-    root.style.setProperty(
-      '--sidebar-ring',
-      primary,
-    )
-
-    root.style.setProperty(
-      '--chart-1',
-      primary,
-    )
+    root.style.setProperty('--primary', primary)
+    root.style.setProperty('--ring', primary)
+    root.style.setProperty('--sidebar-primary', primary)
+    root.style.setProperty('--sidebar-ring', primary)
+    root.style.setProperty('--chart-1', primary)
 
     root.style.setProperty(
       '--secondary',
@@ -614,60 +510,64 @@ export function Header({
     )
   }
 
-  function changeMode(
-    nextMode: 'light' | 'dark',
-  ) {
+  function changeMode(nextMode: 'light' | 'dark') {
     setMode(nextMode)
-
-    localStorage.setItem(
-      't3leem-mode',
-      nextMode,
-    )
-
-    applyTheme(
-      nextMode,
-      theme,
-    )
+    localStorage.setItem('t3leem-mode', nextMode)
+    applyTheme(nextMode, theme)
   }
 
-  function changeTheme(
-    nextTheme: string,
-  ) {
+  function changeTheme(nextTheme: string) {
     setTheme(nextTheme)
-
-    localStorage.setItem(
-      't3leem-theme',
-      nextTheme,
-    )
-
-    applyTheme(
-      mode,
-      nextTheme,
-    )
+    localStorage.setItem('t3leem-theme', nextTheme)
+    applyTheme(mode, nextTheme)
   }
 
-  // تسجيل الخروج: الانتقال لا ينتظر رد الخادم.
+  /**
+   * يبدأ طلب الخروج في الخلفية وينتقل فورًا إلى صفحة الدخول.
+   * تحتفظ window بوعد العملية لكي تتمكن صفحة الدخول
+   * من انتظاره أثناء التنقل داخل التطبيق.
+   */
   function handleLogout() {
     try {
       clearAllCaches()
     } catch (error) {
-      console.error(
-        'Clear caches error:',
-        error,
-      )
+      console.error('Clear caches error:', error)
     }
 
-    void fetch('/api/auth/logout', {
-      method: 'POST',
-      keepalive: true,
-    }).catch((error) => {
-      console.error(
-        'Logout request error:',
-        error,
-      )
-    })
+    const logoutWindow = window as LogoutWindow
 
-    window.location.replace('/login')
+    if (!logoutWindow.__t3leemLogoutPromise) {
+      let pendingLogout: Promise<void>
+
+      pendingLogout = fetch('/api/auth/logout', {
+        method: 'POST',
+        cache: 'no-store',
+        keepalive: true,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            console.error(
+              'Logout request failed:',
+              response.status,
+            )
+          }
+        })
+        .catch((error) => {
+          console.error('Logout request error:', error)
+        })
+        .finally(() => {
+          if (
+            logoutWindow.__t3leemLogoutPromise ===
+            pendingLogout
+          ) {
+            delete logoutWindow.__t3leemLogoutPromise
+          }
+        })
+
+      logoutWindow.__t3leemLogoutPromise = pendingLogout
+    }
+
+    router.replace('/login')
   }
 
   const displayName =
@@ -675,13 +575,11 @@ export function Header({
     profile?.username ||
     'مدير النظام'
 
-  const initials =
-    getInitials(displayName)
+  const initials = getInitials(displayName)
 
-  const currentTheme =
-    themes.find(
-      (item) => item.value === theme,
-    )
+  const currentTheme = themes.find(
+    (item) => item.value === theme,
+  )
 
   const currentThemeColor =
     mode === 'dark'
@@ -709,11 +607,7 @@ export function Header({
       >
         <button
           type="button"
-          onClick={() =>
-            setOpen(
-              (value) => !value,
-            )
-          }
+          onClick={() => setOpen((value) => !value)}
           className="group relative flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
           aria-label="تخصيص المظهر"
           aria-expanded={open}
@@ -723,8 +617,7 @@ export function Header({
           <span
             className="absolute bottom-1 right-1 size-2.5 rounded-full border-2 border-background"
             style={{
-              backgroundColor:
-                currentThemeColor,
+              backgroundColor: currentThemeColor,
             }}
           />
         </button>
@@ -744,9 +637,7 @@ export function Header({
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() =>
-                  changeMode('light')
-                }
+                onClick={() => changeMode('light')}
                 className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                   mode === 'light'
                     ? 'border-primary bg-primary/10 text-primary'
@@ -755,7 +646,6 @@ export function Header({
               >
                 <Sun className="size-4" />
                 نهاري
-
                 {mode === 'light' && (
                   <Check className="size-3.5" />
                 )}
@@ -763,9 +653,7 @@ export function Header({
 
               <button
                 type="button"
-                onClick={() =>
-                  changeMode('dark')
-                }
+                onClick={() => changeMode('dark')}
                 className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                   mode === 'dark'
                     ? 'border-primary bg-primary/10 text-primary'
@@ -774,7 +662,6 @@ export function Header({
               >
                 <Moon className="size-4" />
                 دارك
-
                 {mode === 'dark' && (
                   <Check className="size-3.5" />
                 )}
@@ -788,8 +675,7 @@ export function Header({
 
               <div className="grid grid-cols-6 gap-2">
                 {themes.map((item) => {
-                  const selected =
-                    theme === item.value
+                  const selected = theme === item.value
 
                   const color =
                     mode === 'dark'
@@ -801,23 +687,14 @@ export function Header({
                       key={item.value}
                       type="button"
                       title={item.name}
-                      onClick={() =>
-                        changeTheme(
-                          item.value,
-                        )
-                      }
+                      onClick={() => changeTheme(item.value)}
                       className={`relative flex size-9 items-center justify-center rounded-full border-2 transition-transform hover:scale-110 ${
                         selected
                           ? 'border-foreground'
                           : 'border-transparent'
                       }`}
-                      style={{
-                        backgroundColor:
-                          color,
-                      }}
-                      aria-label={
-                        item.name
-                      }
+                      style={{ backgroundColor: color }}
+                      aria-label={item.name}
                     >
                       {selected && (
                         <Check className="size-4 text-white drop-shadow" />
@@ -839,9 +716,7 @@ export function Header({
         <button
           type="button"
           onClick={() => {
-            const next =
-              !notificationsOpen
-
+            const next = !notificationsOpen
             setNotificationsOpen(next)
 
             if (next) {
@@ -850,9 +725,7 @@ export function Header({
           }}
           className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="الإشعارات"
-          aria-expanded={
-            notificationsOpen
-          }
+          aria-expanded={notificationsOpen}
         >
           <Bell className="size-5" />
 
@@ -905,36 +778,30 @@ export function Header({
                   لا توجد عمليات دخول مسجلة اليوم.
                 </div>
               ) : (
-                notifications.map(
-                  (item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
-                    >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                        {getInitials(
-                          item.userName,
-                        )}
-                      </span>
+                notifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {getInitials(item.userName)}
+                    </span>
 
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {item.userName}
-                        </p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {item.userName}
+                      </p>
 
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          سجل دخول إلى النظام
-                        </p>
-                      </div>
-
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {formatRelativeTime(
-                          item.createdAt,
-                        )}
-                      </span>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        سجل دخول إلى النظام
+                      </p>
                     </div>
-                  ),
-                )
+
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {formatRelativeTime(item.createdAt)}
+                    </span>
+                  </div>
+                ))
               )}
             </div>
 
@@ -956,19 +823,13 @@ export function Header({
       >
         <button
           type="button"
-          onClick={() =>
-            setProfileOpen(
-              (value) => !value,
-            )
-          }
+          onClick={() => setProfileOpen((value) => !value)}
           className="flex items-center gap-2 rounded-lg p-1.5 transition-colors hover:bg-muted"
           aria-label="حساب المستخدم"
           aria-expanded={profileOpen}
         >
           <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-            {loadingProfile
-              ? '...'
-              : initials}
+            {loadingProfile ? '...' : initials}
           </span>
 
           <div className="hidden text-right lg:block">
@@ -979,8 +840,7 @@ export function Header({
             </p>
 
             <p className="text-xs text-muted-foreground">
-              {profile?.role ||
-                'Admin'}
+              {profile?.role || 'Admin'}
             </p>
           </div>
         </button>
@@ -998,13 +858,11 @@ export function Header({
                 </p>
 
                 <p className="truncate text-xs text-muted-foreground">
-                  @{profile?.username ||
-                    'admin'}
+                  @{profile?.username || 'admin'}
                 </p>
 
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {profile?.role ||
-                    'Admin'}
+                  {profile?.role || 'Admin'}
                 </p>
               </div>
             </div>
