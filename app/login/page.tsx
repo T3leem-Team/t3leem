@@ -1,3 +1,4 @@
+
 'use client'
 
 import { FormEvent, useState } from 'react'
@@ -13,7 +14,6 @@ import {
   saveDashboardSections,
   type DashboardSection,
 } from '@/lib/dashboard-sections-cache'
-import { getOrCreateDeviceKey } from '@/lib/device-key'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -84,30 +84,8 @@ export default function LoginPage() {
 
     try {
       /*
-       * 1. تجهيز مفتاح الجهاز محليًا.
-       * لا نستدعي مسار استعادة الجهاز.
-       */
-      let deviceKey:
-        | Awaited<ReturnType<typeof getOrCreateDeviceKey>>
-        | null = null
-
-      try {
-        const keyStartedAt = performance.now()
-
-        deviceKey = await getOrCreateDeviceKey()
-
-        console.info(
-          `[LOGIN PAGE TIMING] getOrCreateDeviceKey: ${Math.round(performance.now() - keyStartedAt)}ms`,
-        )
-      } catch (keyError) {
-        console.warn('Device key unavailable:', keyError)
-      }
-
-      markTiming('device key preparation')
-      markTiming('device recovery skipped')
-
-      /*
-       * 2. تسجيل الدخول الأساسي.
+       * 1. تسجيل الدخول الأساسي.
+       * لا تجهيز لمفتاح الجهاز، ولا طلب challenge أو register.
        */
       const loginResponse = await timedFetch(
         'main login',
@@ -143,93 +121,7 @@ export default function LoginPage() {
       }
 
       /*
-       * 3. تسجيل مفتاح الجهاز إذا توفر.
-       * تبقى آلية التسجيل الأصلية كما هي.
-       */
-      if (deviceKey) {
-        try {
-          const challengeResponse = await timedFetch(
-            'device key registration challenge',
-            '/api/auth/device-key',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              cache: 'no-store',
-              body: JSON.stringify({
-                action: 'challenge',
-              }),
-            },
-          )
-
-          if (challengeResponse.ok) {
-            const challengeData =
-              await challengeResponse.json()
-
-            markTiming('read device registration challenge')
-
-            if (
-              typeof challengeData?.challenge === 'string'
-            ) {
-              const signingStartedAt = performance.now()
-
-              const signature =
-                await deviceKey.signChallenge(
-                  challengeData.challenge,
-                )
-
-              console.info(
-                `[LOGIN PAGE TIMING] sign registration challenge: ${Math.round(performance.now() - signingStartedAt)}ms`,
-              )
-
-              const registerResponse = await timedFetch(
-                'device key registration',
-                '/api/auth/device-key',
-                {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  credentials: 'include',
-                  cache: 'no-store',
-                  body: JSON.stringify({
-                    action: 'register',
-                    publicKey: deviceKey.publicKey,
-                    challenge: challengeData.challenge,
-                    signature,
-                  }),
-                },
-              )
-
-              if (!registerResponse.ok) {
-                console.warn(
-                  'Device key registration failed.',
-                )
-              }
-
-              markTiming('device key registration finished')
-            }
-          } else {
-            console.warn(
-              'Device key registration challenge failed.',
-            )
-          }
-        } catch (keyError) {
-          console.warn(
-            'Device key registration unavailable:',
-            keyError,
-          )
-        }
-
-        markTiming('device key registration stage')
-      } else {
-        markTiming('device key registration skipped: no key')
-      }
-
-      /*
-       * 4. تحميل أقسام لوحة التحكم.
+       * 2. تحميل أقسام لوحة التحكم.
        */
       const sectionsResponse = await timedFetch(
         'dashboard sections',
@@ -333,7 +225,7 @@ export default function LoginPage() {
       markTiming('start dashboard cache preloading')
 
       /*
-       * 5. التوجيه إلى الصفحة الرئيسية المسموح بها.
+       * 3. التوجيه إلى الصفحة الرئيسية المسموح بها.
        */
       setRedirecting(true)
       setLoading(false)
