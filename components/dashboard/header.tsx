@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -272,11 +273,6 @@ export function Header({
       try {
         setLoadingNotifications(true)
 
-        /*
-         * حساب بداية ونهاية اليوم حسب توقيت البحرين.
-         * قاعدة البيانات تخزن created_at كـ UTC،
-         * لذلك نحول بداية ونهاية اليوم إلى ISO قبل الاستعلام.
-         */
         const now = new Date()
 
         const bahrainDate =
@@ -443,22 +439,10 @@ export function Header({
       }
     }, [])
 
-  /*
-   * تحميل عمليات دخول اليوم مباشرة
-   * عند فتح الـDashboard.
-   */
   useEffect(() => {
     void loadNotifications()
   }, [loadNotifications])
 
-  /*
-   * -------------------------------------------------------
-   * Realtime Notifications
-   * -------------------------------------------------------
-   *
-   * أي login_success جديد اليوم
-   * يسبب تحديث الإشعارات مباشرة.
-   */
   useEffect(() => {
     let mounted = true
 
@@ -662,21 +646,28 @@ export function Header({
     )
   }
 
-  async function handleLogout() {
+  // تسجيل الخروج: الانتقال لا ينتظر رد الخادم.
+  function handleLogout() {
     try {
       clearAllCaches()
-
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-      })
     } catch (error) {
+      console.error(
+        'Clear caches error:',
+        error,
+      )
+    }
+
+    void fetch('/api/auth/logout', {
+      method: 'POST',
+      keepalive: true,
+    }).catch((error) => {
       console.error(
         'Logout request error:',
         error,
       )
-    } finally {
-      window.location.href = '/login'
-    }
+    })
+
+    window.location.replace('/login')
   }
 
   const displayName =
