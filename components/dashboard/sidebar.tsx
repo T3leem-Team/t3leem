@@ -23,6 +23,7 @@ import {
 
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { clearAllCaches } from '@/lib/clear-all-caches'
 
 type DashboardSection = {
   id: string
@@ -47,6 +48,10 @@ type CurrentUser = {
   full_name?: string | null
   email?: string | null
   role?: string | null
+}
+
+type LogoutWindow = Window & {
+  __t3leemLogoutPromise?: Promise<void>
 }
 
 const DEFAULT_SCHOOL_NAME = 'تعليم'
@@ -247,7 +252,7 @@ export function Sidebar({
       }
     }
 
-    loadCurrentUser()
+    void loadCurrentUser()
 
     return () => {
       cancelled = true
@@ -270,6 +275,7 @@ export function Sidebar({
           '/api/auth/dashboard-sections',
           {
             method: 'GET',
+            credentials: 'include',
             cache: 'no-store',
           },
         )
@@ -299,7 +305,12 @@ export function Sidebar({
 
           setSections(loadedSections)
         }
-      } catch {
+      } catch (error) {
+        console.error(
+          'Load dashboard sections error:',
+          error,
+        )
+
         if (!cancelled) {
           setSections([])
         }
@@ -310,7 +321,7 @@ export function Sidebar({
       }
     }
 
-    loadSections()
+    void loadSections()
 
     return () => {
       cancelled = true
@@ -356,7 +367,7 @@ export function Sidebar({
       }
     }
 
-    loadSchoolSettings()
+    void loadSchoolSettings()
 
     return () => {
       cancelled = true
@@ -465,7 +476,12 @@ export function Sidebar({
    * -------------------------------------------------------
    * تسجيل الخروج
    *
-   * الانتقال لا ينتظر اكتمال طلب الخروج.
+   * نفس آلية Header:
+   * 1. منع النقر المتكرر.
+   * 2. مسح الكاش.
+   * 3. بدء طلب الخروج دون انتظاره.
+   * 4. مشاركة وعد الخروج مع صفحة الدخول.
+   * 5. الانتقال مباشرة إلى صفحة الدخول.
    * -------------------------------------------------------
    */
   function handleLogout() {
@@ -475,17 +491,53 @@ export function Sidebar({
 
     setLoggingOut(true)
 
-    void fetch('/api/auth/logout', {
-      method: 'POST',
-      cache: 'no-store',
-      keepalive: true,
-    }).catch((error) => {
+    try {
+      clearAllCaches()
+    } catch (error) {
       console.error(
-        'Logout request error:',
+        'Clear caches error:',
         error,
       )
-    })
+    }
 
+    const logoutWindow = window as LogoutWindow
+
+    // إذا كان طلب الخروج قد بدأ بالفعل، نستخدم الطلب نفسه.
+    if (!logoutWindow.__t3leemLogoutPromise) {
+      let pendingLogout: Promise<void>
+
+      pendingLogout = fetch('/api/auth/logout', {
+        method: 'POST',
+        cache: 'no-store',
+        keepalive: true,
+        credentials: 'include',
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(
+              `Logout failed: ${response.status}`,
+            )
+          }
+        })
+        .catch((error) => {
+          console.error(
+            'Logout request error:',
+            error,
+          )
+        })
+        .finally(() => {
+          if (
+            logoutWindow.__t3leemLogoutPromise ===
+            pendingLogout
+          ) {
+            delete logoutWindow.__t3leemLogoutPromise
+          }
+        })
+
+      logoutWindow.__t3leemLogoutPromise = pendingLogout
+    }
+
+    // لا ننتظر الخادم هنا؛ الانتقال فوري.
     router.replace('/login')
   }
 
@@ -677,7 +729,6 @@ export function Sidebar({
           }}
         >
           <div className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-            {/* رأس النافذة */}
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
                 <h2
@@ -703,7 +754,6 @@ export function Sidebar({
               </button>
             </div>
 
-            {/* الحقول */}
             <div className="space-y-5 p-5">
               <div className="space-y-2">
                 <label
@@ -756,7 +806,6 @@ export function Sidebar({
               )}
             </div>
 
-            {/* الأزرار */}
             <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-4">
               <button
                 type="button"
