@@ -1007,14 +1007,12 @@ export default function RegistrationForm(
                     )}
 
                     {settings.show_phone && (
-                      <div>
+                      <div className="rounded-xl border p-4 space-y-2">
                         <FieldLabel
-                          label="رقم الاتصال الأساسي - الواتساب"
-                          required={
-                            settings.required_phone
-                          }
+                          label="رقم واتساب الشخص المسؤول عن الطالب"
+                          required={settings.required_phone}
                         />
-
+                    
                         <Input
                           type="tel"
                           inputMode="numeric"
@@ -1031,126 +1029,86 @@ export default function RegistrationForm(
                           placeholder="مثال: 3XXXXXXX"
                           autoComplete="tel"
                           dir="ltr"
-                          required={
-                            settings.required_phone
-                          }
+                          required={settings.required_phone}
                         />
-
-                        {phone.length > 0 &&
-                          phone.length !== 8 && (
-                            <p
-                              className="mt-1.5 text-sm font-medium text-red-600"
-                              role="alert"
-                            >
-                              رقم الاتصال الأساسي يجب أن يتكون من 8 أرقام.
-                              {` باقي ${8 - phone.length} أرقام.`}
-                            </p>
-                          )}
+                    
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          سيتم استخدام هذا الرقم للتواصل المباشر مع الشخص المسؤول عن الطالب
+                          عبر الهاتف أو الواتساب. يرجى التأكد من صحة الرقم وفعاليته،
+                          وتحديد صلة القرابة أدناه.
+                        </p>
+                    
+                        {phone.length > 0 && phone.length !== 8 && (
+                          <p
+                            className="mt-1.5 text-sm font-medium text-red-600"
+                            role="alert"
+                          >
+                            رقم الواتساب يجب أن يتكون من 8 أرقام.
+                            {` باقي ${8 - phone.length} أرقام.`}
+                          </p>
+                        )}
                       </div>
                     )}
-
+                    
                     {settings.show_guardian_relation && (
-                      <div>
+                      <div className="rounded-xl border p-4 space-y-2">
                         <FieldLabel
-                          label="صلة القرابة"
-                          required={
-                            settings.required_guardian_relation
-                          }
+                          label="صلة قرابة الشخص المسؤول عن الطالب"
+                          required={settings.required_guardian_relation}
                         />
-
+                    
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          حدد صلة قرابة الشخص الذي سيتم التواصل معه مباشرة لمتابعة شؤون الطالب.
+                        </p>
+                    
                         <Select
-                          value={
-                            guardianRelation
-                          }
+                          value={guardianRelation}
                           onChange={(event) => {
-                            const value =
-                              event.target.value
-
-                            setGuardianRelation(
-                              value,
-                            )
-
-                            if (
-                              value !==
-                              'أخرى'
-                            ) {
-                              setCustomGuardianRelation(
-                                '',
-                              )
+                            const value = event.target.value
+                    
+                            setGuardianRelation(value)
+                    
+                            if (value !== 'أخرى') {
+                              setCustomGuardianRelation('')
                             }
                           }}
                           required={
                             settings.required_guardian_relation &&
-                            guardianRelation !==
-                              'أخرى'
+                            guardianRelation !== 'أخرى'
                           }
                         >
-                          <option value="">
-                            اختر صلة القرابة
-                          </option>
-
-                          <option value="الأب">
-                            الأب
-                          </option>
-
-                          <option value="الأم">
-                            الأم
-                          </option>
-
-                          <option value="الأخ">
-                            الأخ
-                          </option>
-
-                          <option value="الأخت">
-                            الأخت
-                          </option>
-
-                          <option value="الجد">
-                            الجد
-                          </option>
-
-                          <option value="الجدة">
-                            الجدة
-                          </option>
-
-                          <option value="أخرى">
-                            أخرى
-                          </option>
+                          <option value="">اختر صلة القرابة</option>
+                          <option value="الأب">الأب</option>
+                          <option value="الأم">الأم</option>
+                          <option value="الأخ">الأخ</option>
+                          <option value="الأخت">الأخت</option>
+                          <option value="الجد">الجد</option>
+                          <option value="الجدة">الجدة</option>
+                          <option value="أخرى">أخرى</option>
                         </Select>
-
-                        {guardianRelation ===
-                          'أخرى' && (
+                    
+                        {guardianRelation === 'أخرى' && (
                           <div className="mt-3">
                             <Input
-                              value={
-                                customGuardianRelation
-                              }
-                              onChange={(
-                                event,
-                              ) =>
-                                setCustomGuardianRelation(
-                                  event.target.value,
-                                )
+                              value={customGuardianRelation}
+                              onChange={(event) =>
+                                setCustomGuardianRelation(event.target.value)
                               }
                               placeholder="اكتب صلة القرابة"
-                              required={
-                                settings.required_guardian_relation
-                              }
+                              required={settings.required_guardian_relation}
                             />
                           </div>
                         )}
                       </div>
                     )}
-
+                    
                     {settings.show_whatsapp && (
-                      <div>
+                      <div className="rounded-xl border p-4 space-y-2">
                         <FieldLabel
-                          label="رقم التواصل الثاني"
-                          required={
-                            settings.required_whatsapp
-                          }
+                          label="رقم واتساب إضافي للتواصل"
+                          required={settings.required_whatsapp}
                         />
-
+                    
                         <Input
                           type="tel"
                           inputMode="numeric"
@@ -1167,33 +1125,33 @@ export default function RegistrationForm(
                           placeholder="مثال: 3XXXXXXX"
                           autoComplete="tel"
                           dir="ltr"
-                          required={
-                            settings.required_whatsapp
-                          }
+                          required={settings.required_whatsapp}
                         />
-
-                        {whatsapp.length > 0 &&
-                          whatsapp.length !== 8 && (
-                            <p
-                              className="mt-1.5 text-sm font-medium text-red-600"
-                              role="alert"
-                            >
-                              رقم التواصل الثاني يجب أن يتكون من 8 أرقام.
-                              {` باقي ${8 - whatsapp.length} أرقام.`}
-                            </p>
-                          )}
+                    
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          أدخل رقم واتساب إضافيًا إذا رغبت في توفير وسيلة تواصل أخرى
+                          مع ولي الأمر أو شخص آخر معني بمتابعة الطالب.
+                        </p>
+                    
+                        {whatsapp.length > 0 && whatsapp.length !== 8 && (
+                          <p
+                            className="mt-1.5 text-sm font-medium text-red-600"
+                            role="alert"
+                          >
+                            رقم التواصل الإضافي يجب أن يتكون من 8 أرقام.
+                            {` باقي ${8 - whatsapp.length} أرقام.`}
+                          </p>
+                        )}
                       </div>
                     )}
-
+                    
                     {settings.show_student_phone && (
-                      <div>
+                      <div className="rounded-xl border p-4 space-y-2">
                         <FieldLabel
-                          label="رقم الطالب"
-                          required={
-                            settings.required_student_phone
-                          }
+                          label="رقم هاتف الطالب"
+                          required={settings.required_student_phone}
                         />
-
+                    
                         <Input
                           type="tel"
                           inputMode="numeric"
@@ -1210,23 +1168,24 @@ export default function RegistrationForm(
                           placeholder="أدخل رقم الطالب"
                           autoComplete="tel"
                           dir="ltr"
-                          required={
-                            settings.required_student_phone
-                          }
+                          required={settings.required_student_phone}
                         />
-
-                        {studentPhone.length > 0 &&
-                          studentPhone.length !== 8 && (
-                            <p
-                              className="mt-1.5 text-sm font-medium text-red-600"
-                              role="alert"
-                            >
-                              رقم الطالب يجب أن يتكون من 8 أرقام.
-                              {` باقي ${8 - studentPhone.length} أرقام.`}
-                            </p>
-                          )}
+                    
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          أدخل رقم هاتف الطالب نفسه إذا كان لديه رقم خاص به.
+                        </p>
+                    
+                        {studentPhone.length > 0 && studentPhone.length !== 8 && (
+                          <p
+                            className="mt-1.5 text-sm font-medium text-red-600"
+                            role="alert"
+                          >
+                            رقم هاتف الطالب يجب أن يتكون من 8 أرقام.
+                            {` باقي ${8 - studentPhone.length} أرقام.`}
+                          </p>
+                        )}
                       </div>
-                      )}
+                    )}
 
                     {settings.show_level && (
                       <div>
