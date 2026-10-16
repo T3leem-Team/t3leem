@@ -89,7 +89,7 @@ function getDeviceRecencyTimestamp(device: TrustedDevice): number {
 
 /**
  * عرض أحدث جهاز معتمد من كل نوع فقط.
- * هذه الدالة لا تحذف أي سجل من قاعدة البيانات.
+ * لا تحذف هذه الدالة أي سجل من قاعدة البيانات.
  */
 function getLatestApprovedDevicesByType(
   devices: TrustedDevice[],
@@ -148,7 +148,6 @@ export default function TrustedDevicesPage() {
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all')
   const [deviceSearch, setDeviceSearch] = useState('')
 
-  // القائمة مغلقة عند فتح الصفحة، والسهم هو المتحكم بفتحها وإغلاقها.
   const [showUserList, setShowUserList] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -498,9 +497,17 @@ export default function TrustedDevicesPage() {
     })
   }, [selectedUserDevices, deviceFilter, deviceSearch])
 
-  const pendingCount = devices.length
-  const approvedCount = approvedDevices.length
-  const expiredCount = approvedDevices.filter(isExpired).length
+  const pendingCount = devices.filter(
+    (device) => device.status === 'pending',
+  ).length
+
+  const approvedCount = approvedDevices.filter(
+    (device) => device.status === 'approved',
+  ).length
+
+  const expiredCount = approvedDevices.filter(
+    (device) => device.status === 'approved' && isExpired(device),
+  ).length
 
   function renderGraceDaysInput(device: TrustedDevice, label: string) {
     return (
@@ -694,7 +701,11 @@ export default function TrustedDevicesPage() {
                   disabled={processingId === device.id}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:bg-transparent dark:hover:bg-red-950/30"
                 >
-                  <X className="h-4 w-4" />
+                  {processingId === device.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4" />
+                  )}
                   رفض
                 </button>
               </>
@@ -722,7 +733,11 @@ export default function TrustedDevicesPage() {
                   disabled={processingId === device.id}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950/30"
                 >
-                  <Ban className="h-4 w-4" />
+                  {processingId === device.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Ban className="h-4 w-4" />
+                  )}
                   إلغاء الاعتماد
                 </button>
               </>
@@ -733,8 +748,20 @@ export default function TrustedDevicesPage() {
     )
   }
 
+  const pendingDevices = useMemo(
+    () =>
+      devices
+        .filter((device) => device.status === 'pending')
+        .sort(
+          (a, b) =>
+            getDeviceRecencyTimestamp(b) -
+            getDeviceRecencyTimestamp(a),
+        ),
+    [devices],
+  )
+
   return (
-    <div dir="rtl" className="space-y-5 p-1">
+    <div dir="rtl" className="space-y-5 p-1 sm:p-3">
       <div className="flex justify-start">
         <button
           type="button"
@@ -748,7 +775,7 @@ export default function TrustedDevicesPage() {
 
       <PageHeader
         title="الأجهزة الموثوقة"
-        description="اختر المستخدم لإدارة أجهزته المعتمدة والمعلقة."
+        description="طلبات الأجهزة المعلقة تظهر مباشرة، ويمكنك إدارة بقية الأجهزة عند الحاجة."
       />
 
       {error && (
@@ -769,38 +796,38 @@ export default function TrustedDevicesPage() {
         </div>
       )}
 
-      {/* الملخص بالألوان */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-3 dark:border-indigo-900 dark:bg-indigo-950/25">
+      {/* ملخص الأعداد */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-4 dark:border-indigo-900 dark:bg-indigo-950/25">
           <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
             <div className="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/60">
               <Users className="h-4 w-4" />
             </div>
-            <span className="text-xs font-medium">المستخدمون</span>
+            <span className="text-sm font-medium">المستخدمون</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-indigo-950 dark:text-indigo-100">
             {userGroups.length}
           </p>
         </div>
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900 dark:bg-amber-950/25">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900 dark:bg-amber-950/25">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
             <div className="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/60">
               <Clock3 className="h-4 w-4" />
             </div>
-            <span className="text-xs font-medium">أجهزة معلقة</span>
+            <span className="text-sm font-medium">طلبات معلقة</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-amber-950 dark:text-amber-100">
             {pendingCount}
           </p>
         </div>
 
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 dark:border-emerald-900 dark:bg-emerald-950/25">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 dark:border-emerald-900 dark:bg-emerald-950/25">
           <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
             <div className="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/60">
               <ShieldCheck className="h-4 w-4" />
             </div>
-            <span className="text-xs font-medium">أجهزة معتمدة</span>
+            <span className="text-sm font-medium">أجهزة معتمدة</span>
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-950 dark:text-emerald-100">
             {approvedCount}
@@ -813,7 +840,100 @@ export default function TrustedDevicesPage() {
         </div>
       </div>
 
-      {/* اختيار المستخدم */}
+      {/* الطلبات المعلقة - تظهر مباشرة عند فتح الصفحة */}
+      <Card className="overflow-hidden border-amber-300 dark:border-amber-900/70">
+        <CardHeader className="border-b border-amber-200 bg-amber-50/80 pb-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="rounded-lg bg-amber-100 p-2 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                <Clock3 className="h-5 w-5" />
+              </span>
+              طلبات الأجهزة المعلقة
+              <span className="rounded-full bg-amber-200 px-2.5 py-1 text-xs font-bold text-amber-900 dark:bg-amber-900 dark:text-amber-200">
+                {pendingCount}
+              </span>
+            </CardTitle>
+
+            <button
+              type="button"
+              onClick={() => void loadDevices()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900 dark:bg-background dark:hover:bg-amber-950/50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+              />
+              تحديث الطلبات
+            </button>
+          </div>
+
+          <CardDescription>
+            وافق على الطلب أو ارفضه مباشرة دون الحاجة إلى فتح حساب المستخدم.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-3 pt-4">
+          {loading && pendingDevices.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              جارٍ تحميل الطلبات المعلقة...
+            </div>
+          ) : pendingDevices.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-8 text-center dark:border-emerald-900 dark:bg-emerald-950/10">
+              <Check className="mx-auto mb-2 h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              <p className="font-medium text-emerald-800 dark:text-emerald-300">
+                لا توجد طلبات معلقة
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                ستظهر هنا أي طلبات جديدة فور تحميل البيانات أو تحديثها.
+              </p>
+            </div>
+          ) : (
+            pendingDevices.map((device) => (
+              <div key={device.id} className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="rounded-xl bg-amber-100 p-2 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
+                      <UserRound className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {device.user?.full_name ||
+                          device.user?.username ||
+                          'مستخدم غير معروف'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {device.user?.username
+                          ? `@${device.user.username}`
+                          : 'اسم المستخدم غير متوفر'}
+                        {device.user?.role
+                          ? ` · ${getRoleName(device.user.role)}`
+                          : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserId(device.auth_user_id)
+                      setDeviceFilter('all')
+                      setDeviceSearch('')
+                    }}
+                    className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-medium transition hover:bg-amber-100 dark:border-amber-900 dark:bg-background dark:hover:bg-amber-950"
+                  >
+                    عرض بقية الأجهزة
+                  </button>
+                </div>
+
+                {renderDeviceCard(device)}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {/* اختيار المستخدم - اختياري لإدارة بقية الأجهزة */}
       <Card className="overflow-hidden border-indigo-200/70 dark:border-indigo-900/70">
         <CardHeader className="border-b border-indigo-100 bg-indigo-50/50 pb-3 dark:border-indigo-900/60 dark:bg-indigo-950/20">
           <div className="flex items-center justify-between gap-3">
@@ -821,7 +941,7 @@ export default function TrustedDevicesPage() {
               <span className="rounded-lg bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
                 <UserRound className="h-5 w-5" />
               </span>
-              المستخدم
+              إدارة أجهزة المستخدم
             </CardTitle>
 
             <button
@@ -838,14 +958,13 @@ export default function TrustedDevicesPage() {
           </div>
 
           <CardDescription>
-            ابحث باسم المستخدم أو اسمه الكامل، ثم اختره لعرض أجهزته.
+            ابحث عن المستخدم لإدارة أجهزته المعتمدة أو مراجعة سجلاته.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-3 pt-4">
           <div className="relative">
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
-
             <input
               type="search"
               value={userSearch}
@@ -892,7 +1011,6 @@ export default function TrustedDevicesPage() {
             </div>
           )}
 
-          {/* السهم وحده يتحكم بفتح القائمة وإغلاقها */}
           <div className="overflow-hidden rounded-lg border border-indigo-200 dark:border-indigo-900">
             <button
               type="button"
@@ -934,7 +1052,6 @@ export default function TrustedDevicesPage() {
                     {filteredUsers.map((user) => {
                       const selected = user.authUserId === selectedUserId
                       const userPendingCount = user.pendingDevices.length
-
                       const userApprovedCount =
                         getLatestApprovedDevicesByType(
                           user.approvedDevices,
@@ -993,7 +1110,6 @@ export default function TrustedDevicesPage() {
                                 {userPendingCount} معلق
                               </span>
                             )}
-
                             <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                               {userApprovedCount} معتمد
                             </span>
@@ -1010,7 +1126,7 @@ export default function TrustedDevicesPage() {
       </Card>
 
       {/* أجهزة المستخدم المختار */}
-      {selectedUser ? (
+      {selectedUser && (
         <div className="space-y-4">
           <Card className="border-purple-200/70 dark:border-purple-900/70">
             <CardHeader className="border-b border-purple-100 bg-purple-50/50 pb-3 dark:border-purple-900/60 dark:bg-purple-950/20">
@@ -1051,7 +1167,6 @@ export default function TrustedDevicesPage() {
                       <label className="mb-1.5 block text-xs font-medium">
                         حالة الجهاز
                       </label>
-
                       <select
                         value={deviceFilter}
                         onChange={(event) =>
@@ -1072,7 +1187,6 @@ export default function TrustedDevicesPage() {
                       <label className="mb-1.5 block text-xs font-medium">
                         البحث داخل الأجهزة
                       </label>
-
                       <input
                         type="search"
                         value={deviceSearch}
@@ -1104,7 +1218,6 @@ export default function TrustedDevicesPage() {
             </CardContent>
           </Card>
 
-          {/* جميع الأجهزة المعلقة */}
           {(deviceFilter === 'all' || deviceFilter === 'pending') && (
             <Card className="overflow-hidden border-amber-200/80 dark:border-amber-900/70">
               <CardHeader className="border-b border-amber-100 bg-amber-50/70 pb-3 dark:border-amber-900/60 dark:bg-amber-950/20">
@@ -1121,9 +1234,8 @@ export default function TrustedDevicesPage() {
                     }
                   </span>
                 </CardTitle>
-
                 <CardDescription>
-                  الأجهزة التي تحتاج إلى موافقة يدوية.
+                  تظهر هنا الأجهزة المعلقة الخاصة بالمستخدم المحدد.
                 </CardDescription>
               </CardHeader>
 
@@ -1143,7 +1255,6 @@ export default function TrustedDevicesPage() {
             </Card>
           )}
 
-          {/* أحدث جهاز معتمد من كل نوع */}
           {(deviceFilter === 'all' ||
             deviceFilter === 'approved' ||
             deviceFilter === 'expired') && (
@@ -1162,7 +1273,6 @@ export default function TrustedDevicesPage() {
                     }
                   </span>
                 </CardTitle>
-
                 <CardDescription>
                   يظهر أحدث جهاز من كل نوع. يمكنك تعديل مدة الثقة أو إلغاء
                   اعتماد الجهاز دون حذف سجله.
@@ -1184,16 +1294,6 @@ export default function TrustedDevicesPage() {
               </CardContent>
             </Card>
           )}
-        </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-indigo-300 bg-indigo-50/40 p-10 text-center dark:border-indigo-900 dark:bg-indigo-950/10">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
-            <Users className="h-9 w-9" />
-          </div>
-          <p className="font-medium">اختر مستخدمًا لعرض أجهزته</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            افتح القائمة من السهم، ثم اضغط على المستخدم المطلوب.
-          </p>
         </div>
       )}
 
