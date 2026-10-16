@@ -86,6 +86,19 @@ type Level = {
   name: string
   sort_order: number | null
 }
+type AcademicYear = {
+  id: string
+  name: string
+}
+
+type RegistrationCourse = {
+  id: string
+  name: string
+  academic_year_id: string
+  start_date: string | null
+  end_date: string | null
+  is_closed: boolean
+}
 
 type PaymentMethod =
   | 'benefitpay'
@@ -121,6 +134,9 @@ type CustomField = {
 
 type Props = {
   settings: RegistrationSettings
+
+  academicYear: AcademicYear | null
+  registrationCourse: RegistrationCourse | null
 
   levels: Level[]
 
@@ -315,11 +331,14 @@ function SectionHeader({
   )
 }
 
+
 export default function RegistrationForm(
   props: Props,
 ) {
   const {
     settings,
+    academicYear,
+    registrationCourse,
     levels,
     customFields,
     customFieldValues,
@@ -642,6 +661,57 @@ export default function RegistrationForm(
                 يرجى تعبئة البيانات التالية لتقديم طلب التسجيل.
               </p>
             </div>
+
+            
+            {/* معلومات السنة الدراسية والدورة */}
+            <section className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+              <h2 className="text-base font-bold">
+                معلومات الدورة الحالية
+              </h2>
+            
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                تفاصيل السنة الدراسية والدورة المتاح التسجيل فيها.
+              </p>
+            
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border bg-background p-3.5">
+                  <p className="text-xs text-muted-foreground">
+                    السنة الدراسية
+                  </p>
+                  <p className="mt-1.5 font-semibold">
+                    {academicYear?.name ?? 'غير محددة'}
+                  </p>
+                </div>
+            
+                <div className="rounded-xl border bg-background p-3.5">
+                  <p className="text-xs text-muted-foreground">
+                    الدورة الحالية
+                  </p>
+                  <p className="mt-1.5 font-semibold">
+                    {registrationCourse?.name ?? 'غير محددة'}
+                  </p>
+                </div>
+            
+                <div className="rounded-xl border bg-background p-3.5">
+                  <p className="text-xs text-muted-foreground">
+                    بداية الدورة
+                  </p>
+                  <p className="mt-1.5 font-semibold">
+                    {formatCourseDate(registrationCourse?.start_date ?? null)}
+                  </p>
+                </div>
+            
+                <div className="rounded-xl border bg-background p-3.5">
+                  <p className="text-xs text-muted-foreground">
+                    نهاية الدورة
+                  </p>
+                  <p className="mt-1.5 font-semibold">
+                    {formatCourseDate(registrationCourse?.end_date ?? null)}
+                  </p>
+                </div>
+              </div>
+            </section>
+
 
             {successMessage && (
               <div className="mt-6 space-y-4">
