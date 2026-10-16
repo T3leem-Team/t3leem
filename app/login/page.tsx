@@ -1,7 +1,12 @@
 
 'use client'
 
-import { FormEvent, useState } from 'react'
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   Eye,
   EyeOff,
@@ -15,6 +20,10 @@ import {
   type DashboardSection,
 } from '@/lib/dashboard-sections-cache'
 
+type LogoutWindow = Window & {
+  __t3leemLogoutPromise?: Promise<void>
+}
+
 export default function LoginPage() {
   const router = useRouter()
 
@@ -23,9 +32,69 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
+  const [logoutWaiting, setLogoutWaiting] = useState(false)
   const [error, setError] = useState('')
 
-  const isBusy = loading || redirecting
+  const mountedRef = useRef(false)
+  const logoutCheckRef = useRef(false)
+
+  const isBusy = loading || redirecting || logoutWaiting
+
+  /**
+   * انتظار عملية الخروج إن كانت موجودة.
+   * إذا لم توجد عملية خروج معلّقة، لا نضيف أي انتظار.
+   */
+  async function waitForPendingLogout(): Promise<boolean> {
+    if (typeof window === 'undefined') {
+      return true
+    }
+
+    const logoutWindow = window as LogoutWindow
+    const pendingLogout = logoutWindow.__t3leemLogoutPromise
+
+    if (!pendingLogout) {
+      return true
+    }
+
+    setLogoutWaiting(true)
+    setError('')
+
+    try {
+      await pendingLogout
+      return true
+    } catch (logoutError) {
+      console.error(
+        'Waiting for logout failed:',
+        logoutError,
+      )
+
+      setError(
+        'تعذر التأكد من اكتمال تسجيل الخروج. أعد المحاولة.',
+      )
+
+      return false
+    } finally {
+      setLogoutWaiting(false)
+    }
+  }
+
+  /**
+   * عند فتح صفحة الدخول عن طريق التنقل داخل التطبيق،
+   * ننتظر عملية الخروج إذا كانت ما زالت معلّقة.
+   */
+  useEffect(() => {
+    mountedRef.current = true
+
+    if (!logoutCheckRef.current) {
+      logoutCheckRef.current = true
+
+      void waitForPendingLogout()
+    }
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -40,6 +109,21 @@ export default function LoginPage() {
 
     if (!cleanUsername || !password) {
       setError('أدخل اسم المستخدم وكلمة المرور.')
+      return
+    }
+
+    /*
+     * فحص أخير قبل إرسال طلب تسجيل الدخول.
+     * هذا يمنع بدء تسجيل الدخول قبل اكتمال طلب الخروج
+     * عندما تكون العملية محفوظة في النافذة الحالية.
+     */
+    const logoutFinished = await waitForPendingLogout()
+
+    if (!logoutFinished) {
+      return
+    }
+
+    if (!mountedRef.current) {
       return
     }
 
@@ -85,7 +169,6 @@ export default function LoginPage() {
     try {
       /*
        * 1. تسجيل الدخول الأساسي.
-       * لا تجهيز لمفتاح الجهاز، ولا طلب challenge أو register.
        */
       const loginResponse = await timedFetch(
         'main login',
@@ -115,6 +198,7 @@ export default function LoginPage() {
             ? loginData.error
             : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
         )
+
         setLoading(false)
         markTiming('stop: main login failed')
         return
@@ -144,6 +228,7 @@ export default function LoginPage() {
             ? sectionsData.error
             : 'تم تسجيل الدخول، لكن تعذر تحديد الصفحة الرئيسية.',
         )
+
         setLoading(false)
         markTiming('stop: dashboard sections failed')
         return
@@ -251,7 +336,6 @@ export default function LoginPage() {
 
       setLoading(false)
       setRedirecting(false)
-      markTiming('login flow exception')
     }
   }
 
@@ -346,6 +430,16 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {logoutWaiting && (
+              <div
+                role="status"
+                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground"
+              >
+                <Loader2 className="size-4 shrink-0 animate-spin" />
+                جارٍ إكمال تسجيل الخروج السابق...
+              </div>
+            )}
+
             {error && (
               <div
                 role="alert"
@@ -363,18 +457,22 @@ export default function LoginPage() {
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 hover:bg-emerald-700'
                   : loading
                     ? 'bg-red-600 text-white shadow-md shadow-red-600/30 hover:bg-red-700'
-                    : 'bg-primary text-primary-foreground hover:opacity-90'
+                    : logoutWaiting
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-primary text-primary-foreground hover:opacity-90'
               }`}
             >
               {isBusy && (
                 <Loader2 className="size-4 animate-spin" />
               )}
 
-              {redirecting
-                ? 'جارٍ فتح النظام...'
-                : loading
-                  ? 'جارٍ تسجيل الدخول...'
-                  : 'دخول'}
+              {logoutWaiting
+                ? 'انتظر اكتمال الخروج...'
+                : redirecting
+                  ? 'جارٍ فتح النظام...'
+                  : loading
+                    ? 'جارٍ تسجيل الدخول...'
+                    : 'دخول'}
             </button>
 
             <div className="text-center">
