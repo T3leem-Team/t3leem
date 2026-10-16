@@ -866,72 +866,58 @@ export default function RegistrationForm(
                 className="mt-7 space-y-8 sm:mt-8"
               >
 
-                {/* بيانات الطالب                 {/* بيانات الطالب                 {/* بيانات الطالب */}
-                <section className="space-y-5">
-                  <SectionHeader
-                    title="بيانات الطالب"
-                    description="يرجى إدخال البيانات الأساسية للطالب."
-                  />
-
-                  <div className="grid gap-5 md:grid-cols-2">
-
-                    {settings.show_name && (
-                      <div className="md:col-span-2">
-                        <FieldLabel
-                          label="الاسم"
-                          required={
-                            settings.required_name
-                          }
-                        />
-
-                        <Input
-                          value={name}
-                          onChange={(event) =>
-                            setName(
-                              event.target.value,
-                            )
-                          }
-                          placeholder="أدخل اسم الطالب"
-                          autoComplete="name"
-                          required={
-                            settings.required_name
-                          }
-                        />
-                      </div>
-                    )}
-
-                    {settings.show_personal_id && (
-                      <div>
-                        <FieldLabel
-                          label="الرقم الشخصي"
-                          required={
-                            settings.required_personal_id
-                          }
-                        />
-
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          pattern="[0-9]{9}"
-                          maxLength={9}
-                          value={personalId}
-                          onChange={(event) =>
-                            setPersonalId(
-                              event.target.value
-                                .replace(/\D/g, '')
-                                .slice(0, 9),
-                            )
-                          }
-                          placeholder="أدخل الرقم الشخصي"
-                          autoComplete="off"
-                          dir="ltr"
-                          required={
-                            settings.required_personal_id
-                          }
-                        />
-
-                        {personalId.length > 0 &&
-                          personalId.length !== 9 && (
+                {/* بيانات الطالب */}
+                  <section className="space-y-5">
+                    <SectionHeader
+                      title="بيانات الطالب"
+                      description="يرجى إدخال البيانات الأساسية للطالب."
+                    />
+                  
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      {/* الاسم */}
+                      {settings.show_name && (
+                        <div className="md:col-span-2">
+                          <FieldLabel
+                            label="الاسم"
+                            required={settings.required_name}
+                          />
+                  
+                          <Input
+                            value={name}
+                            onChange={(event) => setName(event.target.value)}
+                            placeholder="أدخل اسم الطالب"
+                            autoComplete="name"
+                            required={settings.required_name}
+                          />
+                        </div>
+                      )}
+                  
+                      {/* الرقم الشخصي */}
+                      {settings.show_personal_id && (
+                        <div>
+                          <FieldLabel
+                            label="الرقم الشخصي"
+                            required={settings.required_personal_id}
+                          />
+                  
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]{9}"
+                            maxLength={9}
+                            value={personalId}
+                            onChange={(event) =>
+                              setPersonalId(
+                                event.target.value.replace(/\D/g, '').slice(0, 9),
+                              )
+                            }
+                            placeholder="أدخل الرقم الشخصي"
+                            autoComplete="off"
+                            dir="ltr"
+                            required={settings.required_personal_id}
+                          />
+                  
+                          {personalId.length > 0 && personalId.length !== 9 && (
                             <p
                               className="mt-1.5 text-sm font-medium text-red-600"
                               role="alert"
@@ -940,559 +926,449 @@ export default function RegistrationForm(
                               {` باقي ${9 - personalId.length} أرقام.`}
                             </p>
                           )}
-                      </div>
-                    )}
-
-                    {settings.show_gender && (
-                      <div>
-                        <FieldLabel
-                          label="الجنس"
-                          required={
-                            settings.required_gender
-                          }
-                        />
-
-                        <Select
-                          value={gender}
-                          onChange={(event) =>
-                            setGender(
-                              event.target.value,
-                            )
-                          }
-                          required={
-                            settings.required_gender
-                          }
-                        >
-                          <option value="">
-                            اختر الجنس
-                          </option>
-
-                          <option value="ذكر">
-                            ذكر
-                          </option>
-
-                          <option value="أنثى">
-                            أنثى
-                          </option>
-                        </Select>
-                      </div>
-                    )}
-
-                    {settings.show_age && (
-                      <div>
-                        <FieldLabel
-                          label="العمر"
-                          required={
-                            settings.required_age
-                          }
-                        />
-
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min="0"
-                          max="120"
-                          value={age}
-                          onChange={(event) =>
-                            setAge(
-                              event.target.value,
-                            )
-                          }
-                          placeholder="أدخل العمر"
-                          required={
-                            settings.required_age
-                          }
-                        />
-                      </div>
-                    )}
-
-                    {settings.show_phone && (
-                      <div className="rounded-xl border p-4 space-y-2">
-                        <FieldLabel
-                          label="رقم واتساب الشخص المسؤول عن الطالب"
-                          required={settings.required_phone}
-                        />
-                    
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          pattern="[0-9]{8}"
-                          maxLength={8}
-                          value={phone}
-                          onChange={(event) =>
-                            setPhone(
-                              event.target.value
-                                .replace(/\D/g, '')
-                                .slice(0, 8),
-                            )
-                          }
-                          placeholder="مثال: 3XXXXXXX"
-                          autoComplete="tel"
-                          dir="ltr"
-                          required={settings.required_phone}
-                        />
-                    
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          سيتم استخدام هذا الرقم للتواصل المباشر مع الشخص المسؤول عن الطالب
-                          عبر الهاتف أو الواتساب. يرجى التأكد من صحة الرقم وفعاليته،
-                          وتحديد صلة القرابة أدناه.
-                        </p>
-                    
-                        {phone.length > 0 && phone.length !== 8 && (
-                          <p
-                            className="mt-1.5 text-sm font-medium text-red-600"
-                            role="alert"
+                        </div>
+                      )}
+                  
+                      {/* الجنس */}
+                      {settings.show_gender && (
+                        <div>
+                          <FieldLabel
+                            label="الجنس"
+                            required={settings.required_gender}
+                          />
+                  
+                          <Select
+                            value={gender}
+                            onChange={(event) => setGender(event.target.value)}
+                            required={settings.required_gender}
                           >
-                            رقم الواتساب يجب أن يتكون من 8 أرقام.
-                            {` باقي ${8 - phone.length} أرقام.`}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    {settings.show_guardian_relation && (
-                      <div className="rounded-xl border p-4 space-y-2">
-                        <FieldLabel
-                          label="صلة قرابة الشخص المسؤول عن الطالب"
-                          required={settings.required_guardian_relation}
-                        />
-                    
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          حدد صلة قرابة الشخص الذي سيتم التواصل معه مباشرة لمتابعة شؤون الطالب.
-                        </p>
-                    
-                        <Select
-                          value={guardianRelation}
-                          onChange={(event) => {
-                            const value = event.target.value
-                    
-                            setGuardianRelation(value)
-                    
-                            if (value !== 'أخرى') {
-                              setCustomGuardianRelation('')
+                            <option value="">اختر الجنس</option>
+                            <option value="ذكر">ذكر</option>
+                            <option value="أنثى">أنثى</option>
+                          </Select>
+                        </div>
+                      )}
+                  
+                      {/* العمر */}
+                      {settings.show_age && (
+                        <div>
+                          <FieldLabel
+                            label="العمر"
+                            required={settings.required_age}
+                          />
+                  
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            max="120"
+                            value={age}
+                            onChange={(event) => setAge(event.target.value)}
+                            placeholder="أدخل العمر"
+                            required={settings.required_age}
+                          />
+                        </div>
+                      )}
+                  
+                      {/* رقم واتساب الشخص المسؤول */}
+                      {settings.show_phone && (
+                        <div className="space-y-3 rounded-xl border border-border/70 bg-background p-4 md:col-span-2">
+                          <FieldLabel
+                            label="رقم واتساب الشخص المسؤول عن الطالب"
+                            required={settings.required_phone}
+                          />
+                  
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]{8}"
+                            maxLength={8}
+                            value={phone}
+                            onChange={(event) =>
+                              setPhone(
+                                event.target.value.replace(/\D/g, '').slice(0, 8),
+                              )
                             }
-                          }}
-                          required={
-                            settings.required_guardian_relation &&
-                            guardianRelation !== 'أخرى'
-                          }
-                        >
-                          <option value="">اختر صلة القرابة</option>
-                          <option value="الأب">الأب</option>
-                          <option value="الأم">الأم</option>
-                          <option value="الأخ">الأخ</option>
-                          <option value="الأخت">الأخت</option>
-                          <option value="الجد">الجد</option>
-                          <option value="الجدة">الجدة</option>
-                          <option value="أخرى">أخرى</option>
-                        </Select>
-                    
-                        {guardianRelation === 'أخرى' && (
-                          <div className="mt-3">
-                            <Input
-                              value={customGuardianRelation}
-                              onChange={(event) =>
-                                setCustomGuardianRelation(event.target.value)
+                            placeholder="مثال: 3XXXXXXX"
+                            autoComplete="tel"
+                            dir="ltr"
+                            required={settings.required_phone}
+                          />
+                  
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            سيتم استخدام هذا الرقم للتواصل المباشر مع الشخص المسؤول عن
+                            الطالب عبر الهاتف أو الواتساب. يرجى التأكد من صحة الرقم
+                            وفعاليته، ثم تحديد صلة القرابة في الحقل التالي.
+                          </p>
+                  
+                          {phone.length > 0 && phone.length !== 8 && (
+                            <p
+                              className="text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم الواتساب يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - phone.length} أرقام.`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                  
+                      {/* صلة قرابة الشخص المسؤول */}
+                      {settings.show_guardian_relation && (
+                        <div className="space-y-3 rounded-xl border border-border/70 bg-background p-4 md:col-span-2">
+                          <FieldLabel
+                            label="صلة قرابة الشخص المسؤول عن الطالب"
+                            required={settings.required_guardian_relation}
+                          />
+                  
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            حدد صلة قرابة الشخص الذي سيتم التواصل معه مباشرة لمتابعة
+                            شؤون الطالب.
+                          </p>
+                  
+                          <Select
+                            value={guardianRelation}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                  
+                              setGuardianRelation(value);
+                  
+                              if (value !== 'أخرى') {
+                                setCustomGuardianRelation('');
                               }
-                              placeholder="اكتب صلة القرابة"
-                              required={settings.required_guardian_relation}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {settings.show_whatsapp && (
-                      <div className="rounded-xl border p-4 space-y-2">
-                        <FieldLabel
-                          label="رقم واتساب إضافي للتواصل"
-                          required={settings.required_whatsapp}
-                        />
-                    
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          pattern="[0-9]{8}"
-                          maxLength={8}
-                          value={whatsapp}
-                          onChange={(event) =>
-                            setWhatsapp(
-                              event.target.value
-                                .replace(/\D/g, '')
-                                .slice(0, 8),
-                            )
-                          }
-                          placeholder="مثال: 3XXXXXXX"
-                          autoComplete="tel"
-                          dir="ltr"
-                          required={settings.required_whatsapp}
-                        />
-                    
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          أدخل رقم واتساب إضافيًا إذا رغبت في توفير وسيلة تواصل أخرى
-                          مع ولي الأمر أو شخص آخر معني بمتابعة الطالب.
-                        </p>
-                    
-                        {whatsapp.length > 0 && whatsapp.length !== 8 && (
-                          <p
-                            className="mt-1.5 text-sm font-medium text-red-600"
-                            role="alert"
+                            }}
+                            required={
+                              settings.required_guardian_relation &&
+                              guardianRelation !== 'أخرى'
+                            }
                           >
-                            رقم التواصل الإضافي يجب أن يتكون من 8 أرقام.
-                            {` باقي ${8 - whatsapp.length} أرقام.`}
+                            <option value="">اختر صلة القرابة</option>
+                            <option value="الأب">الأب</option>
+                            <option value="الأم">الأم</option>
+                            <option value="الأخ">الأخ</option>
+                            <option value="الأخت">الأخت</option>
+                            <option value="الجد">الجد</option>
+                            <option value="الجدة">الجدة</option>
+                            <option value="أخرى">أخرى</option>
+                          </Select>
+                  
+                          {guardianRelation === 'أخرى' && (
+                            <div className="space-y-2">
+                              <FieldLabel
+                                label="حدد صلة القرابة"
+                                required={settings.required_guardian_relation}
+                              />
+                  
+                              <Input
+                                value={customGuardianRelation}
+                                onChange={(event) =>
+                                  setCustomGuardianRelation(event.target.value)
+                                }
+                                placeholder="اكتب صلة القرابة"
+                                required={settings.required_guardian_relation}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                  
+                      {/* رقم واتساب إضافي */}
+                      {settings.show_whatsapp && (
+                        <div className="space-y-3 rounded-xl border border-border/70 bg-background p-4 md:col-span-2">
+                          <FieldLabel
+                            label="رقم واتساب إضافي للتواصل"
+                            required={settings.required_whatsapp}
+                          />
+                  
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]{8}"
+                            maxLength={8}
+                            value={whatsapp}
+                            onChange={(event) =>
+                              setWhatsapp(
+                                event.target.value.replace(/\D/g, '').slice(0, 8),
+                              )
+                            }
+                            placeholder="مثال: 3XXXXXXX"
+                            autoComplete="tel"
+                            dir="ltr"
+                            required={settings.required_whatsapp}
+                          />
+                  
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            أدخل رقم واتساب إضافيًا إذا رغبت في توفير وسيلة تواصل
+                            أخرى مع ولي الأمر أو شخص آخر معني بمتابعة الطالب.
                           </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    {settings.show_student_phone && (
-                      <div className="rounded-xl border p-4 space-y-2">
-                        <FieldLabel
-                          label="رقم هاتف الطالب"
-                          required={settings.required_student_phone}
-                        />
-                    
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          pattern="[0-9]{8}"
-                          maxLength={8}
-                          value={studentPhone}
-                          onChange={(event) =>
-                            setStudentPhone(
-                              event.target.value
-                                .replace(/\D/g, '')
-                                .slice(0, 8),
-                            )
-                          }
-                          placeholder="أدخل رقم الطالب"
-                          autoComplete="tel"
-                          dir="ltr"
-                          required={settings.required_student_phone}
-                        />
-                    
-                        <p className="text-sm leading-6 text-muted-foreground">
-                          أدخل رقم هاتف الطالب نفسه إذا كان لديه رقم خاص به.
-                        </p>
-                    
-                        {studentPhone.length > 0 && studentPhone.length !== 8 && (
-                          <p
-                            className="mt-1.5 text-sm font-medium text-red-600"
-                            role="alert"
+                  
+                          {whatsapp.length > 0 && whatsapp.length !== 8 && (
+                            <p
+                              className="text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم التواصل الإضافي يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - whatsapp.length} أرقام.`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                  
+                      {/* رقم هاتف الطالب */}
+                      {settings.show_student_phone && (
+                        <div className="space-y-3 rounded-xl border border-border/70 bg-background p-4 md:col-span-2">
+                          <FieldLabel
+                            label="رقم هاتف الطالب"
+                            required={settings.required_student_phone}
+                          />
+                  
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]{8}"
+                            maxLength={8}
+                            value={studentPhone}
+                            onChange={(event) =>
+                              setStudentPhone(
+                                event.target.value.replace(/\D/g, '').slice(0, 8),
+                              )
+                            }
+                            placeholder="أدخل رقم الطالب"
+                            autoComplete="tel"
+                            dir="ltr"
+                            required={settings.required_student_phone}
+                          />
+                  
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            أدخل رقم هاتف الطالب نفسه إذا كان لديه رقم خاص به.
+                          </p>
+                  
+                          {studentPhone.length > 0 && studentPhone.length !== 8 && (
+                            <p
+                              className="text-sm font-medium text-red-600"
+                              role="alert"
+                            >
+                              رقم هاتف الطالب يجب أن يتكون من 8 أرقام.
+                              {` باقي ${8 - studentPhone.length} أرقام.`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                  
+                      {/* الصف / المستوى */}
+                      {settings.show_level && (
+                        <div>
+                          <FieldLabel
+                            label="الصف / المستوى"
+                            required={settings.required_level}
+                          />
+                  
+                          <Select
+                            value={levelId}
+                            onChange={(event) => setLevelId(event.target.value)}
+                            required={settings.required_level}
                           >
-                            رقم هاتف الطالب يجب أن يتكون من 8 أرقام.
-                            {` باقي ${8 - studentPhone.length} أرقام.`}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {settings.show_level && (
-                      <div>
-                        <FieldLabel
-                          label="الصف / المستوى"
-                          required={
-                            settings.required_level
-                          }
-                        />
-
-                        <Select
-                          value={levelId}
-                          onChange={(event) =>
-                            setLevelId(
-                              event.target.value,
-                            )
-                          }
-                          required={
-                            settings.required_level
-                          }
-                        >
-                          <option value="">
-                            اختر المستوى
-                          </option>
-
-                          {levels.map(
-                            (level) => (
-                              <option
-                                key={
-                                  level.id
-                                }
-                                value={
-                                  level.id
-                                }
-                              >
+                            <option value="">اختر المستوى</option>
+                  
+                            {levels.map((level) => (
+                              <option key={level.id} value={level.id}>
                                 {level.name}
                               </option>
-                            ),
-                          )}
-                        </Select>
-                      </div>
-                    )}
-
-                    {settings.show_notes && (
-                      <div className="md:col-span-2">
-                        <FieldLabel
-                          label="الملاحظات"
-                          required={
-                            settings.required_notes
-                          }
-                        />
-
-                        <Textarea
-                          value={notes}
-                          onChange={(event) =>
-                            setNotes(
-                              event.target.value,
-                            )
-                          }
-                          placeholder="أضف أي ملاحظات..."
-                          required={
-                            settings.required_notes
-                          }
-                        />
-                      </div>
-                    )}
-
-                    {settings.show_health_notes && (
-                      <div className="md:col-span-2">
-                        <FieldLabel
-                          label="الحالة الصحية"
-                          required={
-                            settings.required_health_notes
-                          }
-                        />
-
-                        <Textarea
-                          value={
-                            healthNotes
-                          }
-                          onChange={(event) =>
-                            setHealthNotes(
-                              event.target.value,
-                            )
-                          }
-                          placeholder="اذكر الحالة الصحية أو أي ملاحظات صحية..."
-                          required={
-                            settings.required_health_notes
-                          }
-                        />
-                      </div>
-                    )}
-
-                  </div>
-                </section>
-
-                {/* الحقول الإضافية */}
-                {customFields.length >
-                  0 && (
-                  <section className="space-y-5 border-t pt-7">
-                    <SectionHeader
-                      title="بيانات إضافية"
-                      description="يرجى تعبئة البيانات الإضافية المطلوبة."
-                    />
-
-                    <div className="grid gap-5 md:grid-cols-2">
-                      {customFields.map(
-                        (field) =>
-                          renderCustomField(
-                            field,
-                          ),
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                  
+                      {/* الملاحظات */}
+                      {settings.show_notes && (
+                        <div className="md:col-span-2">
+                          <FieldLabel
+                            label="الملاحظات"
+                            required={settings.required_notes}
+                          />
+                  
+                          <Textarea
+                            value={notes}
+                            onChange={(event) => setNotes(event.target.value)}
+                            placeholder="أضف أي ملاحظات..."
+                            required={settings.required_notes}
+                          />
+                        </div>
+                      )}
+                  
+                      {/* الحالة الصحية */}
+                      {settings.show_health_notes && (
+                        <div className="md:col-span-2">
+                          <FieldLabel
+                            label="الحالة الصحية"
+                            required={settings.required_health_notes}
+                          />
+                  
+                          <Textarea
+                            value={healthNotes}
+                            onChange={(event) => setHealthNotes(event.target.value)}
+                            placeholder="اذكر الحالة الصحية أو أي ملاحظات صحية..."
+                            required={settings.required_health_notes}
+                          />
+                        </div>
                       )}
                     </div>
                   </section>
-                )}
-
-                {/* الدفع */}
-                {settings.payment_enabled && (
-                  <section className="space-y-5 border-t pt-7">
-                    <SectionHeader title="الدفع" />
-
-                    {settings.payment_amount >
-                      0 && (
-                      <div className="rounded-xl border bg-muted/30 p-4">
-                        <p className="text-sm text-muted-foreground">
-                          مبلغ التسجيل
-                        </p>
-
-                        <p className="mt-1 text-xl font-bold">
-                          {
-                            settings.payment_amount
-                          }{' '}
-                          د.ب
-                        </p>
+                  
+                  {/* الحقول الإضافية */}
+                  {customFields.length > 0 && (
+                    <section className="space-y-5 border-t pt-7">
+                      <SectionHeader
+                        title="بيانات إضافية"
+                        description="يرجى تعبئة البيانات الإضافية المطلوبة."
+                      />
+                  
+                      <div className="grid gap-5 md:grid-cols-2">
+                        {customFields.map((field) => renderCustomField(field))}
                       </div>
-                    )}
-
-                    {settings.show_payment_qr &&
-                      settings.payment_qr_url && (
+                    </section>
+                  )}
+                  
+                  {/* الدفع */}
+                  {settings.payment_enabled && (
+                    <section className="space-y-5 border-t pt-7">
+                      <SectionHeader title="الدفع" />
+                  
+                      {settings.payment_amount > 0 && (
+                        <div className="rounded-xl border bg-muted/30 p-4">
+                          <p className="text-sm text-muted-foreground">مبلغ التسجيل</p>
+                  
+                          <p className="mt-1 text-xl font-bold">
+                            {settings.payment_amount} د.ب
+                          </p>
+                        </div>
+                      )}
+                  
+                      {settings.show_payment_qr && settings.payment_qr_url && (
                         <div className="rounded-xl border p-4">
                           <div className="flex items-center gap-2">
                             <FileImage className="size-5 text-primary" />
-
-                            <p className="font-medium">
-                              QR / باركود الدفع
-                            </p>
+                            <p className="font-medium">QR / باركود الدفع</p>
                           </div>
-
+                  
                           <div className="mt-4 flex justify-center overflow-hidden rounded-xl">
                             <img
-                              src={
-                                settings.payment_qr_url
-                              }
+                              src={settings.payment_qr_url}
                               alt="QR الدفع"
                               className="max-h-64 max-w-full rounded-lg border object-contain"
                             />
                           </div>
                         </div>
                       )}
-
-                    <div>
-                      <FieldLabel
-                        label="طريقة الدفع"
-                        required
-                      />
-
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {paymentMethods.map(
-                          (method) => (
+                  
+                      <div>
+                        <FieldLabel label="طريقة الدفع" required />
+                  
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {paymentMethods.map((method) => (
                             <button
-                              key={
-                                method.id
-                              }
+                              key={method.id}
                               type="button"
-                              onClick={() =>
-                                setPaymentMethod(
-                                  method.id,
-                                )
-                              }
+                              onClick={() => setPaymentMethod(method.id)}
                               className={`min-h-14 touch-manipulation rounded-xl border p-3.5 text-right transition active:scale-[0.99] ${
-                                paymentMethod ===
-                                method.id
+                                paymentMethod === method.id
                                   ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
                                   : 'hover:bg-muted/50'
                               }`}
                             >
-                              <p className="font-medium">
-                                {
-                                  method.label
-                                }
-                              </p>
+                              <p className="font-medium">{method.label}</p>
                             </button>
-                          ),
+                          ))}
+                        </div>
+                      </div>
+                  
+                      {settings.payment_link_enabled &&
+                        paymentMethod === 'payment_link' &&
+                        settings.payment_link && (
+                          <div className="rounded-xl border bg-muted/30 p-4">
+                            <p className="text-sm leading-6 text-muted-foreground">
+                              استخدم الرابط التالي لإتمام الدفع:
+                            </p>
+                  
+                            <a
+                              href={settings.payment_link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 block break-all text-sm font-medium leading-6 text-primary underline"
+                            >
+                              {settings.payment_link}
+                            </a>
+                          </div>
+                        )}
+                  
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <div>
+                          <FieldLabel label="رقم المرجع" />
+                  
+                          <Input
+                            type="tel"
+                            inputMode="numeric"
+                            value={paymentReference}
+                            onChange={(event) =>
+                              setPaymentReference(event.target.value)
+                            }
+                            placeholder="رقم عملية الدفع إن وجد"
+                            dir="ltr"
+                          />
+                        </div>
+                  
+                        {settings.payment_proof_enabled && (
+                          <div>
+                            <FieldLabel
+                              label="إثبات الدفع"
+                              required={settings.payment_proof_required}
+                            />
+                  
+                            <Input
+                              id="paymentProof"
+                              type="file"
+                              accept="image/*,.pdf"
+                              onChange={(event) =>
+                                setPaymentProof(event.target.files?.[0] ?? null)
+                              }
+                              required={settings.payment_proof_required}
+                              className="h-auto min-h-12 cursor-pointer py-3 file:mr-0 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                            />
+                  
+                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                              يمكنك إرفاق صورة أو ملف PDF لإثبات الدفع.
+                            </p>
+                          </div>
                         )}
                       </div>
-                    </div>
-
-                    {settings.payment_link_enabled &&
-                      paymentMethod ===
-                        'payment_link' &&
-                      settings.payment_link && (
-                        <div className="rounded-xl border bg-muted/30 p-4">
-                          <p className="text-sm leading-6 text-muted-foreground">
-                            استخدم الرابط التالي لإتمام الدفع:
-                          </p>
-
-                          <a
-                            href={
-                              settings.payment_link
-                            }
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-2 block break-all text-sm font-medium leading-6 text-primary underline"
-                          >
-                            {
-                              settings.payment_link
-                            }
-                          </a>
-                        </div>
+                    </section>
+                  )}
+                  
+                  {/* زر الإرسال */}
+                  <section className="border-t pt-7">
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="h-13 w-full touch-manipulation rounded-xl text-base font-semibold sm:h-12"
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="ml-2 size-4 animate-spin" />
+                          جاري إرسال الطلب...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="ml-2 size-4" />
+                          إرسال طلب التسجيل
+                        </>
                       )}
-
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div>
-                        <FieldLabel label="رقم المرجع" />
-
-                        <Input
-                          type="tel"
-                          inputMode="numeric"
-                          value={
-                            paymentReference
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setPaymentReference(
-                              event.target.value,
-                            )
-                          }
-                          placeholder="رقم عملية الدفع إن وجد"
-                          dir="ltr"
-                        />
-                      </div>
-
-                      {settings.payment_proof_enabled && (
-                        <div>
-                          <FieldLabel
-                            label="إثبات الدفع"
-                            required={
-                              settings.payment_proof_required
-                            }
-                          />
-
-                          <Input
-                            id="paymentProof"
-                            type="file"
-                            accept="image/*,.pdf"
-                            onChange={(
-                              event,
-                            ) =>
-                              setPaymentProof(
-                                event.target
-                                  .files?.[0] ??
-                                  null,
-                              )
-                            }
-                            required={
-                              settings.payment_proof_required
-                            }
-                            className="h-auto min-h-12 cursor-pointer py-3 file:mr-0 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
-                          />
-
-                          <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                            يمكنك إرفاق صورة أو ملف PDF لإثبات الدفع.
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    </Button>
+                  
+                    <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+                      سيتم إرسال الطلب إلى قسم طلبات التسجيل للمراجعة.
+                    </p>
                   </section>
-                )}
-
-                {/* زر الإرسال */}
-                <section className="border-t pt-7">
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="h-13 w-full touch-manipulation rounded-xl text-base font-semibold sm:h-12"
-                    disabled={
-                      submitting
-                    }
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="ml-2 size-4 animate-spin" />
-                        جاري إرسال الطلب...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="ml-2 size-4" />
-                        إرسال طلب التسجيل
-                      </>
-                    )}
-                  </Button>
-
-                  <p className="mt-3 text-center text-xs leading-5 text-muted-foreground">
-                    سيتم إرسال الطلب إلى قسم طلبات التسجيل للمراجعة.
-                  </p>
-                </section>
 
               </form>
             )}
