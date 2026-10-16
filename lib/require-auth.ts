@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { validateCurrentAccess } from '@/lib/auth-guard'
@@ -8,16 +9,24 @@ const SESSION_COOKIE = 't3leem_session_id'
 export async function requireAuth() {
   const startedAt = performance.now()
 
-  const markTiming = (step: string) => {
+  const markTiming = (
+    step: string,
+    stepStartedAt: number,
+  ) => {
     console.info(
       `[REQUIRE AUTH TIMING] ${step}: ${
+        Math.round(performance.now() - stepStartedAt)
+      }ms (total: ${
         Math.round(performance.now() - startedAt)
-      }ms`,
+      }ms)`,
     )
   }
 
+  // 1. التحقق من صلاحية الوصول والجلسة
+  const accessStartedAt = performance.now()
   const access = await validateCurrentAccess()
-  markTiming('validateCurrentAccess')
+
+  markTiming('validateCurrentAccess', accessStartedAt)
 
   if (!access.allowed) {
     if (access.reason === 'guard_error') {
@@ -64,10 +73,14 @@ export async function requireAuth() {
     }
   }
 
+  // 2. فحص الصيانة المركزي
   try {
+    const maintenanceStartedAt = performance.now()
     const maintenanceMode = await isMaintenanceMode()
-    markTiming('isMaintenanceMode')
 
+    markTiming('isMaintenanceMode', maintenanceStartedAt)
+
+    // المدير الأساسي مستثنى من وضع الصيانة
     const isPrimaryAdmin =
       access.username === 'admin' &&
       access.role === 'Admin'
@@ -100,7 +113,7 @@ export async function requireAuth() {
     }
   }
 
-  markTiming('complete')
+  markTiming('complete', startedAt)
 
   return {
     access,
