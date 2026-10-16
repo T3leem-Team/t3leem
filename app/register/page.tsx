@@ -1401,6 +1401,8 @@ export default function RegisterPage() {
   return (
     <RegistrationForm
       settings={settings}
+      academicYear={academicYear}
+      registrationCourse={registrationCourse}
       levels={levels}
       customFields={customFields}
       customFieldValues={
