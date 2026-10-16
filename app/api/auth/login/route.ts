@@ -82,9 +82,6 @@ function getUserAgent(request: NextRequest) {
   return request.headers.get('user-agent') ?? ''
 }
 
-/**
- * اكتشاف تقريبي لنوع الجهاز اعتمادًا على User-Agent.
- */
 function detectDeviceType(userAgent: string): DeviceType {
   const ua = userAgent.toLowerCase()
 
@@ -131,10 +128,6 @@ function detectDeviceType(userAgent: string): DeviceType {
   return 'unknown'
 }
 
-/**
- * تحديد عائلة المتصفح بصورة تقريبية.
- * لا نحتفظ بإصدار المتصفح حتى لا تتغير البصمة مع كل تحديث بسيط.
- */
 function detectBrowserFamily(userAgent: string): string {
   const ua = userAgent.toLowerCase()
 
@@ -149,18 +142,15 @@ function detectBrowserFamily(userAgent: string): string {
 }
 
 /**
- * بصمة تقريبية من إشارات يرسلها المتصفح إلى الخادم.
- *
- * ليست معرفًا فريدًا للجهاز، ويمكن أن تتطابق بين أجهزة مختلفة.
+ * بصمة تقريبية من ترويسات المتصفح.
+ * ليست معرفًا فريدًا ولا تُستخدم دون نجاح كلمة المرور.
  */
 function createDeviceFingerprintHash(
   request: NextRequest,
 ): string {
   const userAgent = getUserAgent(request)
   const deviceType = detectDeviceType(userAgent)
-
-  const browserFamily =
-    detectBrowserFamily(userAgent)
+  const browserFamily = detectBrowserFamily(userAgent)
 
   const platform =
     request.headers.get('sec-ch-ua-platform') ?? ''
@@ -171,18 +161,20 @@ function createDeviceFingerprintHash(
   const acceptLanguage =
     request.headers.get('accept-language') ?? ''
 
+  const normalizedLanguage = acceptLanguage
+    .toLowerCase()
+    .trim()
+    .split(',')
+    .map((value) => value.split(';')[0].trim())
+    .filter(Boolean)
+    .join(',')
+
   const fingerprintData = [
     `device:${deviceType}`,
     `browser:${browserFamily}`,
     `platform:${platform.toLowerCase().trim()}`,
     `mobile:${mobile.trim()}`,
-    `language:${acceptLanguage
-      .toLowerCase()
-      .trim()
-      .split(',')
-      .map((value) => value.split(';')[0].trim())
-      .filter(Boolean)
-      .join(',')}`,
+    `language:${normalizedLanguage}`,
   ].join('|')
 
   return createHash('sha256')
@@ -191,8 +183,7 @@ function createDeviceFingerprintHash(
 }
 
 /**
- * الاسترجاع التلقائي مسموح من 08:00 حتى 23:59
- * حسب توقيت البحرين، وليس توقيت جهاز المستخدم.
+ * الاسترجاع من الساعة 08:00 حتى 23:59 بتوقيت البحرين.
  */
 function isAutomaticRecoveryAllowed(): boolean {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -213,9 +204,7 @@ function isGracePeriodValid(device: TrustedDevice): boolean {
     return false
   }
 
-  const expiry = new Date(
-    device.grace_expires_at,
-  ).getTime()
+  const expiry = new Date(device.grace_expires_at).getTime()
 
   return Number.isFinite(expiry) && expiry > Date.now()
 }
@@ -286,9 +275,6 @@ async function writeAudit(
   }
 }
 
-/**
- * جدولة سجل التدقيق بعد إرسال الاستجابة.
- */
 function scheduleAudit(
   authUserId: string,
   eventType: string,
@@ -397,28 +383,20 @@ async function requireDeviceReapproval(
 
 export async function POST(request: NextRequest) {
   const loginStartedAt = Date.now()
-  let lastTimingAt = loginStartedAt
 
   const markLoginTiming = (step: string) => {
-    const now = Date.now()
-
     console.info(
       `[LOGIN TIMING] ${step}: ${
-        now - lastTimingAt
-      }ms | total: ${
-        now - loginStartedAt
-      }ms`,
+        Date.now() - loginStartedAt
+      }ms total`,
     )
-
-    lastTimingAt = now
   }
 
   try {
     /*
-     * 1. قراءة الطلب والتحقق من المدخلات.
+     * 1. قراءة بيانات تسجيل الدخول.
      */
     const body = await request.json()
-    markLoginTiming('parse request body')
 
     const username =
       typeof body.username === 'string'
@@ -431,8 +409,6 @@ export async function POST(request: NextRequest) {
         : ''
 
     if (!username || !password) {
-      markLoginTiming('validate credentials')
-
       return NextResponse.json(
         { error: 'اسم المستخدم وكلمة المرور مطلوبان.' },
         { status: 400 },
@@ -442,11 +418,9 @@ export async function POST(request: NextRequest) {
     const ipAddress = getIpAddress(request)
     const userAgent = getUserAgent(request)
     const detectedType = detectDeviceType(userAgent)
-    const fingerprintHash =
-      createDeviceFingerprintHash(request)
 
     /*
-     * 2. البحث عن المستخدم.
+     * 2. البحث عن حساب المستخدم.
      */
     const { data: profile, error: profileError } =
       await supabaseAdmin
@@ -484,22 +458,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    /*
-     * 3. استخدام البريد المحفوظ في الملف الشخصي.
-     */
     const email =
       typeof profile.email === 'string'
         ? profile.email.trim()
         : ''
 
-    markLoginTiming('auth email from profile')
-
     if (!email) {
-      console.error(
-        'Login profile email missing:',
-        profile.auth_user_id,
-      )
-
       return NextResponse.json(
         { error: 'تعذر التحقق من حساب المستخدم.' },
         { status: 500 },
@@ -507,13 +471,10 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 4. التحقق من كلمة المرور والبحث عن الجهاز بالتوازي.
+     * 3. التحقق من كلمة المرور أولًا.
+     *
+     * لا نبحث عن الجهاز أو البصمة قبل نجاح المصادقة.
      */
-    const existingDeviceToken = getCookie(
-      request,
-      DEVICE_COOKIE,
-    )
-
     const passwordClient = createClient(
       supabaseUrl,
       publishableKey,
@@ -525,159 +486,16 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    const passwordStartedAt = Date.now()
-    const parallelStartedAt = Date.now()
-
-    const passwordPromise = (
-      async () => {
-        const result =
-          await passwordClient.auth.signInWithPassword({
-            email,
-            password,
-          })
-
-        console.info(
-          `[LOGIN TIMING] password verification: ${
-            Date.now() - passwordStartedAt
-          }ms | total: ${
-            Date.now() - loginStartedAt
-          }ms`,
-        )
-
-        return result
-      }
-    )()
-
-    const deviceLookupPromise = (
-      async () => {
-        const lookupStartedAt = Date.now()
-
-        if (existingDeviceToken) {
-          const tokenHash = hashDeviceToken(
-            existingDeviceToken,
-          )
-
-          const { data, error } = await supabaseAdmin
-            .from('trusted_devices')
-            .select(`
-              id,
-              status,
-              device_name,
-              approved_device_type,
-              pending_device_type,
-              grace_period_days,
-              grace_expires_at
-            `)
-            .eq('device_token_hash', tokenHash)
-            .eq('auth_user_id', profile.auth_user_id)
-            .maybeSingle()
-
-          const duration = Date.now() - lookupStartedAt
-
-          console.info(
-            `[LOGIN TIMING] trusted device lookup: ${duration}ms`,
-          )
-
-          return {
-            device: data as TrustedDevice | null,
-            recoveryCandidate: null as TrustedDevice | null,
-            error,
-            skipped: false,
-          }
-        }
-
-        /*
-         * لا نحاول الاسترجاع التلقائي خارج الوقت المحدد.
-         * لا نستخدم البصمة للاسترجاع من 00:00 إلى 07:59.
-         */
-        if (!isAutomaticRecoveryAllowed()) {
-          console.info(
-            '[DEVICE RECOVERY] disabled by Bahrain time policy',
-          )
-
-          return {
-            device: null as TrustedDevice | null,
-            recoveryCandidate: null as TrustedDevice | null,
-            error: null,
-            skipped: true,
-          }
-        }
-
-        /*
-         * نبحث عن جهاز معتمد له بصمة مطابقة.
-         * إذا وجدنا أكثر من سجل مطابق، لا نختار سجلًا عشوائيًا.
-         */
-        const { data, error } = await supabaseAdmin
-          .from('trusted_devices')
-          .select(`
-            id,
-            status,
-            device_name,
-            approved_device_type,
-            pending_device_type,
-            grace_period_days,
-            grace_expires_at
-          `)
-          .eq('auth_user_id', profile.auth_user_id)
-          .eq('device_fingerprint_hash', fingerprintHash)
-          .eq('status', 'approved')
-          .limit(2)
-
-        if (error) {
-          return {
-            device: null as TrustedDevice | null,
-            recoveryCandidate: null as TrustedDevice | null,
-            error,
-            skipped: false,
-          }
-        }
-
-        const candidates = (data ?? []) as TrustedDevice[]
-
-        const candidate =
-          candidates.length === 1
-            ? candidates[0]
-            : null
-
-        console.info(
-          `[DEVICE RECOVERY] matching candidates: ${candidates.length}`,
-        )
-
-        return {
-          device: null as TrustedDevice | null,
-          recoveryCandidate: candidate,
-          error: null,
-          skipped: false,
-        }
-      }
-    )()
-
-    const [
-      passwordResult,
-      deviceLookupResult,
-    ] = await Promise.all([
-      passwordPromise,
-      deviceLookupPromise,
-    ])
-
-    console.info(
-      `[LOGIN TIMING] parallel checks complete: ${
-        Date.now() - parallelStartedAt
-      }ms | total: ${
-        Date.now() - loginStartedAt
-      }ms`,
-    )
-
-    lastTimingAt = Date.now()
-
     const {
       data: passwordAuthData,
       error: passwordError,
-    } = passwordResult
+    } = await passwordClient.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-    /*
-     * 5. معالجة فشل المصادقة أولاً.
-     */
+    markLoginTiming('password verification')
+
     if (
       passwordError ||
       !passwordAuthData.user ||
@@ -697,8 +515,6 @@ export async function POST(request: NextRequest) {
         },
       )
 
-      markLoginTiming('failed login audit scheduled')
-
       return NextResponse.json(
         {
           error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
@@ -707,109 +523,229 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (deviceLookupResult.error) {
-      console.error(
-        'Trusted device lookup error:',
-        deviceLookupResult.error,
-      )
+    /*
+     * 4. بعد نجاح كلمة المرور فقط:
+     * قراءة الكوكي وتوليد البصمة التقريبية.
+     */
+    const existingDeviceToken = getCookie(
+      request,
+      DEVICE_COOKIE,
+    )
 
-      return NextResponse.json(
-        { error: 'تعذر فحص الجهاز.' },
-        { status: 500 },
+    const fingerprintHash =
+      createDeviceFingerprintHash(request)
+
+    let device: TrustedDevice | null = null
+    let recoveryCandidate: TrustedDevice | null = null
+
+    /*
+     * 5. محاولة مطابقة الكوكي الموجودة.
+     *
+     * إذا كانت الكوكي غير موجودة أو لا تطابق سجلًا
+     * لهذا المستخدم، ننتقل إلى مسار البصمة أدناه.
+     *
+     * إذا طابقت جهازًا مرفوضًا أو مسحوب الاعتماد،
+     * فسيُرفض الجهاز ولا نتجاوز الرفض بالبصمة.
+     */
+    if (existingDeviceToken) {
+      const tokenHash = hashDeviceToken(existingDeviceToken)
+
+      const { data, error } = await supabaseAdmin
+        .from('trusted_devices')
+        .select(`
+          id,
+          status,
+          device_name,
+          approved_device_type,
+          pending_device_type,
+          grace_period_days,
+          grace_expires_at
+        `)
+        .eq('device_token_hash', tokenHash)
+        .eq('auth_user_id', profile.auth_user_id)
+        .maybeSingle()
+
+      if (error) {
+        console.error(
+          'Trusted device lookup error:',
+          error,
+        )
+
+        return NextResponse.json(
+          { error: 'تعذر فحص الجهاز.' },
+          { status: 500 },
+        )
+      }
+
+      device = data as TrustedDevice | null
+    }
+
+    /*
+     * 6. الاسترجاع بالبصمة عند غياب الكوكي أو عدم صلاحيتها.
+     *
+     * المقصود بعدم صلاحيتها هنا أن رمزها لا يطابق
+     * سجل جهاز لهذا المستخدم.
+     */
+    const cookieMissingOrInvalid = !device
+
+    if (
+      cookieMissingOrInvalid &&
+      isAutomaticRecoveryAllowed()
+    ) {
+      const { data, error } = await supabaseAdmin
+        .from('trusted_devices')
+        .select(`
+          id,
+          status,
+          device_name,
+          approved_device_type,
+          pending_device_type,
+          grace_period_days,
+          grace_expires_at
+        `)
+        .eq('auth_user_id', profile.auth_user_id)
+        .eq('device_fingerprint_hash', fingerprintHash)
+        .eq('status', 'approved')
+        .limit(2)
+
+      if (error) {
+        console.error(
+          'Fingerprint recovery lookup error:',
+          error,
+        )
+
+        return NextResponse.json(
+          { error: 'تعذر فحص بصمة الجهاز.' },
+          { status: 500 },
+        )
+      }
+
+      const candidates = (data ?? []) as TrustedDevice[]
+
+      /*
+       * لا نسترجع الجهاز إذا وُجد أكثر من تطابق.
+       */
+      if (candidates.length === 1) {
+        recoveryCandidate = candidates[0]
+      }
+
+      console.info(
+        `[DEVICE RECOVERY] candidates: ${candidates.length}`,
+      )
+    } else if (cookieMissingOrInvalid) {
+      console.info(
+        '[DEVICE RECOVERY] blocked by Bahrain time policy',
       )
     }
 
-    let device = deviceLookupResult.device
     let recoveredDeviceToken: string | null = null
 
     /*
-     * 6. محاولة استرجاع الجهاز إذا كانت الكوكي مفقودة.
+     * 7. التعامل مع الجهاز المطابق للبصمة.
      */
-    if (
-      !existingDeviceToken &&
-      deviceLookupResult.recoveryCandidate &&
-      isAutomaticRecoveryAllowed()
-    ) {
-      const candidate =
-        deviceLookupResult.recoveryCandidate
-
-      const candidateIsEligible =
-        candidate.status === 'approved' &&
-        isGracePeriodValid(candidate) &&
-        isDeviceTypeCompatible(candidate, detectedType)
-
-      if (candidateIsEligible) {
-        const newDeviceToken =
-          randomBytes(32).toString('hex')
-
-        const now = new Date().toISOString()
-
-        /*
-         * تدوير رمز الجهاز بعد التحقق من كلمة المرور.
-         * الرمز القديم لا يمكن استعادته من قاعدة البيانات،
-         * لأنها تخزن تجزئته فقط.
-         */
-        const { data: recovered, error: recoveryError } =
-          await supabaseAdmin
-            .from('trusted_devices')
-            .update({
-              device_token_hash:
-                hashDeviceToken(newDeviceToken),
-              device_fingerprint_hash: fingerprintHash,
-              last_used_at: now,
-              device_type_detected_at: now,
-            })
-            .eq('id', candidate.id)
-            .eq('auth_user_id', profile.auth_user_id)
-            .eq('status', 'approved')
-            .eq(
-              'device_fingerprint_hash',
-              fingerprintHash,
-            )
-            .select('id')
-            .maybeSingle()
-
-        if (recoveryError) {
-          console.error(
-            'Device recovery update error:',
-            recoveryError,
-          )
-
-          return NextResponse.json(
-            { error: 'تعذر استرجاع الجهاز.' },
-            { status: 500 },
-          )
-        }
-
-        if (recovered) {
-          device = candidate
-          recoveredDeviceToken = newDeviceToken
-
-          scheduleAudit(
-            profile.auth_user_id,
-            'device_cookie_recovered',
-            true,
-            {
-              deviceId: candidate.id,
-              ipAddress,
-              userAgent,
-              metadata: {
-                recovery_method: 'browser_signal_fingerprint',
-                detected_device_type: detectedType,
-                timezone: RECOVERY_TIME_ZONE,
-              },
-            },
-          )
-
-          console.info(
-            '[DEVICE RECOVERY] approved device recovered',
-          )
-        }
+    if (recoveryCandidate) {
+      /*
+       * إذا انتهت فترة السماح أو اختلف نوع الجهاز،
+       * لا نسمح بالاسترجاع التلقائي.
+       * نطلب موافقة جديدة على سجل الجهاز نفسه.
+       */
+      if (!isGracePeriodValid(recoveryCandidate)) {
+        return await requireDeviceReapproval(
+          recoveryCandidate,
+          profile.auth_user_id,
+          detectedType,
+          'grace_expired',
+          ipAddress,
+          userAgent,
+        )
       }
+
+      if (
+        !isDeviceTypeCompatible(
+          recoveryCandidate,
+          detectedType,
+        )
+      ) {
+        return await requireDeviceReapproval(
+          recoveryCandidate,
+          profile.auth_user_id,
+          detectedType,
+          'device_type_changed',
+          ipAddress,
+          userAgent,
+        )
+      }
+
+      /*
+       * توليد كوكي جديدة وتدوير رمز الجهاز.
+       * التحديث مشروط ببقاء الجهاز معتمدًا
+       * وبقاء البصمة المطابقة في قاعدة البيانات.
+       */
+      const newDeviceToken = randomBytes(32).toString('hex')
+      const now = new Date().toISOString()
+
+      const { data: recovered, error: recoveryError } =
+        await supabaseAdmin
+          .from('trusted_devices')
+          .update({
+            device_token_hash:
+              hashDeviceToken(newDeviceToken),
+            last_used_at: now,
+            device_type_detected_at: now,
+          })
+          .eq('id', recoveryCandidate.id)
+          .eq('auth_user_id', profile.auth_user_id)
+          .eq('status', 'approved')
+          .eq('device_fingerprint_hash', fingerprintHash)
+          .select('id')
+          .maybeSingle()
+
+      if (recoveryError) {
+        console.error(
+          'Device recovery update error:',
+          recoveryError,
+        )
+
+        return NextResponse.json(
+          { error: 'تعذر استرجاع الجهاز.' },
+          { status: 500 },
+        )
+      }
+
+      if (!recovered) {
+        return deviceApprovalRequiredResponse(
+          'تعذر تأكيد حالة الجهاز. يحتاج الجهاز إلى مراجعة المدير.',
+          recoveryCandidate.id,
+        )
+      }
+
+      device = recoveryCandidate
+      recoveredDeviceToken = newDeviceToken
+
+      scheduleAudit(
+        profile.auth_user_id,
+        'device_cookie_recovered',
+        true,
+        {
+          deviceId: recoveryCandidate.id,
+          ipAddress,
+          userAgent,
+          metadata: {
+            recovery_method: 'browser_signal_fingerprint',
+            detected_device_type: detectedType,
+            timezone: RECOVERY_TIME_ZONE,
+          },
+        },
+      )
+
+      console.info(
+        '[DEVICE RECOVERY] approved device recovered',
+      )
     }
 
     /*
-     * 7. الجهاز مرفوض أو مسحوب الاعتماد.
+     * 8. إذا كانت الكوكي تطابق جهازًا مرفوضًا
+     * أو مسحوب الاعتماد، نرفض الدخول.
      */
     if (
       device &&
@@ -835,8 +771,6 @@ export async function POST(request: NextRequest) {
         },
       )
 
-      markLoginTiming('rejected device audit scheduled')
-
       const response = NextResponse.json(
         {
           error: 'هذا الجهاز غير مصرح له بالدخول إلى النظام.',
@@ -849,7 +783,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 8. الجهاز معلق بالفعل.
+     * 9. إذا كان الجهاز معلقًا، نطلب الموافقة.
      */
     if (device && device.status === 'pending') {
       const { error } = await supabaseAdmin
@@ -861,8 +795,6 @@ export async function POST(request: NextRequest) {
         .eq('id', device.id)
         .eq('auth_user_id', profile.auth_user_id)
         .eq('status', 'pending')
-
-      markLoginTiming('pending device update')
 
       if (error) {
         console.error(
@@ -878,8 +810,8 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 9. إنشاء سجل لجهاز جديد عند عدم العثور على جهاز
-     * يمكن استرجاعه، أو عندما تكون البصمة غير مطابقة.
+     * 10. لم نجد جهازًا صالحًا للاسترجاع.
+     * نسجل جهازًا جديدًا بحالة pending.
      */
     if (!device) {
       const deviceToken = randomBytes(32).toString('hex')
@@ -901,8 +833,6 @@ export async function POST(request: NextRequest) {
           })
           .select('id, status')
           .single()
-
-      markLoginTiming('create pending device')
 
       if (insertError || !newDevice) {
         console.error(
@@ -932,8 +862,10 @@ export async function POST(request: NextRequest) {
         },
       )
 
+      const recoveryAllowed = isAutomaticRecoveryAllowed()
+
       const response = deviceApprovalRequiredResponse(
-        isAutomaticRecoveryAllowed()
+        recoveryAllowed
           ? 'لم يتم العثور على جهاز معتمد ببصمة مطابقة. الجهاز بانتظار موافقة مدير النظام.'
           : 'الاسترجاع التلقائي متوقف من منتصف الليل إلى الساعة 8 صباحًا. الجهاز بانتظار موافقة مدير النظام.',
         newDevice.id,
@@ -951,25 +883,25 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 10. لا نسمح إلا للأجهزة المعتمدة.
+     * 11. لا يُسمح بالدخول إلا لجهاز معتمد.
      */
     if (device.status !== 'approved') {
-      const response = NextResponse.json(
-        {
-          error: 'لا يمكن تسجيل الدخول من هذا الجهاز.',
-          deviceStatus: device.status,
-        },
-        { status: 403 },
+      return clearSessionCookie(
+        NextResponse.json(
+          {
+            error: 'لا يمكن تسجيل الدخول من هذا الجهاز.',
+            deviceStatus: device.status,
+          },
+          { status: 403 },
+        ),
       )
-
-      return clearSessionCookie(response)
     }
 
     /*
-     * 11. التحقق من انتهاء مدة الثقة.
+     * 12. التحقق من مدة الثقة.
      */
     if (!isGracePeriodValid(device)) {
-      const result = await requireDeviceReapproval(
+      return await requireDeviceReapproval(
         device,
         profile.auth_user_id,
         detectedType,
@@ -977,19 +909,13 @@ export async function POST(request: NextRequest) {
         ipAddress,
         userAgent,
       )
-
-      markLoginTiming(
-        'device reapproval: grace expired',
-      )
-
-      return result
     }
 
     /*
-     * 12. التحقق من نوع الجهاز.
+     * 13. التحقق من نوع الجهاز.
      */
     if (!isDeviceTypeCompatible(device, detectedType)) {
-      const result = await requireDeviceReapproval(
+      return await requireDeviceReapproval(
         device,
         profile.auth_user_id,
         detectedType,
@@ -997,16 +923,10 @@ export async function POST(request: NextRequest) {
         ipAddress,
         userAgent,
       )
-
-      markLoginTiming(
-        'device reapproval: type changed',
-      )
-
-      return result
     }
 
     /*
-     * 13. تحديث بيانات الجهاز المعتمد والبصمة الحالية.
+     * 14. تحديث آخر استخدام والبصمة الحالية.
      */
     const now = new Date().toISOString()
     const approvedType = device.approved_device_type
@@ -1038,8 +958,6 @@ export async function POST(request: NextRequest) {
       .select('id')
       .maybeSingle()
 
-    markLoginTiming('trusted device update')
-
     if (deviceUpdateError) {
       console.error(
         'Trusted device update error:',
@@ -1060,7 +978,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 14. تجهيز استجابة تسجيل الدخول وعميل الجلسة.
+     * 15. تجهيز جلسة Supabase.
      */
     const response = NextResponse.json({
       user: {
@@ -1103,8 +1021,6 @@ export async function POST(request: NextRequest) {
         refresh_token: session.refresh_token,
       })
 
-    markLoginTiming('set Supabase session')
-
     if (setSessionError) {
       console.error(
         'Supabase session setup error:',
@@ -1120,7 +1036,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 15. إنشاء جلسة النظام النشطة الواحدة.
+     * 16. إنشاء جلسة النظام النشطة الواحدة.
      */
     const loginAt = new Date()
 
@@ -1141,8 +1057,6 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    markLoginTiming('create single active session')
-
     if (sessionError || !activeSessionId) {
       console.error(
         'Create single active session error:',
@@ -1158,7 +1072,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 16. حفظ كوكي جلسة النظام.
+     * 17. حفظ كوكي الجلسة.
      */
     response.cookies.set(SESSION_COOKIE, activeSessionId, {
       httpOnly: true,
@@ -1169,7 +1083,7 @@ export async function POST(request: NextRequest) {
     })
 
     /*
-     * إذا استُرجع الجهاز، نحفظ كوكي الجهاز الجديدة.
+     * إذا استُرجع الجهاز، نحفظ الكوكي الجديدة.
      */
     if (recoveredDeviceToken) {
       response.cookies.set(
@@ -1186,7 +1100,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 17. جدولة سجل نجاح الدخول دون انتظار إدخاله.
+     * 18. تسجيل نجاح الدخول.
      */
     scheduleAudit(
       profile.auth_user_id,
@@ -1207,13 +1121,11 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    markLoginTiming('success audit scheduled')
     markLoginTiming('login complete')
 
     return response
   } catch (error) {
     console.error('Login error:', error)
-    markLoginTiming('login failed with exception')
 
     return NextResponse.json(
       { error: 'حدث خطأ غير متوقع أثناء تسجيل الدخول.' },
