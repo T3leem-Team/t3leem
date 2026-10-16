@@ -1,5 +1,5 @@
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomBytes } from 'crypto'
@@ -44,6 +44,13 @@ type TrustedDevice = {
   pending_device_type: string | null
   grace_period_days: number | null
   grace_expires_at: string | null
+}
+
+type AuditDetails = {
+  deviceId?: string
+  ipAddress: string | null
+  userAgent: string
+  metadata?: Record<string, unknown>
 }
 
 function hashDeviceToken(token: string) {
@@ -155,12 +162,7 @@ async function writeAudit(
   authUserId: string,
   eventType: string,
   success: boolean,
-  details: {
-    deviceId?: string
-    ipAddress: string | null
-    userAgent: string
-    metadata?: Record<string, unknown>
-  },
+  details: AuditDetails,
 ) {
   const { error } = await supabaseAdmin
     .from('auth_audit_logs')
@@ -177,6 +179,26 @@ async function writeAudit(
   if (error) {
     console.error(`Auth audit error (${eventType}):`, error)
   }
+}
+
+/**
+ * جدولة سجل التدقيق بعد إرسال الاستجابة.
+ * لا تنتظر عملية الإدخال قبل إرجاع استجابة تسجيل الدخول.
+ */
+function scheduleAudit(
+  authUserId: string,
+  eventType: string,
+  success: boolean,
+  details: AuditDetails,
+) {
+  after(async () => {
+    await writeAudit(
+      authUserId,
+      eventType,
+      success,
+      details,
+    )
+  })
 }
 
 async function closeDeviceSessions(
@@ -240,7 +262,7 @@ async function requireDeviceReapproval(
 
   await closeDeviceSessions(authUserId, device.id)
 
-  await writeAudit(
+  scheduleAudit(
     authUserId,
     'device_reapproval_required',
     false,
@@ -277,13 +299,20 @@ export async function POST(request: NextRequest) {
     const now = Date.now()
 
     console.info(
-      `[LOGIN TIMING] ${step}: ${now - lastTimingAt}ms | total: ${now - loginStartedAt}ms`,
+      `[LOGIN TIMING] ${step}: ${
+        now - lastTimingAt
+      }ms | total: ${
+        now - loginStartedAt
+      }ms`,
     )
 
     lastTimingAt = now
   }
 
   try {
+    /*
+     * 1. قراءة الطلب والتحقق من المدخلات.
+     */
     const body = await request.json()
     markLoginTiming('parse request body')
 
@@ -311,7 +340,7 @@ export async function POST(request: NextRequest) {
     const detectedType = detectDeviceType(userAgent)
 
     /*
-     * 1. البحث عن المستخدم.
+     * 2. البحث عن المستخدم.
      */
     const { data: profile, error: profileError } =
       await supabaseAdmin
@@ -331,7 +360,10 @@ export async function POST(request: NextRequest) {
     markLoginTiming('profile lookup')
 
     if (profileError) {
-      console.error('Login profile lookup error:', profileError)
+      console.error(
+        'Login profile lookup error:',
+        profileError,
+      )
 
       return NextResponse.json(
         { error: 'حدث خطأ أثناء تسجيل الدخول.' },
@@ -347,8 +379,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 2. استخدام البريد المحفوظ في الملف الشخصي.
-     * يظل التحقق الفعلي من كلمة المرور عبر Supabase Auth.
+     * 3. استخدام البريد المحفوظ في الملف الشخصي.
      */
     const email =
       typeof profile.email === 'string'
@@ -370,8 +401,16 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 3. التحقق من كلمة المرور.
+     * 4. التحقق من كلمة المرور والبحث عن الجهاز بالتوازي.
+     *
+     * لا نغيّر حالة الجهاز أثناء البحث.
+     * ولا نكشف نتيجة البحث إذا فشلت المصادقة.
      */
+    const existingDeviceToken = getCookie(
+      request,
+      DEVICE_COOKIE,
+    )
+
     const passwordClient = createClient(
       supabaseUrl,
       publishableKey,
@@ -383,58 +422,47 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    const {
-      data: passwordAuthData,
-      error: passwordError,
-    } = await passwordClient.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const passwordStartedAt = Date.now()
+    const parallelStartedAt = Date.now()
 
-    markLoginTiming('password verification')
+    const passwordPromise = (
+      async () => {
+        const result =
+          await passwordClient.auth.signInWithPassword({
+            email,
+            password,
+          })
 
-    if (
-      passwordError ||
-      !passwordAuthData.user ||
-      !passwordAuthData.session
-    ) {
-      await writeAudit(
-        profile.auth_user_id,
-        'login_failed',
-        false,
-        {
-          ipAddress,
-          userAgent,
-          metadata: {
-            reason: 'invalid_password',
-            username: profile.username,
-          },
-        },
-      )
+        console.info(
+          `[LOGIN TIMING] password verification: ${
+            Date.now() - passwordStartedAt
+          }ms | total: ${
+            Date.now() - loginStartedAt
+          }ms`,
+        )
 
-      markLoginTiming('failed login audit')
+        return result
+      }
+    )()
 
-      return NextResponse.json(
-        { error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' },
-        { status: 401 },
-      )
-    }
+    const deviceLookupPromise = (
+      async () => {
+        const lookupStartedAt = Date.now()
 
-    /*
-     * 4. البحث عن الجهاز باستخدام كوكي الجهاز.
-     */
-    const existingDeviceToken = getCookie(
-      request,
-      DEVICE_COOKIE,
-    )
+        if (!existingDeviceToken) {
+          return {
+            device: null as TrustedDevice | null,
+            error: null,
+            skipped: true,
+            duration: 0,
+          }
+        }
 
-    let device: TrustedDevice | null = null
+        const tokenHash = hashDeviceToken(
+          existingDeviceToken,
+        )
 
-    if (existingDeviceToken) {
-      const tokenHash = hashDeviceToken(existingDeviceToken)
-
-      const { data: existingDevice, error } =
-        await supabaseAdmin
+        const { data, error } = await supabaseAdmin
           .from('trusted_devices')
           .select(`
             id,
@@ -449,31 +477,118 @@ export async function POST(request: NextRequest) {
           .eq('auth_user_id', profile.auth_user_id)
           .maybeSingle()
 
-      markLoginTiming('trusted device lookup')
+        const duration = Date.now() - lookupStartedAt
 
-      if (error) {
-        console.error('Trusted device lookup error:', error)
-
-        return NextResponse.json(
-          { error: 'تعذر فحص الجهاز.' },
-          { status: 500 },
+        console.info(
+          `[LOGIN TIMING] trusted device lookup: ${
+            duration
+          }ms | total: ${
+            Date.now() - loginStartedAt
+          }ms`,
         )
-      }
 
-      device = existingDevice as TrustedDevice | null
-    } else {
-      markLoginTiming('trusted device lookup skipped: no cookie')
+        return {
+          device: data as TrustedDevice | null,
+          error,
+          skipped: false,
+          duration,
+        }
+      }
+    )()
+
+    const [
+      passwordResult,
+      deviceLookupResult,
+    ] = await Promise.all([
+      passwordPromise,
+      deviceLookupPromise,
+    ])
+
+    const parallelDuration =
+      Date.now() - parallelStartedAt
+
+    console.info(
+      `[LOGIN TIMING] parallel checks complete: ${
+        parallelDuration
+      }ms | total: ${
+        Date.now() - loginStartedAt
+      }ms`,
+    )
+
+    // إعادة ضبط نقطة قياس الخطوة التالية.
+    lastTimingAt = Date.now()
+
+    const {
+      data: passwordAuthData,
+      error: passwordError,
+    } = passwordResult
+
+    /*
+     * 5. معالجة فشل المصادقة أولاً.
+     */
+    if (
+      passwordError ||
+      !passwordAuthData.user ||
+      !passwordAuthData.session
+    ) {
+      scheduleAudit(
+        profile.auth_user_id,
+        'login_failed',
+        false,
+        {
+          ipAddress,
+          userAgent,
+          metadata: {
+            reason: 'invalid_password',
+            username: profile.username,
+          },
+        },
+      )
+
+      markLoginTiming('failed login audit scheduled')
+
+      return NextResponse.json(
+        {
+          error: 'اسم المستخدم أو كلمة المرور غير صحيحة.',
+        },
+        { status: 401 },
+      )
     }
 
     /*
-     * 5. الجهاز مرفوض أو مسحوب الاعتماد.
+     * لا نكمل تسجيل الدخول إذا فشل البحث عن الجهاز.
+     */
+    if (deviceLookupResult.error) {
+      console.error(
+        'Trusted device lookup error:',
+        deviceLookupResult.error,
+      )
+
+      return NextResponse.json(
+        { error: 'تعذر فحص الجهاز.' },
+        { status: 500 },
+      )
+    }
+
+    const device = deviceLookupResult.device
+
+    if (deviceLookupResult.skipped) {
+      console.info(
+        '[LOGIN TIMING] trusted device lookup skipped: no cookie',
+      )
+    }
+
+    /*
+     * 6. الجهاز مرفوض أو مسحوب الاعتماد.
      */
     if (
       device &&
-      (device.status === 'rejected' ||
-        device.status === 'revoked')
+      (
+        device.status === 'rejected' ||
+        device.status === 'revoked'
+      )
     ) {
-      await writeAudit(
+      scheduleAudit(
         profile.auth_user_id,
         'login_failed',
         false,
@@ -490,7 +605,7 @@ export async function POST(request: NextRequest) {
         },
       )
 
-      markLoginTiming('rejected device audit')
+      markLoginTiming('rejected device audit scheduled')
 
       const response = NextResponse.json(
         {
@@ -504,7 +619,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 6. الجهاز معلق بالفعل.
+     * 7. الجهاز معلق بالفعل.
      */
     if (device && device.status === 'pending') {
       const { error } = await supabaseAdmin
@@ -520,7 +635,10 @@ export async function POST(request: NextRequest) {
       markLoginTiming('pending device update')
 
       if (error) {
-        console.error('Pending device update error:', error)
+        console.error(
+          'Pending device update error:',
+          error,
+        )
       }
 
       return deviceApprovalRequiredResponse(
@@ -530,7 +648,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 7. إنشاء سجل لجهاز جديد.
+     * 8. إنشاء سجل لجهاز جديد.
      */
     if (!device) {
       const deviceToken = randomBytes(32).toString('hex')
@@ -566,7 +684,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      await writeAudit(
+      scheduleAudit(
         profile.auth_user_id,
         'device_pending',
         true,
@@ -581,7 +699,7 @@ export async function POST(request: NextRequest) {
         },
       )
 
-      markLoginTiming('new device audit')
+      markLoginTiming('new device audit scheduled')
 
       const response = deviceApprovalRequiredResponse(
         'تم تسجيل جهازك الجديد، وهو بانتظار موافقة مدير النظام.',
@@ -600,7 +718,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 8. لا نسمح إلا للأجهزة المعتمدة.
+     * 9. لا نسمح إلا للأجهزة المعتمدة.
      */
     if (device.status !== 'approved') {
       const response = NextResponse.json(
@@ -615,7 +733,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 9. التحقق من انتهاء مدة الثقة.
+     * 10. التحقق من انتهاء مدة الثقة.
      */
     const graceExpiry = device.grace_expires_at
       ? new Date(device.grace_expires_at).getTime()
@@ -635,13 +753,15 @@ export async function POST(request: NextRequest) {
         userAgent,
       )
 
-      markLoginTiming('device reapproval: grace expired')
+      markLoginTiming(
+        'device reapproval: grace expired',
+      )
 
       return result
     }
 
     /*
-     * 10. التحقق من نوع الجهاز.
+     * 11. التحقق من نوع الجهاز.
      */
     const approvedType = device.approved_device_type
 
@@ -660,13 +780,15 @@ export async function POST(request: NextRequest) {
         userAgent,
       )
 
-      markLoginTiming('device reapproval: type changed')
+      markLoginTiming(
+        'device reapproval: type changed',
+      )
 
       return result
     }
 
     /*
-     * 11 و12. تحديث بيانات الجهاز المعتمد في طلب واحد.
+     * 12. تحديث بيانات الجهاز المعتمد.
      */
     const now = new Date().toISOString()
 
@@ -717,7 +839,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 13. تجهيز جلسة Supabase.
+     * 13. تجهيز استجابة تسجيل الدخول وعميل الجلسة.
      */
     const response = NextResponse.json({
       user: {
@@ -777,8 +899,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 14. إنشاء جلسة النظام وإغلاق الجلسات السابقة
-     * داخل عملية واحدة في قاعدة البيانات.
+     * 14. إنشاء جلسة النظام النشطة الواحدة.
      */
     const loginAt = new Date()
 
@@ -827,9 +948,9 @@ export async function POST(request: NextRequest) {
     })
 
     /*
-     * 16. سجل نجاح الدخول.
+     * 16. جدولة سجل نجاح الدخول دون انتظار إدخاله.
      */
-    await writeAudit(
+    scheduleAudit(
       profile.auth_user_id,
       'login_success',
       true,
@@ -847,7 +968,7 @@ export async function POST(request: NextRequest) {
       },
     )
 
-    markLoginTiming('success audit')
+    markLoginTiming('success audit scheduled')
     markLoginTiming('login complete')
 
     return response
