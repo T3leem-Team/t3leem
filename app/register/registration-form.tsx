@@ -332,6 +332,22 @@ function SectionHeader({
 }
 
 
+function formatCourseDate(value: string | null) {
+  if (!value) return 'غير محدد'
+
+  const date = new Date(`${value}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return 'غير محدد'
+  }
+
+  return new Intl.DateTimeFormat('ar-BH', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
 export default function RegistrationForm(
   props: Props,
 ) {
