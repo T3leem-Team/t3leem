@@ -422,16 +422,28 @@ export function StudentsView() {
 
     try {
       for (const id of ids) {
-        const { error } = await supabase.rpc(
-          'delete_student_completely',
+        const response = await fetch(
+          '/api/admin/students',
           {
-            p_student_id: id,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              studentIds: [id],
+            }),
           }
         )
 
-        if (error) {
+        const result = await response
+          .json()
+          .catch(() => ({}))
+
+        if (!response.ok) {
           throw new Error(
-            `خطأ في حذف الطالب: ${error.message}`
+            typeof result.error === 'string'
+              ? result.error
+              : 'تعذر حذف الطالب.'
           )
         }
       }
@@ -1021,7 +1033,6 @@ export function StudentsView() {
                     variant="destructive"
                     disabled={!selectedStudentId}
                     onClick={async () => {
-                      // التحقق مجددًا قبل تنفيذ الحذف
                       if (
                         !isDeletionSettingLoaded ||
                         !allowStudentDeletion ||
@@ -1048,15 +1059,29 @@ export function StudentsView() {
                       }
 
                       try {
-                        const { error } = await supabase.rpc(
-                          'delete_student_completely',
+                        const response = await fetch(
+                          '/api/admin/students',
                           {
-                            p_student_id: selectedStudentId,
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              studentIds: [selectedStudentId],
+                            }),
                           }
                         )
 
-                        if (error) {
-                          throw new Error(error.message)
+                        const result = await response
+                          .json()
+                          .catch(() => ({}))
+
+                        if (!response.ok) {
+                          throw new Error(
+                            typeof result.error === 'string'
+                              ? result.error
+                              : 'تعذر حذف الطالب.'
+                          )
                         }
 
                         setStudentList((current) => {
