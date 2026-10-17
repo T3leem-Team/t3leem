@@ -1,3 +1,4 @@
+
 'use client'
 
 import { supabase } from '@/lib/supabase'
@@ -20,14 +21,11 @@ export type Teacher = {
   isActive: boolean
 }
 
-export type Assignment =
-  PreviousCourseAssignment
+export type Assignment = PreviousCourseAssignment
 
-export type TeacherCourseSubject =
-  PreviousCourseSubject
+export type TeacherCourseSubject = PreviousCourseSubject
 
-export type ManagedCourse =
-  PreviousManagedCourse
+export type ManagedCourse = PreviousManagedCourse
 
 export type AcademicLevel = {
   id: string
@@ -51,43 +49,49 @@ export type TeachersCache = {
 
 let teachersCache: TeachersCache | null = null
 
-let teachersCacheLoading: Promise<TeachersCache> | null =
-  null
+let teachersCacheLoading: Promise<TeachersCache> | null = null
+
+/**
+ * يتغير الرقم عند بدء تحميل جديد أو تعديل/مسح الكاش.
+ * يمنع أي تحميل قديم من الكتابة فوق بيانات أحدث.
+ */
+let teachersCacheVersion = 0
 
 export function getTeachersCache() {
   return teachersCache
 }
 
 export function setTeachersCache(data: TeachersCache) {
+  teachersCacheVersion += 1
+  teachersCacheLoading = null
   teachersCache = data
 }
 
 export function updateTeachersCache(
   patch: Partial<TeachersCache>,
 ) {
+  teachersCacheVersion += 1
+  teachersCacheLoading = null
+
   teachersCache = {
     teachers: teachersCache?.teachers ?? [],
     courses: teachersCache?.courses ?? [],
     students: teachersCache?.students ?? [],
     assignments: teachersCache?.assignments ?? [],
-    attendanceStatuses:
-      teachersCache?.attendanceStatuses ?? [],
-    attendanceRecords:
-      teachersCache?.attendanceRecords ?? [],
-    allowTeacherTransfer:
-      teachersCache?.allowTeacherTransfer ?? false,
-    allowTeacherRemove:
-      teachersCache?.allowTeacherRemove ?? false,
-    courseTeacherIds:
-      teachersCache?.courseTeacherIds ?? {},
-    teacherCourseSubjects:
-      teachersCache?.teacherCourseSubjects ?? [],
+    attendanceStatuses: teachersCache?.attendanceStatuses ?? [],
+    attendanceRecords: teachersCache?.attendanceRecords ?? [],
+    allowTeacherTransfer: teachersCache?.allowTeacherTransfer ?? false,
+    allowTeacherRemove: teachersCache?.allowTeacherRemove ?? false,
+    courseTeacherIds: teachersCache?.courseTeacherIds ?? {},
+    teacherCourseSubjects: teachersCache?.teacherCourseSubjects ?? [],
     academicLevels: teachersCache?.academicLevels ?? [],
     ...patch,
   }
 }
 
 export function clearTeachersCache() {
+  teachersCacheVersion += 1
+  teachersCacheLoading = null
   teachersCache = null
 }
 
@@ -95,18 +99,21 @@ export async function loadTeachersCache(
   options?: {
     force?: boolean
   },
-) {
+): Promise<TeachersCache> {
   const force = options?.force ?? false
 
   if (!force && teachersCache) {
     return teachersCache
   }
 
-  if (teachersCacheLoading) {
+  if (!force && teachersCacheLoading) {
     return teachersCacheLoading
   }
 
-  teachersCacheLoading = (async () => {
+  // كل تحميل جديد يحصل على نسخة خاصة به.
+  const requestVersion = ++teachersCacheVersion
+
+  const loadingPromise = (async (): Promise<TeachersCache> => {
     const {
       data: academicYear,
       error: academicYearError,
@@ -175,7 +182,6 @@ export async function loadTeachersCache(
               thursday: 'الخميس',
               friday: 'الجمعة',
               saturday: 'السبت',
-
               الأحد: 'الأحد',
               الاحد: 'الأحد',
               الإثنين: 'الإثنين',
@@ -761,7 +767,7 @@ export async function loadTeachersCache(
         sortOrder: status.sort_order ?? 0,
       }))
 
-     /*
+    /*
      * =====================================================
      * الحضور
      * =====================================================
@@ -812,15 +818,6 @@ export async function loadTeachersCache(
       }
     }
 
-    console.log('ATTENDANCE LOAD CHECK', {
-      total: attendanceRows.length,
-      matchingRows: attendanceRows.filter(
-        row =>
-          row.course_id === '27097455-819d-409b-b8b7-3a40bc44f482' &&
-          row.attendance_date === '2026-10-12'
-      ).length,
-    })
-
     const attendanceRecords: AttendanceRecord[] =
       attendanceRows.map((record) => ({
         id: record.id,
@@ -846,14 +843,22 @@ export async function loadTeachersCache(
       academicLevels,
     }
 
-    teachersCache = data
+    // لا تسمح لطلب قديم بالكتابة فوق الكاش الأحدث.
+    if (requestVersion === teachersCacheVersion) {
+      teachersCache = data
+    }
 
     return data
   })()
 
+  teachersCacheLoading = loadingPromise
+
   try {
-    return await teachersCacheLoading
+    return await loadingPromise
   } finally {
-    teachersCacheLoading = null
+    // لا تمسح مرجع طلب أحدث عند انتهاء طلب أقدم.
+    if (teachersCacheLoading === loadingPromise) {
+      teachersCacheLoading = null
+    }
   }
 }
