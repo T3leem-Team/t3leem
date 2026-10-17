@@ -1,3 +1,4 @@
+
 export type DashboardSection = {
   section_key: string
   href: string
@@ -41,13 +42,40 @@ export function getDashboardSections():
       return null
     }
 
-    const parsed = JSON.parse(raw)
+    const parsed: unknown = JSON.parse(raw)
 
     if (!Array.isArray(parsed)) {
       return null
     }
 
-    return parsed
+    const isValid = parsed.every(
+      (section: unknown) => {
+        if (
+          typeof section !== 'object' ||
+          section === null
+        ) {
+          return false
+        }
+
+        const item = section as Record<
+          string,
+          unknown
+        >
+
+        return (
+          typeof item.section_key === 'string' &&
+          typeof item.href === 'string' &&
+          typeof item.sort_order === 'number' &&
+          Number.isFinite(item.sort_order)
+        )
+      },
+    )
+
+    if (!isValid) {
+      return null
+    }
+
+    return parsed as DashboardSection[]
   } catch (error) {
     console.error(
       'Failed to read dashboard sections:',
