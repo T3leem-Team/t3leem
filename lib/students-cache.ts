@@ -1,3 +1,4 @@
+
 'use client'
 
 import { supabase } from '@/lib/supabase'
@@ -68,9 +69,13 @@ export type StudentsCacheData = {
 
 let studentsCache: StudentsCacheData | null = null
 
-let studentsCacheLoading:
-  | Promise<StudentsCacheData>
-  | null = null
+let studentsCacheLoading: Promise<StudentsCacheData> | null = null
+
+// إصدار الكاش لمنع الطلبات القديمة من استبدال البيانات الأحدث.
+let studentsCacheVersion = 0
+
+// عدد سجلات الحضور في كل طلب إلى Supabase.
+const ATTENDANCE_PAGE_SIZE = 100
 
 function getTodayString() {
   const now = new Date()
@@ -137,15 +142,10 @@ function normalizeArabicDay(value: unknown) {
 }
 
 function getDayOfWeek(date: string) {
-  const [year, month, day] =
-    date.split('-').map(Number)
+  const [year, month, day] = date.split('-').map(Number)
 
   const value = new Date(
-    Date.UTC(
-      year,
-      month - 1,
-      day
-    )
+    Date.UTC(year, month - 1, day)
   )
 
   return [
@@ -167,13 +167,10 @@ function isCourseStudyDay(
     return false
   }
 
-  const currentDay =
-    getDayOfWeek(date)
+  const currentDay = getDayOfWeek(date)
 
   return courseDays.some(
-    (day) =>
-      normalizeArabicDay(day) ===
-      currentDay
+    (day) => normalizeArabicDay(day) === currentDay
   )
 }
 
@@ -183,31 +180,19 @@ function getDateRange(
 ) {
   const result: string[] = []
 
-  const [sy, sm, sd] =
-    startDate.split('-').map(Number)
-
-  const [ey, em, ed] =
-    endDate.split('-').map(Number)
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
 
   const current = new Date(
-    Date.UTC(
-      sy,
-      sm - 1,
-      sd
-    )
+    Date.UTC(sy, sm - 1, sd)
   )
 
   const end = new Date(
-    Date.UTC(
-      ey,
-      em - 1,
-      ed
-    )
+    Date.UTC(ey, em - 1, ed)
   )
 
   while (current <= end) {
-    const year =
-      current.getUTCFullYear()
+    const year = current.getUTCFullYear()
 
     const month = String(
       current.getUTCMonth() + 1
@@ -217,13 +202,9 @@ function getDateRange(
       current.getUTCDate()
     ).padStart(2, '0')
 
-    result.push(
-      `${year}-${month}-${day}`
-    )
+    result.push(`${year}-${month}-${day}`)
 
-    current.setUTCDate(
-      current.getUTCDate() + 1
-    )
+    current.setUTCDate(current.getUTCDate() + 1)
   }
 
   return result
@@ -235,25 +216,17 @@ function getCourseStatus(
   assignments: TeacherStudentAssignment[],
   today: string
 ): StudentCourseStatus['status'] {
-  const hasAssignment =
-    assignments.some(
-      (assignment) =>
-        assignment.student_id ===
-          studentId &&
-        assignment.course_id ===
-          course.id
-    )
+  const hasAssignment = assignments.some(
+    (assignment) =>
+      assignment.student_id === studentId &&
+      assignment.course_id === course.id
+  )
 
-  if (
-    course.start_date &&
-    today < course.start_date
-  ) {
+  if (course.start_date && today < course.start_date) {
     return 'لم تقم الدورة حتى الآن'
   }
 
-  return hasAssignment
-    ? 'حاضر'
-    : 'لم يحضر'
+  return hasAssignment ? 'حاضر' : 'لم يحضر'
 }
 
 function getCurrentCourse(
@@ -262,10 +235,7 @@ function getCurrentCourse(
 ) {
   return (
     courses.find((course) => {
-      if (
-        !course.start_date ||
-        !course.end_date
-      ) {
+      if (!course.start_date || !course.end_date) {
         return false
       }
 
@@ -282,31 +252,21 @@ function getStatusName(
   statusId: string
 ) {
   return (
-    statuses.find(
-      (status) =>
-        status.id === statusId
-    )?.name ?? ''
+    statuses.find((status) => status.id === statusId)
+      ?.name ?? ''
   )
 }
 
 function normalizeAttendanceStatus(
   value: string
 ): StudentAttendanceRecord['status'] | '' {
-  const text = value
-    .trim()
-    .toLowerCase()
+  const text = value.trim().toLowerCase()
 
-  if (
-    text === 'حاضر' ||
-    text === 'present'
-  ) {
+  if (text === 'حاضر' || text === 'present') {
     return 'حاضر'
   }
 
-  if (
-    text === 'غائب' ||
-    text === 'absent'
-  ) {
+  if (text === 'غائب' || text === 'absent') {
     return 'غائب'
   }
 
@@ -345,10 +305,7 @@ function calculateAttendanceSummary(
 
   const studyDates: string[] = []
 
-  if (
-    course.start_date &&
-    course.end_date
-  ) {
+  if (course.start_date && course.end_date) {
     const dates = getDateRange(
       course.start_date,
       course.end_date
@@ -357,53 +314,36 @@ function calculateAttendanceSummary(
     dates.forEach((date) => {
       if (
         date > today ||
-        !isCourseStudyDay(
-          date,
-          course.days
-        )
+        !isCourseStudyDay(date, course.days)
       ) {
         return
       }
 
       studyDates.push(date)
 
-      const record =
-        records.find(
-          (item) =>
-            item.studentId ===
-              studentId &&
-            item.courseId ===
-              course.id &&
-            item.attendanceDate ===
-              date
-        )
+      const record = records.find(
+        (item) =>
+          item.studentId === studentId &&
+          item.courseId === course.id &&
+          item.attendanceDate === date
+      )
 
       if (!record) {
         notRecorded += 1
         return
       }
 
-      const status =
-        normalizeAttendanceStatus(
-          getStatusName(
-            statuses,
-            record.statusId
-          )
-        )
+      const status = normalizeAttendanceStatus(
+        getStatusName(statuses, record.statusId)
+      )
 
       if (status === 'حاضر') {
         present += 1
-      } else if (
-        status === 'غائب'
-      ) {
+      } else if (status === 'غائب') {
         absent += 1
-      } else if (
-        status === 'متأخر'
-      ) {
+      } else if (status === 'متأخر') {
         late += 1
-      } else if (
-        status === 'مستأذن'
-      ) {
+      } else if (status === 'مستأذن') {
         excused += 1
       } else {
         notRecorded += 1
@@ -411,25 +351,13 @@ function calculateAttendanceSummary(
     })
   }
 
-  const counted =
-    present +
-    late +
-    excused +
-    absent
-
-  const attended =
-    present +
-    late +
-    excused
+  const counted = present + late + excused + absent
+  const attended = present + late + excused
 
   const percentage =
     counted === 0
       ? 0
-      : Math.round(
-          (attended /
-            counted) *
-            100
-        )
+      : Math.round((attended / counted) * 100)
 
   return {
     courseId: course.id,
@@ -438,8 +366,7 @@ function calculateAttendanceSummary(
     endDate: course.end_date,
     days: course.days,
     teacherName,
-    totalDays:
-      studyDates.length,
+    totalDays: studyDates.length,
     present,
     absent,
     late,
@@ -456,10 +383,14 @@ export function getStudentsCache() {
 export function setStudentsCache(
   data: StudentsCacheData
 ) {
+  studentsCacheVersion++
+  studentsCacheLoading = null
   studentsCache = data
 }
 
 export function clearStudentsCache() {
+  studentsCacheVersion++
+  studentsCacheLoading = null
   studentsCache = null
 }
 
@@ -470,6 +401,9 @@ export function updateStudentsCacheStudentList(
     return
   }
 
+  studentsCacheVersion++
+  studentsCacheLoading = null
+
   studentsCache = {
     ...studentsCache,
     studentList,
@@ -479,1019 +413,690 @@ export function updateStudentsCacheStudentList(
 export async function loadStudentsCache(options?: {
   force?: boolean
 }) {
-  const force =
-    options?.force ?? false
+  const force = options?.force ?? false
 
   if (!force && studentsCache) {
     return studentsCache
+  }
+
+  if (force) {
+    studentsCacheVersion++
+    studentsCacheLoading = null
   }
 
   if (studentsCacheLoading) {
     return studentsCacheLoading
   }
 
-  studentsCacheLoading =
-    (async () => {
-      const {
-        data: currentYear,
-        error: yearError,
-      } =
-        await supabase
-          .from('academic_years')
-          .select(
-            'id, name, annual_fee'
-          )
-          .eq(
-            'is_current',
-            true
-          )
-          .eq(
-            'is_active',
-            true
-          )
-          .maybeSingle()
+  const requestVersion = studentsCacheVersion
 
-      if (yearError) {
-        throw new Error(
-          `خطأ في تحميل السنة الدراسية: ${yearError.message}`
-        )
-      }
+  const loadingPromise = (async (): Promise<StudentsCacheData> => {
+    const {
+      data: currentYear,
+      error: yearError,
+    } = await supabase
+      .from('academic_years')
+      .select('id, name, annual_fee')
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle()
 
-      if (!currentYear) {
-        throw new Error(
-          'لا توجد سنة دراسية حالية مفعلة'
-        )
-      }
-
-      const annualFee =
-        Number(
-          currentYear.annual_fee ??
-            0
-        )
-
-      /*
-       * الصفوف الأكاديمية
-       */
-      const {
-        data: levels,
-        error: levelsError,
-      } =
-        await supabase
-          .from('levels')
-          .select(
-            'id, name, sort_order'
-          )
-          .eq(
-            'is_active',
-            true
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            }
-          )
-
-      if (levelsError) {
-        throw new Error(
-          `خطأ في تحميل الصفوف الأكاديمية: ${levelsError.message}`
-        )
-      }
-
-      const loadedAcademicLevels =
-        levels ?? []
-
-      /*
-       * الدورات
-       */
-      const {
-        data: coursesData,
-        error: coursesError,
-      } =
-        await supabase
-          .from('courses')
-          .select(
-            'id, academic_year_id, name, start_date, end_date, days'
-          )
-          .eq(
-            'academic_year_id',
-            currentYear.id
-          )
-          .order(
-            'start_date',
-            {
-              ascending: true,
-              nullsFirst: false,
-            }
-          )
-
-      if (coursesError) {
-        throw new Error(
-          `خطأ في تحميل الدورات: ${coursesError.message}`
-        )
-      }
-
-      const loadedCourses: Course[] =
-        (
-          coursesData ?? []
-        ).map(
-          (course) => ({
-            id: course.id,
-            academic_year_id:
-              course.academic_year_id,
-            name:
-              course.name,
-            start_date:
-              course.start_date ??
-              null,
-            end_date:
-              course.end_date ??
-              null,
-            days:
-              Array.isArray(
-                course.days
-              )
-                ? course.days
-                : [],
-          })
-        )
-
-      const courseNameMap =
-        new Map<string, string>()
-
-      loadedCourses.forEach(
-        (course) => {
-          courseNameMap.set(
-            course.id,
-            course.name
-          )
-        }
+    if (yearError) {
+      throw new Error(
+        `خطأ في تحميل السنة الدراسية: ${yearError.message}`
       )
+    }
 
-      const today =
-        getTodayString()
+    if (!currentYear) {
+      throw new Error('لا توجد سنة دراسية حالية مفعلة')
+    }
 
-      const currentCourse =
-        getCurrentCourse(
-          loadedCourses,
-          today
-        )
+    const annualFee = Number(currentYear.annual_fee ?? 0)
 
-      /*
-       * الحقول الديناميكية
-       */
-      const {
-        data: dynamicFieldsData,
-        error:
-          dynamicFieldsError,
-      } = await supabase
-        .from('dynamic_fields')
-        .select(
-          'id, name, field_key, field_type, is_required, show_in_registration, is_active, sort_order'
-        )
-        .eq(
-          'is_active',
-          true
-        )
-        .order(
-          'sort_order',
-          {
-            ascending: true,
-          }
-        )
+    /*
+     * الصفوف الأكاديمية
+     */
+    const {
+      data: levels,
+      error: levelsError,
+    } = await supabase
+      .from('levels')
+      .select('id, name, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
 
-      if (dynamicFieldsError) {
-        throw new Error(
-          `خطأ في تحميل حقول التسجيل: ${dynamicFieldsError.message}`
-        )
-      }
-
-      const loadedDynamicFields: StudentDynamicField[] =
-        (
-          dynamicFieldsData ??
-          []
-        ).map(
-          (field) => ({
-            id: field.id,
-            name:
-              field.name,
-            field_key:
-              field.field_key,
-            field_type:
-              field.field_type,
-            is_required:
-              Boolean(
-                field.is_required
-              ),
-            show_in_registration:
-              Boolean(
-                field.show_in_registration
-              ),
-            is_active:
-              Boolean(
-                field.is_active
-              ),
-            sort_order:
-              Number(
-                field.sort_order ??
-                  0
-              ),
-          })
-        )
-
-      /*
-       * قيم الحقول الديناميكية
-       */
-      const {
-        data: dynamicValuesData,
-        error:
-          dynamicValuesError,
-      } = await supabase
-        .from(
-          'student_dynamic_values'
-        )
-        .select(
-          'id, student_id, field_id, value'
-        )
-
-      if (dynamicValuesError) {
-        throw new Error(
-          `خطأ في تحميل بيانات حقول الطلاب: ${dynamicValuesError.message}`
-        )
-      }
-
-      const dynamicValuesMap =
-        new Map<
-          string,
-          Record<string, string>
-        >()
-
-      ;(
-        dynamicValuesData ?? []
-      ).forEach(
-        (item) => {
-          const current =
-            dynamicValuesMap.get(
-              item.student_id
-            ) ?? {}
-
-          current[item.field_id] =
-            item.value ?? ''
-
-          dynamicValuesMap.set(
-            item.student_id,
-            current
-          )
-        }
+    if (levelsError) {
+      throw new Error(
+        `خطأ في تحميل الصفوف الأكاديمية: ${levelsError.message}`
       )
+    }
 
-      /*
-       * enrollments
-       *
-       * course_id = دورة الالتحاق
-       */
-      const {
-        data: enrollmentRows,
-        error:
-          enrollmentsError,
-      } =
-        await supabase
-          .from(
-            'enrollments'
-          )
-          .select(
-            'student_id, level_id, class_id, academic_year_id, status, course_id'
-          )
-          .eq(
-            'academic_year_id',
-            currentYear.id
-          )
+    const loadedAcademicLevels = levels ?? []
 
-      if (enrollmentsError) {
-        throw new Error(
-          `خطأ في تحميل ربط الطلاب بالصفوف والدورات: ${enrollmentsError.message}`
-        )
-      }
-
-      /*
-       * الفصول
-       */
-      const {
-        data: classesData,
-        error: classesError,
-      } =
-        await supabase
-          .from('classes')
-          .select(
-            'id, name, level_id, academic_year_id'
-          )
-          .eq(
-            'academic_year_id',
-            currentYear.id
-          )
-
-      if (classesError) {
-        throw new Error(
-          `خطأ في تحميل الفصول: ${classesError.message}`
-        )
-      }
-
-      const levelMap =
-        new Map<string, string>()
-
-      ;(
-        levels ?? []
-      ).forEach((level) => {
-        levelMap.set(
-          level.id,
-          level.name
-        )
+    /*
+     * الدورات
+     */
+    const {
+      data: coursesData,
+      error: coursesError,
+    } = await supabase
+      .from('courses')
+      .select(
+        'id, academic_year_id, name, start_date, end_date, days'
+      )
+      .eq('academic_year_id', currentYear.id)
+      .order('start_date', {
+        ascending: true,
+        nullsFirst: false,
       })
 
-      const classMap =
-        new Map<string, string>()
+    if (coursesError) {
+      throw new Error(
+        `خطأ في تحميل الدورات: ${coursesError.message}`
+      )
+    }
 
-      ;(
-        classesData ?? []
-      ).forEach((item) => {
-        classMap.set(
-          item.id,
-          item.name
-        )
+    const loadedCourses: Course[] = (coursesData ?? []).map(
+      (course) => ({
+        id: course.id,
+        academic_year_id: course.academic_year_id,
+        name: course.name,
+        start_date: course.start_date ?? null,
+        end_date: course.end_date ?? null,
+        days: Array.isArray(course.days) ? course.days : [],
       })
+    )
 
-      const enrollmentMap =
-        new Map<
-          string,
-          {
-            levelName: string
-            className: string
-            courseId: string
-            courseName: string
-          }
-        >()
+    const courseNameMap = new Map<string, string>()
 
-      ;(
-        enrollmentRows ?? []
-      ).forEach(
-        (enrollment) => {
-          const courseId =
-            enrollment.course_id ??
-            ''
+    loadedCourses.forEach((course) => {
+      courseNameMap.set(course.id, course.name)
+    })
 
-          enrollmentMap.set(
-            enrollment.student_id,
-            {
-              levelName:
-                levelMap.get(
-                  enrollment.level_id
-                ) ?? '',
+    const today = getTodayString()
 
-              className:
-                enrollment.class_id
-                  ? classMap.get(
-                      enrollment.class_id
-                    ) ?? ''
-                  : '',
+    const currentCourse = getCurrentCourse(
+      loadedCourses,
+      today
+    )
 
-              courseId,
+    /*
+     * الحقول الديناميكية
+     */
+    const {
+      data: dynamicFieldsData,
+      error: dynamicFieldsError,
+    } = await supabase
+      .from('dynamic_fields')
+      .select(
+        'id, name, field_key, field_type, is_required, show_in_registration, is_active, sort_order'
+      )
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
 
-              courseName:
-                courseId
-                  ? courseNameMap.get(
-                      courseId
-                    ) ?? ''
-                  : '',
-            }
-          )
-        }
+    if (dynamicFieldsError) {
+      throw new Error(
+        `خطأ في تحميل حقول التسجيل: ${dynamicFieldsError.message}`
+      )
+    }
+
+    const loadedDynamicFields: StudentDynamicField[] = (
+      dynamicFieldsData ?? []
+    ).map((field) => ({
+      id: field.id,
+      name: field.name,
+      field_key: field.field_key,
+      field_type: field.field_type,
+      is_required: Boolean(field.is_required),
+      show_in_registration: Boolean(
+        field.show_in_registration
+      ),
+      is_active: Boolean(field.is_active),
+      sort_order: Number(field.sort_order ?? 0),
+    }))
+
+    /*
+     * قيم الحقول الديناميكية
+     */
+    const {
+      data: dynamicValuesData,
+      error: dynamicValuesError,
+    } = await supabase
+      .from('student_dynamic_values')
+      .select('id, student_id, field_id, value')
+
+    if (dynamicValuesError) {
+      throw new Error(
+        `خطأ في تحميل بيانات حقول الطلاب: ${dynamicValuesError.message}`
+      )
+    }
+
+    const dynamicValuesMap = new Map<
+      string,
+      Record<string, string>
+    >()
+
+    ;(dynamicValuesData ?? []).forEach((item) => {
+      const current =
+        dynamicValuesMap.get(item.student_id) ?? {}
+
+      current[item.field_id] = item.value ?? ''
+
+      dynamicValuesMap.set(item.student_id, current)
+    })
+
+    /*
+     * enrollments
+     *
+     * course_id = دورة الالتحاق
+     */
+    const {
+      data: enrollmentRows,
+      error: enrollmentsError,
+    } = await supabase
+      .from('enrollments')
+      .select(
+        'student_id, level_id, class_id, academic_year_id, status, course_id'
+      )
+      .eq('academic_year_id', currentYear.id)
+
+    if (enrollmentsError) {
+      throw new Error(
+        `خطأ في تحميل ربط الطلاب بالصفوف والدورات: ${enrollmentsError.message}`
+      )
+    }
+
+    /*
+     * الفصول
+     */
+    const {
+      data: classesData,
+      error: classesError,
+    } = await supabase
+      .from('classes')
+      .select('id, name, level_id, academic_year_id')
+      .eq('academic_year_id', currentYear.id)
+
+    if (classesError) {
+      throw new Error(
+        `خطأ في تحميل الفصول: ${classesError.message}`
+      )
+    }
+
+    const levelMap = new Map<string, string>()
+
+    ;(levels ?? []).forEach((level) => {
+      levelMap.set(level.id, level.name)
+    })
+
+    const classMap = new Map<string, string>()
+
+    ;(classesData ?? []).forEach((item) => {
+      classMap.set(item.id, item.name)
+    })
+
+    const enrollmentMap = new Map<
+      string,
+      {
+        levelName: string
+        className: string
+        courseId: string
+        courseName: string
+      }
+    >()
+
+    ;(enrollmentRows ?? []).forEach((enrollment) => {
+      const courseId = enrollment.course_id ?? ''
+
+      enrollmentMap.set(enrollment.student_id, {
+        levelName:
+          levelMap.get(enrollment.level_id) ?? '',
+
+        className: enrollment.class_id
+          ? classMap.get(enrollment.class_id) ?? ''
+          : '',
+
+        courseId,
+
+        courseName: courseId
+          ? courseNameMap.get(courseId) ?? ''
+          : '',
+      })
+    })
+
+    /*
+     * الطلاب
+     */
+    let studentsData: any[] | null = null
+
+    const {
+      data: loadedStudents,
+      error: studentsError,
+    } = await supabase
+      .from('students')
+      .select(
+        'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
+      )
+      .order('created_at', { ascending: false })
+
+    studentsData = loadedStudents
+
+    if (studentsError) {
+      const {
+        data: fallbackStudents,
+        error: fallbackError,
+      } = await supabase
+        .from('students')
+        .select(
+          'id, student_id, name, personal_id, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
+        )
+        .order('created_at', { ascending: false })
+
+      if (fallbackError) {
+        throw new Error(
+          `خطأ في تحميل الطلاب: ${fallbackError.message}`
+        )
+      }
+
+      studentsData = fallbackStudents
+    }
+
+    /*
+     * المدفوعات
+     */
+    const {
+      data: paymentsData,
+      error: paymentsError,
+    } = await supabase
+      .from('payments')
+      .select('student_id, academic_year_id, amount')
+      .eq('academic_year_id', currentYear.id)
+
+    if (paymentsError) {
+      throw new Error(
+        `خطأ في تحميل الدفعات: ${paymentsError.message}`
+      )
+    }
+
+    /*
+     * توزيع الطلاب على المعلمين
+     */
+    let assignments: TeacherStudentAssignment[] = []
+
+    if (loadedCourses.length > 0) {
+      const {
+        data: assignmentsData,
+        error: assignmentsError,
+      } = await supabase
+        .from('teacher_student_assignments')
+        .select('id, course_id, teacher_id, student_id')
+        .in(
+          'course_id',
+          loadedCourses.map((course) => course.id)
+        )
+
+      if (assignmentsError) {
+        throw new Error(
+          `خطأ في تحميل توزيع الطلاب على المعلمين: ${assignmentsError.message}`
+        )
+      }
+
+      assignments = (assignmentsData ?? []).map(
+        (assignment) => ({
+          id: assignment.id,
+          course_id: assignment.course_id,
+          teacher_id: assignment.teacher_id,
+          student_id: assignment.student_id,
+        })
+      )
+    }
+
+    /*
+     * أسماء المعلمين
+     */
+    const teacherNames = new Map<string, string>()
+
+    if (assignments.length > 0) {
+      const teacherIds = Array.from(
+        new Set(
+          assignments.map((item) => item.teacher_id)
+        )
       )
 
-      /*
-       * الطلاب
-       */
-      let studentsData:
-        | any[]
-        | null = null
-
       const {
-        data: loadedStudents,
-        error: studentsError,
-      } =
-        await supabase
-          .from('students')
-          .select(
-            'id, student_id, name, personal_id, gender, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            }
-          )
+        data: teachersData,
+        error: teachersError,
+      } = await supabase
+        .from('teachers')
+        .select('id, name')
+        .in('id', teacherIds)
 
-      studentsData =
-        loadedStudents
-
-      if (studentsError) {
-        const {
-          data: fallbackStudents,
-          error:
-            fallbackError,
-        } =
-          await supabase
-            .from('students')
-            .select(
-              'id, student_id, name, personal_id, phone, whatsapp, age, notes, health_notes, guardian_relation, student_phone, status, fee_exempt, created_at, updated_at, source, academic_year_id'
-            )
-            .order(
-              'created_at',
-              {
-                ascending: false,
-              }
-            )
-
-        if (fallbackError) {
-          throw new Error(
-            `خطأ في تحميل الطلاب: ${fallbackError.message}`
-          )
-        }
-
-        studentsData =
-          fallbackStudents
-      }
-
-      /*
-       * المدفوعات
-       */
-      const {
-        data: paymentsData,
-        error: paymentsError,
-      } =
-        await supabase
-          .from('payments')
-          .select(
-            'student_id, academic_year_id, amount'
-          )
-          .eq(
-            'academic_year_id',
-            currentYear.id
-          )
-
-      if (paymentsError) {
+      if (teachersError) {
         throw new Error(
-          `خطأ في تحميل الدفعات: ${paymentsError.message}`
+          `خطأ في تحميل أسماء المعلمين: ${teachersError.message}`
         )
       }
 
-      /*
-       * توزيع الطلاب على المعلمين
-       */
-      let assignments: TeacherStudentAssignment[] =
-        []
+      ;(teachersData ?? []).forEach((teacher) => {
+        teacherNames.set(teacher.id, teacher.name ?? '')
+      })
+    }
 
-      if (
-        loadedCourses.length >
-        0
-      ) {
-        const {
-          data:
-            assignmentsData,
-          error:
-            assignmentsError,
-        } =
-          await supabase
-            .from(
-              'teacher_student_assignments'
-            )
-            .select(
-              'id, course_id, teacher_id, student_id'
-            )
-            .in(
-              'course_id',
-              loadedCourses.map(
-                (course) =>
-                  course.id
-              )
-            )
+    /*
+     * حالات الحضور
+     */
+    const {
+      data: statusesData,
+      error: statusesError,
+    } = await supabase
+      .from('attendance_statuses')
+      .select('id, name, is_active, sort_order')
+      .order('sort_order', { ascending: true })
 
-        if (
-          assignmentsError
-        ) {
-          throw new Error(
-            `خطأ في تحميل توزيع الطلاب على المعلمين: ${assignmentsError.message}`
-          )
-        }
+    if (statusesError) {
+      throw new Error(
+        `خطأ في تحميل حالات الحضور: ${statusesError.message}`
+      )
+    }
 
-        assignments =
-          (
-            assignmentsData ??
-            []
-          ).map(
-            (assignment) => ({
-              id:
-                assignment.id,
-              course_id:
-                assignment.course_id,
-              teacher_id:
-                assignment.teacher_id,
-              student_id:
-                assignment.student_id,
-            })
-          )
-      }
+    const loadedAttendanceStatuses: AttendanceStatus[] = (
+      statusesData ?? []
+    ).map((status) => ({
+      id: status.id,
+      name: status.name,
+      isActive: Boolean(status.is_active),
+      sortOrder: Number(status.sort_order ?? 0),
+    }))
 
-      /*
-       * أسماء المعلمين
-       */
-      const teacherNames =
-        new Map<string, string>()
+    /*
+     * الحضور
+     *
+     * تحميل السجلات على دفعات من 100 سجل.
+     * لا نكمل بناء بيانات الطلاب إذا فشلت أي دفعة.
+     */
+    const attendanceRows: AttendanceRecord[] = []
 
-      if (
-        assignments.length >
-        0
-      ) {
-        const teacherIds =
-          Array.from(
-            new Set(
-              assignments.map(
-                (item) =>
-                  item.teacher_id
-              )
-            )
-          )
+    if (loadedCourses.length > 0) {
+      const courseIds = loadedCourses.map(
+        (course) => course.id
+      )
 
-        const {
-          data: teachersData,
-        } =
-          await supabase
-            .from('teachers')
-            .select(
-              'id, name'
-            )
-            .in(
-              'id',
-              teacherIds
-            )
+      let from = 0
 
-        ;(
-          teachersData ?? []
-        ).forEach(
-          (teacher) => {
-            teacherNames.set(
-              teacher.id,
-              teacher.name ?? ''
-            )
-          }
-        )
-      }
-
-      /*
-       * حالات الحضور
-       */
-      let loadedAttendanceStatuses: AttendanceStatus[] =
-        []
-
-      const {
-        data: statusesData,
-        error:
-          statusesError,
-      } =
-        await supabase
-          .from(
-            'attendance_statuses'
-          )
-          .select(
-            'id, name, is_active, sort_order'
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            }
-          )
-
-      if (
-        !statusesError &&
-        statusesData
-      ) {
-        loadedAttendanceStatuses =
-          statusesData.map(
-            (status) => ({
-              id:
-                status.id,
-              name:
-                status.name,
-              isActive:
-                Boolean(
-                  status.is_active
-                ),
-              sortOrder:
-                Number(
-                  status.sort_order ??
-                    0
-                ),
-            })
-          )
-      }
-
-      /*
-       * الحضور
-       */
-      let attendanceRows: AttendanceRecord[] =
-        []
-
-      if (
-        loadedCourses.length >
-        0
-      ) {
+      while (true) {
         const {
           data: attendanceData,
-          error:
-            attendanceError,
-        } =
-          await supabase
-            .from(
-              'attendance'
-            )
-            .select(
-              'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
-            )
-            .in(
-              'course_id',
-              loadedCourses.map(
-                (course) =>
-                  course.id
-              )
-            )
+          error: attendanceError,
+        } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
+          )
+          .in('course_id', courseIds)
+          .order('id', { ascending: true })
+          .range(
+            from,
+            from + ATTENDANCE_PAGE_SIZE - 1
+          )
 
         if (attendanceError) {
-          console.warn(
-            'تعذر تحميل سجلات الحضور:',
-            attendanceError.message
+          throw new Error(
+            `خطأ في تحميل سجلات الحضور: ${attendanceError.message}`
           )
-        } else {
-          attendanceRows =
-            (
-              attendanceData ??
-              []
-            ).map(
-              (record) => ({
-                id:
-                  record.id,
-                studentId:
-                  record.student_id,
-                enrollmentId:
-                  record.enrollment_id ??
-                  null,
-                courseId:
-                  record.course_id,
-                attendanceDate:
-                  record.attendance_date,
-                statusId:
-                  record.status_id,
-                note:
-                  record.note ??
-                  '',
-              })
-            )
         }
+
+        const page = attendanceData ?? []
+
+        attendanceRows.push(
+          ...page.map((record) => ({
+            id: record.id,
+            studentId: record.student_id,
+            enrollmentId: record.enrollment_id ?? null,
+            courseId: record.course_id,
+            attendanceDate: record.attendance_date,
+            statusId: record.status_id,
+            note: record.note ?? '',
+          }))
+        )
+
+        if (page.length < ATTENDANCE_PAGE_SIZE) {
+          break
+        }
+
+        from += ATTENDANCE_PAGE_SIZE
       }
+    }
 
-      /*
-       * المدفوع لكل طالب
-       */
-      const paidMap =
-        new Map<
-          string,
-          number
-        >()
+    /*
+     * المدفوع لكل طالب
+     */
+    const paidMap = new Map<string, number>()
 
-      ;(
-        paymentsData ?? []
-      ).forEach(
-        (payment) => {
-          const current =
-            paidMap.get(
-              payment.student_id
-            ) ?? 0
+    ;(paymentsData ?? []).forEach((payment) => {
+      const current =
+        paidMap.get(payment.student_id) ?? 0
 
-          paidMap.set(
-            payment.student_id,
-            current +
-              Number(
-                payment.amount ??
-                  0
-              )
-          )
-        }
+      paidMap.set(
+        payment.student_id,
+        current + Number(payment.amount ?? 0)
       )
+    })
 
-      /*
-       * بناء بيانات الطلاب النهائية
-       */
-      const mappedStudents =
-        (
-          studentsData ?? []
-        ).map(
-          (student: any) => {
-            const amountPaid =
-              paidMap.get(
-                student.id
-              ) ?? 0
+    /*
+     * بناء بيانات الطلاب النهائية
+     */
+    const mappedStudents = (studentsData ?? []).map(
+      (student: any) => {
+        const amountPaid = paidMap.get(student.id) ?? 0
 
-            const feeExempt =
-              Boolean(
-                student.fee_exempt
-              )
+        const feeExempt = Boolean(student.fee_exempt)
 
-            const paymentStatus =
-              feeExempt
-                ? 'معفي'
-                : amountPaid >=
-                      annualFee &&
-                    annualFee > 0
-                  ? 'مدفوع بالكامل'
-                  : amountPaid >
-                      0
-                    ? 'مدفوع جزئيًا'
-                    : 'غير مدفوع'
+        const paymentStatus = feeExempt
+          ? 'معفي'
+          : amountPaid >= annualFee && annualFee > 0
+            ? 'مدفوع بالكامل'
+            : amountPaid > 0
+              ? 'مدفوع جزئيًا'
+              : 'غير مدفوع'
 
-            const enrollment =
-              enrollmentMap.get(
-                student.id
-              )
+        const enrollment = enrollmentMap.get(student.id)
 
-            const courseStatuses =
-              loadedCourses.map(
-                (course) => ({
-                  courseId:
-                    course.id,
-                  courseName:
-                    course.name,
-                  startDate:
-                    course.start_date,
-                  endDate:
-                    course.end_date,
-                  status:
-                    getCourseStatus(
-                      course,
-                      student.id,
-                      assignments,
-                      today
-                    ),
-                })
-              )
+        const courseStatuses = loadedCourses.map(
+          (course) => ({
+            courseId: course.id,
+            courseName: course.name,
+            startDate: course.start_date,
+            endDate: course.end_date,
+            status: getCourseStatus(
+              course,
+              student.id,
+              assignments,
+              today
+            ),
+          })
+        )
 
-            const attendanceSummaries =
-              loadedCourses.map(
-                (course) => {
-                  const assignment =
-                    assignments.find(
-                      (item) =>
-                        item.student_id ===
-                          student.id &&
-                        item.course_id ===
-                          course.id
-                    )
+        const attendanceSummaries = loadedCourses.map(
+          (course) => {
+            const assignment = assignments.find(
+              (item) =>
+                item.student_id === student.id &&
+                item.course_id === course.id
+            )
 
-                  const teacherName =
-                    assignment
-                      ? teacherNames.get(
-                          assignment.teacher_id
-                        ) ?? ''
-                      : ''
+            const teacherName = assignment
+              ? teacherNames.get(assignment.teacher_id) ?? ''
+              : ''
 
-                  return calculateAttendanceSummary(
-                    student.id,
-                    course,
-                    attendanceRows,
-                    loadedAttendanceStatuses,
-                    teacherName,
-                    today
-                  )
-                }
-              )
-
-            const attendanceRecords: StudentAttendanceRecord[] =
-              attendanceRows
-                .filter(
-                  (record) =>
-                    record.studentId ===
-                    student.id
-                )
-                .map(
-                  (record) => {
-                    const status =
-                      normalizeAttendanceStatus(
-                        getStatusName(
-                          loadedAttendanceStatuses,
-                          record.statusId
-                        )
-                      )
-
-                    if (!status) {
-                      return null
-                    }
-
-                    return {
-                      id:
-                        record.id,
-                      studentId:
-                        record.studentId,
-                      courseId:
-                        record.courseId,
-                      attendanceDate:
-                        record.attendanceDate,
-                      status,
-                      note:
-                        record.note,
-                    }
-                  }
-                )
-                .filter(
-                  (
-                    record
-                  ): record is StudentAttendanceRecord =>
-                    Boolean(
-                      record
-                    )
-                )
-
-            const currentStatus =
-              currentCourse
-                ? getCourseStatus(
-                    currentCourse,
-                    student.id,
-                    assignments,
-                    today
-                  )
-                : 'لم يحضر'
-
-            return {
-              id:
-                student.id,
-
-              studentId:
-                student.student_id ??
-                '',
-
-              name:
-                student.name ??
-                '',
-
-              personalId:
-                student.personal_id ??
-                '',
-
-              gender:
-                student.gender ??
-                '',
-
-              age:
-                student.age ??
-                null,
-
-              grade:
-                enrollment?.levelName ??
-                '',
-
-              className:
-                enrollment?.className ??
-                '',
-
-              phone:
-                student.phone ??
-                '',
-
-              whatsapp:
-                student.whatsapp ??
-                '',
-
-              guardianRelation:
-                student.guardian_relation ??
-                '',
-
-              studentPhone:
-                student.student_phone ??
-                '',
-
-              enrollmentCourseId:
-                enrollment?.courseId ??
-                '',
-
-              enrollmentCourseName:
-                enrollment?.courseName ??
-                '',
-
-              status:
-                student.status ??
-                '',
-
-              paymentStatus,
-
-              amountDue:
-                annualFee,
-
-              amountPaid,
-
-              feeExempt,
-
-              chronicDiseases:
-                student.health_notes ??
-                '',
-
-              notes:
-                student.notes ??
-                '',
-
-              source:
-                student.source ??
-                '',
-
-              createdAt:
-                student.created_at ??
-                '',
-
-              updatedAt:
-                student.updated_at ??
-                '',
-
-              academicYearId:
-                student.academic_year_id ??
-                currentYear.id,
-
-              academicYearName:
-                currentYear.name ??
-                '',
-
-              attendance:
-                currentStatus,
-
-              courseStatuses,
-
-              attendanceSummaries,
-
-              attendanceRecords,
-
-              dynamicValues:
-                dynamicValuesMap.get(
-                  student.id
-                ) ?? {},
-            }
+            return calculateAttendanceSummary(
+              student.id,
+              course,
+              attendanceRows,
+              loadedAttendanceStatuses,
+              teacherName,
+              today
+            )
           }
         )
 
-      const finalStatus =
-        currentCourse
-          ? `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-          : `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+        const attendanceRecords: StudentAttendanceRecord[] =
+          attendanceRows
+            .filter(
+              (record) => record.studentId === student.id
+            )
+            .map((record) => {
+              const status = normalizeAttendanceStatus(
+                getStatusName(
+                  loadedAttendanceStatuses,
+                  record.statusId
+                )
+              )
 
-      const data: StudentsCacheData = {
-        academicLevels:
-          loadedAcademicLevels,
+              if (!status) {
+                return null
+              }
 
-        currentAcademicYearId:
-          currentYear.id,
+              return {
+                id: record.id,
+                studentId: record.studentId,
+                courseId: record.courseId,
+                attendanceDate: record.attendanceDate,
+                status,
+                note: record.note,
+              }
+            })
+            .filter(
+              (
+                record
+              ): record is StudentAttendanceRecord =>
+                Boolean(record)
+            )
 
-        currentAcademicYearName:
-          currentYear.name ?? '',
+        const currentStatus = currentCourse
+          ? getCourseStatus(
+              currentCourse,
+              student.id,
+              assignments,
+              today
+            )
+          : 'لم يحضر'
 
-        currentAnnualFee:
-          annualFee,
+        return {
+          id: student.id,
 
-        courses:
-          loadedCourses,
+          studentId: student.student_id ?? '',
 
-        currentCourseId:
-          currentCourse?.id ??
-          null,
+          name: student.name ?? '',
 
-        currentCourseName:
-          currentCourse?.name ??
-          '',
+          personalId: student.personal_id ?? '',
 
-        dynamicFields:
-          loadedDynamicFields,
+          gender: student.gender ?? '',
 
-        studentList:
-          mappedStudents as StudentTableStudent[],
+          age: student.age ?? null,
 
-        attendanceStatuses:
-          loadedAttendanceStatuses,
+          grade: enrollment?.levelName ?? '',
 
-        supabaseStatus:
-          finalStatus,
+          className: enrollment?.className ?? '',
+
+          phone: student.phone ?? '',
+
+          whatsapp: student.whatsapp ?? '',
+
+          guardianRelation:
+            student.guardian_relation ?? '',
+
+          studentPhone: student.student_phone ?? '',
+
+          enrollmentCourseId:
+            enrollment?.courseId ?? '',
+
+          enrollmentCourseName:
+            enrollment?.courseName ?? '',
+
+          status: student.status ?? '',
+
+          paymentStatus,
+
+          amountDue: annualFee,
+
+          amountPaid,
+
+          feeExempt,
+
+          chronicDiseases: student.health_notes ?? '',
+
+          notes: student.notes ?? '',
+
+          source: student.source ?? '',
+
+          createdAt: student.created_at ?? '',
+
+          updatedAt: student.updated_at ?? '',
+
+          academicYearId:
+            student.academic_year_id ?? currentYear.id,
+
+          academicYearName: currentYear.name ?? '',
+
+          attendance: currentStatus,
+
+          courseStatuses,
+
+          attendanceSummaries,
+
+          attendanceRecords,
+
+          dynamicValues:
+            dynamicValuesMap.get(student.id) ?? {},
+        }
       }
+    )
 
+    const finalStatus = currentCourse
+      ? `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+      : `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
+
+    const data: StudentsCacheData = {
+      academicLevels: loadedAcademicLevels,
+
+      currentAcademicYearId: currentYear.id,
+
+      currentAcademicYearName: currentYear.name ?? '',
+
+      currentAnnualFee: annualFee,
+
+      courses: loadedCourses,
+
+      currentCourseId: currentCourse?.id ?? null,
+
+      currentCourseName: currentCourse?.name ?? '',
+
+      dynamicFields: loadedDynamicFields,
+
+      studentList:
+        mappedStudents as StudentTableStudent[],
+
+      attendanceStatuses: loadedAttendanceStatuses,
+
+      supabaseStatus: finalStatus,
+    }
+
+    // الطلب القديم لا يستبدل الكاش إذا تغير الإصدار أثناء تحميله.
+    if (requestVersion === studentsCacheVersion) {
       studentsCache = data
+    }
 
-      return data
-    })()
+    return data
+  })()
+
+  studentsCacheLoading = loadingPromise
 
   try {
-    return await studentsCacheLoading
+    return await loadingPromise
   } finally {
-    studentsCacheLoading = null
+    // لا نمسح مرجع طلب أحدث من هذا الطلب.
+    if (studentsCacheLoading === loadingPromise) {
+      studentsCacheLoading = null
+    }
   }
 }
