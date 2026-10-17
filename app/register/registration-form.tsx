@@ -853,7 +853,7 @@ export default function RegistrationForm(props: Props) {
                   <section className="space-y-5">
                     <SectionHeader
                       title="بيانات التواصل الأساسية"
-                      description="بيانات الشخص المسؤول عن الطالب وصلة القرابة به. يرجى التأكد من صحة رقم التواصل."
+                      description="بيانات ولي أمر الطالب وصلة القرابة به. يرجى التأكد من صحة رقم التواصل."
                       icon={Phone}
                     />
 
@@ -862,7 +862,7 @@ export default function RegistrationForm(props: Props) {
                         {settings.show_phone && (
                           <FieldCard>
                             <FieldLabel
-                              label="رقم واتساب الشخص المسؤول"
+                              label="رقم واتساب ولي الأمر"
                               required={settings.required_phone}
                             />
                             <Input
@@ -887,7 +887,7 @@ export default function RegistrationForm(props: Props) {
                               </FieldError>
                             ) : (
                               <FieldHint>
-                                الرقم الذي ستستخدمه الإدارة للتواصل مع الشخص المسؤول عن الطالب.
+                                الرقم الذي ستستخدمه الإدارة للتواصل مع ولي أمر الطالب.
                               </FieldHint>
                             )}
                           </FieldCard>
