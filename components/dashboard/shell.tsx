@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from './sidebar'
 import { Header } from './header'
 import { SectionRouter } from './section-router'
-import { ActivityTracker } from '@/components/auth/activity-tracker'
+import { SessionMonitor } from '@/components/auth/session-monitor'
 
 export function DashboardShell({
   children,
@@ -32,7 +32,7 @@ export function DashboardShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      <ActivityTracker />
+      <SessionMonitor />
 
       <Sidebar
         open={sidebarOpen}
