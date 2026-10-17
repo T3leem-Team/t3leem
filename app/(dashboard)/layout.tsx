@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { unstable_noStore as noStore } from 'next/cache'
 
 import { DashboardShell } from '@/components/dashboard/shell'
-import { SessionHeartbeat } from '@/components/auth/session-heartbeat'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 import { isMaintenanceMode } from '@/lib/system-control'
 
@@ -13,13 +12,10 @@ export default async function DashboardLayout({
 }) {
   noStore()
 
-  const access =
-    await validateCurrentAccess()
+  const access = await validateCurrentAccess()
 
   if (!access.allowed) {
-    if (
-      access.reason === 'guard_error'
-    ) {
+    if (access.reason === 'guard_error') {
       throw new Error(
         'تعذر التحقق من جلسة المستخدم مؤقتًا.',
       )
@@ -51,12 +47,8 @@ export default async function DashboardLayout({
   }
 
   return (
-    <>
-      <SessionHeartbeat />
-
-      <DashboardShell>
-        {children}
-      </DashboardShell>
-    </>
+    <DashboardShell>
+      {children}
+    </DashboardShell>
   )
 }
