@@ -592,46 +592,95 @@ export async function POST(request: NextRequest) {
       cookieMissingOrInvalid &&
       isAutomaticRecoveryAllowed()
     ) {
-      const { data, error } = await supabaseAdmin
+      /*
+       * أولًا: نتحقق من عدم وجود أي سجل سابق مطابق
+       * للبصمة حالته revoked أو rejected.
+       *
+       * إذا وجدنا سجلًا مانعًا، لا نجرب استرجاع
+       * أي سجل approved بهذه البصمة.
+       */
+      const {
+        data: blockedFingerprintRecords,
+        error: blockedFingerprintError,
+      } = await supabaseAdmin
         .from('trusted_devices')
-        .select(`
-          id,
-          status,
-          device_name,
-          approved_device_type,
-          pending_device_type,
-          grace_period_days,
-          grace_expires_at
-        `)
+        .select('id, status')
         .eq('auth_user_id', profile.auth_user_id)
         .eq('device_fingerprint_hash', fingerprintHash)
-        .eq('status', 'approved')
-        .limit(2)
+        .in('status', ['revoked', 'rejected'])
+        .limit(1)
 
-      if (error) {
+      if (blockedFingerprintError) {
         console.error(
-          'Fingerprint recovery lookup error:',
-          error,
+          'Blocked fingerprint lookup error:',
+          blockedFingerprintError,
         )
 
         return NextResponse.json(
-          { error: 'تعذر فحص بصمة الجهاز.' },
+          { error: 'تعذر التحقق من سجل اعتماد الجهاز.' },
           { status: 500 },
         )
       }
 
-      const candidates = (data ?? []) as TrustedDevice[]
+      const hasBlockedFingerprintRecord =
+        (blockedFingerprintRecords ?? []).length > 0
 
-      /*
-       * لا نسترجع الجهاز إذا وُجد أكثر من تطابق.
-       */
-      if (candidates.length === 1) {
-        recoveryCandidate = candidates[0]
+      if (hasBlockedFingerprintRecord) {
+        console.info(
+          '[DEVICE RECOVERY] blocked: matching revoked/rejected record exists',
+        )
+
+        /*
+         * لا نعيّن recoveryCandidate.
+         * سيواصل الكود مساره المعتاد لطلب موافقة جديدة
+         * بدل استرجاع الجهاز تلقائيًا.
+         */
+      } else {
+        /*
+         * لا نبحث عن جهاز معتمد للاسترجاع إلا إذا
+         * لم يوجد أي سجل مانع مطابق للبصمة.
+         */
+        const { data, error } = await supabaseAdmin
+          .from('trusted_devices')
+          .select(`
+            id,
+            status,
+            device_name,
+            approved_device_type,
+            pending_device_type,
+            grace_period_days,
+            grace_expires_at
+          `)
+          .eq('auth_user_id', profile.auth_user_id)
+          .eq('device_fingerprint_hash', fingerprintHash)
+          .eq('status', 'approved')
+          .limit(2)
+
+        if (error) {
+          console.error(
+            'Fingerprint recovery lookup error:',
+            error,
+          )
+
+          return NextResponse.json(
+            { error: 'تعذر فحص بصمة الجهاز.' },
+            { status: 500 },
+          )
+        }
+
+        const candidates = (data ?? []) as TrustedDevice[]
+
+        /*
+         * لا نسترجع الجهاز إذا وُجد أكثر من تطابق.
+         */
+        if (candidates.length === 1) {
+          recoveryCandidate = candidates[0]
+        }
+
+        console.info(
+          `[DEVICE RECOVERY] candidates: ${candidates.length}`,
+        )
       }
-
-      console.info(
-        `[DEVICE RECOVERY] candidates: ${candidates.length}`,
-      )
     } else if (cookieMissingOrInvalid) {
       console.info(
         '[DEVICE RECOVERY] blocked by Bahrain time policy',
