@@ -336,8 +336,6 @@ export function getLessonDateStatus(
     : 'no-lesson'
 }
 
-let dashboardCache: DashboardCache | null = null
-let dashboardDataLoading = false
 
 export function useDashboardData() {
   const hasDashboardCache = dashboardCache !== null
