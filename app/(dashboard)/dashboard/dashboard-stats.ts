@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { ClipboardCheck, Clock3, UserCheck, UserX } from 'lucide-react'
 import {
   type Assignment,
   type AttendanceRecord,
