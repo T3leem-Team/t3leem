@@ -1046,3 +1046,110 @@ export async function PATCH(request: Request) {
     updatedAt: data.updated_at,
   });
 }
+
+
+export async function POST(request: Request) {
+  // التحقق من صلاحية حذف الطلاب
+  const authorization = await authorize(
+    'students.delete',
+    'ليس لديك صلاحية حذف الطلاب.',
+  )
+
+  if (!authorization.allowed) {
+    return authorization.response
+  }
+
+  let body: unknown
+
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'بيانات الطلب غير صالحة.' },
+      { status: 400 },
+    )
+  }
+
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !Array.isArray((body as { studentIds?: unknown }).studentIds)
+  ) {
+    return NextResponse.json(
+      { error: 'يجب إرسال قائمة بمعرّفات الطلاب.' },
+      { status: 400 },
+    )
+  }
+
+  const rawIds = (body as { studentIds: unknown[] }).studentIds
+
+  if (
+    rawIds.length === 0 ||
+    rawIds.length > 500 ||
+    !rawIds.every(isValidUuid)
+  ) {
+    return NextResponse.json(
+      { error: 'قائمة الطلاب غير صالحة أو تتجاوز الحد المسموح.' },
+      { status: 400 },
+    )
+  }
+
+  const studentIds = [...new Set(rawIds)]
+
+  // التحقق من إعداد الحذف داخل الخادم
+  const { data: setting, error: settingError } =
+    await supabaseAdmin
+      .from('student_deletion_settings')
+      .select('deletion_enabled')
+      .eq('id', 1)
+      .maybeSingle()
+
+  if (settingError) {
+    console.error('Read student deletion setting:', settingError)
+
+    return NextResponse.json(
+      { error: 'تعذر التحقق من إعداد حذف الطلاب.' },
+      { status: 500 },
+    )
+  }
+
+  if (!setting || setting.deletion_enabled !== true) {
+    return NextResponse.json(
+      { error: 'حذف الطلاب معطّل حاليًا من إعدادات النظام.' },
+      { status: 403 },
+    )
+  }
+
+  const deletedIds: string[] = []
+
+  for (const studentId of studentIds) {
+    const { error } = await supabaseAdmin.rpc(
+      'delete_student_completely',
+      { p_student_id: studentId },
+    )
+
+    if (error) {
+      console.error('Delete student RPC failed:', {
+        studentId,
+        error,
+      })
+
+      return NextResponse.json(
+        {
+          error:
+            'توقف الحذف قبل اكتمال جميع الطلاب. قد يكون بعض الطلاب قد حُذفوا بالفعل.',
+          deletedIds,
+        },
+        { status: 500 },
+      )
+    }
+
+    deletedIds.push(studentId)
+  }
+
+  return NextResponse.json({
+    success: true,
+    deletedIds,
+  })
+}
+
