@@ -1,3 +1,4 @@
+
 'use client'
 
 export type PaymentStatus =
@@ -42,20 +43,32 @@ export type PaymentLevel = {
 
 let paymentsCache: PaymentStudentsCache | null = null
 
-let paymentsLoadingPromise: Promise<PaymentStudentsCache> | null =
-  null
+let paymentsLoadingPromise:
+  | Promise<PaymentStudentsCache>
+  | null = null
+
+let paymentsCacheVersion = 0
 
 export function getPaymentsCache() {
   return paymentsCache
 }
 
-export function setPaymentsCache(value: PaymentStudentsCache) {
+export function setPaymentsCache(
+  value: PaymentStudentsCache,
+) {
+  // إبطال أي طلب سابق قبل تعيين الكاش الجديد.
+  paymentsCacheVersion += 1
+  paymentsLoadingPromise = null
   paymentsCache = value
 }
 
 export function updatePaymentsCache(
   patch: Partial<PaymentStudentsCache>,
 ) {
+  // إبطال أي طلب سابق حتى لا يستبدل التحديث اليدوي.
+  paymentsCacheVersion += 1
+  paymentsLoadingPromise = null
+
   paymentsCache = {
     studentList: paymentsCache?.studentList ?? [],
 
@@ -65,7 +78,8 @@ export function updatePaymentsCache(
     currentAcademicYearName:
       paymentsCache?.currentAcademicYearName ?? '',
 
-    currentAnnualFee: paymentsCache?.currentAnnualFee ?? 0,
+    currentAnnualFee:
+      paymentsCache?.currentAnnualFee ?? 0,
 
     levels: paymentsCache?.levels ?? [],
 
@@ -76,6 +90,8 @@ export function updatePaymentsCache(
 }
 
 export function clearPaymentsCache() {
+  // منع الطلبات الجارية من إعادة تعبئة الكاش بعد مسحه.
+  paymentsCacheVersion += 1
   paymentsCache = null
   paymentsLoadingPromise = null
 }
@@ -95,7 +111,9 @@ export async function loadPaymentsCache(
     return paymentsLoadingPromise
   }
 
-  const loadPromise = (async () => {
+  const requestVersion = ++paymentsCacheVersion
+
+  const loadPromise = (async (): Promise<PaymentStudentsCache> => {
     const response = await fetch('/api/payments', {
       method: 'GET',
       cache: 'no-store',
@@ -122,7 +140,10 @@ export async function loadPaymentsCache(
         levels: [],
       }
 
-      paymentsCache = emptyCache
+      // لا تسمح لطلب قديم باستبدال الكاش الأحدث.
+      if (requestVersion === paymentsCacheVersion) {
+        paymentsCache = emptyCache
+      }
 
       return emptyCache
     }
@@ -291,7 +312,10 @@ export async function loadPaymentsCache(
       levels: normalizedLevels,
     }
 
-    paymentsCache = nextCache
+    // لا تحفظ البيانات إلا إذا كان الطلب ما زال الأحدث.
+    if (requestVersion === paymentsCacheVersion) {
+      paymentsCache = nextCache
+    }
 
     return nextCache
   })()
@@ -301,6 +325,7 @@ export async function loadPaymentsCache(
   try {
     return await loadPromise
   } finally {
+    // لا تسمح لطلب قديم بمسح مرجع طلب أحدث.
     if (paymentsLoadingPromise === loadPromise) {
       paymentsLoadingPromise = null
     }
