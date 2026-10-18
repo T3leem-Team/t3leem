@@ -1,5 +1,4 @@
 
-
 export const ALLOWED_ROLES = [
   'Admin',
   'Supervisor',
@@ -24,14 +23,15 @@ export function isValidEmail(value: string): boolean {
 
 export function readString(
   value: unknown,
+  trim = true,
 ): string | null {
   if (typeof value !== 'string') {
     return null
   }
 
-  const normalized = value.trim()
+  const result = trim ? value.trim() : value
 
-  return normalized.length > 0 ? normalized : null
+  return result.length > 0 ? result : null
 }
 
 export function readStringArray(
