@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
 import { supabaseAdmin } from './users-supabase'
@@ -9,7 +10,9 @@ import {
 
 export async function deleteUser(request: Request) {
   try {
-    const { access, error } = await requirePermission('users.manage')
+    const { access, error } =
+      await requirePermission('users.manage')
+
     if (error) return error
 
     let body: Record<string, unknown>
@@ -23,7 +26,7 @@ export async function deleteUser(request: Request) {
       )
     }
 
-    const userId = readString(body.userId, false)
+    const userId = readString(body.userId)
 
     if (!userId) {
       return NextResponse.json(
@@ -32,15 +35,21 @@ export async function deleteUser(request: Request) {
       )
     }
 
-    const { data: targetUser, error: targetUserError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select('id, auth_user_id, username, role')
-        .eq('id', userId)
-        .maybeSingle()
+    const {
+      data: targetUser,
+      error: targetUserError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, auth_user_id, username, role')
+      .eq('id', userId)
+      .maybeSingle()
 
     if (targetUserError) {
-      console.error('Delete user lookup error:', targetUserError)
+      console.error(
+        'Delete user lookup error:',
+        targetUserError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر العثور على المستخدم.' },
         { status: 500 },
@@ -74,7 +83,11 @@ export async function deleteUser(request: Request) {
         .eq('user_profile_id', targetUser.id)
 
     if (permissionsDeleteError) {
-      console.error('Permissions delete error:', permissionsDeleteError)
+      console.error(
+        'Permissions delete error:',
+        permissionsDeleteError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر حذف صلاحيات المستخدم.' },
         { status: 500 },
@@ -88,7 +101,11 @@ export async function deleteUser(request: Request) {
         .eq('user_profile_id', targetUser.id)
 
     if (sectionsDeleteError) {
-      console.error('Dashboard sections delete error:', sectionsDeleteError)
+      console.error(
+        'Dashboard sections delete error:',
+        sectionsDeleteError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر حذف أقسام لوحة التحكم.' },
         { status: 500 },
@@ -102,7 +119,11 @@ export async function deleteUser(request: Request) {
         .eq('id', targetUser.id)
 
     if (profileDeleteError) {
-      console.error('Profile delete error:', profileDeleteError)
+      console.error(
+        'Profile delete error:',
+        profileDeleteError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر حذف بيانات المستخدم.' },
         { status: 500 },
@@ -111,7 +132,10 @@ export async function deleteUser(request: Request) {
 
     if (!targetUser.auth_user_id) {
       return NextResponse.json(
-        { error: 'تم حذف بيانات المستخدم لكن لم يُعثر على معرّف حساب الدخول.' },
+        {
+          error:
+            'تم حذف بيانات المستخدم لكن لم يُعثر على معرّف حساب الدخول.',
+        },
         { status: 500 },
       )
     }
@@ -122,9 +146,16 @@ export async function deleteUser(request: Request) {
       )
 
     if (authDeleteError) {
-      console.error('Auth delete error:', authDeleteError)
+      console.error(
+        'Auth delete error:',
+        authDeleteError,
+      )
+
       return NextResponse.json(
-        { error: 'تم حذف بيانات المستخدم لكن تعذر حذف حساب الدخول.' },
+        {
+          error:
+            'تم حذف بيانات المستخدم لكن تعذر حذف حساب الدخول.',
+        },
         { status: 500 },
       )
     }
@@ -132,6 +163,7 @@ export async function deleteUser(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Users DELETE error:', error)
+
     return NextResponse.json(
       { error: 'حدث خطأ أثناء حذف المستخدم.' },
       { status: 500 },
