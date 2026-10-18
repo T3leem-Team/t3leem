@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
 import { supabaseAdmin } from './users-supabase'
@@ -16,7 +17,9 @@ import {
 
 export async function updateUser(request: Request) {
   try {
-    const { access, error } = await requirePermission('users.manage')
+    const { access, error } =
+      await requirePermission('users.manage')
+
     if (error) return error
 
     let body: Record<string, unknown>
@@ -30,16 +33,25 @@ export async function updateUser(request: Request) {
       )
     }
 
-    const userId = readString(body.userId, false)
+    const userId = readString(body.userId)
     const fullName = readString(body.fullName)
-    const email = readString(body.email).toLowerCase()
+    const emailValue = readString(body.email)
+    const email = emailValue?.toLowerCase() ?? null
     const role = readString(body.role)
     const department = readString(body.department) || null
     const isActive =
-      typeof body.isActive === 'boolean' ? body.isActive : undefined
+      typeof body.isActive === 'boolean'
+        ? body.isActive
+        : undefined
     const password = readString(body.password, false)
-    const permissionIds = uniqueStrings(readStringArray(body.permissionIds))
-    const sectionIds = uniqueStrings(readStringArray(body.sectionIds))
+
+    const permissionIds = uniqueStrings(
+      readStringArray(body.permissionIds) ?? [],
+    )
+
+    const sectionIds = uniqueStrings(
+      readStringArray(body.sectionIds) ?? [],
+    )
 
     if (!userId) {
       return NextResponse.json(
@@ -64,7 +76,10 @@ export async function updateUser(request: Request) {
 
     if (password && password.length < 8) {
       return NextResponse.json(
-        { error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.' },
+        {
+          error:
+            'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
+        },
         { status: 400 },
       )
     }
@@ -76,18 +91,24 @@ export async function updateUser(request: Request) {
       )
     }
 
-    const { data: targetUser, error: targetUserError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(`
-          id, auth_user_id, username, email, full_name,
-          role, department, is_active
-        `)
-        .eq('id', userId)
-        .maybeSingle()
+    const {
+      data: targetUser,
+      error: targetUserError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .select(`
+        id, auth_user_id, username, email, full_name,
+        role, department, is_active
+      `)
+      .eq('id', userId)
+      .maybeSingle()
 
     if (targetUserError) {
-      console.error('Target user lookup error:', targetUserError)
+      console.error(
+        'Target user lookup error:',
+        targetUserError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر العثور على المستخدم.' },
         { status: 500 },
@@ -103,29 +124,34 @@ export async function updateUser(request: Request) {
 
     // حماية الحساب الإداري الأساسي قبل أي عملية كتابة.
     if (isProtectedAdmin(targetUser.id)) {
-      if (access?.profileId !== targetUser.id) {
+      // لا نعتمد على profileId قبل التأكد من شكل access.
+      if (targetUser.auth_user_id !== access?.userId) {
         return denyProtectedAdminEdit()
       }
 
+      // الحساب الأساسي يبقى Admin ومفعّلًا دائمًا.
       if (role !== 'Admin' || isActive === false) {
         return denyProtectedAdminRoleChange()
       }
     }
 
-    if (
-      email &&
-      email !== targetUser.email
-    ) {
-      const { data: existingEmail, error: existingEmailError } =
-        await supabaseAdmin
-          .from('user_profiles')
-          .select('id')
-          .eq('email', email)
-          .neq('id', userId)
-          .maybeSingle()
+    if (email && email !== targetUser.email) {
+      const {
+        data: existingEmail,
+        error: existingEmailError,
+      } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .neq('id', userId)
+        .maybeSingle()
 
       if (existingEmailError) {
-        console.error('Existing email lookup error:', existingEmailError)
+        console.error(
+          'Existing email lookup error:',
+          existingEmailError,
+        )
+
         return NextResponse.json(
           { error: 'تعذر التحقق من البريد الإلكتروني.' },
           { status: 500 },
@@ -150,17 +176,20 @@ export async function updateUser(request: Request) {
       )
     }
 
-    // تحديث بيانات تسجيل الدخول عند وجود تغيير فعلي.
     const authUpdate: {
       password?: string
       ban_duration?: string
       email?: string
     } = {}
 
-    if (password) authUpdate.password = password
+    if (password) {
+      authUpdate.password = password
+    }
 
     if (isActive !== undefined) {
-      authUpdate.ban_duration = isActive ? 'none' : '876000h'
+      authUpdate.ban_duration = isActive
+        ? 'none'
+        : '876000h'
     }
 
     if (email && email !== targetUser.email) {
@@ -170,7 +199,10 @@ export async function updateUser(request: Request) {
     if (Object.keys(authUpdate).length > 0) {
       if (!targetUser.auth_user_id) {
         return NextResponse.json(
-          { error: 'حساب تسجيل الدخول غير مرتبط بهذا المستخدم.' },
+          {
+            error:
+              'حساب تسجيل الدخول غير مرتبط بهذا المستخدم.',
+          },
           { status: 500 },
         )
       }
@@ -182,7 +214,11 @@ export async function updateUser(request: Request) {
         )
 
       if (authUpdateError) {
-        console.error('Auth update error:', authUpdateError)
+        console.error(
+          'Auth update error:',
+          authUpdateError,
+        )
+
         return NextResponse.json(
           { error: 'تعذر تحديث حساب الدخول.' },
           { status: 500 },
@@ -197,47 +233,65 @@ export async function updateUser(request: Request) {
       updated_at: new Date().toISOString(),
     }
 
-    if (email) profileUpdate.email = email
-    if (isActive !== undefined) profileUpdate.is_active = isActive
+    if (email) {
+      profileUpdate.email = email
+    }
 
-    const { data: updatedProfile, error: profileUpdateError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .update(profileUpdate)
-        .eq('id', userId)
-        .select(`
-          id, auth_user_id, username, email, full_name,
-          role, department, is_active, created_at, updated_at
-        `)
-        .single()
+    if (isActive !== undefined) {
+      profileUpdate.is_active = isActive
+    }
+
+    const {
+      data: updatedProfile,
+      error: profileUpdateError,
+    } = await supabaseAdmin
+      .from('user_profiles')
+      .update(profileUpdate)
+      .eq('id', userId)
+      .select(`
+        id, auth_user_id, username, email, full_name,
+        role, department, is_active, created_at, updated_at
+      `)
+      .single()
 
     if (profileUpdateError || !updatedProfile) {
-      console.error('Profile update error:', profileUpdateError)
+      console.error(
+        'Profile update error:',
+        profileUpdateError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر تحديث بيانات المستخدم.' },
         { status: 500 },
       )
     }
 
-    // التحقق من الصلاحيات الفردية الجديدة.
     let validPermissionIds: string[] = []
 
     if (permissionIds.length > 0) {
-      const { data, error: permissionsError } =
-        await supabaseAdmin
-          .from('permissions')
-          .select('id')
-          .in('id', permissionIds)
+      const {
+        data,
+        error: permissionsError,
+      } = await supabaseAdmin
+        .from('permissions')
+        .select('id')
+        .in('id', permissionIds)
 
       if (permissionsError) {
-        console.error('Permission lookup error:', permissionsError)
+        console.error(
+          'Permission lookup error:',
+          permissionsError,
+        )
+
         return NextResponse.json(
           { error: 'تعذر التحقق من الصلاحيات.' },
           { status: 500 },
         )
       }
 
-      validPermissionIds = (data ?? []).map((item) => item.id)
+      validPermissionIds = (data ?? []).map(
+        (item) => item.id,
+      )
     }
 
     const { error: deletePermissionsError } =
@@ -247,7 +301,11 @@ export async function updateUser(request: Request) {
         .eq('user_profile_id', userId)
 
     if (deletePermissionsError) {
-      console.error('Old permissions delete error:', deletePermissionsError)
+      console.error(
+        'Old permissions delete error:',
+        deletePermissionsError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر تحديث صلاحيات المستخدم.' },
         { status: 500 },
@@ -266,7 +324,11 @@ export async function updateUser(request: Request) {
           )
 
       if (insertPermissionsError) {
-        console.error('New permissions insert error:', insertPermissionsError)
+        console.error(
+          'New permissions insert error:',
+          insertPermissionsError,
+        )
+
         return NextResponse.json(
           { error: 'تعذر حفظ صلاحيات المستخدم.' },
           { status: 500 },
@@ -274,25 +336,35 @@ export async function updateUser(request: Request) {
       }
     }
 
-    // التحقق من أقسام لوحة التحكم الجديدة.
     let validSectionIds: string[] = []
 
     if (sectionIds.length > 0) {
-      const { data, error: sectionsError } =
-        await supabaseAdmin
-          .from('dashboard_sections')
-          .select('id')
-          .in('id', sectionIds)
+      const {
+        data,
+        error: sectionsError,
+      } = await supabaseAdmin
+        .from('dashboard_sections')
+        .select('id')
+        .in('id', sectionIds)
 
       if (sectionsError) {
-        console.error('Dashboard section lookup error:', sectionsError)
+        console.error(
+          'Dashboard section lookup error:',
+          sectionsError,
+        )
+
         return NextResponse.json(
-          { error: 'تعذر التحقق من أقسام لوحة التحكم.' },
+          {
+            error:
+              'تعذر التحقق من أقسام لوحة التحكم.',
+          },
           { status: 500 },
         )
       }
 
-      validSectionIds = (data ?? []).map((item) => item.id)
+      validSectionIds = (data ?? []).map(
+        (item) => item.id,
+      )
     }
 
     const { error: deleteSectionsError } =
@@ -302,9 +374,16 @@ export async function updateUser(request: Request) {
         .eq('user_profile_id', userId)
 
     if (deleteSectionsError) {
-      console.error('Old dashboard sections delete error:', deleteSectionsError)
+      console.error(
+        'Old dashboard sections delete error:',
+        deleteSectionsError,
+      )
+
       return NextResponse.json(
-        { error: 'تعذر تحديث أقسام لوحة التحكم للمستخدم.' },
+        {
+          error:
+            'تعذر تحديث أقسام لوحة التحكم للمستخدم.',
+        },
         { status: 500 },
       )
     }
@@ -321,22 +400,35 @@ export async function updateUser(request: Request) {
           )
 
       if (insertSectionsError) {
-        console.error('New dashboard sections insert error:', insertSectionsError)
+        console.error(
+          'New dashboard sections insert error:',
+          insertSectionsError,
+        )
+
         return NextResponse.json(
-          { error: 'تعذر حفظ أقسام لوحة التحكم للمستخدم.' },
+          {
+            error:
+              'تعذر حفظ أقسام لوحة التحكم للمستخدم.',
+          },
           { status: 500 },
         )
       }
     }
 
-    const { data: rolePermissions, error: rolePermissionsError } =
-      await supabaseAdmin
-        .from('role_permissions')
-        .select('permission_id')
-        .eq('role', role)
+    const {
+      data: rolePermissions,
+      error: rolePermissionsError,
+    } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id')
+      .eq('role', role)
 
     if (rolePermissionsError) {
-      console.error('Role permissions lookup error:', rolePermissionsError)
+      console.error(
+        'Role permissions lookup error:',
+        rolePermissionsError,
+      )
+
       return NextResponse.json(
         { error: 'تعذر تحميل صلاحيات الدور.' },
         { status: 500 },
@@ -344,11 +436,18 @@ export async function updateUser(request: Request) {
     }
 
     const rolePermissionIds = Array.from(
-      new Set((rolePermissions ?? []).map((item) => item.permission_id)),
+      new Set(
+        (rolePermissions ?? []).map(
+          (item) => item.permission_id,
+        ),
+      ),
     )
 
     const effectivePermissionIds = Array.from(
-      new Set([...rolePermissionIds, ...validPermissionIds]),
+      new Set([
+        ...rolePermissionIds,
+        ...validPermissionIds,
+      ]),
     )
 
     return NextResponse.json({
@@ -363,6 +462,7 @@ export async function updateUser(request: Request) {
     })
   } catch (error) {
     console.error('Users PATCH error:', error)
+
     return NextResponse.json(
       { error: 'حدث خطأ أثناء تحديث المستخدم.' },
       { status: 500 },
