@@ -598,47 +598,45 @@ export function useDashboardData() {
           return
         }
 
+        
         const records =
           (
             data ?? []
           ).map(
             (record) => ({
-              id: String(
-                record.id,
+              id: String(record.id),
+              studentId: normalizeId(record.student_id),
+              enrollmentId: record.enrollment_id
+                ? String(record.enrollment_id)
+                : null,
+              attendanceDate: normalizeAttendanceDate(
+                record.attendance_date,
               ),
-              studentId: normalizeId(
-                record.student_id,
-              ),
-              enrollmentId:
-                record.enrollment_id
-                  ? String(
-                      record.enrollment_id,
-                    )
-                  : null,
-              attendanceDate:
-                normalizeAttendanceDate(
-                  record.attendance_date,
-                ),
-              statusId: normalizeId(
-                record.status_id,
-              ),
-              note:
-                record.note ??
-                null,
-              courseId: normalizeId(
-                record.course_id,
-              ),
+              statusId: normalizeId(record.status_id),
+              note: record.note ?? null,
+              courseId: normalizeId(record.course_id),
             }),
           )
-
+        
+        console.log(
+          'وسام - سجلات الحضور المحملة:',
+          records.filter(
+            (record) =>
+              record.studentId === 'ee56a907-d027-4592-95c2-ec19410a881c' &&
+              ['2026-09-14', '2026-09-16'].includes(
+                String(record.attendanceDate).slice(0, 10),
+              ),
+          ),
+        )
+        
         setAttendanceRecords(
           records,
         )
-
+        
         updateDashboardCache({
-          attendanceRecords:
-            records,
+          attendanceRecords: records,
         })
+
       },
       [updateDashboardCache],
     )
