@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -70,6 +71,18 @@ export type AttendanceRecord = {
   note: string | null
   courseId: string
 }
+
+type AttendanceQueryRow = {
+  id: string
+  student_id: string
+  enrollment_id: string | null
+  attendance_date: string
+  status_id: string
+  note: string | null
+  course_id: string
+}
+
+const ATTENDANCE_PAGE_SIZE = 500
 
 export type DashboardStats = {
   studentsCount: number
@@ -336,7 +349,6 @@ export function getLessonDateStatus(
     : 'no-lesson'
 }
 
-
 export function useDashboardData() {
   const hasDashboardCache = dashboardCache !== null
 
@@ -419,17 +431,16 @@ export function useDashboardData() {
     dashboardCache?.pendingRegistrationCount ??
       0,
   )
+
   const updateDashboardCache = useCallback(
     (
       patch: Partial<DashboardCache>,
     ) => {
-      const current =
-        dashboardCache
+      const current = dashboardCache
 
       dashboardCache = {
         academicYear:
-          current?.academicYear ??
-          null,
+          current?.academicYear ?? null,
         courses:
           current?.courses ?? [],
         enrollments:
@@ -441,19 +452,15 @@ export function useDashboardData() {
         teachers:
           current?.teachers ?? [],
         attendanceStatuses:
-          current?.attendanceStatuses ??
-          [],
+          current?.attendanceStatuses ?? [],
         attendanceRecords:
-          current?.attendanceRecords ??
-          [],
+          current?.attendanceRecords ?? [],
         students:
           current?.students ?? [],
         pendingRegistrationCount:
-          current?.pendingRegistrationCount ??
-          0,
+          current?.pendingRegistrationCount ?? 0,
         selectedCourseId:
-          current?.selectedCourseId ??
-          '',
+          current?.selectedCourseId ?? '',
         selectedDate:
           current?.selectedDate ??
           getLocalDateString(),
@@ -462,12 +469,11 @@ export function useDashboardData() {
     },
     [],
   )
+
   const loadAttendanceStatuses =
     useCallback(
       async () => {
-        if (
-          attendanceStatuses.length > 0
-        ) {
+        if (attendanceStatuses.length > 0) {
           return
         }
 
@@ -475,22 +481,12 @@ export function useDashboardData() {
           data,
           error,
         } = await supabase
-          .from(
-            'attendance_statuses',
-          )
-          .select(
-            'id, name',
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+          .from('attendance_statuses')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('sort_order', {
+            ascending: true,
+          })
 
         if (error) {
           console.error(
@@ -502,27 +498,17 @@ export function useDashboardData() {
         }
 
         const mappedStatuses =
-          (
-            data ?? []
-          ).map(
+          (data ?? []).map(
             (status) => ({
-              id: normalizeId(
-                status.id,
-              ),
-              name: String(
-                status.name ??
-                  '',
-              ),
+              id: normalizeId(status.id),
+              name: String(status.name ?? ''),
             }),
           )
 
-        setAttendanceStatuses(
-          mappedStatuses,
-        )
+        setAttendanceStatuses(mappedStatuses)
 
         updateDashboardCache({
-          attendanceStatuses:
-            mappedStatuses,
+          attendanceStatuses: mappedStatuses,
         })
       },
       [
@@ -543,10 +529,7 @@ export function useDashboardData() {
             ),
           )
 
-        if (
-          normalizedCourseIds.length ===
-          0
-        ) {
+        if (normalizedCourseIds.length === 0) {
           setAttendanceRecords([])
 
           updateDashboardCache({
@@ -556,14 +539,19 @@ export function useDashboardData() {
           return
         }
 
-     
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('attendance')
-          .select(
-            `
+        // تحميل جميع سجلات الحضور على دفعات،
+        // لتجاوز الحد الأقصى للنتائج في الطلب الواحد.
+        const allAttendanceData: AttendanceQueryRow[] = []
+
+        let from = 0
+
+        while (true) {
+          const {
+            data,
+            error,
+          } = await supabase
+            .from('attendance')
+            .select(`
               id,
               student_id,
               enrollment_id,
@@ -571,54 +559,49 @@ export function useDashboardData() {
               status_id,
               note,
               course_id
-            `,
-          )
-          .in(
-            'course_id',
-            normalizedCourseIds,
-          )
-          .order(
-            'attendance_date',
-            {
-              ascending: false,
-            },
-          )
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            },
-          )
-        
-        if (error) {
-          console.error(
-            'Attendance load error:',
-            error,
-          )
-        
-          return
-        }
-        
-        console.log('فحص تحميل الحضور:', {
-          selectedCourseIds: normalizedCourseIds,
-          rowsReturned: data?.length ?? 0,
-          wessamRows: (data ?? [])
-            .filter(
-              (record) =>
-                normalizeId(record.student_id) ===
-                'ee56a907-d027-4592-95c2-ec19410a881c',
+            `)
+            .in(
+              'course_id',
+              normalizedCourseIds,
             )
-            .map((record) => ({
-              student_id: record.student_id,
-              course_id: record.course_id,
-              enrollment_id: record.enrollment_id,
-              attendance_date: record.attendance_date,
-              status_id: record.status_id,
-            })),
-        })
-        
-        const records =
-          (data ?? []).map(
+            .order('attendance_date', {
+              ascending: false,
+            })
+            .order('created_at', {
+              ascending: false,
+            })
+            .order('id', {
+              ascending: false,
+            })
+            .range(
+              from,
+              from + ATTENDANCE_PAGE_SIZE - 1,
+            )
+
+          if (error) {
+            console.error(
+              'Attendance load error:',
+              error,
+            )
+
+            // لا نستبدل البيانات الحالية بنتيجة ناقصة
+            // إذا فشلت إحدى دفعات التحميل.
+            return
+          }
+
+          const page = (data ?? []) as AttendanceQueryRow[]
+
+          allAttendanceData.push(...page)
+
+          if (page.length < ATTENDANCE_PAGE_SIZE) {
+            break
+          }
+
+          from += ATTENDANCE_PAGE_SIZE
+        }
+
+        const records: AttendanceRecord[] =
+          allAttendanceData.map(
             (record) => ({
               id: String(record.id),
               studentId: normalizeId(record.student_id),
@@ -633,25 +616,12 @@ export function useDashboardData() {
               courseId: normalizeId(record.course_id),
             }),
           )
-        
-        console.log(
-          'وسام - سجلات الحضور المحملة:',
-          records.filter(
-            (record) =>
-              record.studentId ===
-                'ee56a907-d027-4592-95c2-ec19410a881c' &&
-              ['2026-09-14', '2026-09-16'].includes(
-                String(record.attendanceDate).slice(0, 10),
-              ),
-          ),
-        )
-        
+
         setAttendanceRecords(records)
-        
+
         updateDashboardCache({
           attendanceRecords: records,
         })
-
       },
       [updateDashboardCache],
     )
@@ -673,21 +643,14 @@ export function useDashboardData() {
           ] = await Promise.all([
             courseIds.length > 0
               ? supabase
-                  .from(
-                    'teacher_student_assignments',
-                  )
-                  .select(
-                    `
-                      id,
-                      course_id,
-                      teacher_id,
-                      student_id
-                    `,
-                  )
-                  .in(
-                    'course_id',
-                    courseIds,
-                  )
+                  .from('teacher_student_assignments')
+                  .select(`
+                    id,
+                    course_id,
+                    teacher_id,
+                    student_id
+                  `)
+                  .in('course_id', courseIds)
               : Promise.resolve({
                   data: [],
                   error: null,
@@ -695,20 +658,13 @@ export function useDashboardData() {
 
             courseIds.length > 0
               ? supabase
-                  .from(
-                    'course_teachers',
-                  )
-                  .select(
-                    `
-                      id,
-                      course_id,
-                      teacher_id
-                    `,
-                  )
-                  .in(
-                    'course_id',
-                    courseIds,
-                  )
+                  .from('course_teachers')
+                  .select(`
+                    id,
+                    course_id,
+                    teacher_id
+                  `)
+                  .in('course_id', courseIds)
               : Promise.resolve({
                   data: [],
                   error: null,
@@ -717,96 +673,64 @@ export function useDashboardData() {
             enrolledStudentIds.length > 0
               ? supabase
                   .from('students')
-                  .select(
-                    `
-                      id,
-                      student_id,
-                      name,
-                      personal_id,
-                      phone,
-                      whatsapp,
-                      status
-                    `,
-                  )
-                  .in(
-                    'id',
-                    enrolledStudentIds,
-                  )
+                  .select(`
+                    id,
+                    student_id,
+                    name,
+                    personal_id,
+                    phone,
+                    whatsapp,
+                    status
+                  `)
+                  .in('id', enrolledStudentIds)
               : Promise.resolve({
                   data: [],
                   error: null,
                 }),
 
             supabase
-              .from(
-                'registration_requests',
-              )
-              .select(
-                'id, status',
-              )
-              .eq(
-                'status',
-                'pending',
-              ),
+              .from('registration_requests')
+              .select('id, status')
+              .eq('status', 'pending'),
 
             supabase
-              .from(
-                'attendance_statuses',
-              )
-              .select(
-                'id, name',
-              )
-              .eq(
-                'is_active',
-                true,
-              )
-              .order(
-                'sort_order',
-                {
-                  ascending: true,
-                },
-              ),
+              .from('attendance_statuses')
+              .select('id, name')
+              .eq('is_active', true)
+              .order('sort_order', {
+                ascending: true,
+              }),
           ])
 
-          if (
-            assignmentsResult.error
-          ) {
+          if (assignmentsResult.error) {
             console.error(
               'Assignments background load error:',
               assignmentsResult.error,
             )
           }
 
-          if (
-            courseTeachersResult.error
-          ) {
+          if (courseTeachersResult.error) {
             console.error(
               'Course teachers background load error:',
               courseTeachersResult.error,
             )
           }
 
-          if (
-            studentsResult.error
-          ) {
+          if (studentsResult.error) {
             console.error(
               'Students background load error:',
               studentsResult.error,
             )
           }
 
-          if (
-            registrationsResult.error
-          ) {
+          if (registrationsResult.error) {
             console.error(
               'Registration background load error:',
               registrationsResult.error,
             )
           }
 
-          if (
-            statusesResult.error
-          ) {
+          if (statusesResult.error) {
             console.error(
               'Attendance statuses background load error:',
               statusesResult.error,
@@ -814,146 +738,84 @@ export function useDashboardData() {
           }
 
           const mappedAssignments: Assignment[] =
-            (
-              assignmentsResult.data ??
-              []
-            ).map(
+            (assignmentsResult.data ?? []).map(
               (assignment) => ({
-                id: normalizeId(
-                  assignment.id,
+                id: normalizeId(assignment.id),
+                courseId: normalizeId(
+                  assignment.course_id,
                 ),
-                courseId:
-                  normalizeId(
-                    assignment.course_id,
-                  ),
-                teacherId:
-                  normalizeId(
-                    assignment.teacher_id,
-                  ),
-                studentId:
-                  normalizeId(
-                    assignment.student_id,
-                  ),
+                teacherId: normalizeId(
+                  assignment.teacher_id,
+                ),
+                studentId: normalizeId(
+                  assignment.student_id,
+                ),
               }),
             )
 
           const mappedCourseTeachers: CourseTeacher[] =
-            (
-              courseTeachersResult.data ??
-              []
-            ).map(
+            (courseTeachersResult.data ?? []).map(
               (item) => ({
-                id: normalizeId(
-                  item.id,
+                id: normalizeId(item.id),
+                courseId: normalizeId(
+                  item.course_id,
                 ),
-                courseId:
-                  normalizeId(
-                    item.course_id,
-                  ),
-                teacherId:
-                  normalizeId(
-                    item.teacher_id,
-                  ),
+                teacherId: normalizeId(
+                  item.teacher_id,
+                ),
               }),
             )
 
           const mappedStudents: Student[] =
-            (
-              studentsResult.data ??
-              []
-            ).map(
+            (studentsResult.data ?? []).map(
               (student) => ({
-                id: normalizeId(
-                  student.id,
-                ),
+                id: normalizeId(student.id),
                 studentId:
-                  student.student_id ??
-                  null,
-                name:
-                  student.name,
+                  student.student_id ?? null,
+                name: student.name,
                 personalId:
-                  student.personal_id ??
-                  null,
-                phone:
-                  student.phone ??
-                  null,
-                whatsapp:
-                  student.whatsapp ??
-                  null,
-                status:
-                  student.status ??
-                  null,
+                  student.personal_id ?? null,
+                phone: student.phone ?? null,
+                whatsapp: student.whatsapp ?? null,
+                status: student.status ?? null,
               }),
             )
 
           const mappedStatuses: AttendanceStatus[] =
-            (
-              statusesResult.data ??
-              []
-            ).map(
+            (statusesResult.data ?? []).map(
               (status) => ({
-                id: normalizeId(
-                  status.id,
-                ),
-                name: String(
-                  status.name ??
-                    '',
-                ),
+                id: normalizeId(status.id),
+                name: String(status.name ?? ''),
               }),
             )
 
           const pendingCount =
-            (
-              registrationsResult.data ??
-              []
-            ).length
+            (registrationsResult.data ?? []).length
 
-          setAssignments(
-            mappedAssignments,
-          )
-
-          setCourseTeachers(
-            mappedCourseTeachers,
-          )
-
-          setStudents(
-            mappedStudents,
-          )
-
-          setAttendanceStatuses(
-            mappedStatuses,
-          )
-
-          setPendingRegistrationCount(
-            pendingCount,
-          )
+          setAssignments(mappedAssignments)
+          setCourseTeachers(mappedCourseTeachers)
+          setStudents(mappedStudents)
+          setAttendanceStatuses(mappedStatuses)
+          setPendingRegistrationCount(pendingCount)
 
           updateDashboardCache({
-            assignments:
-              mappedAssignments,
-            courseTeachers:
-              mappedCourseTeachers,
-            students:
-              mappedStudents,
-            attendanceStatuses:
-              mappedStatuses,
-            pendingRegistrationCount:
-              pendingCount,
+            assignments: mappedAssignments,
+            courseTeachers: mappedCourseTeachers,
+            students: mappedStudents,
+            attendanceStatuses: mappedStatuses,
+            pendingRegistrationCount: pendingCount,
           })
 
           const teacherIds =
             Array.from(
               new Set(
                 mappedCourseTeachers.map(
-                  (item) =>
-                    item.teacherId,
+                  (item) => item.teacherId,
                 ),
               ),
             ).filter(Boolean)
 
-          if (
-            teacherIds.length === 0
-          ) {
+          if (teacherIds.length === 0) {
             setTeachers([])
 
             updateDashboardCache({
@@ -968,13 +830,8 @@ export function useDashboardData() {
             error,
           } = await supabase
             .from('teachers')
-            .select(
-              'id, name',
-            )
-            .in(
-              'id',
-              teacherIds,
-            )
+            .select('id, name')
+            .in('id', teacherIds)
 
           if (error) {
             console.error(
@@ -986,25 +843,17 @@ export function useDashboardData() {
           }
 
           const mappedTeachers: Teacher[] =
-            (
-              data ?? []
-            ).map(
+            (data ?? []).map(
               (teacher) => ({
-                id: normalizeId(
-                  teacher.id,
-                ),
-                name:
-                  teacher.name,
+                id: normalizeId(teacher.id),
+                name: teacher.name,
               }),
             )
 
-          setTeachers(
-            mappedTeachers,
-          )
+          setTeachers(mappedTeachers)
 
           updateDashboardCache({
-            teachers:
-              mappedTeachers,
+            teachers: mappedTeachers,
           })
 
           void currentYearId
@@ -1025,9 +874,7 @@ export function useDashboardData() {
       ) => {
         if (showRefresh) {
           setRefreshing(true)
-        } else if (
-          dashboardCache === null
-        ) {
+        } else if (dashboardCache === null) {
           setLoading(true)
         }
 
@@ -1038,82 +885,54 @@ export function useDashboardData() {
             enrollmentsResult,
           ] = await Promise.all([
             supabase
-              .from(
-                'academic_years',
-              )
-              .select(
-                `
-                  id,
-                  name,
-                  annual_fee,
-                  start_date,
-                  end_date
-                `,
-              )
-              .eq(
-                'is_current',
-                true,
-              )
-              .eq(
-                'is_active',
-                true,
-              )
+              .from('academic_years')
+              .select(`
+                id,
+                name,
+                annual_fee,
+                start_date,
+                end_date
+              `)
+              .eq('is_current', true)
+              .eq('is_active', true)
               .maybeSingle(),
 
             supabase
               .from('courses')
-              .select(
-                `
-                  id,
-                  name,
-                  start_date,
-                  end_date,
-                  days,
-                  created_at,
-                  academic_year_id
-                `,
-              )
-              .order(
-                'created_at',
-                {
-                  ascending: true,
-                },
-              ),
+              .select(`
+                id,
+                name,
+                start_date,
+                end_date,
+                days,
+                created_at,
+                academic_year_id
+              `)
+              .order('created_at', {
+                ascending: true,
+              }),
 
             supabase
-              .from(
-                'enrollments',
-              )
-              .select(
-                `
-                  id,
-                  student_id,
-                  academic_year_id,
-                  level_id,
-                  status
-                `,
-              )
-              .eq(
-                'status',
-                'نشط',
-              ),
+              .from('enrollments')
+              .select(`
+                id,
+                student_id,
+                academic_year_id,
+                level_id,
+                status
+              `)
+              .eq('status', 'نشط'),
           ])
 
-          if (
-            yearResult.error
-          ) {
+          if (yearResult.error) {
             throw yearResult.error
           }
 
-          if (
-            coursesResult.error
-          ) {
+          if (coursesResult.error) {
             throw coursesResult.error
           }
 
-          if (
-            enrollmentsResult.error
-          ) {
+          if (enrollmentsResult.error) {
             throw enrollmentsResult.error
           }
 
@@ -1148,181 +967,115 @@ export function useDashboardData() {
           }
 
           const currentYear: AcademicYear = {
-            id: String(
-              yearResult.data.id,
-            ),
-            name:
-              yearResult.data.name,
+            id: String(yearResult.data.id),
+            name: yearResult.data.name,
             annualFee:
-              Number(
-                yearResult.data.annual_fee,
-              ) || 0,
+              Number(yearResult.data.annual_fee) || 0,
             startDate:
-              yearResult.data.start_date ??
-              null,
+              yearResult.data.start_date ?? null,
             endDate:
-              yearResult.data.end_date ??
-              null,
+              yearResult.data.end_date ?? null,
           }
 
           const mappedCourses: Course[] =
-            (
-              coursesResult.data ??
-              []
-            )
+            (coursesResult.data ?? [])
               .filter(
                 (course) =>
-                  normalizeId(
-                    course.academic_year_id,
-                  ) ===
-                  normalizeId(
-                    currentYear.id,
-                  ),
+                  normalizeId(course.academic_year_id) ===
+                  normalizeId(currentYear.id),
               )
               .map(
                 (course) => ({
-                  id: normalizeId(
-                    course.id,
-                  ),
-                  name:
-                    course.name,
-                  startDate:
-                    course.start_date ??
-                    null,
-                  endDate:
-                    course.end_date ??
-                    null,
-                  days:
-                    getCourseDays(
-                      course.days,
-                    ),
-                  createdAt:
-                    course.created_at ??
-                    null,
+                  id: normalizeId(course.id),
+                  name: course.name,
+                  startDate: course.start_date ?? null,
+                  endDate: course.end_date ?? null,
+                  days: getCourseDays(course.days),
+                  createdAt: course.created_at ?? null,
                 }),
               )
 
           const mappedEnrollments: Enrollment[] =
-            (
-              enrollmentsResult.data ??
-              []
-            )
-               .filter(
+            (enrollmentsResult.data ?? [])
+              .filter(
                 (enrollment) =>
-                  normalizeId(
-                    enrollment.academic_year_id,
-                  ) === normalizeId(currentYear.id),
+                  normalizeId(enrollment.academic_year_id) ===
+                  normalizeId(currentYear.id),
               )
               .map(
                 (enrollment) => ({
-                  id: normalizeId(
-                    enrollment.id,
+                  id: normalizeId(enrollment.id),
+                  studentId: normalizeId(
+                    enrollment.student_id,
                   ),
-                  studentId:
-                    normalizeId(
-                      enrollment.student_id,
-                    ),
-                  academicYearId:
-                    normalizeId(
-                      enrollment.academic_year_id,
-                    ),
-                  levelId:
-                    enrollment.level_id
-                      ? normalizeId(
-                          enrollment.level_id,
-                        )
-                      : null,
-                  status:
-                    enrollment.status,
+                  academicYearId: normalizeId(
+                    enrollment.academic_year_id,
+                  ),
+                  levelId: enrollment.level_id
+                    ? normalizeId(enrollment.level_id)
+                    : null,
+                  status: enrollment.status,
                 }),
               )
 
-          let nextSelectedCourseId =
-            selectedCourseId
+          let nextSelectedCourseId = selectedCourseId
 
           if (
             !nextSelectedCourseId ||
             !mappedCourses.some(
               (course) =>
-                course.id ===
-                nextSelectedCourseId,
+                course.id === nextSelectedCourseId,
             )
           ) {
-            const today =
-              getLocalDateString()
+            const today = getLocalDateString()
 
             const currentCourse =
               mappedCourses.find(
                 (course) => {
                   const starts =
                     !course.startDate ||
-                    course.startDate <=
-                      today
+                    course.startDate <= today
 
                   const ends =
                     !course.endDate ||
-                    course.endDate >=
-                      today
+                    course.endDate >= today
 
-                  return (
-                    starts &&
-                    ends
-                  )
+                  return starts && ends
                 },
               )
 
             nextSelectedCourseId =
               currentCourse?.id ??
               mappedCourses[
-                mappedCourses.length -
-                  1
+                mappedCourses.length - 1
               ]?.id ??
               ''
           }
 
-          setAcademicYear(
-            currentYear,
-          )
-
-          setCourses(
-            mappedCourses,
-          )
-
-          setEnrollments(
-            mappedEnrollments,
-          )
-
-          setSelectedCourseId(
-            nextSelectedCourseId,
-          )
+          setAcademicYear(currentYear)
+          setCourses(mappedCourses)
+          setEnrollments(mappedEnrollments)
+          setSelectedCourseId(nextSelectedCourseId)
 
           updateDashboardCache({
-            academicYear:
-              currentYear,
-            courses:
-              mappedCourses,
-            enrollments:
-              mappedEnrollments,
-            selectedCourseId:
-              nextSelectedCourseId,
+            academicYear: currentYear,
+            courses: mappedCourses,
+            enrollments: mappedEnrollments,
+            selectedCourseId: nextSelectedCourseId,
           })
 
           setLoading(false)
 
           const courseIds =
             mappedCourses.map(
-              (course) =>
-                course.id,
+              (course) => course.id,
             )
 
           const enrolledStudentIds =
             Array.from(
               new Set(
                 mappedEnrollments
-                  .map(
-                    (item) =>
-                      item.studentId,
-                  )
+                  .map((item) => item.studentId)
                   .filter(Boolean),
               ),
             )
@@ -1393,9 +1146,7 @@ export function useDashboardData() {
   ])
 
   useEffect(() => {
-    if (
-      attendanceStatuses.length > 0
-    ) {
+    if (attendanceStatuses.length > 0) {
       return
     }
 
@@ -1411,52 +1162,37 @@ export function useDashboardData() {
     }
 
     const refresh = () => {
-      if (
-        document.visibilityState ===
-        'visible'
-      ) {
+      if (document.visibilityState === 'visible') {
         void loadAttendance([
           selectedCourseId,
         ])
       }
     }
 
-    window.addEventListener(
-      'focus',
-      refresh,
-    )
+    window.addEventListener('focus', refresh)
 
     document.addEventListener(
       'visibilitychange',
       refresh,
     )
 
-    const interval =
-      window.setInterval(() => {
-        if (
-          document.visibilityState ===
-          'visible'
-        ) {
-          void loadAttendance([
-            selectedCourseId,
-          ])
-        }
-      }, 5000)
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadAttendance([
+          selectedCourseId,
+        ])
+      }
+    }, 5000)
 
     return () => {
-      window.removeEventListener(
-        'focus',
-        refresh,
-      )
+      window.removeEventListener('focus', refresh)
 
       document.removeEventListener(
         'visibilitychange',
         refresh,
       )
 
-      window.clearInterval(
-        interval,
-      )
+      window.clearInterval(interval)
     }
   }, [
     selectedCourseId,
