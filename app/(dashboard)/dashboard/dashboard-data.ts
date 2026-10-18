@@ -556,6 +556,7 @@ export function useDashboardData() {
           return
         }
 
+     
         const {
           data,
           error,
@@ -588,21 +589,36 @@ export function useDashboardData() {
               ascending: false,
             },
           )
-
+        
         if (error) {
           console.error(
             'Attendance load error:',
             error,
           )
-
+        
           return
         }
-
+        
+        console.log('فحص تحميل الحضور:', {
+          selectedCourseIds: normalizedCourseIds,
+          rowsReturned: data?.length ?? 0,
+          wessamRows: (data ?? [])
+            .filter(
+              (record) =>
+                normalizeId(record.student_id) ===
+                'ee56a907-d027-4592-95c2-ec19410a881c',
+            )
+            .map((record) => ({
+              student_id: record.student_id,
+              course_id: record.course_id,
+              enrollment_id: record.enrollment_id,
+              attendance_date: record.attendance_date,
+              status_id: record.status_id,
+            })),
+        })
         
         const records =
-          (
-            data ?? []
-          ).map(
+          (data ?? []).map(
             (record) => ({
               id: String(record.id),
               studentId: normalizeId(record.student_id),
@@ -622,16 +638,15 @@ export function useDashboardData() {
           'وسام - سجلات الحضور المحملة:',
           records.filter(
             (record) =>
-              record.studentId === 'ee56a907-d027-4592-95c2-ec19410a881c' &&
+              record.studentId ===
+                'ee56a907-d027-4592-95c2-ec19410a881c' &&
               ['2026-09-14', '2026-09-16'].includes(
                 String(record.attendanceDate).slice(0, 10),
               ),
           ),
         )
         
-        setAttendanceRecords(
-          records,
-        )
+        setAttendanceRecords(records)
         
         updateDashboardCache({
           attendanceRecords: records,
