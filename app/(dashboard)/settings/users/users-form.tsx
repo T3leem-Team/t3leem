@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useState } from 'react'
@@ -125,10 +126,11 @@ export default function UsersForm({
             <input
               id="user-username"
               required
+              disabled={editing}
               value={form.username}
               onChange={(event) => update('username', event.target.value)}
               placeholder="اسم المستخدم"
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
 
@@ -243,7 +245,7 @@ export default function UsersForm({
               {dashboardSections
                 .filter((section) => form.selectedSections.includes(section.id))
                 .map((section) => (
-                  <Badge key={section.id} variant="secondary">
+                  <Badge key={section.id} variant="neutral">
                     {section.section_name}
                   </Badge>
                 ))}
@@ -313,7 +315,7 @@ export default function UsersForm({
                   form.selectedPermissions.includes(permission.id),
                 )
                 .map((permission) => (
-                  <Badge key={permission.id} variant="outline">
+                  <Badge key={permission.id} variant="neutral">
                     {permission.permission_name}
                   </Badge>
                 ))}
