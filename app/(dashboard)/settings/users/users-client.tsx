@@ -420,7 +420,7 @@ export default function Page() {
 
       const data =
         await response.json()
-
+      console.log('SAVE RESPONSE:', response.status, data)
       if (!response.ok) {
         throw new Error(
           data.error ??
