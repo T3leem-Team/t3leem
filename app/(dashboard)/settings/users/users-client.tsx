@@ -520,7 +520,7 @@ export default function Page() {
         )
       }
 
-      await loadUsers()
+      await loadUsers(false)
     } catch (err) {
       setError(
         err instanceof Error
