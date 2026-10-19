@@ -68,108 +68,115 @@ export default function UsersTable({
   }
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-5" dir="rtl">
+      {/* إحصائيات المستخدمين */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
+        <Card className="border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">
                 إجمالي المستخدمين
               </p>
-              <p className="mt-1 text-2xl font-bold">{users.length}</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-slate-100">
+                {users.length}
+              </p>
             </div>
-            <div className="rounded-xl bg-primary/10 p-3">
-              <Users className="h-6 w-6 text-primary" />
+            <div className="rounded-xl bg-sky-50 p-3 dark:bg-sky-950/40">
+              <Users className="h-6 w-6 text-sky-600 dark:text-sky-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">
                 المستخدمون النشطون
               </p>
-              <p className="mt-1 text-2xl font-bold text-green-600">
+              <p className="mt-1 text-2xl font-bold text-emerald-600">
                 {activeUsers}
               </p>
             </div>
-            <div className="rounded-xl bg-green-500/10 p-3">
-              <Check className="h-6 w-6 text-green-600" />
+            <div className="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-950/40">
+              <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           <CardContent className="flex items-center justify-between p-5">
             <div>
               <p className="text-sm text-muted-foreground">
                 المستخدمون غير النشطين
               </p>
-              <p className="mt-1 text-2xl font-bold text-muted-foreground">
+              <p className="mt-1 text-2xl font-bold text-slate-500">
                 {inactiveUsers}
               </p>
             </div>
-            <div className="rounded-xl bg-muted p-3">
-              <Power className="h-6 w-6 text-muted-foreground" />
+            <div className="rounded-xl bg-slate-100 p-3 dark:bg-slate-800">
+              <Power className="h-6 w-6 text-slate-500 dark:text-slate-300" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-4">
+      {/* لوحة إدارة المستخدمين */}
+      <Card className="overflow-hidden border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <CardContent className="p-4 sm:p-5">
+          {/* البحث والإضافة */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {!showForm && (
               <div className="relative flex-1">
-                <Users className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Users className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(event) => onSearchChange(event.target.value)}
                   placeholder="ابحث عن مستخدم بالاسم أو البريد أو اسم المستخدم..."
-                  className="h-10 w-full rounded-md border border-input bg-background pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/70 pr-10 pl-3 text-sm outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:focus:bg-slate-950 dark:focus:ring-sky-950"
                 />
               </div>
             )}
 
             {!showForm && (
-              <Button onClick={onAdd} className="gap-2">
+              <Button onClick={onAdd} className="gap-2 rounded-lg">
                 <UserPlus className="h-4 w-4" />
                 إضافة مستخدم
               </Button>
             )}
           </div>
 
+          {/* رسالة الخطأ */}
           {!showForm && error && (
-            <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
               {error}
             </div>
           )}
 
+          {/* جدول بتمرير مستقل */}
           {!showForm && (
-            <div className="users-table-scroll mt-4 overflow-x-auto rounded-lg border">
+            <div className="users-table-scroll mt-4 max-h-[55vh] min-h-[240px] overflow-auto rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
               <table className="w-full min-w-[980px] text-sm">
-                <thead className="bg-muted/50">
-                  <tr className="border-b">
-                    <th className="w-16 whitespace-nowrap px-4 py-3 text-center font-medium">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_#e2e8f0] dark:bg-slate-900 dark:shadow-[0_1px_0_0_#334155]">
+                  <tr>
+                    <th className="w-16 whitespace-nowrap px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">
                       #
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">
                       المستخدم
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">
                       اسم المستخدم
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">
                       الدور
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">
                       الصلاحيات
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">
                       الحالة
                     </th>
-                    <th className="whitespace-nowrap px-4 py-3 text-center font-medium">
+                    <th className="whitespace-nowrap px-4 py-3 text-center font-semibold text-slate-600 dark:text-slate-300">
                       الإجراءات
                     </th>
                   </tr>
@@ -179,7 +186,7 @@ export default function UsersTable({
                   {loading ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center">
-                        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2 text-slate-500">
                           <Loader2 className="h-5 w-5 animate-spin" />
                           جاري تحميل المستخدمين...
                         </div>
@@ -189,7 +196,7 @@ export default function UsersTable({
                     <tr>
                       <td
                         colSpan={7}
-                        className="px-4 py-12 text-center text-muted-foreground"
+                        className="px-4 py-12 text-center text-slate-500"
                       >
                         لا يوجد مستخدمون مطابقون للبحث
                       </td>
@@ -226,18 +233,18 @@ export default function UsersTable({
                           key={user.id}
                           onClick={() => onSelectUser(user.id)}
                           aria-selected={isSelected}
-                          className={`cursor-pointer border-b transition-colors last:border-0 ${
+                          className={`cursor-pointer border-b border-slate-100 transition-colors last:border-0 dark:border-slate-800 ${
                             isSelected
-                              ? 'bg-primary/10 hover:bg-primary/15'
-                              : 'hover:bg-muted/40'
+                              ? 'bg-sky-50 hover:bg-sky-100/80 dark:bg-sky-950/40 dark:hover:bg-sky-950/60'
+                              : 'hover:bg-slate-50/80 dark:hover:bg-slate-900/70'
                           }`}
                         >
                           <td className="px-4 py-3 text-center">
                             <span
                               className={`inline-flex h-8 min-w-8 items-center justify-center rounded-full text-xs font-semibold ${
                                 isSelected
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'bg-muted text-muted-foreground'
+                                  ? 'bg-sky-600 text-white'
+                                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
                               }`}
                             >
                               {index + 1}
@@ -246,22 +253,29 @@ export default function UsersTable({
 
                           <td
                             className={`px-4 py-3 ${
-                              isSelected ? 'border-r-4 border-primary' : ''
+                              isSelected
+                                ? 'border-r-4 border-sky-500'
+                                : 'border-r-4 border-transparent'
                             }`}
                           >
-                            <div className="font-medium">{user.full_name}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
+                            <div className="font-medium text-slate-800 dark:text-slate-100">
+                              {user.full_name}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                               {user.email || 'لا يوجد بريد إلكتروني'}
                             </div>
                             {user.department && (
-                              <div className="mt-1 text-xs text-muted-foreground">
+                              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                 {user.department}
                               </div>
                             )}
                           </td>
 
                           <td className="px-4 py-3">
-                            <span dir="ltr" className="inline-block">
+                            <span
+                              dir="ltr"
+                              className="inline-block text-slate-600 dark:text-slate-300"
+                            >
                               {user.username}
                             </span>
                           </td>
@@ -280,7 +294,7 @@ export default function UsersTable({
                                   event.stopPropagation()
                                   onShowDetails(user.id)
                                 }}
-                                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                                className="text-xs text-slate-500 underline-offset-4 hover:text-sky-700 hover:underline dark:hover:text-sky-300"
                               >
                                 لا توجد صلاحيات
                               </button>
@@ -292,11 +306,11 @@ export default function UsersTable({
                                   event.stopPropagation()
                                   onShowDetails(user.id)
                                 }}
-                                className="flex max-w-[260px] items-center gap-2 rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-right transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="flex max-w-[260px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-right transition-colors hover:border-sky-300 hover:bg-sky-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-800 dark:hover:bg-sky-950/40"
                               >
-                                <Shield className="h-4 w-4 shrink-0 text-primary" />
+                                <Shield className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
 
-                                <span className="max-w-[160px] truncate text-xs font-medium">
+                                <span className="max-w-[160px] truncate text-xs font-medium text-slate-700 dark:text-slate-200">
                                   {firstPermission?.permission_name ??
                                     'عرض الصلاحيات'}
                                 </span>
@@ -313,7 +327,7 @@ export default function UsersTable({
                             )}
 
                             {extraPermissionCount > 0 && (
-                              <p className="mt-1 text-xs text-muted-foreground">
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                 {extraPermissionCount} صلاحية إضافية
                               </p>
                             )}
@@ -321,12 +335,7 @@ export default function UsersTable({
 
                           <td className="px-4 py-3">
                             <Badge
-                              variant={user.is_active ? 'default' : 'neutral'}
-                              className={
-                                user.is_active
-                                  ? 'bg-green-600 hover:bg-green-600'
-                                  : ''
-                              }
+                              variant={user.is_active ? 'success' : 'neutral'}
                             >
                               {user.is_active ? 'نشط' : 'غير نشط'}
                             </Badge>
@@ -344,7 +353,7 @@ export default function UsersTable({
                                   onEdit(user)
                                 }}
                               >
-                                <Edit3 className="h-4 w-4" />
+                                <Edit3 className="h-4 w-4 text-slate-600 dark:text-slate-300" />
                               </Button>
 
                               {user.id !== PROTECTED_ADMIN_ID && (
@@ -366,8 +375,8 @@ export default function UsersTable({
                                   <Power
                                     className={`h-4 w-4 ${
                                       user.is_active
-                                        ? 'text-destructive'
-                                        : 'text-green-600'
+                                        ? 'text-rose-500'
+                                        : 'text-emerald-600'
                                     }`}
                                   />
                                 </Button>
@@ -383,9 +392,10 @@ export default function UsersTable({
             </div>
           )}
 
+          {/* شريط المستخدم المحدد */}
           {!showForm && selectedUserId && (
-            <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50/70 px-3 py-2.5 text-sm dark:border-sky-900/60 dark:bg-sky-950/30">
+              <span className="text-slate-600 dark:text-slate-300">
                 تم تحديد مستخدم. اضغط على الصلاحيات لعرض تفاصيلها.
               </span>
               <Button
@@ -403,7 +413,8 @@ export default function UsersTable({
       <style jsx global>{`
         .users-table-scroll {
           scrollbar-width: thin;
-          scrollbar-color: hsl(var(--border)) transparent;
+          scrollbar-color: #cbd5e1 transparent;
+          overscroll-behavior: contain;
         }
 
         .users-table-scroll::-webkit-scrollbar {
@@ -416,8 +427,18 @@ export default function UsersTable({
         }
 
         .users-table-scroll::-webkit-scrollbar-thumb {
-          background: hsl(var(--border));
+          background: #cbd5e1;
           border-radius: 999px;
+        }
+
+        .users-table-scroll::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        .users-table-scroll thead {
+          position: sticky;
+          top: 0;
+          z-index: 10;
         }
       `}</style>
     </div>
