@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -229,7 +230,7 @@ export default function UsersTable({
                           </td>
 
                           <td className="px-4 py-3">
-                            <Badge variant="secondary">
+                            <Badge variant="neutral">
                               {roleLabels[user.role] || user.role}
                             </Badge>
                           </td>
@@ -254,7 +255,7 @@ export default function UsersTable({
                                       return (
                                         <Badge
                                           key={permissionId}
-                                          variant="outline"
+                                          variant="neutral"
                                           className="max-w-[150px] truncate text-xs"
                                         >
                                           {permission.permission_name}
@@ -263,7 +264,7 @@ export default function UsersTable({
                                     })}
 
                                   {effectivePermissionIds.length > 3 && (
-                                    <Badge variant="outline" className="text-xs">
+                                    <Badge variant="neutral" className="text-xs">
                                       +{effectivePermissionIds.length - 3}
                                     </Badge>
                                   )}
@@ -280,7 +281,7 @@ export default function UsersTable({
 
                           <td className="px-4 py-3">
                             <Badge
-                              variant={user.is_active ? 'default' : 'secondary'}
+                              variant={user.is_active ? 'default' : 'neutral'}
                               className={
                                 user.is_active
                                   ? 'bg-green-600 hover:bg-green-600'
