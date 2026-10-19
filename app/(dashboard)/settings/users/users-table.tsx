@@ -5,6 +5,7 @@ import {
   Edit3,
   Loader2,
   Power,
+  Shield,
   UserPlus,
   Users,
 } from 'lucide-react'
