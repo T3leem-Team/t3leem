@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -147,12 +146,15 @@ export function StudentsUI({
   const canDelete =
     isDeletionSettingLoaded && allowStudentDeletion
 
+  const isConnected =
+    !isLoadingStudents &&
+    /متصل|connected|success/i.test(supabaseStatus)
+
   return (
     <div
       dir="rtl"
       className="mx-auto min-w-0 max-w-[1600px] space-y-4 pb-6 sm:space-y-5"
     >
-      {/* عنوان الصفحة */}
       <PageHeader
         title="إدارة الطلاب"
         description="إدارة سجلات الطلاب والرسوم والبيانات الدراسية"
@@ -168,7 +170,39 @@ export function StudentsUI({
         }
       />
 
-      {/* معلومات الدراسة في سطر واحد */}
+      {/* حالة اتصال قاعدة البيانات في الأعلى */}
+      <section className="flex min-w-0 items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+        {isLoadingStudents ? (
+          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+        ) : (
+          <Database
+            className={`size-4 shrink-0 ${
+              isConnected ? 'text-emerald-600' : 'text-muted-foreground'
+            }`}
+          />
+        )}
+
+        <span className="shrink-0 text-xs font-medium">
+          اتصال قاعدة البيانات
+        </span>
+
+        <span className="text-xs text-muted-foreground">—</span>
+
+        <p
+          title={supabaseStatus}
+          className={`min-w-0 flex-1 break-words text-xs ${
+            isConnected
+              ? 'font-medium text-emerald-600'
+              : 'text-muted-foreground'
+          }`}
+        >
+          {isLoadingStudents
+            ? 'جارٍ تحميل بيانات الطلاب...'
+            : supabaseStatus || 'حالة الاتصال غير محددة'}
+        </p>
+      </section>
+
+      {/* معلومات الدراسة */}
       <section className="rounded-xl border bg-card px-3 py-3 shadow-sm sm:px-4">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -207,31 +241,7 @@ export function StudentsUI({
         </div>
       </section>
 
-      {/* حالة قاعدة البيانات - مستقلة عن معلومات الدراسة */}
-      <section className="flex min-w-0 items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
-        {isLoadingStudents ? (
-          <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-        ) : (
-          <Database className="size-4 shrink-0 text-muted-foreground" />
-        )}
-
-        <span className="shrink-0 text-xs font-medium">
-          اتصال قاعدة البيانات
-        </span>
-
-        <span className="text-xs text-muted-foreground">—</span>
-
-        <p
-          title={supabaseStatus}
-          className="min-w-0 flex-1 break-words text-xs text-muted-foreground"
-        >
-          {isLoadingStudents
-            ? 'جارٍ تحميل بيانات الطلاب...'
-            : supabaseStatus || 'حالة الاتصال غير محددة'}
-        </p>
-      </section>
-
-      {/* إحصائيات مختصرة */}
+      {/* الإحصائيات */}
       <section className="grid grid-cols-2 gap-3">
         <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-card px-3 py-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -258,101 +268,95 @@ export function StudentsUI({
         </div>
       </section>
 
-      {/* إجراءات الطلاب - أزرار صغيرة ومجمعة */}
-      <section className="rounded-xl border bg-card p-3 shadow-sm sm:px-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold">إجراءات الطلاب</h2>
+      {/* بطاقة واحدة لإجراءات الطلاب والسجل والبحث */}
+      <Card className="min-w-0 overflow-hidden rounded-xl shadow-sm">
+        <div className="space-y-3 border-b px-3 py-3 sm:px-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold">إجراءات الطلاب</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedStudentId
+                  ? 'تم تحديد طالب، ويمكنك تنفيذ الإجراءات المتاحة'
+                  : 'حدّد طالباً لتفعيل الإجراءات'}
+              </p>
+            </div>
 
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            {selectedStudentId ? (
-              <>
-                <CheckCircle2 className="size-3.5 text-primary" />
-                تم تحديد طالب
-              </>
-            ) : (
-              'حدّد طالباً لتفعيل الإجراءات'
+            {selectedStudentId && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-primary/5 px-2 py-1 text-xs text-primary">
+                <CheckCircle2 className="size-3.5" />
+                طالب محدد
+              </span>
             )}
-          </span>
-        </div>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!selectedStudentId}
-            onClick={openEditStudent}
-            className="h-9 gap-1.5 px-3"
-          >
-            <Pencil className="size-3.5" />
-            تعديل
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!selectedStudentId}
-            onClick={() => void toggleFeeExemption()}
-            className="h-9 gap-1.5 px-3"
-          >
-            <Wallet className="size-3.5" />
-            {selectedStudent?.feeExempt
-              ? 'إلغاء الإعفاء'
-              : 'إعفاء من الرسوم'}
-          </Button>
-
-          {canDelete && (
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="destructive"
+              variant="outline"
               size="sm"
               disabled={!selectedStudentId}
-              onClick={() => void deleteStudent()}
+              onClick={openEditStudent}
               className="h-9 gap-1.5 px-3"
             >
-              <Trash2 className="size-3.5" />
-              حذف الطالب
+              <Pencil className="size-3.5" />
+              تعديل
             </Button>
-          )}
 
-          <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedStudentId}
+              onClick={() => void toggleFeeExemption()}
+              className="h-9 gap-1.5 px-3"
+            >
+              <Wallet className="size-3.5" />
+              {selectedStudent?.feeExempt
+                ? 'إلغاء الإعفاء'
+                : 'إعفاء من الرسوم'}
+            </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={filteredStudents.length === 0}
-            onClick={exportStudentsToExcel}
-            className="h-9 gap-1.5 border-emerald-600/30 px-3 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
-          >
-            <FileSpreadsheet className="size-3.5" />
-            تصدير Excel
-            <Download className="size-3.5 opacity-70" />
-          </Button>
+            {canDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={!selectedStudentId}
+                onClick={() => void deleteStudent()}
+                className="h-9 gap-1.5 px-3"
+              >
+                <Trash2 className="size-3.5" />
+                حذف الطالب
+              </Button>
+            )}
+
+            <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={filteredStudents.length === 0}
+              onClick={exportStudentsToExcel}
+              className="h-9 gap-1.5 border-emerald-600/30 px-3 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300"
+            >
+              <FileSpreadsheet className="size-3.5" />
+              تصدير Excel
+              <Download className="size-3.5 opacity-70" />
+            </Button>
+          </div>
         </div>
-      </section>
 
-      {/* سجل الطلاب والبحث */}
-      <Card className="min-w-0 overflow-hidden rounded-xl shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3 sm:px-4">
+        <CardContent className="min-w-0 space-y-4 p-3 sm:p-4">
+          {/* سجل الطلاب */}
           <div>
-            <h2 className="text-base font-bold">سجل الطلاب</h2>
+            <h3 className="text-sm font-bold">سجل الطلاب</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               البحث والتصفية وإدارة السجلات
             </p>
           </div>
 
-          {selectedStudentId && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-primary/5 px-2 py-1 text-xs text-primary">
-              <CheckCircle2 className="size-3.5" />
-              طالب محدد
-            </span>
-          )}
-        </div>
-
-        <CardContent className="min-w-0 space-y-4 p-3 sm:p-4">
-          {/* البحث */}
+          {/* البحث عن طالب */}
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <label
