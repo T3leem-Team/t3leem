@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -33,6 +32,17 @@ import {
   normalizePaymentStatus,
   normalizeAttendanceStatus,
 } from './students-table-utils'
+
+import {
+  StudentPaymentDialog,
+  type PaymentStudent,
+} from './student-payment-dialog'
+
+import {
+  baseColumns,
+  extraColumns,
+  getVisibleExtraColumns,
+} from './students-table-columns'
 
 export type StudentTableFilters = {
   name: string
@@ -78,13 +88,10 @@ export type StudentTableStudent = {
   className: string | null
   phone: string | null
   whatsapp: string | null
-
   guardianRelation: string | null
   studentPhone: string | null
-
   enrollmentCourseId: string | null
   enrollmentCourseName: string | null
-
   status: string
   paymentStatus: string
   amountDue: number
@@ -143,117 +150,6 @@ type Props = {
   ) => Promise<void> | void
 }
 
-const baseColumns = [
-  {
-    key: 'name',
-    label: 'الاسم',
-  },
-  {
-    key: 'personalId',
-    label: 'رقم الهوية',
-  },
-  {
-    key: 'grade',
-    label: 'المرحلة / المستوى',
-  },
-  {
-    key: 'contact',
-    label: 'التواصل',
-  },
-  {
-    key: 'paymentStatus',
-    label: 'حالة السداد',
-  },
-  {
-    key: 'notes',
-    label: 'الملاحظات',
-  },
-  {
-    key: 'attendance',
-    label: 'الحضور',
-  },
-]
-
-const extraColumns = [
-  {
-    key: 'studentId',
-    label: 'معرف الطالب',
-  },
-  {
-    key: 'guardianRelation',
-    label: 'صلة القرابة',
-  },
-  {
-    key: 'studentPhone',
-    label: 'رقم الطالب',
-  },
-  {
-    key: 'enrollmentCourseName',
-    label: 'دورة الالتحاق',
-  },
-  {
-    key: 'gender',
-    label: 'الجنس',
-  },
-  {
-    key: 'age',
-    label: 'العمر',
-  },
-  {
-    key: 'phone',
-    label: 'الهاتف',
-  },
-  {
-    key: 'whatsapp',
-    label: 'واتساب',
-  },
-  {
-    key: 'status',
-    label: 'الحالة',
-  },
-  {
-    key: 'className',
-    label: 'الفصل',
-  },
-  {
-    key: 'source',
-    label: 'المصدر',
-  },
-  {
-    key: 'amountDue',
-    label: 'المستحق',
-  },
-  {
-    key: 'amountPaid',
-    label: 'المدفوع',
-  },
-  {
-    key: 'remaining',
-    label: 'المتبقي',
-  },
-  {
-    key: 'feeExempt',
-    label: 'الإعفاء',
-  },
-  {
-    key: 'chronicDiseases',
-    label: 'الحالات الصحية',
-  },
-  {
-    key: 'createdAt',
-    label: 'تاريخ الإضافة',
-  },
-  {
-    key: 'updatedAt',
-    label: 'آخر تحديث',
-  },
-  {
-    key: 'academicYearName',
-    label: 'العام الدراسي',
-  },
-]
-
-
 export function StudentsTable({
   allowStudentDeletion,
   students,
@@ -289,56 +185,7 @@ export function StudentsTable({
   const [
     paymentStudent,
     setPaymentStudent,
-  ] =
-    useState<StudentTableStudent | null>(
-      null
-    )
-
-  const [
-    showAddPayment,
-    setShowAddPayment,
-  ] = useState(false)
-
-  const [
-    paymentAmount,
-    setPaymentAmount,
-  ] = useState('')
-
-  const [
-    paymentMethod,
-    setPaymentMethod,
-  ] = useState<
-    'نقدي' | 'تحويل' | 'بطاقة'
-  >('نقدي')
-
-  const [
-    paymentDate,
-    setPaymentDate,
-  ] = useState(
-    new Date()
-      .toISOString()
-      .slice(0, 10)
-  )
-
-  const [
-    paymentReference,
-    setPaymentReference,
-  ] = useState('')
-
-  const [
-    paymentNotes,
-    setPaymentNotes,
-  ] = useState('')
-
-  const [
-    paymentSaving,
-    setPaymentSaving,
-  ] = useState(false)
-
-  const [
-    paymentMessage,
-    setPaymentMessage,
-  ] = useState('')
+  ] = useState<PaymentStudent | null>(null)
 
   const [
     showDeleteConfirm,
@@ -355,198 +202,141 @@ export function StudentsTable({
     setDeleteMessage,
   ] = useState('')
 
-  const gradeOptions =
-    useMemo(() => {
-      const existingValues =
-        new Set<string>()
+  const gradeOptions = useMemo(() => {
+    const existingValues = new Set<string>()
 
-      students.forEach(
-        (student) => {
-          const value =
-            String(
-              student.grade || ''
-            ).trim()
+    students.forEach((student) => {
+      const value = String(
+        student.grade || ''
+      ).trim()
 
-          if (value) {
-            existingValues.add(
-              value
-            )
-          }
-        }
+      if (value) {
+        existingValues.add(value)
+      }
+    })
+
+    const ordered = academicLevels
+      .filter((level) =>
+        existingValues.has(level.name)
+      )
+      .sort(
+        (a, b) =>
+          Number(a.sort_order ?? 0) -
+          Number(b.sort_order ?? 0)
+      )
+      .map((level) => level.name)
+
+    const remaining = Array.from(
+      existingValues
+    ).filter(
+      (value) => !ordered.includes(value)
+    )
+
+    return [
+      ...ordered,
+      ...remaining,
+    ]
+  }, [
+    students,
+    academicLevels,
+  ])
+
+  const paymentStatusOptions = useMemo(() => {
+    const values = new Set<string>()
+
+    students.forEach((student) => {
+      const value = normalizePaymentStatus(
+        student.paymentStatus
       )
 
-      const ordered =
-        academicLevels
-          .filter((level) =>
-            existingValues.has(
-              level.name
-            )
-          )
-          .sort(
-            (a, b) =>
-              Number(
-                a.sort_order ?? 0
-              ) -
-              Number(
-                b.sort_order ?? 0
-              )
-          )
-          .map(
-            (level) =>
-              level.name
-          )
+      if (value && value !== '-') {
+        values.add(value)
+      }
+    })
 
-      const remaining =
-        Array.from(
-          existingValues
-        ).filter(
-          (value) =>
-            !ordered.includes(
-              value
-            )
-        )
+    return Array.from(values)
+  }, [students])
 
-      return [
-        ...ordered,
-        ...remaining,
-      ]
-    }, [
-      students,
-      academicLevels,
-    ])
+  const attendanceOptions = useMemo(() => {
+    const values = new Set<string>()
 
-  const paymentStatusOptions =
-    useMemo(() => {
-      const values =
-        new Set<string>()
-
-      students.forEach(
-        (student) => {
-          const value =
-            normalizePaymentStatus(
-              student.paymentStatus
-            )
-
-          if (
-            value &&
-            value !== '-'
-          ) {
-            values.add(value)
-          }
-        }
+    students.forEach((student) => {
+      const value = normalizeAttendanceStatus(
+        student.attendance
       )
 
-      return Array.from(values)
-    }, [students])
+      if (value) {
+        values.add(value)
+      }
+    })
 
-  const attendanceOptions =
-    useMemo(() => {
-      const values =
-        new Set<string>()
+    return Array.from(values)
+  }, [students])
 
-      students.forEach(
-        (student) => {
-          const value =
-            normalizeAttendanceStatus(
-              student.attendance
-            )
+  const enrollmentCourseOptions = useMemo(() => {
+    const values = new Set<string>()
 
-          if (value) {
-            values.add(value)
-          }
-        }
+    students.forEach((student) => {
+      const value = String(
+        student.enrollmentCourseName || ''
+      ).trim()
+
+      if (value) {
+        values.add(value)
+      }
+    })
+
+    const ordered = courses
+      .filter((course) =>
+        values.has(course.name)
       )
+      .map((course) => course.name)
 
-      return Array.from(values)
-    }, [students])
+    const remaining = Array.from(
+      values
+    ).filter(
+      (value) => !ordered.includes(value)
+    )
 
-  const enrollmentCourseOptions =
-    useMemo(() => {
-      const values =
-        new Set<string>()
-
-      students.forEach(
-        (student) => {
-          const value =
-            String(
-              student.enrollmentCourseName ||
-                ''
-            ).trim()
-
-          if (value) {
-            values.add(value)
-          }
-        }
-      )
-
-      const ordered =
-        courses
-          .filter((course) =>
-            values.has(
-              course.name
-            )
-          )
-          .map(
-            (course) =>
-              course.name
-          )
-
-      const remaining =
-        Array.from(values).filter(
-          (value) =>
-            !ordered.includes(
-              value
-            )
-        )
-
-      return [
-        ...ordered,
-        ...remaining,
-      ]
-    }, [
-      students,
-      courses,
-    ])
+    return [
+      ...ordered,
+      ...remaining,
+    ]
+  }, [
+    students,
+    courses,
+  ])
 
   const toggleStudentSelection = (
     studentId: string
   ) => {
-    setSelectedStudentIds(
-      (current) =>
-        current.includes(studentId)
-          ? current.filter(
-              (id) =>
-                id !== studentId
-            )
-          : [
-              ...current,
-              studentId,
-            ]
+    setSelectedStudentIds((current) =>
+      current.includes(studentId)
+        ? current.filter(
+            (id) => id !== studentId
+          )
+        : [
+            ...current,
+            studentId,
+          ]
     )
   }
 
   const toggleSelectAll = () => {
-    const allStudentIds =
-      students.map(
-        (student) =>
-          student.id
-      )
+    const allStudentIds = students.map(
+      (student) => student.id
+    )
 
     const allSelected =
       allStudentIds.length > 0 &&
-      allStudentIds.every(
-        (id) =>
-          selectedStudentIds.includes(
-            id
-          )
+      allStudentIds.every((id) =>
+        selectedStudentIds.includes(id)
       )
 
     if (allSelected) {
       setSelectedStudentIds([])
     } else {
-      setSelectedStudentIds(
-        allStudentIds
-      )
+      setSelectedStudentIds(allStudentIds)
     }
   }
 
@@ -560,25 +350,24 @@ export function StudentsTable({
   }
 
   const openDeleteConfirmation = () => {
-      if (
-        !allowStudentDeletion ||
-        selectedStudentIds.length === 0 ||
-        deleteSaving
-      ) {
-        return
-      }
-    
-      setDeleteMessage('')
-      setShowDeleteConfirm(true)
+    if (
+      !allowStudentDeletion ||
+      selectedStudentIds.length === 0 ||
+      deleteSaving
+    ) {
+      return
     }
 
-  const closeDeleteConfirmation =
-    () => {
-      if (deleteSaving) return
+    setDeleteMessage('')
+    setShowDeleteConfirm(true)
+  }
 
-      setShowDeleteConfirm(false)
-      setDeleteMessage('')
-    }
+  const closeDeleteConfirmation = () => {
+    if (deleteSaving) return
+
+    setShowDeleteConfirm(false)
+    setDeleteMessage('')
+  }
 
   const confirmDeleteSelected = async () => {
     if (
@@ -588,21 +377,23 @@ export function StudentsTable({
     ) {
       return
     }
-  
+
     setDeleteSaving(true)
     setDeleteMessage('')
-  
+
     try {
       const ids = Array.from(
-        new Set(selectedStudentIds.filter(Boolean))
+        new Set(
+          selectedStudentIds.filter(Boolean)
+        )
       )
-  
+
       if (ids.length === 0) {
         return
       }
-  
+
       await onDeleteSelected(ids)
-  
+
       setSelectedStudentIds([])
       setSelectionMode(false)
       setShowDeleteConfirm(false)
@@ -614,171 +405,6 @@ export function StudentsTable({
       )
     } finally {
       setDeleteSaving(false)
-    }
-  }
-
-  const openPayment = (
-    student: StudentTableStudent
-  ) => {
-    setPaymentStudent(student)
-    setShowAddPayment(false)
-    setPaymentAmount('')
-    setPaymentMethod('نقدي')
-    setPaymentDate(
-      new Date()
-        .toISOString()
-        .slice(0, 10)
-    )
-    setPaymentReference('')
-    setPaymentNotes('')
-    setPaymentMessage('')
-  }
-
-  const closePayment = () => {
-    if (paymentSaving) return
-
-    setPaymentStudent(null)
-    setShowAddPayment(false)
-    setPaymentMessage('')
-  }
-
-  const savePayment = async () => {
-    if (!paymentStudent) return
-
-    const amount =
-      Number(paymentAmount)
-
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      setPaymentMessage(
-        'أدخل مبلغاً صحيحاً.'
-      )
-      return
-    }
-
-    if (
-      !paymentStudent.academicYearId
-    ) {
-      setPaymentMessage(
-        'لا توجد سنة دراسية مرتبطة بالطالب.'
-      )
-      return
-    }
-
-    const remaining =
-      Math.max(
-        Number(
-          paymentStudent.amountDue
-        ) -
-          Number(
-            paymentStudent.amountPaid
-          ),
-        0
-      )
-
-    if (
-      amount >
-      remaining + 0.000001
-    ) {
-      setPaymentMessage(
-        `المبلغ أكبر من المتبقي. المتبقي: ${remaining.toFixed(3)} د.ب`
-      )
-      return
-    }
-
-    setPaymentSaving(true)
-    setPaymentMessage('')
-
-    try {
-      const response =
-        await fetch(
-          '/api/payments',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({
-              student_id:
-                paymentStudent.id,
-              academic_year_id:
-                paymentStudent.academicYearId,
-              amount,
-              payment_method:
-                paymentMethod,
-              payment_date:
-                paymentDate,
-              reference_number:
-                paymentReference ||
-                null,
-              notes:
-                paymentNotes ||
-                null,
-            }),
-          }
-        )
-
-      const data =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            'تعذر حفظ الدفعة.'
-        )
-      }
-
-      const newPaid =
-        Number(
-          paymentStudent.amountPaid
-        ) + amount
-
-      const newRemaining =
-        Math.max(
-          Number(
-            paymentStudent.amountDue
-          ) - newPaid,
-          0
-        )
-
-      const newStatus =
-        paymentStudent.feeExempt
-          ? 'معفي'
-          : newRemaining <= 0
-            ? 'مدفوع بالكامل'
-            : newPaid > 0
-              ? 'مدفوع جزئيًا'
-              : 'غير مدفوع'
-
-      setPaymentStudent({
-        ...paymentStudent,
-        amountPaid: newPaid,
-        paymentStatus:
-          newStatus,
-      })
-
-      setPaymentAmount('')
-      setPaymentReference('')
-      setPaymentNotes('')
-
-      setPaymentMessage(
-        'تم تسجيل الدفعة بنجاح ✅'
-      )
-
-      setTimeout(() => {
-        setShowAddPayment(false)
-      }, 700)
-    } catch (error) {
-      setPaymentMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر حفظ الدفعة.'
-      )
-    } finally {
-      setPaymentSaving(false)
     }
   }
 
@@ -834,28 +460,18 @@ export function StudentsTable({
             {placeholder}
           </option>
 
-          {options.map(
-            (option) => (
-              <option
-                key={option}
-                value={option}
-              >
-                {option}
-              </option>
-            )
-          )}
+          {options.map((option) => (
+            <option
+              key={option}
+              value={option}
+            >
+              {option}
+            </option>
+          ))}
         </select>
       </div>
     )
   }
-
-  const visibleExtraColumns =
-    extraColumns.filter(
-      (column) =>
-        visibleColumns[
-          column.key
-        ]
-    )
 
   const visibleDynamicFields =
     dynamicFields.filter(
@@ -866,22 +482,24 @@ export function StudentsTable({
         ]
     )
 
-  const visibleCourses =
-    courses.filter(
-      (course) =>
-        visibleColumns[
-          `course-${course.id}`
-        ]
-    )
+  const visibleCourses = courses.filter(
+    (course) =>
+      visibleColumns[
+        `course-${course.id}`
+      ]
+  )
+
+  const visibleExtraColumns =
+    getVisibleExtraColumns(visibleColumns)
 
   const totalColumns =
     1 +
-    (allowStudentDeletion && selectionMode ? 1 : 0) +
+    (allowStudentDeletion && selectionMode
+      ? 1
+      : 0) +
     baseColumns.filter(
       (column) =>
-        visibleColumns[
-          column.key
-        ] !== false
+        visibleColumns[column.key] !== false
     ).length +
     visibleExtraColumns.length +
     visibleDynamicFields.length +
@@ -889,44 +507,42 @@ export function StudentsTable({
 
   const allStudentsSelected =
     students.length > 0 &&
-    students.every(
-      (student) =>
-        selectedStudentIds.includes(
-          student.id
-        )
+    students.every((student) =>
+      selectedStudentIds.includes(student.id)
     )
 
-   const selectedCount =
+  const selectedCount =
     selectedStudentIds.length
-  
-    return (
-      <>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-medium">
-              الطلاب ({students.length})
-            </div>
-    
-            <div className="flex items-center gap-2">
-              {allowStudentDeletion && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectionMode) {
-                      exitSelectionMode()
-                    } else {
-                      setSelectionMode(true)
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
-                >
-                  {selectionMode
-                    ? 'إلغاء التحديد'
-                    : 'تحديد'}
-                </button>
-              )}
-    
-              {allowStudentDeletion && selectionMode && (
+
+  return (
+    <>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-medium">
+            الطلاب ({students.length})
+          </div>
+
+          <div className="flex items-center gap-2">
+            {allowStudentDeletion && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectionMode) {
+                    exitSelectionMode()
+                  } else {
+                    setSelectionMode(true)
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs hover:bg-muted"
+              >
+                {selectionMode
+                  ? 'إلغاء التحديد'
+                  : 'تحديد'}
+              </button>
+            )}
+
+            {allowStudentDeletion &&
+              selectionMode && (
                 <>
                   <button
                     type="button"
@@ -937,7 +553,7 @@ export function StudentsTable({
                       ? 'إلغاء تحديد الكل'
                       : 'تحديد الكل'}
                   </button>
-    
+
                   <button
                     type="button"
                     onClick={openDeleteConfirmation}
@@ -948,7 +564,7 @@ export function StudentsTable({
                     className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Trash2 className="h-4 w-4" />
-    
+
                     {selectedCount > 0
                       ? `مسح المحدد (${selectedCount})`
                       : 'مسح المحدد'}
@@ -959,10 +575,7 @@ export function StudentsTable({
             <button
               type="button"
               onClick={() =>
-                setShowColumns(
-                  (current) =>
-                    !current
-                )
+                setShowColumns((current) => !current)
               }
               className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${
                 showColumns
@@ -977,16 +590,15 @@ export function StudentsTable({
           </div>
         </div>
 
-        {selectionMode &&
-          selectedCount > 0 && (
-            <div className="rounded-lg border bg-muted/20 px-4 py-2 text-sm">
-              تم تحديد{' '}
-              <span className="font-semibold">
-                {selectedCount}
-              </span>{' '}
-              طالب
-            </div>
-          )}
+        {selectionMode && selectedCount > 0 && (
+          <div className="rounded-lg border bg-muted/20 px-4 py-2 text-sm">
+            تم تحديد{' '}
+            <span className="font-semibold">
+              {selectedCount}
+            </span>{' '}
+            طالب
+          </div>
+        )}
 
         {showColumns && (
           <div className="rounded-xl border border-primary/20 bg-primary/[0.035] p-4 shadow-sm transition-all">
@@ -1009,9 +621,7 @@ export function StudentsTable({
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowColumns(false)
-                }
+                onClick={() => setShowColumns(false)}
                 className="rounded-md border bg-background px-3 py-1.5 text-xs hover:bg-muted"
               >
                 إغلاق
@@ -1019,45 +629,34 @@ export function StudentsTable({
             </div>
 
             <div className="space-y-5">
-
               <div>
                 <div className="mb-2 text-xs font-semibold text-muted-foreground">
                   الأعمدة الأساسية
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {baseColumns.map(
-                    (column) => (
-                      <label
-                        key={
-                          column.key
+                  {baseColumns.map((column) => (
+                    <label
+                      key={column.key}
+                      className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          visibleColumns[column.key] !==
+                          false
                         }
-                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={
-                            visibleColumns[
-                              column.key
-                            ] !==
-                            false
-                          }
-                          onChange={() =>
-                            onToggleColumn(
-                              column.key
-                            )
-                          }
-                          className="h-4 w-4 shrink-0"
-                        />
+                        onChange={() =>
+                          onToggleColumn(column.key)
+                        }
+                        className="h-4 w-4 shrink-0"
+                      />
 
-                        <span className="truncate">
-                          {
-                            column.label
-                          }
-                        </span>
-                      </label>
-                    )
-                  )}
+                      <span className="truncate">
+                        {column.label}
+                      </span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -1067,46 +666,34 @@ export function StudentsTable({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {extraColumns.map(
-                    (column) => (
-                      <label
-                        key={
-                          column.key
+                  {extraColumns.map((column) => (
+                    <label
+                      key={column.key}
+                      className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          !!visibleColumns[column.key]
                         }
-                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={
-                            !!visibleColumns[
-                              column.key
-                            ]
-                          }
-                          onChange={() =>
-                            onToggleColumn(
-                              column.key
-                            )
-                          }
-                          className="h-4 w-4 shrink-0"
-                        />
+                        onChange={() =>
+                          onToggleColumn(column.key)
+                        }
+                        className="h-4 w-4 shrink-0"
+                      />
 
-                        <span className="truncate">
-                          {
-                            column.label
-                          }
-                        </span>
-                      </label>
-                    )
-                  )}
+                      <span className="truncate">
+                        {column.label}
+                      </span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
               {(dynamicFields.some(
-                (field) =>
-                  field.is_active
+                (field) => field.is_active
               ) ||
-                courses.length >
-                  0) && (
+                courses.length > 0) && (
                 <div>
                   <div className="mb-2 text-xs font-semibold text-muted-foreground">
                     الحقول والدورات
@@ -1115,72 +702,59 @@ export function StudentsTable({
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {dynamicFields
                       .filter(
-                        (field) =>
-                          field.is_active
+                        (field) => field.is_active
                       )
-                      .map(
-                        (field) => (
-                          <label
-                            key={
-                              field.id
-                            }
-                            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={
-                                !!visibleColumns[
-                                  `dynamic-${field.id}`
-                                ]
-                              }
-                              onChange={() =>
-                                onToggleColumn(
-                                  `dynamic-${field.id}`
-                                )
-                              }
-                              className="h-4 w-4 shrink-0"
-                            />
-
-                            <span className="truncate">
-                              {
-                                field.name
-                              }
-                            </span>
-                          </label>
-                        )
-                      )}
-
-                    {courses.map(
-                      (course) => (
+                      .map((field) => (
                         <label
-                          key={
-                            course.id
-                          }
+                          key={field.id}
                           className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
                         >
                           <input
                             type="checkbox"
                             checked={
                               !!visibleColumns[
-                                `course-${course.id}`
+                                `dynamic-${field.id}`
                               ]
                             }
                             onChange={() =>
                               onToggleColumn(
-                                `course-${course.id}`
+                                `dynamic-${field.id}`
                               )
                             }
                             className="h-4 w-4 shrink-0"
                           />
 
                           <span className="truncate">
-                            {
-                              course.name
-                            }
+                            {field.name}
                           </span>
                         </label>
-                      )
-                    )}
+                      ))}
+
+                    {courses.map((course) => (
+                      <label
+                        key={course.id}
+                        className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm transition-colors hover:border-primary/30 hover:bg-primary/5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={
+                            !!visibleColumns[
+                              `course-${course.id}`
+                            ]
+                          }
+                          onChange={() =>
+                            onToggleColumn(
+                              `course-${course.id}`
+                            )
+                          }
+                          className="h-4 w-4 shrink-0"
+                        />
+
+                        <span className="truncate">
+                          {course.name}
+                        </span>
+                      </label>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1198,32 +772,25 @@ export function StudentsTable({
           >
             <TableHeader className="sticky top-0 z-20 bg-background">
               <TableRow>
-
                 <TableHead className="w-[55px] text-center">
                   #
                 </TableHead>
 
-                {allowStudentDeletion && selectionMode && (
-                  <TableHead className="w-[55px] text-center">
-                    <input
-                      type="checkbox"
-                      checked={
-                        allStudentsSelected
-                      }
-                      onChange={
-                        toggleSelectAll
-                      }
-                      aria-label="تحديد الكل"
-                    />
-                  </TableHead>
-                )}
+                {allowStudentDeletion &&
+                  selectionMode && (
+                    <TableHead className="w-[55px] text-center">
+                      <input
+                        type="checkbox"
+                        checked={allStudentsSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="تحديد الكل"
+                      />
+                    </TableHead>
+                  )}
 
                 {visibleColumns.name !== false && (
                   <TableHead className="min-w-[220px]">
-                    {filterInput(
-                      'name',
-                      'الاسم'
-                    )}
+                    {filterInput('name', 'الاسم')}
                   </TableHead>
                 )}
 
@@ -1294,129 +861,97 @@ export function StudentsTable({
                   </TableHead>
                 )}
 
-                {visibleExtraColumns.map(
-                  (column) => {
-                    if (
-                      column.key ===
-                      'enrollmentCourseName'
-                    ) {
-                      return null
-                    }
-
-                    return (
-                      <TableHead
-                        key={
-                          column.key
-                        }
-                      >
-                        {
-                          column.label
-                        }
-                      </TableHead>
-                    )
+                {visibleExtraColumns.map((column) => {
+                  if (
+                    column.key ===
+                    'enrollmentCourseName'
+                  ) {
+                    return null
                   }
-                )}
 
-                {visibleDynamicFields.map(
-                  (field) => (
-                    <TableHead
-                      key={`dynamic-${field.id}`}
-                    >
-                      {field.name}
+                  return (
+                    <TableHead key={column.key}>
+                      {column.label}
                     </TableHead>
                   )
-                )}
+                })}
 
-                {visibleCourses.map(
-                  (course) => (
-                    <TableHead
-                      key={`course-${course.id}`}
-                    >
-                      {course.name}
-                    </TableHead>
-                  )
-                )}
+                {visibleDynamicFields.map((field) => (
+                  <TableHead
+                    key={`dynamic-${field.id}`}
+                  >
+                    {field.name}
+                  </TableHead>
+                ))}
 
+                {visibleCourses.map((course) => (
+                  <TableHead
+                    key={`course-${course.id}`}
+                  >
+                    {course.name}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {students.map(
-                (
-                  student,
-                  index
-                ) => {
-                  const remaining =
-                    student.feeExempt
-                      ? 0
-                      : Math.max(
-                          Number(
-                            student.amountDue
-                          ) -
-                            Number(
-                              student.amountPaid
-                            ),
-                          0
-                        )
-
-                  const isSelected =
-                    selectedStudentIds.includes(
-                      student.id
+              {students.map((student, index) => {
+                const remaining = student.feeExempt
+                  ? 0
+                  : Math.max(
+                      Number(student.amountDue) -
+                        Number(student.amountPaid),
+                      0
                     )
 
-                  const isCurrentStudent =
-                    selectedStudentId ===
+                const isSelected =
+                  selectedStudentIds.includes(
                     student.id
+                  )
 
-                  return (
-                    <TableRow
-                      key={
-                        student.id
-                      }
-                      data-state={
-                        isCurrentStudent
-                          ? 'selected'
-                          : undefined
-                      }
-                      className={`h-[48px] cursor-pointer transition-colors ${
-                        isCurrentStudent
-                          ? '!bg-primary/15 hover:!bg-primary/20'
-                          : 'hover:bg-muted/50'
-                      }`}
-                      onClick={() => {
-                        if (
-                          selectionMode
-                        ) {
-                          toggleStudentSelection(
-                            student.id
-                          )
-                          return
-                        }
+                const isCurrentStudent =
+                  selectedStudentId === student.id
 
-                        onSelectStudent(
+                return (
+                  <TableRow
+                    key={student.id}
+                    data-state={
+                      isCurrentStudent
+                        ? 'selected'
+                        : undefined
+                    }
+                    className={`h-[48px] cursor-pointer transition-colors ${
+                      isCurrentStudent
+                        ? '!bg-primary/15 hover:!bg-primary/20'
+                        : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => {
+                      if (selectionMode) {
+                        toggleStudentSelection(
                           student.id
                         )
-                      }}
-                    >
-                      <TableCell className="text-center text-muted-foreground">
-                        {index + 1}
-                      </TableCell>
+                        return
+                      }
 
-                      {allowStudentDeletion && selectionMode && (
+                      onSelectStudent(student.id)
+                    }}
+                  >
+                    <TableCell className="text-center text-muted-foreground">
+                      {index + 1}
+                    </TableCell>
+
+                    {allowStudentDeletion &&
+                      selectionMode && (
                         <TableCell className="text-center">
                           <input
                             type="checkbox"
-                            checked={
-                              isSelected
-                            }
+                            checked={isSelected}
                             onChange={() =>
                               toggleStudentSelection(
                                 student.id
                               )
                             }
-                            onClick={(
-                              event
-                            ) =>
+                            onClick={(event) =>
                               event.stopPropagation()
                             }
                             aria-label={`تحديد ${student.name}`}
@@ -1424,311 +959,249 @@ export function StudentsTable({
                         </TableCell>
                       )}
 
-                      {visibleColumns.name !== false && (
-                        <TableCell className="font-medium">
-                          {
-                            student.name
-                          }
-                        </TableCell>
-                      )}
+                    {visibleColumns.name !== false && (
+                      <TableCell className="font-medium">
+                        {student.name}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.personalId !== false && (
-                        <TableCell>
-                          {student.personalId ||
-                            '-'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.personalId !== false && (
+                      <TableCell>
+                        {student.personalId || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.grade !== false && (
-                        <TableCell>
-                          {student.grade ||
-                            '-'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.grade !== false && (
+                      <TableCell>
+                        {student.grade || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.contact !== false && (
-                        <TableCell>
-                          <div className="space-y-1 text-xs">
-                            <div>
-                              {student.phone ||
-                                '-'}
-                            </div>
-
-                            {student.whatsapp && (
-                              <div className="text-muted-foreground">
-                                {
-                                  student.whatsapp
-                                }
-                              </div>
-                            )}
+                    {visibleColumns.contact !== false && (
+                      <TableCell>
+                        <div className="space-y-1 text-xs">
+                          <div>
+                            {student.phone || '-'}
                           </div>
-                        </TableCell>
-                      )}
 
-                      {visibleColumns.paymentStatus !== false && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="rounded-md px-2 py-1 hover:bg-muted"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
+                          {student.whatsapp && (
+                            <div className="text-muted-foreground">
+                              {student.whatsapp}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
 
-                              openPayment(
-                                student
-                              )
-                            }}
-                          >
-                            <StatusBadge
-                              status={getPaymentStatusLabel(
-                                student.paymentStatus
-                              )}
-                            />
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.notes !== false && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="max-w-[180px] truncate rounded-md px-2 py-1 text-xs hover:bg-muted"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
-
-                              onOpenNotes(
-                                student
-                              )
-                            }}
-                          >
-                            {student.notes ||
-                              'لا توجد'}
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.attendance !== false && (
-                        <TableCell>
-                          <button
-                            type="button"
-                            className="rounded-md px-2 py-1 text-xs hover:bg-muted"
-                            onClick={(
-                              event
-                            ) => {
-                              event.stopPropagation()
-
-                              onOpenAttendance(
-                                student
-                              )
-                            }}
-                          >
-                            {normalizeAttendanceStatus(
-                              student.attendance
-                            )}
-                          </button>
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.enrollmentCourseName && (
-                        <TableCell>
-                          {student.enrollmentCourseName ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.studentId && (
-                        <TableCell>
-                          {student.studentId ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.guardianRelation && (
-                        <TableCell>
-                          {student.guardianRelation ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.studentPhone && (
-                        <TableCell>
-                          {student.studentPhone ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.gender && (
-                        <TableCell>
-                          {student.gender ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.age && (
-                        <TableCell>
-                          {student.age ??
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.phone && (
-                        <TableCell>
-                          {student.phone ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.whatsapp && (
-                        <TableCell>
-                          {student.whatsapp ||
-                            '-'}
-                        </TableCell>
-                      )}
-
-                      {visibleColumns.status && (
-                        <TableCell>
+                    {visibleColumns.paymentStatus !== false && (
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="rounded-md px-2 py-1 hover:bg-muted"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setPaymentStudent(student)
+                          }}
+                        >
                           <StatusBadge
-                            status={
-                              student.status ||
-                              '-'
-                            }
+                            status={getPaymentStatusLabel(
+                              student.paymentStatus
+                            )}
                           />
-                        </TableCell>
-                      )}
+                        </button>
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.className && (
-                        <TableCell>
-                          {student.className ||
-                            '-'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.notes !== false && (
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="max-w-[180px] truncate rounded-md px-2 py-1 text-xs hover:bg-muted"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onOpenNotes(student)
+                          }}
+                        >
+                          {student.notes || 'لا توجد'}
+                        </button>
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.source && (
-                        <TableCell>
-                          {getSourceLabel(
-                            student.source
+                    {visibleColumns.attendance !== false && (
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="rounded-md px-2 py-1 text-xs hover:bg-muted"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onOpenAttendance(student)
+                          }}
+                        >
+                          {normalizeAttendanceStatus(
+                            student.attendance
                           )}
-                        </TableCell>
-                      )}
+                        </button>
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.amountDue && (
-                        <TableCell>
-                          {Number(
-                            student.amountDue
-                          ).toFixed(
-                            3
-                          )}
-                        </TableCell>
-                      )}
+                    {visibleColumns.enrollmentCourseName && (
+                      <TableCell>
+                        {student.enrollmentCourseName ||
+                          '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.amountPaid && (
-                        <TableCell>
-                          {Number(
-                            student.amountPaid
-                          ).toFixed(
-                            3
-                          )}
-                        </TableCell>
-                      )}
+                    {visibleColumns.studentId && (
+                      <TableCell>
+                        {student.studentId || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.remaining && (
-                        <TableCell>
-                          {remaining.toFixed(
-                            3
-                          )}
-                        </TableCell>
-                      )}
+                    {visibleColumns.guardianRelation && (
+                      <TableCell>
+                        {student.guardianRelation || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.feeExempt && (
-                        <TableCell>
-                          {student.feeExempt
-                            ? 'نعم'
-                            : 'لا'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.studentPhone && (
+                      <TableCell>
+                        {student.studentPhone || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.chronicDiseases && (
-                        <TableCell>
-                          {student.chronicDiseases ||
-                            '-'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.gender && (
+                      <TableCell>
+                        {student.gender || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.createdAt && (
-                        <TableCell>
-                          {formatDate(
-                            student.createdAt
-                          )}
-                        </TableCell>
-                      )}
+                    {visibleColumns.age && (
+                      <TableCell>
+                        {student.age ?? '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.updatedAt && (
-                        <TableCell>
-                          {formatDate(
-                            student.updatedAt
-                          )}
-                        </TableCell>
-                      )}
+                    {visibleColumns.phone && (
+                      <TableCell>
+                        {student.phone || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleColumns.academicYearName && (
-                        <TableCell>
-                          {student.academicYearName ||
-                            '-'}
-                        </TableCell>
-                      )}
+                    {visibleColumns.whatsapp && (
+                      <TableCell>
+                        {student.whatsapp || '-'}
+                      </TableCell>
+                    )}
 
-                      {visibleDynamicFields.map(
-                        (field) => (
-                          <TableCell
-                            key={`dynamic-${field.id}`}
-                          >
-                            {student
-                              .dynamicValues?.[
-                              field.field_key
-                            ] ||
-                              student
-                                .dynamicValues?.[
-                                field.id
-                              ] ||
-                              '-'}
-                          </TableCell>
+                    {visibleColumns.status && (
+                      <TableCell>
+                        <StatusBadge
+                          status={student.status || '-'}
+                        />
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.className && (
+                      <TableCell>
+                        {student.className || '-'}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.source && (
+                      <TableCell>
+                        {getSourceLabel(student.source)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.amountDue && (
+                      <TableCell>
+                        {Number(
+                          student.amountDue
+                        ).toFixed(3)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.amountPaid && (
+                      <TableCell>
+                        {Number(
+                          student.amountPaid
+                        ).toFixed(3)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.remaining && (
+                      <TableCell>
+                        {remaining.toFixed(3)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.feeExempt && (
+                      <TableCell>
+                        {student.feeExempt ? 'نعم' : 'لا'}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.chronicDiseases && (
+                      <TableCell>
+                        {student.chronicDiseases || '-'}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.createdAt && (
+                      <TableCell>
+                        {formatDate(student.createdAt)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.updatedAt && (
+                      <TableCell>
+                        {formatDate(student.updatedAt)}
+                      </TableCell>
+                    )}
+
+                    {visibleColumns.academicYearName && (
+                      <TableCell>
+                        {student.academicYearName || '-'}
+                      </TableCell>
+                    )}
+
+                    {visibleDynamicFields.map((field) => (
+                      <TableCell
+                        key={`dynamic-${field.id}`}
+                      >
+                        {student.dynamicValues?.[
+                          field.field_key
+                        ] ||
+                          student.dynamicValues?.[
+                            field.id
+                          ] ||
+                          '-'}
+                      </TableCell>
+                    ))}
+
+                    {visibleCourses.map((course) => {
+                      const status =
+                        student.courseStatuses?.find(
+                          (item) =>
+                            item.courseId === course.id
                         )
-                      )}
 
-                      {visibleCourses.map(
-                        (course) => {
-                          const status =
-                            student.courseStatuses?.find(
-                              (item) =>
-                                item.courseId ===
-                                course.id
-                            )
-
-                          return (
-                            <TableCell
-                              key={`course-${course.id}`}
-                            >
-                              {status?.status ||
-                                'لم يسجل'}
-                            </TableCell>
-                          )
-                        }
-                      )}
-                    </TableRow>
-                  )
-                }
-              )}
+                      return (
+                        <TableCell
+                          key={`course-${course.id}`}
+                        >
+                          {status?.status || 'لم يسجل'}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                )
+              })}
 
               {students.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={Math.max(
-                      totalColumns,
-                      1
-                    )}
+                    colSpan={Math.max(totalColumns, 1)}
                     className="h-32 text-center text-muted-foreground"
                   >
                     لا توجد بيانات
@@ -1743,12 +1216,9 @@ export function StudentsTable({
       {allowStudentDeletion && showDeleteConfirm && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(
-            event
-          ) => {
+          onMouseDown={(event) => {
             if (
-              event.target ===
-              event.currentTarget
+              event.target === event.currentTarget
             ) {
               closeDeleteConfirmation()
             }
@@ -1757,9 +1227,7 @@ export function StudentsTable({
           <div
             dir="rtl"
             className="w-full max-w-md rounded-xl bg-background p-5 shadow-xl"
-            onMouseDown={(
-              event
-            ) =>
+            onMouseDown={(event) =>
               event.stopPropagation()
             }
           >
@@ -1800,12 +1268,8 @@ export function StudentsTable({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={
-                  confirmDeleteSelected
-                }
-                disabled={
-                  deleteSaving
-                }
+                onClick={confirmDeleteSelected}
+                disabled={deleteSaving}
                 className="flex-1 rounded-md bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {deleteSaving
@@ -1815,12 +1279,8 @@ export function StudentsTable({
 
               <button
                 type="button"
-                onClick={
-                  closeDeleteConfirmation
-                }
-                disabled={
-                  deleteSaving
-                }
+                onClick={closeDeleteConfirmation}
+                disabled={deleteSaving}
                 className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
               >
                 إلغاء
@@ -1831,324 +1291,26 @@ export function StudentsTable({
       )}
 
       {paymentStudent && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) {
-                closePayment()
-              }
-            }}
-          >
-            <div
-              className="w-full max-w-lg rounded-xl bg-background p-5 shadow-xl"
-              dir="rtl"
-              onMouseDown={(event) =>
-                event.stopPropagation()
-              }
-            >
-              <div className="mb-5 flex items-start justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    تفاصيل السداد
-                  </h2>
-  
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {paymentStudent.name}
-                  </p>
-                </div>
-  
-                <button
-                  type="button"
-                  onClick={closePayment}
-                  disabled={paymentSaving}
-                  className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-                >
-                  إغلاق
-                </button>
-              </div>
-  
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">
-                    المستحق
-                  </div>
-  
-                  <div className="mt-1 font-semibold">
-                    {Number(
-                      paymentStudent.amountDue
-                    ).toFixed(3)}{' '}
-                    د.ب
-                  </div>
-                </div>
-  
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">
-                    المدفوع
-                  </div>
-  
-                  <div className="mt-1 font-semibold">
-                    {Number(
-                      paymentStudent.amountPaid
-                    ).toFixed(3)}{' '}
-                    د.ب
-                  </div>
-                </div>
-  
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">
-                    المتبقي
-                  </div>
-  
-                  <div className="mt-1 font-semibold">
-                    {Math.max(
-                      Number(
-                        paymentStudent.amountDue
-                      ) -
-                        Number(
-                          paymentStudent.amountPaid
-                        ),
-                      0
-                    ).toFixed(3)}{' '}
-                    د.ب
-                  </div>
-                </div>
-  
-                <div className="rounded-lg border p-3">
-                  <div className="text-xs text-muted-foreground">
-                    الحالة
-                  </div>
-  
-                  <div className="mt-2">
-                    <StatusBadge
-                      status={getPaymentStatusLabel(
-                        paymentStudent.paymentStatus
-                      )}
-                    />
-                  </div>
-                </div>
-              </div>
-  
-              {!paymentStudent.feeExempt &&
-                Number(
-                  paymentStudent.amountPaid
-                ) <
-                  Number(
-                    paymentStudent.amountDue
-                  ) && (
-                  <div className="mt-5">
-                    {!showAddPayment ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowAddPayment(true)
-                        }
-                        className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-                      >
-                        إضافة دفعة
-                      </button>
-                    ) : (
-                      <div
-                        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
-                        onMouseDown={(event) => {
-                          if (
-                            event.target ===
-                            event.currentTarget
-                          ) {
-                            setShowAddPayment(false)
-                          }
-                        }}
-                      >
-                        <div
-                          dir="rtl"
-                          className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-background p-5 shadow-2xl"
-                          onMouseDown={(event) =>
-                            event.stopPropagation()
-                          }
-                        >
-                          <div className="mb-5 flex items-start justify-between">
-                            <div>
-                              <h2 className="text-lg font-semibold">
-                                إضافة دفعة
-                              </h2>
-  
-                              <p className="mt-1 text-sm text-muted-foreground">
-                                {paymentStudent.name}
-                              </p>
-                            </div>
-  
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowAddPayment(false)
-                              }
-                              disabled={paymentSaving}
-                              className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-                            >
-                              إغلاق
-                            </button>
-                          </div>
-  
-                          <div className="space-y-4">
-                            <div>
-                              <label className="mb-1.5 block text-xs text-muted-foreground">
-                                المبلغ
-                              </label>
-  
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={paymentAmount}
-                                onChange={(event) =>
-                                  setPaymentAmount(
-                                    event.target.value
-                                  )
-                                }
-                                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-1"
-                                placeholder="0.000"
-                              />
-                            </div>
-  
-                            <div>
-                              <label className="mb-1.5 block text-xs text-muted-foreground">
-                                طريقة الدفع
-                              </label>
-  
-                              <select
-                                value={paymentMethod}
-                                onChange={(event) =>
-                                  setPaymentMethod(
-                                    event.target
-                                      .value as
-                                      | 'نقدي'
-                                      | 'تحويل'
-                                      | 'بطاقة'
-                                  )
-                                }
-                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                              >
-                                <option value="نقدي">
-                                  نقدي
-                                </option>
-  
-                                <option value="تحويل">
-                                  تحويل
-                                </option>
-  
-                                <option value="بطاقة">
-                                  بطاقة
-                                </option>
-                              </select>
-                            </div>
-  
-                            <div>
-                              <label className="mb-1.5 block text-xs text-muted-foreground">
-                                تاريخ الدفع
-                              </label>
-  
-                              <input
-                                type="date"
-                                value={paymentDate}
-                                onChange={(event) =>
-                                  setPaymentDate(
-                                    event.target.value
-                                  )
-                                }
-                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                              />
-                            </div>
-  
-                            <div>
-                              <label className="mb-1.5 block text-xs text-muted-foreground">
-                                رقم المرجع
-                              </label>
-  
-                              <input
-                                value={paymentReference}
-                                onChange={(event) =>
-                                  setPaymentReference(
-                                    event.target.value
-                                  )
-                                }
-                                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                                placeholder="اختياري"
-                              />
-                            </div>
-  
-                            <div>
-                              <label className="mb-1.5 block text-xs text-muted-foreground">
-                                ملاحظات
-                              </label>
-  
-                              <textarea
-                                value={paymentNotes}
-                                onChange={(event) =>
-                                  setPaymentNotes(
-                                    event.target.value
-                                  )
-                                }
-                                rows={3}
-                                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                                placeholder="اختياري"
-                              />
-                            </div>
-  
-                            {paymentMessage && (
-                              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                                {paymentMessage}
-                              </div>
-                            )}
-  
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={savePayment}
-                                disabled={paymentSaving}
-                                className="flex-1 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                              >
-                                {paymentSaving
-                                  ? 'جاري الحفظ...'
-                                  : 'حفظ الدفعة'}
-                              </button>
-  
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setShowAddPayment(false)
-                                }
-                                disabled={paymentSaving}
-                                className="rounded-md border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
-                              >
-                                إلغاء
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-  
-              {paymentStudent.feeExempt && (
-                <div className="mt-5 rounded-lg border p-3 text-sm">
-                  الطالب معفي من الرسوم ولا يمكن إضافة دفعة له.
-                </div>
-              )}
-  
-              {!paymentStudent.feeExempt &&
-                Number(
-                  paymentStudent.amountPaid
-                ) >=
-                  Number(
-                    paymentStudent.amountDue
-                  ) && (
-                  <div className="mt-5 rounded-lg border p-3 text-sm">
-                    تم سداد الرسوم بالكامل.
-                  </div>
-                )}
-            </div>
-          </div>
-        )}
-      </>
-    )
-  }
+        <StudentPaymentDialog
+          student={paymentStudent}
+          onClose={() => setPaymentStudent(null)}
+          onPaymentSaved={(
+            studentId,
+            amount,
+            paymentStatus
+          ) => {
+            setPaymentStudent((current) =>
+              current && current.id === studentId
+                ? {
+                    ...current,
+                    amountPaid: amount,
+                    paymentStatus,
+                  }
+                : current
+            )
+          }}
+        />
+      )}
+    </>
+  )
+}
