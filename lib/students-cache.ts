@@ -1052,10 +1052,8 @@ export async function loadStudentsCache(options?: {
       }
     )
 
-    const finalStatus = currentCourse
-      ? `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | الدورة الحالية: ${currentCourse.name} | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-      : `متصل بقاعدة البيانات ✅ | السنة الحالية: ${currentYear.name} | لا توجد دورة حالية الآن | الرسوم السنوية: ${annualFee.toFixed(3)} د.ب`
-
+    const finalStatus = 'متصل بقاعدة البيانات ✅'
+    
     const data: StudentsCacheData = {
       academicLevels: loadedAcademicLevels,
 
