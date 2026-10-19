@@ -1295,22 +1295,27 @@ export function StudentsTable({
           student={paymentStudent}
           onClose={() => setPaymentStudent(null)}
           onPaymentSaved={(
-            studentId,
-            amount,
-            paymentStatus
-          ) => {
-            setPaymentStudent((current) =>
-              current && current.id === studentId
-                ? {
-                    ...current,
-                    amountPaid: amount,
-                    paymentStatus,
-                  }
-                : current
-            )
-          }}
-        />
-      )}
-    </>
-  )
-}
+          studentId,
+          amount,
+          paymentStatus
+        ) => {
+          setPaymentStudent((current) =>
+            current && current.id === studentId
+              ? {
+                  ...current,
+                  amountPaid: amount,
+                  paymentStatus,
+                }
+              : current
+          )
+        
+          window.dispatchEvent(
+            new CustomEvent('student-payment-saved', {
+              detail: {
+                studentId,
+                amount,
+                paymentStatus,
+              },
+            })
+          )
+        }}
