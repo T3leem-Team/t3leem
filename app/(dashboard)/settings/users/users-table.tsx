@@ -1,13 +1,10 @@
-
 'use client'
 
 import {
   Check,
   Edit3,
-  Info,
   Loader2,
   Power,
-  Shield,
   UserPlus,
   Users,
 } from 'lucide-react'
@@ -75,7 +72,9 @@ export default function UsersTable({
         <Card>
           <CardContent className="flex items-center justify-between p-5">
             <div>
-              <p className="text-sm text-muted-foreground">إجمالي المستخدمين</p>
+              <p className="text-sm text-muted-foreground">
+                إجمالي المستخدمين
+              </p>
               <p className="mt-1 text-2xl font-bold">{users.length}</p>
             </div>
             <div className="rounded-xl bg-primary/10 p-3">
@@ -87,7 +86,9 @@ export default function UsersTable({
         <Card>
           <CardContent className="flex items-center justify-between p-5">
             <div>
-              <p className="text-sm text-muted-foreground">المستخدمون النشطون</p>
+              <p className="text-sm text-muted-foreground">
+                المستخدمون النشطون
+              </p>
               <p className="mt-1 text-2xl font-bold text-green-600">
                 {activeUsers}
               </p>
@@ -101,7 +102,9 @@ export default function UsersTable({
         <Card>
           <CardContent className="flex items-center justify-between p-5">
             <div>
-              <p className="text-sm text-muted-foreground">المستخدمون غير النشطين</p>
+              <p className="text-sm text-muted-foreground">
+                المستخدمون غير النشطين
+              </p>
               <p className="mt-1 text-2xl font-bold text-muted-foreground">
                 {inactiveUsers}
               </p>
@@ -144,9 +147,12 @@ export default function UsersTable({
 
           {!showForm && (
             <div className="users-table-scroll mt-4 overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/50">
                   <tr className="border-b">
+                    <th className="w-16 whitespace-nowrap px-4 py-3 text-center font-medium">
+                      #
+                    </th>
                     <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
                       المستخدم
                     </th>
@@ -171,7 +177,7 @@ export default function UsersTable({
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center">
+                      <td colSpan={7} className="px-4 py-12 text-center">
                         <div className="flex items-center justify-center gap-2 text-muted-foreground">
                           <Loader2 className="h-5 w-5 animate-spin" />
                           جاري تحميل المستخدمين...
@@ -181,14 +187,14 @@ export default function UsersTable({
                   ) : filteredUsers.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-12 text-center text-muted-foreground"
                       >
                         لا يوجد مستخدمون مطابقون للبحث
                       </td>
                     </tr>
                   ) : (
-                    filteredUsers.map((user) => {
+                    filteredUsers.map((user, index) => {
                       const effectivePermissionIds =
                         getEffectivePermissionIds(user)
 
@@ -201,17 +207,47 @@ export default function UsersTable({
                             !rolePermissionIds.includes(permissionId),
                         ).length
 
+                      const firstPermission = permissions.find(
+                        (permission) =>
+                          permission.id === effectivePermissionIds[0],
+                      )
+
+                      const remainingPermissionCount = Math.max(
+                        0,
+                        effectivePermissionIds.length -
+                          (firstPermission ? 1 : 0),
+                      )
+
                       const isSelected = selectedUserId === user.id
 
                       return (
                         <tr
                           key={user.id}
                           onClick={() => onSelectUser(user.id)}
-                          className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-muted/30 ${
-                            isSelected ? 'bg-primary/5' : ''
+                          aria-selected={isSelected}
+                          className={`cursor-pointer border-b transition-colors last:border-0 ${
+                            isSelected
+                              ? 'bg-primary/10 hover:bg-primary/15'
+                              : 'hover:bg-muted/40'
                           }`}
                         >
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-flex h-8 min-w-8 items-center justify-center rounded-full text-xs font-semibold ${
+                                isSelected
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                          </td>
+
+                          <td
+                            className={`px-4 py-3 ${
+                              isSelected ? 'border-r-4 border-primary' : ''
+                            }`}
+                          >
                             <div className="font-medium">{user.full_name}</div>
                             <div className="mt-1 text-xs text-muted-foreground">
                               {user.email || 'لا يوجد بريد إلكتروني'}
@@ -236,41 +272,44 @@ export default function UsersTable({
                           </td>
 
                           <td className="px-4 py-3">
-                            <div className="flex max-w-[260px] flex-wrap gap-1.5">
-                              {effectivePermissionIds.length === 0 ? (
-                                <span className="text-xs text-muted-foreground">
-                                  لا توجد صلاحيات
+                            {effectivePermissionIds.length === 0 ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  onShowDetails(user.id)
+                                }}
+                                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                              >
+                                لا توجد صلاحيات
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                title="اضغط لعرض جميع الصلاحيات"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  onShowDetails(user.id)
+                                }}
+                                className="flex max-w-[260px] items-center gap-2 rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-right transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                <Shield className="h-4 w-4 shrink-0 text-primary" />
+
+                                <span className="max-w-[160px] truncate text-xs font-medium">
+                                  {firstPermission?.permission_name ??
+                                    'عرض الصلاحيات'}
                                 </span>
-                              ) : (
-                                <>
-                                  {effectivePermissionIds
-                                    .slice(0, 3)
-                                    .map((permissionId) => {
-                                      const permission = permissions.find(
-                                        (item) => item.id === permissionId,
-                                      )
 
-                                      if (!permission) return null
-
-                                      return (
-                                        <Badge
-                                          key={permissionId}
-                                          variant="neutral"
-                                          className="max-w-[150px] truncate text-xs"
-                                        >
-                                          {permission.permission_name}
-                                        </Badge>
-                                      )
-                                    })}
-
-                                  {effectivePermissionIds.length > 3 && (
-                                    <Badge variant="neutral" className="text-xs">
-                                      +{effectivePermissionIds.length - 3}
-                                    </Badge>
-                                  )}
-                                </>
-                              )}
-                            </div>
+                                {remainingPermissionCount > 0 && (
+                                  <Badge
+                                    variant="neutral"
+                                    className="shrink-0 text-xs"
+                                  >
+                                    +{remainingPermissionCount}
+                                  </Badge>
+                                )}
+                              </button>
+                            )}
 
                             {extraPermissionCount > 0 && (
                               <p className="mt-1 text-xs text-muted-foreground">
@@ -294,19 +333,6 @@ export default function UsersTable({
 
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title="عرض التفاصيل"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  onShowDetails(user.id)
-                                }}
-                              >
-                                <Info className="h-4 w-4" />
-                              </Button>
-
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -345,19 +371,6 @@ export default function UsersTable({
                                   />
                                 </Button>
                               )}
-
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title="الصلاحيات"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  onShowDetails(user.id)
-                                }}
-                              >
-                                <Shield className="h-4 w-4" />
-                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -372,7 +385,7 @@ export default function UsersTable({
           {!showForm && selectedUserId && (
             <div className="mt-3 flex items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">
-                تم تحديد مستخدم. اضغط على التفاصيل لعرض معلوماته وصلاحياته.
+                تم تحديد مستخدم. اضغط على الصلاحيات لعرض تفاصيلها.
               </span>
               <Button
                 variant="outline"
