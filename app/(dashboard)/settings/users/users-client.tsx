@@ -130,9 +130,12 @@ export default function Page() {
 
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-  const loadUsers = async () => {
+ 
+  const loadUsers = async (showLoading = true) => {
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       setError('')
 
       const response = await fetch('/api/admin/users', {
@@ -159,7 +162,9 @@ export default function Page() {
           : 'تعذر تحميل المستخدمين.',
       )
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -432,7 +437,7 @@ export default function Page() {
 
       resetForm()
 
-      await loadUsers()
+      await loadUsers(false)
     } catch (err) {
       setError(
         err instanceof Error
