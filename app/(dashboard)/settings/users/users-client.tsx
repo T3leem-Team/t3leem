@@ -296,30 +296,42 @@ export default function Page() {
       />
 
       {showForm ? (
-        <div className="fixed inset-0 z-[100] overflow-y-auto bg-background/95 p-4 sm:p-8">
-          <div className="mx-auto max-w-3xl rounded-xl border bg-background p-5 shadow-xl sm:p-8">
-            {error && (
-              <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+        <div className="fixed inset-0 z-[100]">
+          <button
+            type="button"
+            aria-label="إغلاق"
+            onClick={resetForm}
+            className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
+          />
 
-            <UsersForm
-              key={editingId ?? 'new-user'}
-              initialData={initialFormData}
-              editing={editingId !== null}
-              saving={saving}
-              permissions={permissions}
-              dashboardSections={dashboardSections.filter(
-                (section) => section.is_active,
+          <aside
+            dir="rtl"
+            className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col overflow-y-auto border-l bg-background shadow-2xl"
+          >
+            <div className="p-6">
+              {error && (
+                <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
               )}
-              rolePermissionIds={getRolePermissionIds(
-                initialFormData.role,
-              )}
-              onSubmit={handleSave}
-              onCancel={resetForm}
-            />
-          </div>
+
+              <UsersForm
+                key={editingId ?? 'new-user'}
+                initialData={initialFormData}
+                editing={editingId !== null}
+                saving={saving}
+                permissions={permissions}
+                dashboardSections={dashboardSections.filter(
+                  (section) => section.is_active,
+                )}
+                rolePermissionIds={getRolePermissionIds(
+                  initialFormData.role,
+                )}
+                onSubmit={handleSave}
+                onCancel={resetForm}
+              />
+            </div>
+          </aside>
         </div>
       ) : (
         <>
