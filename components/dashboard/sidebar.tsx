@@ -1,4 +1,3 @@
-
 'use client'
 
 import Link from 'next/link'
@@ -116,6 +115,10 @@ export function Sidebar({
 
   const [loading, setLoading] = useState(true)
 
+  // عدد طلبات التسجيل التي تنتظر المراجعة
+  const [pendingRegistrationCount, setPendingRegistrationCount] =
+    useState(0)
+
   const [currentUser, setCurrentUser] =
     useState<CurrentUser | null>(null)
 
@@ -157,6 +160,93 @@ export function Sidebar({
 
   const [schoolSettingsError, setSchoolSettingsError] =
     useState('')
+
+  /*
+   * -------------------------------------------------------
+   * عدد طلبات التسجيل المنتظرة
+   * السنة الدراسية الحالية فقط
+   * الحالات: pending و under_review
+   * تحديث تلقائي كل 30 ثانية
+   * -------------------------------------------------------
+   */
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPendingRegistrationCount() {
+      try {
+        const {
+          data: academicYear,
+          error: academicYearError,
+        } = await supabase
+          .from('academic_years')
+          .select('id')
+          .eq('is_current', true)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (academicYearError) {
+          console.error(
+            'Load current academic year error:',
+            academicYearError,
+          )
+
+          if (!cancelled) {
+            setPendingRegistrationCount(0)
+          }
+
+          return
+        }
+
+        if (!academicYear) {
+          if (!cancelled) {
+            setPendingRegistrationCount(0)
+          }
+
+          return
+        }
+
+        const {
+          count,
+          error,
+        } = await supabase
+          .from('registration_requests')
+          .select('id', {
+            count: 'exact',
+            head: true,
+          })
+          .eq('academic_year_id', academicYear.id)
+          .in('status', ['pending', 'under_review'])
+
+        if (error) {
+          console.error(
+            'Load pending registration count error:',
+            error,
+          )
+          return
+        }
+
+        if (!cancelled) {
+          setPendingRegistrationCount(count ?? 0)
+        }
+      } catch (error) {
+        console.error(
+          'Load pending registration count error:',
+          error,
+        )
+      }
+    }
+
+    void loadPendingRegistrationCount()
+
+    const intervalId = window.setInterval(() => {
+      void loadPendingRegistrationCount()
+    }, 30000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   /*
    * -------------------------------------------------------
@@ -476,7 +566,6 @@ export function Sidebar({
    * -------------------------------------------------------
    * تسجيل الخروج
    *
-   * نفس آلية Header:
    * 1. منع النقر المتكرر.
    * 2. مسح الكاش.
    * 3. بدء طلب الخروج دون انتظاره.
@@ -502,7 +591,6 @@ export function Sidebar({
 
     const logoutWindow = window as LogoutWindow
 
-    // إذا كان طلب الخروج قد بدأ بالفعل، نستخدم الطلب نفسه.
     if (!logoutWindow.__t3leemLogoutPromise) {
       let pendingLogout: Promise<void>
 
@@ -537,7 +625,6 @@ export function Sidebar({
       logoutWindow.__t3leemLogoutPromise = pendingLogout
     }
 
-    // لا ننتظر الخادم هنا؛ الانتقال فوري.
     router.replace('/login')
   }
 
@@ -632,6 +719,10 @@ export function Sidebar({
                   section.icon as keyof typeof iconMap
                 ] ?? LayoutDashboard
 
+              const isRegistrationSection =
+                section.section_name.trim() ===
+                'طلبات التسجيل'
+
               return (
                 <Link
                   key={section.id}
@@ -649,7 +740,22 @@ export function Sidebar({
                 >
                   <Icon className="size-[18px] shrink-0" />
 
-                  <span>{section.section_name}</span>
+                  <span className="min-w-0 flex-1">
+                    {section.section_name}
+                  </span>
+
+                  {isRegistrationSection &&
+                    pendingRegistrationCount > 0 && (
+                      <span
+                        className="inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold leading-5 tabular-nums text-white shadow-sm ring-1 ring-red-400/40"
+                        aria-label={`${pendingRegistrationCount} طلب بانتظار المراجعة`}
+                        title={`${pendingRegistrationCount} طلب بانتظار المراجعة`}
+                      >
+                        {pendingRegistrationCount > 99
+                          ? '99+'
+                          : pendingRegistrationCount}
+                      </span>
+                    )}
                 </Link>
               )
             })
