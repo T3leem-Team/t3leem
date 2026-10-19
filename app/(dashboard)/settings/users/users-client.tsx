@@ -1022,72 +1022,51 @@ export default function Page() {
                             <td className="px-5 py-4">
                               <div
                                 className="flex items-center gap-2"
-                                onClick={(event) =>
-                                  event.stopPropagation()
-                                }
+                                onClick={(event) => event.stopPropagation()}
                               >
                                 <Button
                                   type="button"
                                   size="sm"
-                                  onClick={() =>
-                                    openEditForm(
-                                      user,
-                                    )
-                                  }
-                                  disabled={
-                                    saving
-                                  }
+                                  onClick={() => openEditForm(user)}
+                                  disabled={saving}
                                   className="border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
                                 >
                                   <Edit3 className="size-4" />
                                   تعديل
                                 </Button>
-
-                                {user.is_active ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleToggleActive(
-                                        user,
-                                      )
-                                    }
-                                    disabled={
-                                      saving
-                                    }
-                                    className="border border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
-                                  >
-                                    {saving ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Power className="size-4" />
-                                    )}
-
-                                    تعطيل
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={() =>
-                                      handleToggleActive(
-                                        user,
-                                      )
-                                    }
-                                    disabled={
-                                      saving
-                                    }
-                                    className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
-                                  >
-                                    {saving ? (
-                                      <Loader2 className="size-4 animate-spin" />
-                                    ) : (
-                                      <Power className="size-4" />
-                                    )}
-
-                                    تفعيل
-                                  </Button>
-                                )}
+                            
+                                {user.id !== '70060d69-27ec-4065-9057-33f8b12a20c1' &&
+                                  (user.is_active ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => handleToggleActive(user)}
+                                      disabled={saving}
+                                      className="border border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
+                                    >
+                                      {saving ? (
+                                        <Loader2 className="size-4 animate-spin" />
+                                      ) : (
+                                        <Power className="size-4" />
+                                      )}
+                                      تعطيل
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => handleToggleActive(user)}
+                                      disabled={saving}
+                                      className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
+                                    >
+                                      {saving ? (
+                                        <Loader2 className="size-4 animate-spin" />
+                                      ) : (
+                                        <Power className="size-4" />
+                                      )}
+                                      تفعيل
+                                    </Button>
+                                  ))}
                               </div>
                             </td>
                           </tr>
