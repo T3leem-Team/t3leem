@@ -1,13 +1,8 @@
 'use client'
 
-import {
-  Filter,
-} from 'lucide-react'
+import { Filter } from 'lucide-react'
 
-import {
-  useMemo,
-  useState,
-} from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   Table,
@@ -122,26 +117,24 @@ type Props = {
   selectionMode: boolean
   selectedStudentIds: string[]
 
-  onToggleStudentSelection: (
-    studentId: string
-  ) => void
+  // حالة تحديد جميع الطلاب الظاهرين، يديرها الملف الرئيسي
+  allStudentsSelected: boolean
 
-  onSelectStudent: (
-    studentId: string
-  ) => void
+  // دالة تحديد الكل أو إلغاء تحديده من الملف الرئيسي
+  onToggleSelectAll: () => void
+
+  onToggleStudentSelection: (studentId: string) => void
+
+  onSelectStudent: (studentId: string) => void
 
   onUpdateFilter: (
     key: keyof StudentTableFilters,
-    value: string
+    value: string,
   ) => void
 
-  onOpenNotes: (
-    student: StudentTableStudent
-  ) => void
+  onOpenNotes: (student: StudentTableStudent) => void
 
-  onOpenAttendance: (
-    student: StudentTableStudent
-  ) => void
+  onOpenAttendance: (student: StudentTableStudent) => void
 }
 
 export function StudentsTable({
@@ -153,27 +146,24 @@ export function StudentsTable({
   filters,
   visibleColumns,
   selectedStudentId,
-  currentCourseName,
   selectionMode,
   selectedStudentIds,
+  allStudentsSelected,
+  onToggleSelectAll,
   onToggleStudentSelection,
   onSelectStudent,
   onUpdateFilter,
   onOpenNotes,
   onOpenAttendance,
 }: Props) {
-  const [
-    paymentStudent,
-    setPaymentStudent,
-  ] = useState<PaymentStudent | null>(null)
+  const [paymentStudent, setPaymentStudent] =
+    useState<PaymentStudent | null>(null)
 
   const gradeOptions = useMemo(() => {
     const existingValues = new Set<string>()
 
     students.forEach((student) => {
-      const value = String(
-        student.grade || ''
-      ).trim()
+      const value = String(student.grade || '').trim()
 
       if (value) {
         existingValues.add(value)
@@ -181,38 +171,26 @@ export function StudentsTable({
     })
 
     const ordered = academicLevels
-      .filter((level) =>
-        existingValues.has(level.name)
-      )
+      .filter((level) => existingValues.has(level.name))
       .sort(
         (a, b) =>
           Number(a.sort_order ?? 0) -
-          Number(b.sort_order ?? 0)
+          Number(b.sort_order ?? 0),
       )
       .map((level) => level.name)
 
-    const remaining = Array.from(
-      existingValues
-    ).filter(
-      (value) => !ordered.includes(value)
+    const remaining = Array.from(existingValues).filter(
+      (value) => !ordered.includes(value),
     )
 
-    return [
-      ...ordered,
-      ...remaining,
-    ]
-  }, [
-    students,
-    academicLevels,
-  ])
+    return [...ordered, ...remaining]
+  }, [students, academicLevels])
 
   const paymentStatusOptions = useMemo(() => {
     const values = new Set<string>()
 
     students.forEach((student) => {
-      const value = normalizePaymentStatus(
-        student.paymentStatus
-      )
+      const value = normalizePaymentStatus(student.paymentStatus)
 
       if (value && value !== '-') {
         values.add(value)
@@ -226,9 +204,7 @@ export function StudentsTable({
     const values = new Set<string>()
 
     students.forEach((student) => {
-      const value = normalizeAttendanceStatus(
-        student.attendance
-      )
+      const value = normalizeAttendanceStatus(student.attendance)
 
       if (value) {
         values.add(value)
@@ -243,7 +219,7 @@ export function StudentsTable({
 
     students.forEach((student) => {
       const value = String(
-        student.enrollmentCourseName || ''
+        student.enrollmentCourseName || '',
       ).trim()
 
       if (value) {
@@ -252,29 +228,19 @@ export function StudentsTable({
     })
 
     const ordered = courses
-      .filter((course) =>
-        values.has(course.name)
-      )
+      .filter((course) => values.has(course.name))
       .map((course) => course.name)
 
-    const remaining = Array.from(
-      values
-    ).filter(
-      (value) => !ordered.includes(value)
+    const remaining = Array.from(values).filter(
+      (value) => !ordered.includes(value),
     )
 
-    return [
-      ...ordered,
-      ...remaining,
-    ]
-  }, [
-    students,
-    courses,
-  ])
+    return [...ordered, ...remaining]
+  }, [students, courses])
 
   const filterInput = (
     key: keyof StudentTableFilters,
-    placeholder: string
+    placeholder: string,
   ) => {
     return (
       <div className="flex items-center gap-1">
@@ -283,16 +249,11 @@ export function StudentsTable({
         <input
           value={filters[key]}
           onChange={(event) =>
-            onUpdateFilter(
-              key,
-              event.target.value
-            )
+            onUpdateFilter(key, event.target.value)
           }
           placeholder={placeholder}
-          className="h-7 w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1"
-          onClick={(event) =>
-            event.stopPropagation()
-          }
+          className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+          onClick={(event) => event.stopPropagation()}
         />
       </div>
     )
@@ -301,7 +262,7 @@ export function StudentsTable({
   const filterSelect = (
     key: keyof StudentTableFilters,
     placeholder: string,
-    options: string[]
+    options: string[],
   ) => {
     return (
       <div className="flex items-center gap-1">
@@ -310,25 +271,15 @@ export function StudentsTable({
         <select
           value={filters[key]}
           onChange={(event) =>
-            onUpdateFilter(
-              key,
-              event.target.value
-            )
+            onUpdateFilter(key, event.target.value)
           }
-          onClick={(event) =>
-            event.stopPropagation()
-          }
-          className="h-7 w-full min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1"
+          onClick={(event) => event.stopPropagation()}
+          className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
         >
-          <option value="">
-            {placeholder}
-          </option>
+          <option value="">{placeholder}</option>
 
           {options.map((option) => (
-            <option
-              key={option}
-              value={option}
-            >
+            <option key={option} value={option}>
               {option}
             </option>
           ))}
@@ -337,20 +288,13 @@ export function StudentsTable({
     )
   }
 
-  const visibleDynamicFields =
-    dynamicFields.filter(
-      (field) =>
-        field.is_active &&
-        visibleColumns[
-          `dynamic-${field.id}`
-        ]
-    )
+  const visibleDynamicFields = dynamicFields.filter(
+    (field) =>
+      field.is_active && visibleColumns[`dynamic-${field.id}`],
+  )
 
   const visibleCourses = courses.filter(
-    (course) =>
-      visibleColumns[
-        `course-${course.id}`
-      ]
+    (course) => visibleColumns[`course-${course.id}`],
   )
 
   const visibleExtraColumns =
@@ -358,76 +302,44 @@ export function StudentsTable({
 
   const totalColumns =
     1 +
-    (allowStudentDeletion && selectionMode
-      ? 1
-      : 0) +
+    (allowStudentDeletion && selectionMode ? 1 : 0) +
     baseColumns.filter(
-      (column) =>
-        visibleColumns[column.key] !== false
+      (column) => visibleColumns[column.key] !== false,
     ).length +
-    visibleExtraColumns.length +
+    visibleExtraColumns.filter(
+      (column) => column.key !== 'enrollmentCourseName',
+    ).length +
     visibleDynamicFields.length +
     visibleCourses.length
-
-  const allStudentsSelected =
-    students.length > 0 &&
-    students.every((student) =>
-      selectedStudentIds.includes(student.id)
-    )
 
   return (
     <>
       <div
         dir="ltr"
-        className="relative max-h-[590px] overflow-auto rounded-lg border [&>div]:overflow-visible"
+        className="relative max-h-[590px] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950 [&>div]:overflow-visible"
       >
-        <Table
-          dir="rtl"
-          className="min-w-[1450px]"
-        >
-          <TableHeader className="sticky top-0 z-20 bg-background">
-            <TableRow>
-              <TableHead className="w-[55px] text-center">
+        <Table dir="rtl" className="min-w-[1450px]">
+          <TableHeader className="sticky top-0 z-20 bg-slate-50 dark:bg-slate-900">
+            <TableRow className="border-b border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900">
+              <TableHead className="w-[55px] text-center text-slate-600 dark:text-slate-300">
                 #
               </TableHead>
 
-              {allowStudentDeletion &&
-                selectionMode && (
-                  <TableHead className="w-[55px] text-center">
-                    <input
-                      type="checkbox"
-                      checked={allStudentsSelected}
-                      onChange={() => {
-                        if (allStudentsSelected) {
-                          students.forEach((student) => {
-                            if (
-                              selectedStudentIds.includes(
-                                student.id
-                              )
-                            ) {
-                              onToggleStudentSelection(
-                                student.id
-                              )
-                            }
-                          })
-                        } else {
-                          students.forEach((student) => {
-                            if (
-                              !selectedStudentIds.includes(
-                                student.id
-                              )
-                            ) {
-                              onToggleStudentSelection(
-                                student.id
-                              )
-                            }
-                          })
-                        }
-                      }}
-                      aria-label="تحديد الكل"
-                    />
-                  </TableHead>
-                )}
+              {allowStudentDeletion && selectionMode && (
+                <TableHead className="w-[55px] text-center">
+                  <input
+                    type="checkbox"
+                    checked={allStudentsSelected}
+                    onChange={onToggleSelectAll}
+                    aria-label={
+                      allStudentsSelected
+                        ? 'إلغاء تحديد الكل'
+                        : 'تحديد الكل'
+                    }
+                    className="size-4 cursor-pointer accent-sky-600"
+                  />
+                </TableHead>
+              )}
 
               {visibleColumns.name !== false && (
                 <TableHead className="min-w-[220px]">
@@ -437,10 +349,7 @@ export function StudentsTable({
 
               {visibleColumns.personalId !== false && (
                 <TableHead className="min-w-[150px]">
-                  {filterInput(
-                    'personalId',
-                    'رقم الهوية'
-                  )}
+                  {filterInput('personalId', 'رقم الهوية')}
                 </TableHead>
               )}
 
@@ -449,17 +358,14 @@ export function StudentsTable({
                   {filterSelect(
                     'grade',
                     'كل المستويات',
-                    gradeOptions
+                    gradeOptions,
                   )}
                 </TableHead>
               )}
 
               {visibleColumns.contact !== false && (
                 <TableHead className="min-w-[180px]">
-                  {filterInput(
-                    'phone',
-                    'الهاتف / واتساب'
-                  )}
+                  {filterInput('phone', 'الهاتف / واتساب')}
                 </TableHead>
               )}
 
@@ -468,17 +374,14 @@ export function StudentsTable({
                   {filterSelect(
                     'paymentStatus',
                     'كل حالات السداد',
-                    paymentStatusOptions
+                    paymentStatusOptions,
                   )}
                 </TableHead>
               )}
 
               {visibleColumns.notes !== false && (
                 <TableHead className="min-w-[130px]">
-                  {filterInput(
-                    'notes',
-                    'الملاحظات'
-                  )}
+                  {filterInput('notes', 'الملاحظات')}
                 </TableHead>
               )}
 
@@ -487,7 +390,7 @@ export function StudentsTable({
                   {filterSelect(
                     'attendance',
                     'كل حالات الحضور',
-                    attendanceOptions
+                    attendanceOptions,
                   )}
                 </TableHead>
               )}
@@ -497,16 +400,13 @@ export function StudentsTable({
                   {filterSelect(
                     'enrollmentCourse',
                     'كل دورات الالتحاق',
-                    enrollmentCourseOptions
+                    enrollmentCourseOptions,
                   )}
                 </TableHead>
               )}
 
               {visibleExtraColumns.map((column) => {
-                if (
-                  column.key ===
-                  'enrollmentCourseName'
-                ) {
+                if (column.key === 'enrollmentCourseName') {
                   return null
                 }
 
@@ -518,17 +418,13 @@ export function StudentsTable({
               })}
 
               {visibleDynamicFields.map((field) => (
-                <TableHead
-                  key={`dynamic-${field.id}`}
-                >
+                <TableHead key={`dynamic-${field.id}`}>
                   {field.name}
                 </TableHead>
               ))}
 
               {visibleCourses.map((course) => (
-                <TableHead
-                  key={`course-${course.id}`}
-                >
+                <TableHead key={`course-${course.id}`}>
                   {course.name}
                 </TableHead>
               ))}
@@ -542,13 +438,12 @@ export function StudentsTable({
                 : Math.max(
                     Number(student.amountDue) -
                       Number(student.amountPaid),
-                    0
+                    0,
                   )
 
-              const isSelected =
-                selectedStudentIds.includes(
-                  student.id
-                )
+              const isSelected = selectedStudentIds.includes(
+                student.id,
+              )
 
               const isCurrentStudent =
                 selectedStudentId === student.id
@@ -557,76 +452,70 @@ export function StudentsTable({
                 <TableRow
                   key={student.id}
                   data-state={
-                    isCurrentStudent
-                      ? 'selected'
-                      : undefined
+                    isCurrentStudent ? 'selected' : undefined
                   }
-                  className={`h-[48px] cursor-pointer transition-colors ${
-                    isCurrentStudent
-                      ? '!bg-primary/15 hover:!bg-primary/20'
-                      : 'hover:bg-muted/50'
+                  className={`h-[48px] cursor-pointer border-b border-slate-100 transition-colors dark:border-slate-800 ${
+                    isSelected && selectionMode
+                      ? 'bg-sky-50 hover:bg-sky-100/80 dark:bg-sky-950/40 dark:hover:bg-sky-950/60'
+                      : isCurrentStudent
+                        ? 'bg-indigo-50 hover:bg-indigo-100/70 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/60'
+                        : 'hover:bg-slate-50/80 dark:hover:bg-slate-900/70'
                   }`}
                   onClick={() => {
                     if (selectionMode) {
-                      onToggleStudentSelection(
-                        student.id
-                      )
+                      onToggleStudentSelection(student.id)
                       return
                     }
 
                     onSelectStudent(student.id)
                   }}
                 >
-                  <TableCell className="text-center text-muted-foreground">
+                  <TableCell className="text-center text-slate-500 dark:text-slate-400">
                     {index + 1}
                   </TableCell>
 
-                  {allowStudentDeletion &&
-                    selectionMode && (
-                      <TableCell className="text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            onToggleStudentSelection(
-                              student.id
-                            )
-                          }
-                          onClick={(event) =>
-                            event.stopPropagation()
-                          }
-                          aria-label={`تحديد ${student.name}`}
-                        />
-                      </TableCell>
-                    )}
+                  {allowStudentDeletion && selectionMode && (
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() =>
+                          onToggleStudentSelection(student.id)
+                        }
+                        onClick={(event) =>
+                          event.stopPropagation()
+                        }
+                        aria-label={`تحديد ${student.name}`}
+                        className="size-4 cursor-pointer accent-sky-600"
+                      />
+                    </TableCell>
+                  )}
 
                   {visibleColumns.name !== false && (
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium text-slate-800 dark:text-slate-100">
                       {student.name}
                     </TableCell>
                   )}
 
                   {visibleColumns.personalId !== false && (
-                    <TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {student.personalId || '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.grade !== false && (
-                    <TableCell>
+                    <TableCell className="text-slate-600 dark:text-slate-300">
                       {student.grade || '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.contact !== false && (
                     <TableCell>
-                      <div className="space-y-1 text-xs">
-                        <div>
-                          {student.phone || '-'}
-                        </div>
+                      <div className="space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                        <div>{student.phone || '-'}</div>
 
                         {student.whatsapp && (
-                          <div className="text-muted-foreground">
+                          <div className="text-slate-500 dark:text-slate-400">
                             {student.whatsapp}
                           </div>
                         )}
@@ -638,7 +527,7 @@ export function StudentsTable({
                     <TableCell>
                       <button
                         type="button"
-                        className="rounded-md px-2 py-1 hover:bg-muted"
+                        className="rounded-lg px-2 py-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                         onClick={(event) => {
                           event.stopPropagation()
                           setPaymentStudent(student)
@@ -646,7 +535,7 @@ export function StudentsTable({
                       >
                         <StatusBadge
                           status={getPaymentStatusLabel(
-                            student.paymentStatus
+                            student.paymentStatus,
                           )}
                         />
                       </button>
@@ -657,7 +546,7 @@ export function StudentsTable({
                     <TableCell>
                       <button
                         type="button"
-                        className="max-w-[180px] truncate rounded-md px-2 py-1 text-xs hover:bg-muted"
+                        className="max-w-[180px] truncate rounded-lg px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                         onClick={(event) => {
                           event.stopPropagation()
                           onOpenNotes(student)
@@ -672,30 +561,27 @@ export function StudentsTable({
                     <TableCell>
                       <button
                         type="button"
-                        className="rounded-md px-2 py-1 text-xs hover:bg-muted"
+                        className="rounded-lg px-2 py-1 text-xs text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                         onClick={(event) => {
                           event.stopPropagation()
                           onOpenAttendance(student)
                         }}
                       >
                         {normalizeAttendanceStatus(
-                          student.attendance
+                          student.attendance,
                         )}
                       </button>
                     </TableCell>
                   )}
 
                   {visibleColumns.enrollmentCourseName && (
-                    <TableCell>
-                      {student.enrollmentCourseName ||
-                        '-'}
+                    <TableCell className="text-slate-600 dark:text-slate-300">
+                      {student.enrollmentCourseName || '-'}
                     </TableCell>
                   )}
 
                   {visibleColumns.studentId && (
-                    <TableCell>
-                      {student.studentId || '-'}
-                    </TableCell>
+                    <TableCell>{student.studentId || '-'}</TableCell>
                   )}
 
                   {visibleColumns.guardianRelation && (
@@ -711,41 +597,29 @@ export function StudentsTable({
                   )}
 
                   {visibleColumns.gender && (
-                    <TableCell>
-                      {student.gender || '-'}
-                    </TableCell>
+                    <TableCell>{student.gender || '-'}</TableCell>
                   )}
 
                   {visibleColumns.age && (
-                    <TableCell>
-                      {student.age ?? '-'}
-                    </TableCell>
+                    <TableCell>{student.age ?? '-'}</TableCell>
                   )}
 
                   {visibleColumns.phone && (
-                    <TableCell>
-                      {student.phone || '-'}
-                    </TableCell>
+                    <TableCell>{student.phone || '-'}</TableCell>
                   )}
 
                   {visibleColumns.whatsapp && (
-                    <TableCell>
-                      {student.whatsapp || '-'}
-                    </TableCell>
+                    <TableCell>{student.whatsapp || '-'}</TableCell>
                   )}
 
                   {visibleColumns.status && (
                     <TableCell>
-                      <StatusBadge
-                        status={student.status || '-'}
-                      />
+                      <StatusBadge status={student.status || '-'} />
                     </TableCell>
                   )}
 
                   {visibleColumns.className && (
-                    <TableCell>
-                      {student.className || '-'}
-                    </TableCell>
+                    <TableCell>{student.className || '-'}</TableCell>
                   )}
 
                   {visibleColumns.source && (
@@ -755,23 +629,19 @@ export function StudentsTable({
                   )}
 
                   {visibleColumns.amountDue && (
-                    <TableCell>
-                      {Number(
-                        student.amountDue
-                      ).toFixed(3)}
+                    <TableCell className="tabular-nums">
+                      {Number(student.amountDue).toFixed(3)}
                     </TableCell>
                   )}
 
                   {visibleColumns.amountPaid && (
-                    <TableCell>
-                      {Number(
-                        student.amountPaid
-                      ).toFixed(3)}
+                    <TableCell className="tabular-nums">
+                      {Number(student.amountPaid).toFixed(3)}
                     </TableCell>
                   )}
 
                   {visibleColumns.remaining && (
-                    <TableCell>
+                    <TableCell className="tabular-nums">
                       {remaining.toFixed(3)}
                     </TableCell>
                   )}
@@ -807,30 +677,20 @@ export function StudentsTable({
                   )}
 
                   {visibleDynamicFields.map((field) => (
-                    <TableCell
-                      key={`dynamic-${field.id}`}
-                    >
-                      {student.dynamicValues?.[
-                        field.field_key
-                      ] ||
-                        student.dynamicValues?.[
-                          field.id
-                        ] ||
+                    <TableCell key={`dynamic-${field.id}`}>
+                      {student.dynamicValues?.[field.field_key] ||
+                        student.dynamicValues?.[field.id] ||
                         '-'}
                     </TableCell>
                   ))}
 
                   {visibleCourses.map((course) => {
-                    const status =
-                      student.courseStatuses?.find(
-                        (item) =>
-                          item.courseId === course.id
-                      )
+                    const status = student.courseStatuses?.find(
+                      (item) => item.courseId === course.id,
+                    )
 
                     return (
-                      <TableCell
-                        key={`course-${course.id}`}
-                      >
+                      <TableCell key={`course-${course.id}`}>
                         {status?.status || 'لم يسجل'}
                       </TableCell>
                     )
@@ -843,9 +703,9 @@ export function StudentsTable({
               <TableRow>
                 <TableCell
                   colSpan={Math.max(totalColumns, 1)}
-                  className="h-32 text-center text-muted-foreground"
+                  className="h-32 text-center text-sm text-slate-500 dark:text-slate-400"
                 >
-                  لا توجد بيانات
+                  لا توجد بيانات مطابقة للبحث أو التصفية.
                 </TableCell>
               </TableRow>
             )}
@@ -857,11 +717,7 @@ export function StudentsTable({
         <StudentPaymentDialog
           student={paymentStudent}
           onClose={() => setPaymentStudent(null)}
-          onPaymentSaved={(
-            studentId,
-            amount,
-            paymentStatus
-          ) => {
+          onPaymentSaved={(studentId, amount, paymentStatus) => {
             setPaymentStudent((current) =>
               current && current.id === studentId
                 ? {
@@ -869,7 +725,7 @@ export function StudentsTable({
                     amountPaid: amount,
                     paymentStatus,
                   }
-                : current
+                : current,
             )
           }}
         />
