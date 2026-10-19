@@ -115,139 +115,183 @@ export function Sidebar({
 
   const [loading, setLoading] = useState(true)
 
-  // عدد طلبات التسجيل التي تنتظر المراجعة
-  const [pendingRegistrationCount, setPendingRegistrationCount] =
-    useState(0)
+// عدد طلبات التسجيل التي تنتظر المراجعة
+const [pendingRegistrationCount, setPendingRegistrationCount] =
+  useState(0)
 
-  const [currentUser, setCurrentUser] =
-    useState<CurrentUser | null>(null)
+const [currentUser, setCurrentUser] =
+  useState<CurrentUser | null>(null)
 
-  const [userLoading, setUserLoading] =
-    useState(true)
+const [userLoading, setUserLoading] =
+  useState(true)
 
-  const [userMenuOpen, setUserMenuOpen] =
-    useState(false)
+const [userMenuOpen, setUserMenuOpen] =
+  useState(false)
 
-  const [loggingOut, setLoggingOut] =
-    useState(false)
+const [loggingOut, setLoggingOut] =
+  useState(false)
 
-  const [schoolSettings, setSchoolSettings] =
-    useState<SchoolSettings>(
-      schoolSettingsCache ?? {
-        id: 1,
-        school_name: DEFAULT_SCHOOL_NAME,
-        school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
-      },
-    )
+const [schoolSettings, setSchoolSettings] =
+  useState<SchoolSettings>(
+    schoolSettingsCache ?? {
+      id: 1,
+      school_name: DEFAULT_SCHOOL_NAME,
+      school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
+    },
+  )
 
-  const [schoolDialogOpen, setSchoolDialogOpen] =
-    useState(false)
+const [schoolDialogOpen, setSchoolDialogOpen] =
+  useState(false)
 
-  const [schoolName, setSchoolName] =
-    useState(
-      schoolSettingsCache?.school_name ??
-        DEFAULT_SCHOOL_NAME,
-    )
+const [schoolName, setSchoolName] =
+  useState(
+    schoolSettingsCache?.school_name ??
+      DEFAULT_SCHOOL_NAME,
+  )
 
-  const [schoolSubtitle, setSchoolSubtitle] =
-    useState(
-      schoolSettingsCache?.school_subtitle ??
-        DEFAULT_SCHOOL_SUBTITLE,
-    )
+const [schoolSubtitle, setSchoolSubtitle] =
+  useState(
+    schoolSettingsCache?.school_subtitle ??
+      DEFAULT_SCHOOL_SUBTITLE,
+  )
 
-  const [savingSchoolSettings, setSavingSchoolSettings] =
-    useState(false)
+const [savingSchoolSettings, setSavingSchoolSettings] =
+  useState(false)
 
-  const [schoolSettingsError, setSchoolSettingsError] =
-    useState('')
+const [schoolSettingsError, setSchoolSettingsError] =
+  useState('')
 
-  /*
-   * -------------------------------------------------------
-   * عدد طلبات التسجيل المنتظرة
-   * السنة الدراسية الحالية فقط
-   * الحالات: pending و under_review
-   * تحديث تلقائي كل 30 ثانية
-   * -------------------------------------------------------
-   */
-  useEffect(() => {
-    let cancelled = false
+/*
+ * -------------------------------------------------------
+ * عدد طلبات التسجيل المنتظرة
+ * السنة الدراسية الحالية فقط
+ * الحالات: pending و under_review
+ * تحديث كل دقيقتين، وإيقاف التحديث في الخلفية
+ * -------------------------------------------------------
+ */
+useEffect(() => {
+  let cancelled = false
+  let intervalId: number | undefined
+  let requestInProgress = false
 
-    async function loadPendingRegistrationCount() {
-      try {
-        const {
-          data: academicYear,
-          error: academicYearError,
-        } = await supabase
-          .from('academic_years')
-          .select('id')
-          .eq('is_current', true)
-          .eq('is_active', true)
-          .maybeSingle()
+  async function loadPendingRegistrationCount() {
+    // منع تداخل الاستعلامات إذا تأخر رد Supabase
+    if (
+      cancelled ||
+      requestInProgress ||
+      document.visibilityState !== 'visible'
+    ) {
+      return
+    }
 
-        if (academicYearError) {
-          console.error(
-            'Load current academic year error:',
-            academicYearError,
-          )
+    requestInProgress = true
 
-          if (!cancelled) {
-            setPendingRegistrationCount(0)
-          }
+    try {
+      const {
+        data: academicYear,
+        error: academicYearError,
+      } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_current', true)
+        .eq('is_active', true)
+        .maybeSingle()
 
-          return
-        }
+      if (academicYearError) {
+        console.error(
+          'Load current academic year error:',
+          academicYearError,
+        )
+        return
+      }
 
-        if (!academicYear) {
-          if (!cancelled) {
-            setPendingRegistrationCount(0)
-          }
-
-          return
-        }
-
-        const {
-          count,
-          error,
-        } = await supabase
-          .from('registration_requests')
-          .select('id', {
-            count: 'exact',
-            head: true,
-          })
-          .eq('academic_year_id', academicYear.id)
-          .in('status', ['pending', 'under_review'])
-
-        if (error) {
-          console.error(
-            'Load pending registration count error:',
-            error,
-          )
-          return
-        }
-
+      if (!academicYear) {
         if (!cancelled) {
-          setPendingRegistrationCount(count ?? 0)
+          setPendingRegistrationCount(0)
         }
-      } catch (error) {
+        return
+      }
+
+      const { count, error } = await supabase
+        .from('registration_requests')
+        .select('id', {
+          count: 'exact',
+          head: true,
+        })
+        .eq('academic_year_id', academicYear.id)
+        .in('status', ['pending', 'under_review'])
+
+      if (error) {
         console.error(
           'Load pending registration count error:',
           error,
         )
+        return
       }
+
+      if (!cancelled) {
+        setPendingRegistrationCount(count ?? 0)
+      }
+    } catch (error) {
+      console.error(
+        'Load pending registration count error:',
+        error,
+      )
+    } finally {
+      requestInProgress = false
+    }
+  }
+
+  function startPolling() {
+    if (
+      cancelled ||
+      intervalId !== undefined ||
+      document.visibilityState !== 'visible'
+    ) {
+      return
     }
 
+    // جلب العدد عند فتح الصفحة أو الرجوع إليها
     void loadPendingRegistrationCount()
 
-    const intervalId = window.setInterval(() => {
+    // ثم التحديث كل دقيقتين
+    intervalId = window.setInterval(() => {
       void loadPendingRegistrationCount()
-    }, 30000)
+    }, 120000)
+  }
 
-    return () => {
-      cancelled = true
+  function stopPolling() {
+    if (intervalId !== undefined) {
       window.clearInterval(intervalId)
+      intervalId = undefined
     }
-  }, [])
+  }
 
+  function handleVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      startPolling()
+    } else {
+      stopPolling()
+    }
+  }
+
+  document.addEventListener(
+    'visibilitychange',
+    handleVisibilityChange,
+  )
+
+  startPolling()
+
+  return () => {
+    cancelled = true
+    stopPolling()
+
+    document.removeEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+    )
+  }
+}, [])
   /*
    * -------------------------------------------------------
    * المستخدم الحالي
