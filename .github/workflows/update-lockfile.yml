@@ -26,9 +26,10 @@ jobs:
         with:
           node-version: 24
 
-      - name: Update Zod dependency
+      - name: Override vulnerable Zod
         run: |
-          pnpm add zod@4.6.7 --save-exact --lockfile-only
+          pnpm pkg set 'pnpm.overrides.zod=4.6.7'
+          pnpm install --lockfile-only
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -36,14 +37,22 @@ jobs:
       - name: Verify Zod version
         run: |
           pnpm why zod
-          node -e "
+          node <<'NODE'
           const fs = require('fs');
           const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
-          if (!lock.includes('zod@4.6.7')) {
-            console.error('Expected Zod 4.6.7 not found');
+
+          if (/zod@3\.\d/.test(lock)) {
+            console.error('Vulnerable Zod 3 dependency remains in lockfile.');
             process.exit(1);
           }
-          "
+
+          if (!lock.includes('zod@4.6.7')) {
+            console.error('Zod 4.6.7 was not found in lockfile.');
+            process.exit(1);
+          }
+
+          console.log('Zod lockfile verification passed.');
+          NODE
 
       - name: TypeScript check
         run: pnpm exec tsc --noEmit
@@ -52,6 +61,10 @@ jobs:
         run: pnpm build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key"
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "test-publishable-key"
+          SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key"
 
       - name: Commit verified changes
         run: |
@@ -65,5 +78,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "fix: update zod security dependency"
+          git commit -m "fix: override vulnerable zod dependency"
           git push origin main
