@@ -34,7 +34,7 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Apply safe dependency overrides
+      - name: Remove obsolete package.json overrides
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -42,38 +42,33 @@ jobs:
           const file = 'package.json';
           const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-          pkg.pnpm ??= {};
-          pkg.pnpm.overrides ??= {};
-          pkg.pnpm.overrides['ip-address'] = '10.3.1';
-          pkg.pnpm.overrides['nanoid@3'] = '3.3.18';
+          if (pkg.pnpm?.overrides) {
+            delete pkg.pnpm.overrides;
 
-          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+            if (Object.keys(pkg.pnpm).length === 0) {
+              delete pkg.pnpm;
+            }
+
+            fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+          }
           NODE
 
-      - name: Diagnose pnpm overrides
+      - name: Check workspace overrides
         run: |
+          echo "=== pnpm-workspace.yaml ==="
+          cat pnpm-workspace.yaml
+
           echo "=== pnpm version ==="
           pnpm --version
 
-          echo "=== package.json overrides ==="
-          node -e "console.log(JSON.stringify(require('./package.json').pnpm?.overrides, null, 2))"
+          grep -qE '^overrides:' pnpm-workspace.yaml || {
+            echo "ERROR: overrides section is missing."
+            exit 1
+          }
 
-          echo "=== pnpm config ==="
-          pnpm config get overrides || true
-
-      - name: Diagnose lockfile override behavior
+      - name: Regenerate lockfile
         run: |
-          echo "=== Lockfile before ==="
-          grep -nE 'ip-address@|nanoid@3\.' pnpm-lock.yaml | head -40 || true
-
-          echo "=== Regenerate lockfile ==="
           pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
-
-          echo "=== Lockfile after ==="
-          grep -nE 'ip-address@|nanoid@3\.' pnpm-lock.yaml | head -40 || true
-
-          echo "=== Lockfile diff ==="
-          git diff -- pnpm-lock.yaml
 
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -82,7 +77,6 @@ jobs:
         run: |
           pnpm why ip-address
           pnpm why nanoid
-          pnpm why zod
 
       - name: Verify patched versions
         run: |
@@ -116,7 +110,7 @@ jobs:
           }
 
           if (failed) {
-            console.error('Lockfile does not contain all expected versions.');
+            console.error('Patched versions were not found in the lockfile.');
             process.exit(1);
           }
           NODE
@@ -125,13 +119,17 @@ jobs:
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
-      - name: Show pending changes
-        if: always()
+      - name: Commit dependency changes
         run: |
-          echo "=== Git status ==="
-          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          echo "=== Dependency diff ==="
-          git diff -- package.json pnpm-lock.yaml
+          git add package.json pnpm-workspace.yaml pnpm-lock.yaml
 
-      # Intentionally no commit or push during diagnosis.
+          if git diff --cached --quiet; then
+            echo "No dependency changes to commit."
+            exit 0
+          fi
+
+          git commit -m "fix: update vulnerable transitive dependencies"
+          git push origin main
