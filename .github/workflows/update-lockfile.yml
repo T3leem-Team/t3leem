@@ -14,6 +14,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -28,6 +29,9 @@ jobs:
 
       - name: Update lockfile
         run: pnpm install --lockfile-only
+
+      - name: Verify lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Commit lockfile
         run: |
