@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: manual-security-scan
@@ -17,22 +16,22 @@ jobs:
   security-scan:
     name: Dependency and Code Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 12.3.4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -58,21 +57,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Save security scan report
+      - name: Create security scan report
         if: always()
         run: |
           {
             echo "# Security Scan Report"
             echo
-            echo "Commit: $GITHUB_SHA"
-            echo "Date: $(date -u)"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Date: $(date -u)"
             echo
-            echo "Review the workflow logs for audit, TypeScript, and Gitleaks results."
+            echo "See the workflow logs for detailed results."
           } > security-scan-report.md
 
       - name: Upload security report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: security-scan-report
           path: security-scan-report.md
