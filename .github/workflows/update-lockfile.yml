@@ -1,4 +1,4 @@
-name: Fix Zod Security Alert
+name: Update pnpm lockfile
 
 on:
   workflow_dispatch:
@@ -7,14 +7,14 @@ permissions:
   contents: write
 
 jobs:
-  update-zod:
+  update-lockfile:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -26,57 +26,19 @@ jobs:
         with:
           node-version: 24
 
-      - name: Override vulnerable Zod
-        run: |
-          pnpm pkg set 'pnpm.overrides.zod=4.6.7'
-          pnpm install --lockfile-only
+      - name: Update lockfile
+        run: pnpm install --lockfile-only
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify Zod version
-        run: |
-          pnpm why zod
-          node <<'NODE'
-          const fs = require('fs');
-          const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
-
-          if (/zod@3\.\d/.test(lock)) {
-            console.error('Vulnerable Zod 3 dependency remains in lockfile.');
-            process.exit(1);
-          }
-
-          if (!lock.includes('zod@4.6.7')) {
-            console.error('Zod 4.6.7 was not found in lockfile.');
-            process.exit(1);
-          }
-
-          console.log('Zod lockfile verification passed.');
-          NODE
-
-      - name: TypeScript check
-        run: pnpm exec tsc --noEmit
-
-      - name: Production build
-        run: pnpm build
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
-          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key"
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "test-publishable-key"
-          SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key"
-
-      - name: Commit verified changes
+      - name: Commit lockfile
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add package.json pnpm-lock.yaml
+          git add pnpm-lock.yaml
 
           if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
+            echo "No lockfile changes."
+          else
+            git commit -m "chore: update pnpm lockfile"
+            git push origin main
           fi
-
-          git commit -m "fix: override vulnerable zod dependency"
-          git push origin main
