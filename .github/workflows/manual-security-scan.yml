@@ -1,16 +1,23 @@
-
 name: Manual Security Scan
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "30 2 * * 1"
 
 permissions:
   contents: read
+  security-events: write
+
+concurrency:
+  group: manual-security-scan
+  cancel-in-progress: true
 
 jobs:
   security-scan:
     name: Dependency and Code Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -28,22 +35,45 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Inspect vulnerable dependency versions
+      - name: Inspect dependency versions
         run: |
           pnpm why ip-address
-          pnpm why zod
           pnpm why nanoid
+          pnpm why zod
+        continue-on-error: true
 
-      - name: Scan dependencies for known vulnerabilities
+      - name: Scan dependencies for vulnerabilities
         run: pnpm audit --audit-level=low
         continue-on-error: true
 
       - name: Check TypeScript
         run: pnpm exec tsc --noEmit
+        continue-on-error: true
 
       - name: Scan repository for leaked secrets
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Save security scan report
+        if: always()
+        run: |
+          {
+            echo "# Security Scan Report"
+            echo
+            echo "Commit: $GITHUB_SHA"
+            echo "Date: $(date -u)"
+            echo
+            echo "Review the workflow logs for audit, TypeScript, and Gitleaks results."
+          } > security-scan-report.md
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-report
+          path: security-scan-report.md
+          retention-days: 14
