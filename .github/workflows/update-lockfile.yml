@@ -1,5 +1,4 @@
-
-name: Update pnpm lockfile
+name: Fix dependency security
 
 on:
   workflow_dispatch:
@@ -8,16 +7,16 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-pnpm-lockfile
+  group: fix-dependency-security
   cancel-in-progress: false
 
 jobs:
-  update-lockfile:
+  fix-dependencies:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v5
         with:
           ref: main
@@ -28,19 +27,35 @@ jobs:
         with:
           version: 12.3.4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
 
+      - name: Apply safe dependency overrides
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const file = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+
+          pkg.pnpm ??= {};
+          pkg.pnpm.overrides ??= {};
+          pkg.pnpm.overrides['ip-address'] = '10.3.1';
+          pkg.pnpm.overrides['nanoid@3'] = '3.3.18';
+
+          fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
       - name: Update lockfile
         run: pnpm install --lockfile-only --ignore-scripts
 
-      - name: Verify lockfile
+      - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Verify vulnerable dependency versions
+      - name: Verify dependency versions
         run: |
           pnpm why ip-address
           pnpm why nanoid
@@ -50,16 +65,17 @@ jobs:
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
-      - name: Commit lockfile
+      - name: Commit dependency changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add pnpm-lock.yaml
+          git add package.json pnpm-lock.yaml
 
           if git diff --cached --quiet; then
-            echo "No lockfile changes."
-          else
-            git commit -m "fix: update pnpm lockfile"
-            git push origin main
+            echo "No dependency changes to commit."
+            exit 0
           fi
+
+          git commit -m "fix: update vulnerable transitive dependencies"
+          git push origin main
