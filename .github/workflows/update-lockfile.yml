@@ -49,6 +49,12 @@ jobs:
           fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
           NODE
 
+      - name: Diagnose pnpm overrides
+        run: |
+          pnpm --version
+          node -e "console.log(JSON.stringify(require('./package.json').pnpm?.overrides, null, 2))"
+          pnpm config get overrides
+
       - name: Update lockfile
         run: pnpm install --lockfile-only --force --ignore-scripts
 
@@ -85,22 +91,17 @@ jobs:
 
           for (const item of checks) {
             const found = item.pattern.test(lock);
-
             console.log(
               `${item.name} ${item.version}: ${found ? 'FOUND' : 'NOT FOUND'}`
             );
 
-            if (!found) {
-              failed = true;
-            }
+            if (!found) failed = true;
           }
 
           if (failed) {
             console.error('Lockfile does not contain all expected versions.');
             process.exit(1);
           }
-
-          console.log('All expected patched versions found.');
           NODE
 
       - name: Audit dependencies
