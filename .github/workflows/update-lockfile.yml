@@ -1,3 +1,4 @@
+
 name: Fix dependency security
 
 on:
@@ -51,12 +52,28 @@ jobs:
 
       - name: Diagnose pnpm overrides
         run: |
+          echo "=== pnpm version ==="
           pnpm --version
-          node -e "console.log(JSON.stringify(require('./package.json').pnpm?.overrides, null, 2))"
-          pnpm config get overrides
 
-      - name: Update lockfile
-        run: pnpm install --lockfile-only --force --ignore-scripts
+          echo "=== package.json overrides ==="
+          node -e "console.log(JSON.stringify(require('./package.json').pnpm?.overrides, null, 2))"
+
+          echo "=== pnpm config ==="
+          pnpm config get overrides || true
+
+      - name: Diagnose lockfile override behavior
+        run: |
+          echo "=== Lockfile before ==="
+          grep -nE 'ip-address@|nanoid@3\.' pnpm-lock.yaml | head -40 || true
+
+          echo "=== Regenerate lockfile ==="
+          pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
+
+          echo "=== Lockfile after ==="
+          grep -nE 'ip-address@|nanoid@3\.' pnpm-lock.yaml | head -40 || true
+
+          echo "=== Lockfile diff ==="
+          git diff -- pnpm-lock.yaml
 
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -108,17 +125,13 @@ jobs:
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
-      - name: Commit dependency changes
+      - name: Show pending changes
+        if: always()
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "=== Git status ==="
+          git status --short
 
-          git add package.json pnpm-lock.yaml
+          echo "=== Dependency diff ==="
+          git diff -- package.json pnpm-lock.yaml
 
-          if git diff --cached --quiet; then
-            echo "No dependency changes to commit."
-            exit 0
-          fi
-
-          git commit -m "fix: update vulnerable transitive dependencies"
-          git push origin main
+      # Intentionally no commit or push during diagnosis.
