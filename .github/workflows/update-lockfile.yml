@@ -50,7 +50,7 @@ jobs:
           NODE
 
       - name: Update lockfile
-        run: pnpm install --lockfile-only --ignore-scripts
+        run: pnpm install --lockfile-only --force --ignore-scripts
 
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -60,6 +60,26 @@ jobs:
           pnpm why ip-address
           pnpm why nanoid
           pnpm why zod
+
+      - name: Verify patched versions
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
+
+          if (!lock.includes('ip-address@10.3.1')) {
+            console.error('Expected ip-address 10.3.1 in lockfile.');
+            process.exit(1);
+          }
+
+          if (!lock.includes('nanoid@3.3.18')) {
+            console.error('Expected nanoid 3.3.18 in lockfile.');
+            process.exit(1);
+          }
+
+          console.log('Patched dependency versions found in lockfile.');
+          NODE
 
       - name: Audit dependencies
         run: pnpm audit --audit-level=high
