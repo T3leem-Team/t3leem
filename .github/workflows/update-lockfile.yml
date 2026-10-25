@@ -1,4 +1,4 @@
-name: Update pnpm lockfile
+name: Fix Zod Security Alert
 
 on:
   workflow_dispatch:
@@ -7,14 +7,14 @@ permissions:
   contents: write
 
 jobs:
-  update-lockfile:
+  update-zod:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: main
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -26,20 +26,44 @@ jobs:
         with:
           node-version: 24
 
-      - name: Update lockfile
-        run: pnpm install --lockfile-only
+      - name: Update Zod dependency
+        run: |
+          pnpm add zod@4.6.7 --save-exact --lockfile-only
 
-      - name: Commit lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Zod version
+        run: |
+          pnpm why zod
+          node -e "
+          const fs = require('fs');
+          const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
+          if (!lock.includes('zod@4.6.7')) {
+            console.error('Expected Zod 4.6.7 not found');
+            process.exit(1);
+          }
+          "
+
+      - name: TypeScript check
+        run: pnpm exec tsc --noEmit
+
+      - name: Production build
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Commit verified changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add pnpm-lock.yaml
+          git add package.json pnpm-lock.yaml
 
           if git diff --cached --quiet; then
-            echo "No lockfile changes."
-          else
-            git commit -m "chore: update pnpm lockfile"
-            git push origin main
+            echo "No changes to commit."
+            exit 0
           fi
 
+          git commit -m "fix: update zod security dependency"
+          git push origin main
