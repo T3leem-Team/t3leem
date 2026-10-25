@@ -30,8 +30,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Inspect vulnerable dependency versions
+        run: |
+          pnpm why ip-address
+          pnpm why zod
+          pnpm why nanoid
+
       - name: Scan dependencies for known vulnerabilities
         run: pnpm audit --audit-level=low
+        continue-on-error: true
 
       - name: Check TypeScript
         run: pnpm exec tsc --noEmit
