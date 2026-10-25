@@ -68,17 +68,39 @@ jobs:
 
           const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
 
-          if (!lock.includes('ip-address@10.3.1')) {
-            console.error('Expected ip-address 10.3.1 in lockfile.');
+          const checks = [
+            {
+              name: 'ip-address',
+              version: '10.3.1',
+              pattern: /ip-address@10\.3\.1(?:\(|:)/,
+            },
+            {
+              name: 'nanoid',
+              version: '3.3.18',
+              pattern: /nanoid@3\.3\.18(?:\(|:)/,
+            },
+          ];
+
+          let failed = false;
+
+          for (const item of checks) {
+            const found = item.pattern.test(lock);
+
+            console.log(
+              `${item.name} ${item.version}: ${found ? 'FOUND' : 'NOT FOUND'}`
+            );
+
+            if (!found) {
+              failed = true;
+            }
+          }
+
+          if (failed) {
+            console.error('Lockfile does not contain all expected versions.');
             process.exit(1);
           }
 
-          if (!lock.includes('nanoid@3.3.18')) {
-            console.error('Expected nanoid 3.3.18 in lockfile.');
-            process.exit(1);
-          }
-
-          console.log('Patched dependency versions found in lockfile.');
+          console.log('All expected patched versions found.');
           NODE
 
       - name: Audit dependencies
