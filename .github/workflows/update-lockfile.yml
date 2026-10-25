@@ -1,3 +1,4 @@
+
 name: Update pnpm lockfile
 
 on:
@@ -6,13 +7,18 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-pnpm-lockfile
+  cancel-in-progress: false
+
 jobs:
   update-lockfile:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
@@ -23,15 +29,26 @@ jobs:
           version: 12.3.4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: pnpm
 
       - name: Update lockfile
-        run: pnpm install --lockfile-only
+        run: pnpm install --lockfile-only --ignore-scripts
 
       - name: Verify lockfile
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify vulnerable dependency versions
+        run: |
+          pnpm why ip-address
+          pnpm why nanoid
+          pnpm why zod
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
 
       - name: Commit lockfile
         run: |
@@ -43,6 +60,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No lockfile changes."
           else
-            git commit -m "chore: update pnpm lockfile"
+            git commit -m "fix: update pnpm lockfile"
             git push origin main
           fi
