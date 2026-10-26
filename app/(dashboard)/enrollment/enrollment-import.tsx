@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -5,6 +6,8 @@ import {
   useMemo,
   useState,
 } from 'react'
+import type { ChangeEvent } from 'react'
+import ExcelJS from 'exceljs'
 import {
   AlertCircle,
   Check,
@@ -14,7 +17,6 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 
 import { supabase } from '@/lib/supabase'
 
@@ -76,16 +78,136 @@ const PAYMENT_OPTIONS = [
   'لا يوجد',
 ]
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024
+const MAX_IMPORT_ROWS = 5000
+
+const EXCEL_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
 const normalize = (value: unknown) =>
   String(value ?? '')
     .trim()
     .replace(/\s+/g, ' ')
 
-function downloadBlob(
-  workbook: XLSX.WorkBook,
+/**
+ * يحوّل قيمة خلية ExcelJS إلى نص قابل للمعالجة.
+ * لا ينفّذ الصيغ الموجودة داخل الملف.
+ */
+function cellToText(cell: ExcelJS.Cell): string {
+  const value = cell.value
+
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  if (typeof value === 'object') {
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText
+        .map((part) => part.text ?? '')
+        .join('')
+    }
+
+    if ('text' in value && typeof value.text === 'string') {
+      return value.text
+    }
+
+    if ('result' in value) {
+      const result = value.result
+
+      if (
+        result === null ||
+        result === undefined
+      ) {
+        return ''
+      }
+
+      if (result instanceof Date) {
+        return result.toISOString()
+      }
+
+      return String(result)
+    }
+
+    if ('hyperlink' in value) {
+      return String(value.hyperlink ?? '')
+    }
+
+    return ''
+  }
+
+  return String(value)
+}
+
+/**
+ * استخراج صفوف ورقة Excel مع المحافظة على ترتيب الأعمدة
+ * والخلايا الفارغة.
+ */
+function worksheetToMatrix(
+  worksheet: ExcelJS.Worksheet,
+): string[][] {
+  const matrix: string[][] = []
+
+  worksheet.eachRow(
+    { includeEmpty: true },
+    (row) => {
+      const values: string[] = []
+
+      for (
+        let column = 1;
+        column <= Math.max(row.cellCount, COLUMNS.length);
+        column++
+      ) {
+        values.push(
+          cellToText(row.getCell(column)),
+        )
+      }
+
+      // إزالة الخلايا الفارغة الموجودة بعد آخر قيمة.
+      while (
+        values.length > 0 &&
+        normalize(values[values.length - 1]) === ''
+      ) {
+        values.pop()
+      }
+
+      matrix.push(values)
+    },
+  )
+
+  return matrix
+}
+
+/**
+ * إنشاء ملف XLSX وتنزيله في المتصفح.
+ */
+async function downloadWorkbook(
+  workbook: ExcelJS.Workbook,
   filename: string,
 ) {
-  XLSX.writeFile(workbook, filename)
+  const buffer = await workbook.xlsx.writeBuffer()
+
+  const blob = new Blob(
+    [new Uint8Array(buffer)],
+    { type: EXCEL_MIME_TYPE },
+  )
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 1000)
 }
 
 export function EnrollmentImport({
@@ -97,6 +219,9 @@ export function EnrollmentImport({
 
   const [loadingLevels, setLoadingLevels] =
     useState(true)
+
+  const [templateLoading, setTemplateLoading] =
+    useState(false)
 
   const [fileName, setFileName] =
     useState('')
@@ -114,34 +239,55 @@ export function EnrollmentImport({
     useState('')
 
   useEffect(() => {
+    let cancelled = false
+
     const loadLevels = async () => {
       setLoadingLevels(true)
 
-      const { data, error } =
-        await supabase
-          .from('levels')
-          .select('id, name')
-          .order('name')
+      try {
+        const { data, error } =
+          await supabase
+            .from('levels')
+            .select('id, name')
+            .order('name')
 
-      if (error) {
+        if (cancelled) return
+
+        if (error) {
+          setErrors([
+            `تعذر تحميل المستويات: ${error.message}`,
+          ])
+          return
+        }
+
+        setLevels(
+          (data ?? []).map((item) => ({
+            id: item.id,
+            name: item.name,
+          })),
+        )
+      } catch (error) {
+        if (cancelled) return
+
         setErrors([
-          `تعذر تحميل المستويات: ${error.message}`,
+          `تعذر تحميل المستويات: ${
+            error instanceof Error
+              ? error.message
+              : 'خطأ غير معروف'
+          }`,
         ])
-        setLoadingLevels(false)
-        return
+      } finally {
+        if (!cancelled) {
+          setLoadingLevels(false)
+        }
       }
-
-      setLevels(
-        (data ?? []).map((item) => ({
-          id: item.id,
-          name: item.name,
-        })),
-      )
-
-      setLoadingLevels(false)
     }
 
-    loadLevels()
+    void loadLevels()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const levelNames = useMemo(
@@ -149,144 +295,198 @@ export function EnrollmentImport({
     [levels],
   )
 
-  const downloadTemplate = () => {
-    const exampleLevel =
-      levels[0]?.name ?? 'اكتب المستوى هنا'
+  const downloadTemplate = async () => {
+    if (templateLoading || saving) return
 
-    const data = [
-      COLUMNS,
-      [
-        'مثال: محمد أحمد',
-        '123456789',
-        'ذكر',
-        10,
-        '3XXXXXXXX',
-        '3XXXXXXXX',
-        exampleLevel,
-        '',
-        '',
-        'لا يوجد',
-        '',
-        '',
-      ],
-    ]
+    setTemplateLoading(true)
+    setMessage('')
 
-    const instructions = [
-      ['تعليمات استيراد سجل التسجيل'],
-      [''],
-      ['مهم', 'يجب عدم تغيير أسماء الأعمدة أو ترتيبها.'],
-      [''],
-      ['الجنس', GENDER_OPTIONS.join(' / ')],
-      ['المستويات', levelNames.join(' / ') || 'لا توجد مستويات'],
-      ['طريقة الدفع', PAYMENT_OPTIONS.join(' / ')],
-      [''],
-      ['ملاحظات'],
-      [
-        'الاسم',
-        'حقل مطلوب.',
-      ],
-      [
-        'الرقم الشخصي',
-        'يفضل إدخاله بدون مسافات.',
-      ],
-      [
-        'الجنس',
-        'استخدم أحد الخيارات الموجودة في ورقة التعليمات.',
-      ],
-      [
-        'المستوى',
-        'يجب أن يطابق اسم مستوى موجود في النظام.',
-      ],
-      [
-        'العمر',
-        'رقم فقط، ويمكن تركه فارغاً.',
-      ],
-      [
-        'الملاحظات والمعلومات الصحية',
-        'اختيارية.',
-      ],
-      [
-        'الدفع',
-        'اختياري. الطلب سيظل طلب تسجيل ويمكن مراجعته قبل القبول.',
-      ],
-    ]
+    try {
+      const exampleLevel =
+        levels[0]?.name ?? 'اكتب المستوى هنا'
 
-    const workbook =
-      XLSX.utils.book_new()
+      const data: (string | number)[][] = [
+        COLUMNS,
+        [
+          'مثال: محمد أحمد',
+          '123456789',
+          'ذكر',
+          10,
+          '3XXXXXXXX',
+          '3XXXXXXXX',
+          exampleLevel,
+          '',
+          '',
+          'لا يوجد',
+          '',
+          '',
+        ],
+      ]
 
-    const dataSheet =
-      XLSX.utils.aoa_to_sheet(data)
+      const instructions: (string | number)[][] = [
+        ['تعليمات استيراد سجل التسجيل'],
+        [''],
+        ['مهم', 'يجب عدم تغيير أسماء الأعمدة أو ترتيبها.'],
+        [''],
+        ['الجنس', GENDER_OPTIONS.join(' / ')],
+        [
+          'المستويات',
+          levelNames.join(' / ') || 'لا توجد مستويات',
+        ],
+        ['طريقة الدفع', PAYMENT_OPTIONS.join(' / ')],
+        [''],
+        ['ملاحظات'],
+        ['الاسم', 'حقل مطلوب.'],
+        ['الرقم الشخصي', 'يفضل إدخاله بدون مسافات.'],
+        [
+          'الجنس',
+          'استخدم أحد الخيارات الموجودة في ورقة التعليمات.',
+        ],
+        [
+          'المستوى',
+          'يجب أن يطابق اسم مستوى موجود في النظام.',
+        ],
+        [
+          'العمر',
+          'رقم فقط، ويمكن تركه فارغاً.',
+        ],
+        [
+          'الملاحظات والمعلومات الصحية',
+          'اختيارية.',
+        ],
+        [
+          'الدفع',
+          'اختياري. الطلب سيظل طلب تسجيل ويمكن مراجعته قبل القبول.',
+        ],
+      ]
 
-    const instructionsSheet =
-      XLSX.utils.aoa_to_sheet(
-        instructions,
+      const workbook = new ExcelJS.Workbook()
+
+      workbook.creator = 'T3leem'
+      workbook.subject = 'قالب استيراد طلبات التسجيل'
+      workbook.title = 'قالب استيراد طلبات التسجيل'
+      workbook.created = new Date()
+
+      const dataSheet =
+        workbook.addWorksheet('طلبات التسجيل')
+
+      dataSheet.addRows(data)
+      dataSheet.columns = COLUMNS.map(() => ({
+        width: 22,
+      }))
+
+      dataSheet.views = [
+        { state: 'frozen', ySplit: 1 },
+      ]
+
+      dataSheet.getRow(1).font = {
+        bold: true,
+      }
+
+      dataSheet.getRow(1).alignment = {
+        vertical: 'middle',
+        wrapText: true,
+      }
+
+      const instructionsSheet =
+        workbook.addWorksheet('التعليمات والخيارات')
+
+      instructionsSheet.addRows(instructions)
+      instructionsSheet.columns = [
+        { width: 24 },
+        { width: 70 },
+      ]
+
+      instructionsSheet.getRow(1).font = {
+        bold: true,
+        size: 14,
+      }
+
+      instructionsSheet.eachRow((row) => {
+        row.alignment = {
+          vertical: 'top',
+          wrapText: true,
+        }
+      })
+
+      await downloadWorkbook(
+        workbook,
+        'قالب_استيراد_طلبات_التسجيل.xlsx',
       )
+    } catch (error) {
+      console.error('Template download error:', error)
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      dataSheet,
-      'طلبات التسجيل',
-    )
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      instructionsSheet,
-      'التعليمات والخيارات',
-    )
-
-    dataSheet['!cols'] = COLUMNS.map(
-      () => ({
-        wch: 22,
-      }),
-    )
-
-    instructionsSheet['!cols'] = [
-      { wch: 24 },
-      { wch: 70 },
-    ]
-
-    downloadBlob(
-      workbook,
-      'قالب_استيراد_طلبات_التسجيل.xlsx',
-    )
+      setErrors([
+        `تعذر إنشاء قالب Excel: ${
+          error instanceof Error
+            ? error.message
+            : 'خطأ غير معروف'
+        }`,
+      ])
+    } finally {
+      setTemplateLoading(false)
+    }
   }
 
-  const parseExcel = async (
-    file: File,
-  ) => {
+  const parseExcel = async (file: File) => {
     setErrors([])
     setMessage('')
     setRows([])
 
-    const buffer =
-      await file.arrayBuffer()
+    const extension =
+      file.name.split('.').pop()?.toLowerCase()
 
-    const workbook =
-      XLSX.read(buffer, {
-        type: 'array',
-      })
+    if (extension !== 'xlsx') {
+      setErrors([
+        'نوع الملف غير مدعوم. ارفع ملف .xlsx فقط.',
+      ])
+      return
+    }
 
-    const firstSheetName =
-      workbook.SheetNames[0]
+    if (file.size === 0) {
+      setErrors([
+        'الملف فارغ.',
+      ])
+      return
+    }
 
-    if (!firstSheetName) {
+    if (file.size > MAX_FILE_SIZE) {
+      setErrors([
+        'حجم الملف أكبر من الحد المسموح (5 ميجابايت). قسّم البيانات إلى ملفات أصغر.',
+      ])
+      return
+    }
+
+    const buffer = await file.arrayBuffer()
+
+    const workbook = new ExcelJS.Workbook()
+
+    await workbook.xlsx.load(buffer)
+
+    const worksheet = workbook.worksheets[0]
+
+    if (!worksheet) {
       setErrors([
         'ملف Excel لا يحتوي على أي ورقة.',
       ])
       return
     }
 
-    const sheet =
-      workbook.Sheets[firstSheetName]
+    if (worksheet.rowCount === 0) {
+      setErrors([
+        'ملف Excel فارغ.',
+      ])
+      return
+    }
 
-    const matrix =
-      XLSX.utils.sheet_to_json<
-        unknown[]
-      >(sheet, {
-        header: 1,
-        defval: '',
-        raw: false,
-      })
+    if (worksheet.rowCount > MAX_IMPORT_ROWS + 1) {
+      setErrors([
+        `الملف يتجاوز الحد المسموح وهو ${MAX_IMPORT_ROWS.toLocaleString('ar-BH')} سجل. قسّم البيانات إلى ملفات أصغر.`,
+      ])
+      return
+    }
+
+    const matrix = worksheetToMatrix(worksheet)
 
     if (matrix.length === 0) {
       setErrors([
@@ -295,11 +495,8 @@ export function EnrollmentImport({
       return
     }
 
-    const header =
-      (matrix[0] ?? []).map(normalize)
-
-    const expected =
-      COLUMNS.map(normalize)
+    const header = (matrix[0] ?? []).map(normalize)
+    const expected = COLUMNS.map(normalize)
 
     const sameHeader =
       header.length === expected.length &&
@@ -328,51 +525,36 @@ export function EnrollmentImport({
     ) {
       const raw = matrix[index] ?? []
 
-      const isEmpty =
-        raw.every(
-          (value) =>
-            normalize(value) === '',
-        )
+      const isEmpty = raw.every(
+        (value) => normalize(value) === '',
+      )
 
       if (isEmpty) continue
 
-      const name =
-        normalize(raw[0])
-
-      const personalId =
-        normalize(raw[1])
-
-      const gender =
-        normalize(raw[2])
-
-      const ageValue =
-        normalize(raw[3])
-
-      const phone =
-        normalize(raw[4])
-
-      const whatsapp =
-        normalize(raw[5])
-
-      const level =
-        normalize(raw[6])
-
-      const notes =
-        normalize(raw[7])
-
-      const healthNotes =
-        normalize(raw[8])
-
-      const paymentMethod =
-        normalize(raw[9])
-
-      const amountValue =
-        normalize(raw[10])
-
-      const paymentReference =
-        normalize(raw[11])
-
       const rowNumber = index + 1
+
+      if (
+        raw.slice(COLUMNS.length).some(
+          (value) => normalize(value) !== '',
+        )
+      ) {
+        rowErrors.push(
+          `الصف ${rowNumber}: توجد بيانات خارج الأعمدة الاثني عشر المطلوبة.`,
+        )
+      }
+
+      const name = normalize(raw[0])
+      const personalId = normalize(raw[1])
+      const gender = normalize(raw[2])
+      const ageValue = normalize(raw[3])
+      const phone = normalize(raw[4])
+      const whatsapp = normalize(raw[5])
+      const level = normalize(raw[6])
+      const notes = normalize(raw[7])
+      const healthNotes = normalize(raw[8])
+      const paymentMethod = normalize(raw[9])
+      const amountValue = normalize(raw[10])
+      const paymentReference = normalize(raw[11])
 
       if (!name) {
         rowErrors.push(
@@ -384,9 +566,7 @@ export function EnrollmentImport({
         rowErrors.push(
           `الصف ${rowNumber}: الجنس مطلوب.`,
         )
-      } else if (
-        !GENDER_OPTIONS.includes(gender)
-      ) {
+      } else if (!GENDER_OPTIONS.includes(gender)) {
         rowErrors.push(
           `الصف ${rowNumber}: الجنس "${gender}" غير صحيح.`,
         )
@@ -396,9 +576,7 @@ export function EnrollmentImport({
         rowErrors.push(
           `الصف ${rowNumber}: المستوى مطلوب.`,
         )
-      } else if (
-        !levelNames.includes(level)
-      ) {
+      } else if (!levelNames.includes(level)) {
         rowErrors.push(
           `الصف ${rowNumber}: المستوى "${level}" غير موجود في النظام.`,
         )
@@ -407,8 +585,7 @@ export function EnrollmentImport({
       let age: number | null = null
 
       if (ageValue) {
-        const parsedAge =
-          Number(ageValue)
+        const parsedAge = Number(ageValue)
 
         if (
           !Number.isFinite(parsedAge) ||
@@ -422,34 +599,26 @@ export function EnrollmentImport({
         }
       }
 
-      let paymentAmount:
-        | number
-        | null = null
+      let paymentAmount: number | null = null
 
       if (amountValue) {
-        const parsedAmount =
-          Number(amountValue)
+        const parsedAmount = Number(amountValue)
 
         if (
-          !Number.isFinite(
-            parsedAmount,
-          ) ||
+          !Number.isFinite(parsedAmount) ||
           parsedAmount < 0
         ) {
           rowErrors.push(
             `الصف ${rowNumber}: مبلغ الدفع غير صحيح.`,
           )
         } else {
-          paymentAmount =
-            parsedAmount
+          paymentAmount = parsedAmount
         }
       }
 
       if (
         paymentMethod &&
-        !PAYMENT_OPTIONS.includes(
-          paymentMethod,
-        )
+        !PAYMENT_OPTIONS.includes(paymentMethod)
       ) {
         rowErrors.push(
           `الصف ${rowNumber}: طريقة الدفع "${paymentMethod}" غير صحيحة.`,
@@ -483,10 +652,10 @@ export function EnrollmentImport({
   }
 
   const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: ChangeEvent<HTMLInputElement>,
   ) => {
-    const file =
-      event.target.files?.[0]
+    const input = event.currentTarget
+    const file = input.files?.[0]
 
     if (!file) return
 
@@ -495,15 +664,15 @@ export function EnrollmentImport({
     try {
       await parseExcel(file)
     } catch (error) {
-      console.error(error)
+      console.error('Excel parsing error:', error)
 
       setRows([])
       setErrors([
-        'تعذر قراءة ملف Excel. تأكد أنه ملف xlsx صالح.',
+        'تعذر قراءة ملف Excel. تأكد أنه ملف .xlsx صالح وغير تالف.',
       ])
+    } finally {
+      input.value = ''
     }
-
-    event.target.value = ''
   }
 
   const importRows = async () => {
@@ -523,10 +692,9 @@ export function EnrollmentImport({
       return
     }
 
-    const confirmed =
-      window.confirm(
-        `سيتم إضافة ${rows.length} طلب تسجيل جديد.\n\nسيتم وضعها في قسم "الطلبات المستوردة" للمراجعة قبل إنشاء الطلاب.\n\nهل تريد المتابعة؟`,
-      )
+    const confirmed = window.confirm(
+      `سيتم إضافة ${rows.length} طلب تسجيل جديد.\n\nسيتم وضعها في قسم "الطلبات المستوردة" للمراجعة قبل إنشاء الطلاب.\n\nهل تريد المتابعة؟`,
+    )
 
     if (!confirmed) return
 
@@ -557,20 +725,18 @@ export function EnrollmentImport({
         )
       }
 
-      const levelMap =
-        new Map(
-          levels.map((level) => [
-            level.name,
-            level.id,
-          ]),
-        )
+      const levelMap = new Map(
+        levels.map((level) => [
+          level.name,
+          level.id,
+        ]),
+      )
 
       const missingLevels = Array.from(
         new Set(
           rows
             .filter(
-              (row) =>
-                !levelMap.has(row.level),
+              (row) => !levelMap.has(row.level),
             )
             .map((row) => row.level),
         ),
@@ -578,98 +744,75 @@ export function EnrollmentImport({
 
       if (missingLevels.length > 0) {
         throw new Error(
-          `المستويات التالية غير موجودة في النظام: ${missingLevels.join(
-            '، ',
-          )}`,
+          `المستويات التالية غير موجودة في النظام: ${missingLevels.join('، ')}`,
         )
       }
 
-      const timestamp =
-        Date.now()
+      const timestamp = Date.now()
 
-      const payload =
-        rows.map((row, index) => {
-          const levelId =
-            levelMap.get(row.level)
+      const payload = rows.map((row, index) => {
+        const levelId = levelMap.get(row.level)
 
-          return {
-            request_number:
-              `IMP-${timestamp}-${String(
-                index + 1,
-              ).padStart(3, '0')}`,
+        return {
+          request_number:
+            `IMP-${timestamp}-${String(index + 1).padStart(3, '0')}`,
 
-            tracking_token:
-              crypto.randomUUID(),
+          tracking_token: crypto.randomUUID(),
 
-            name: row.name,
+          name: row.name,
 
-            personal_id:
-              row.personalId || null,
+          personal_id: row.personalId || null,
 
-            gender:
-              row.gender || null,
+          gender: row.gender || null,
 
-            age: row.age,
+          age: row.age,
 
-            phone:
-              row.phone || null,
+          phone: row.phone || null,
 
-            whatsapp:
-              row.whatsapp || null,
+          whatsapp: row.whatsapp || null,
 
-            level_id:
-              levelId,
+          level_id: levelId,
 
-            class_id: null,
+          class_id: null,
 
-            notes:
-              row.notes || null,
+          notes: row.notes || null,
 
-            health_notes:
-              row.healthNotes || null,
+          health_notes: row.healthNotes || null,
 
-            status: 'pending',
+          status: 'pending',
 
-            processing_mode: 'review',
+          processing_mode: 'review',
 
-            payment_method:
-              row.paymentMethod &&
-              row.paymentMethod !==
-                'لا يوجد'
-                ? row.paymentMethod
-                : null,
+          payment_method:
+            row.paymentMethod &&
+            row.paymentMethod !== 'لا يوجد'
+              ? row.paymentMethod
+              : null,
 
-            payment_amount:
-              row.paymentAmount,
+          payment_amount: row.paymentAmount,
 
-            payment_reference:
-              row.paymentReference ||
-              null,
+          payment_reference:
+            row.paymentReference || null,
 
-            payment_status:
-              row.paymentAmount !==
-                null &&
-              row.paymentAmount >
-                0
-                ? 'pending'
-                : 'not_required',
+          payment_status:
+            row.paymentAmount !== null &&
+            row.paymentAmount > 0
+              ? 'pending'
+              : 'not_required',
 
-            source: 'import',
+          source: 'import',
 
-            academic_year_id:
-              academicYear.id,
-          }
-        })
+          academic_year_id: academicYear.id,
+        }
+      })
 
       setMessage(
         `جاري استيراد ${payload.length} طلب...`,
       )
 
-      await new Promise<void>(
-        (resolve) => {
-          setTimeout(resolve, 50)
-        },
-      )
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 50)
+      })
 
       const {
         data,
@@ -688,9 +831,7 @@ export function EnrollmentImport({
         data.length !== payload.length
       ) {
         throw new Error(
-          `تم إرسال الطلب لكن لم يتم تأكيد إضافة جميع السجلات. المتوقع: ${payload.length}، المضاف: ${
-            data?.length ?? 0
-          }`,
+          `تم إرسال الطلب لكن لم يتم تأكيد إضافة جميع السجلات. المتوقع: ${payload.length}، المضاف: ${data?.length ?? 0}`,
         )
       }
 
@@ -703,10 +844,7 @@ export function EnrollmentImport({
 
       await onImported()
     } catch (error) {
-      console.error(
-        'Import error:',
-        error,
-      )
+      console.error('Import error:', error)
 
       const errorMessage =
         error instanceof Error
@@ -755,7 +893,7 @@ export function EnrollmentImport({
             variant="ghost"
             size="icon"
             onClick={onClose}
-            disabled={saving}
+            disabled={saving || templateLoading}
           >
             <X className="size-4" />
           </Button>
@@ -776,19 +914,23 @@ export function EnrollmentImport({
 
               <Button
                 variant="outline"
-                onClick={
-                  downloadTemplate
+                onClick={downloadTemplate}
+                disabled={
+                  loadingLevels ||
+                  saving ||
+                  templateLoading
                 }
-                disabled={loadingLevels || saving}
                 className="gap-2"
               >
-                {loadingLevels ? (
+                {loadingLevels || templateLoading ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <Download className="size-4" />
                 )}
 
-                تحميل قالب Excel
+                {templateLoading
+                  ? 'جاري إنشاء القالب...'
+                  : 'تحميل قالب Excel'}
               </Button>
 
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
@@ -813,11 +955,15 @@ export function EnrollmentImport({
                 <p className="mt-1 text-sm text-muted-foreground">
                   سيتم فحص الأعمدة والخيارات قبل إضافة أي سجل.
                 </p>
+
+                <p className="mt-1 text-xs text-muted-foreground">
+                  الملفات المدعومة: XLSX فقط، بحد أقصى 5 ميجابايت و5,000 سجل.
+                </p>
               </div>
 
               <label
                 className={`flex items-center justify-center rounded-lg border-2 border-dashed p-8 transition ${
-                  saving
+                  saving || templateLoading
                     ? 'cursor-not-allowed opacity-50'
                     : 'cursor-pointer hover:bg-muted/30'
                 }`}
@@ -843,11 +989,9 @@ export function EnrollmentImport({
 
                   <input
                     type="file"
-                    accept=".xlsx,.xls"
-                    onChange={
-                      handleFileChange
-                    }
-                    disabled={saving}
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={handleFileChange}
+                    disabled={saving || templateLoading}
                     className="hidden"
                   />
                 </div>
@@ -875,18 +1019,11 @@ export function EnrollmentImport({
                   </p>
 
                   <ul className="mt-2 max-h-48 list-disc space-y-1 overflow-y-auto pr-5 text-sm">
-                    {errors.map(
-                      (
-                        error,
-                        index,
-                      ) => (
-                        <li
-                          key={`${error}-${index}`}
-                        >
-                          {error}
-                        </li>
-                      ),
-                    )}
+                    {errors.map((error, index) => (
+                      <li key={`${error}-${index}`}>
+                        {error}
+                      </li>
+                    ))}
                   </ul>
                 </div>
               </div>
@@ -954,49 +1091,40 @@ export function EnrollmentImport({
                     </thead>
 
                     <tbody>
-                      {rows.map(
-                        (
-                          row,
-                          index,
-                        ) => (
-                          <tr
-                            key={index}
-                            className="border-b"
-                          >
-                            <td className="px-3 py-3 font-medium">
-                              {row.name}
-                            </td>
+                      {rows.map((row, index) => (
+                        <tr
+                          key={index}
+                          className="border-b"
+                        >
+                          <td className="px-3 py-3 font-medium">
+                            {row.name}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.personalId ||
-                                '—'}
-                            </td>
+                          <td className="px-3 py-3">
+                            {row.personalId || '—'}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.gender}
-                            </td>
+                          <td className="px-3 py-3">
+                            {row.gender}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.age ??
-                                '—'}
-                            </td>
+                          <td className="px-3 py-3">
+                            {row.age ?? '—'}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.phone ||
-                                '—'}
-                            </td>
+                          <td className="px-3 py-3">
+                            {row.phone || '—'}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.whatsapp ||
-                                '—'}
-                            </td>
+                          <td className="px-3 py-3">
+                            {row.whatsapp || '—'}
+                          </td>
 
-                            <td className="px-3 py-3">
-                              {row.level}
-                            </td>
-                          </tr>
-                        ),
-                      )}
+                          <td className="px-3 py-3">
+                            {row.level}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -1008,7 +1136,7 @@ export function EnrollmentImport({
             <Button
               variant="ghost"
               onClick={onClose}
-              disabled={saving}
+              disabled={saving || templateLoading}
             >
               إلغاء
             </Button>
@@ -1017,6 +1145,7 @@ export function EnrollmentImport({
               onClick={importRows}
               disabled={
                 saving ||
+                templateLoading ||
                 rows.length === 0 ||
                 errors.length > 0
               }
