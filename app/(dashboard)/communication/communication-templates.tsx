@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { FileText, Pencil, Save, Trash2, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
