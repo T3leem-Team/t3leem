@@ -2,7 +2,7 @@
 'use client'
 
 import { Filter } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   Table,
@@ -153,6 +153,34 @@ export function StudentsTable({
   const [paymentStudent, setPaymentStudent] =
     useState<PaymentStudent | null>(null)
 
+  // التحكم في فتح وإغلاق قائمة المستويات
+  const [gradeMenuOpen, setGradeMenuOpen] = useState(false)
+  const gradeMenuRef = useRef<HTMLDivElement>(null)
+
+  // إغلاق القائمة عند الضغط خارجها
+  useEffect(() => {
+    if (!gradeMenuOpen) return
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        gradeMenuRef.current &&
+        !gradeMenuRef.current.contains(event.target as Node)
+      ) {
+        setGradeMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+
+    return () => {
+      document.removeEventListener(
+        'mousedown',
+        handleOutsideClick,
+      )
+    }
+  }, [gradeMenuOpen])
+
+  // عرض جميع المستويات حتى عند تطبيق الفلاتر
   const gradeOptions = useMemo(() => {
     const existingValues = new Set<string>()
 
@@ -165,7 +193,7 @@ export function StudentsTable({
     })
 
     const ordered = academicLevels
-      .filter((level) => existingValues.has(level.name))
+      .slice()
       .sort(
         (a, b) =>
           Number(a.sort_order ?? 0) -
@@ -232,7 +260,7 @@ export function StudentsTable({
     return [...ordered, ...remaining]
   }, [students, courses])
 
-  // إضافة مستوى أو إلغاء تحديده مع الاحتفاظ ببقية الاختيارات
+  // إضافة مستوى أو إلغاء تحديده دون إغلاق القائمة
   const toggleGrade = (grade: string) => {
     const currentGrades = filters.grade ?? []
 
@@ -364,37 +392,86 @@ export function StudentsTable({
                   <div className="flex items-center gap-1">
                     <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
 
-                    <select
-                      value=""
-                      onChange={(event) => {
-                        const grade = event.target.value
-
-                        if (!grade) return
-
-                        toggleGrade(grade)
-                        event.currentTarget.value = ''
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label="تصفية حسب المستويات"
-                      className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+                    <div
+                      ref={gradeMenuRef}
+                      className="relative w-full min-w-0"
                     >
-                      <option value="">
-                        {filters.grade.length === 0
-                          ? 'كل المستويات'
-                          : filters.grade.length === 1
-                            ? filters.grade[0]
-                            : `${filters.grade.length} مستويات محددة`}
-                      </option>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setGradeMenuOpen((open) => !open)
+                        }}
+                        aria-label="تصفية حسب المستويات"
+                        aria-expanded={gradeMenuOpen}
+                        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors hover:border-sky-300 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+                      >
+                        <span className="truncate">
+                          {filters.grade.length === 0
+                            ? 'كل المستويات'
+                            : filters.grade.length === 1
+                              ? filters.grade[0]
+                              : `${filters.grade.length} مستويات محددة`}
+                        </span>
 
-                      {gradeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {filters.grade.includes(option)
-                            ? '✓ '
-                            : ''}
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                        <span className="shrink-0">▾</span>
+                      </button>
+
+                      {gradeMenuOpen && (
+                        <div
+                          className="absolute right-0 top-full z-[100] mt-1 max-h-64 w-full min-w-[190px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                          onClick={(event) =>
+                            event.stopPropagation()
+                          }
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateFilter('grade', [])
+                            }
+                            className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                              filters.grade.length === 0
+                                ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                                : 'text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            <span className="w-4 shrink-0 text-center">
+                              {filters.grade.length === 0
+                                ? '✓'
+                                : ''}
+                            </span>
+
+                            كل المستويات
+                          </button>
+
+                          {gradeOptions.map((option) => {
+                            const checked =
+                              filters.grade.includes(option)
+
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() =>
+                                  toggleGrade(option)
+                                }
+                                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                                  checked
+                                    ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                                    : 'text-slate-700 dark:text-slate-200'
+                                }`}
+                              >
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-300 text-[10px] dark:border-slate-600">
+                                  {checked ? '✓' : ''}
+                                </span>
+
+                                <span>{option}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </TableHead>
               )}
