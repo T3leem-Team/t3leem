@@ -34,25 +34,6 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Remove obsolete package.json overrides
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-
-          const file = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-
-          if (pkg.pnpm?.overrides) {
-            delete pkg.pnpm.overrides;
-
-            if (Object.keys(pkg.pnpm).length === 0) {
-              delete pkg.pnpm;
-            }
-
-            fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
-          }
-          NODE
-
       - name: Check workspace overrides
         run: |
           echo "=== pnpm-workspace.yaml ==="
@@ -71,6 +52,22 @@ jobs:
             exit 1
           }
 
+      - name: Verify ExcelJS dependency
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+
+          if (!pkg.dependencies?.exceljs) {
+            console.error('ERROR: exceljs is missing from package.json dependencies.');
+            process.exit(1);
+          }
+
+          console.log(`ExcelJS requested version: ${pkg.dependencies.exceljs}`);
+          console.log(`Existing xlsx dependency preserved: ${Boolean(pkg.dependencies.xlsx)}`);
+          NODE
+
       - name: Regenerate lockfile
         run: |
           pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
@@ -80,11 +77,12 @@ jobs:
 
       - name: Verify dependency versions
         run: |
+          pnpm why exceljs
           pnpm why ip-address
           pnpm why nanoid
           pnpm why zod
 
-      - name: Verify patched versions
+      - name: Verify lockfile versions
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -93,18 +91,19 @@ jobs:
 
           const checks = [
             {
-              name: 'ip-address',
-              version: '10.7.4',
+              name: 'exceljs',
+              pattern: /exceljs@[^:\s(]+(?:\(|:)/,
+            },
+            {
+              name: 'ip-address 10.7.4',
               pattern: /ip-address@10\.7\.4(?:\(|:)/,
             },
             {
-              name: 'nanoid',
-              version: '3.3.18',
+              name: 'nanoid 3.3.18',
               pattern: /nanoid@3\.3\.18(?:\(|:)/,
             },
             {
-              name: 'zod',
-              version: '4.6.6 or newer',
+              name: 'zod 4.6.6 or newer',
               pattern: /zod@(?:4\.(?:6\.\d+|[7-9]\.\d+|[1-9]\d+\.\d+)|[5-9]\.\d+\.\d+|[1-9]\d+\.\d+\.\d+)(?:\(|:)/,
             },
           ];
@@ -113,11 +112,7 @@ jobs:
 
           for (const item of checks) {
             const found = item.pattern.test(lock);
-
-            console.log(
-              `${item.name} ${item.version}: ${found ? 'FOUND' : 'NOT FOUND'}`
-            );
-
+            console.log(`${item.name}: ${found ? 'FOUND' : 'NOT FOUND'}`);
             if (!found) failed = true;
           }
 
@@ -131,17 +126,18 @@ jobs:
         run: pnpm audit --audit-level=high
         continue-on-error: true
 
-      - name: Commit dependency changes
+      - name: Commit lockfile only
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add package.json pnpm-workspace.yaml pnpm-lock.yaml
+          git add pnpm-lock.yaml
 
           if git diff --cached --quiet; then
-            echo "No dependency changes to commit."
+            echo "No lockfile changes to commit."
             exit 0
           fi
 
-          git commit -m "fix: update vulnerable transitive dependencies"
+          git diff --cached --stat
+          git commit -m "fix: sync pnpm lockfile for exceljs"
           git push origin main
