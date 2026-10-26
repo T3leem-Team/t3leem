@@ -511,6 +511,10 @@ export function DashboardAttendanceExport({
           (student) => normalizeId(student.id),
         )
 
+        /*
+         * 1. جلب تاريخ انضمام الطالب للدورة.
+         * المصدر: enrollments.join_date.
+         */
         let enrollments: Enrollment[] = []
 
         if (
@@ -565,6 +569,10 @@ export function DashboardAttendanceExport({
           )
         }
 
+        /*
+         * اختيار أقدم تاريخ انضمام غير فارغ
+         * لكل طالب في السنة الأكاديمية المحددة.
+         */
         const enrollmentMap =
           new Map<string, Enrollment>()
 
@@ -591,6 +599,11 @@ export function DashboardAttendanceExport({
           }
         }
 
+        /*
+         * 2. جلب تاريخ تعيين المعلم من created_at.
+         * نستخدم تاريخ إنشاء سجل التعيين بتوقيت البحرين،
+         * ولا نعتمد على teacher_student_assignments.join_date.
+         */
         const assignmentCreatedAtMap =
           new Map<string, string>()
 
@@ -640,6 +653,11 @@ export function DashboardAttendanceExport({
                 : null,
             }))
 
+          /*
+           * إذا كان للطالب أكثر من تعيين في الدورة،
+           * نعتمد أقدم تاريخ إنشاء صالح؛ لأن مسؤولية
+           * تسجيل الحضور تبدأ من أول تعيين.
+           */
           for (const assignment of assignmentRecords) {
             if (!assignment.createdAt) {
               continue
@@ -676,6 +694,10 @@ export function DashboardAttendanceExport({
           }
         }
 
+        /*
+         * 3. سحب سجلات الحضور مباشرة من Supabase.
+         * يتم جلبها على دفعات لتجنب حدود الاستعلام.
+         */
         const exportedAttendanceRecords:
           AttendanceRecord[] = []
 
@@ -756,6 +778,12 @@ export function DashboardAttendanceExport({
           }
         }
 
+        /*
+         * 4. إنشاء خريطة سجلات الحضور.
+         * عند وجود أكثر من سجل للطالب في اليوم نفسه،
+         * نفضّل السجل الذي لا يحمل حالة "غير منضم"
+         * حتى لا يخفي سجل قديم حالة حضور فعلية.
+         */
         const recordMap = new Map<
           string,
           AttendanceRecord
@@ -801,6 +829,9 @@ export function DashboardAttendanceExport({
         const summaryRows:
           Record<string, unknown>[] = []
 
+        /*
+         * 5. إنشاء التفاصيل والملخص.
+         */
         for (const student of assignedStudents) {
           const studentId = normalizeId(student.id)
 
@@ -859,9 +890,18 @@ export function DashboardAttendanceExport({
 
             let statusLabel: string
 
+            /*
+             * الأولوية الأولى:
+             * الطالب لم ينضم للدورة بعد.
+             */
             if (isBeforeEnrollment) {
               statusLabel = 'لم ينضم للدورة'
             } else if (
+              /*
+               * الأولوية الثانية:
+               * انضم للدورة لكنه لم يصل بعد
+               * إلى تاريخ إنشاء سجل تعيينه عند المعلم.
+               */
               assignmentCreatedAtDate !== null &&
               isBeforeAssignment
             ) {
@@ -872,6 +912,11 @@ export function DashboardAttendanceExport({
                 attendanceStatuses,
               )
 
+              /*
+               * بعد تاريخ التعيين، السجل القديم
+               * "غير منضم" لا يُعتبر تسجيل حضور.
+               * نعرض "لم يسجل" دون تعديل السجل الأصلي.
+               */
               if (
                 assignmentCreatedAtDate !== null &&
                 lessonDate >= assignmentCreatedAtDate &&
@@ -882,6 +927,9 @@ export function DashboardAttendanceExport({
                 statusLabel = recordedStatus
               }
             } else {
+              /*
+               * لا يوجد سجل حضور في يوم الدراسة.
+               */
               statusLabel = 'لم يسجل'
             }
 
@@ -925,6 +973,10 @@ export function DashboardAttendanceExport({
             })
           }
 
+          /*
+           * الأيام المسجلة هي الأيام التي تحمل
+           * حالة حضور فعلية، بما فيها الغياب.
+           */
           const recordedDays =
             counts.present +
             counts.absent +
@@ -965,6 +1017,9 @@ export function DashboardAttendanceExport({
           })
         }
 
+        /*
+         * 6. إنشاء ملف Excel بالورقتين الأصليتين.
+         */
         const workbook = XLSX.utils.book_new()
 
         const detailsSheet =
@@ -1087,15 +1142,12 @@ export function DashboardAttendanceExport({
 
   return (
     <>
-      <div
-        dir="rtl"
-        className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start"
-      >
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           onClick={handleCourseToToday}
           disabled={!course || exporting}
-          className="h-10 w-full justify-center gap-2 border border-emerald-200 bg-emerald-50 px-4 text-emerald-700 shadow-sm hover:bg-emerald-100 hover:text-emerald-800 sm:w-[190px]"
+          className="h-10 w-[190px] justify-center gap-2 border border-emerald-200 bg-emerald-50 px-4 text-emerald-700 shadow-sm hover:bg-emerald-100 hover:text-emerald-800"
         >
           <FileSpreadsheet className="size-4" />
 
@@ -1108,7 +1160,7 @@ export function DashboardAttendanceExport({
           type="button"
           onClick={openCustomModal}
           disabled={!course || exporting}
-          className="h-10 w-full justify-center gap-2 border border-indigo-200 bg-indigo-50 px-4 text-indigo-700 shadow-sm hover:bg-indigo-100 hover:text-indigo-800 sm:w-[190px]"
+          className="h-10 w-[190px] justify-center gap-2 border border-indigo-200 bg-indigo-50 px-4 text-indigo-700 shadow-sm hover:bg-indigo-100 hover:text-indigo-800"
         >
           <CalendarRange className="size-4" />
           تنزيل مخصص
