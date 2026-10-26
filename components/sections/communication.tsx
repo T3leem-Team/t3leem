@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -32,6 +33,20 @@ import { Button } from '@/components/ui/button'
 import { CommunicationViewGroups } from '@/app/(dashboard)/communication/communication-groups'
 import { CommunicationTemplates } from '@/app/(dashboard)/communication/communication-templates'
 
+import {
+  getCommunicationCache,
+  isCommunicationCacheLoading,
+  setCommunicationCache,
+  setCommunicationCacheLoading,
+  loadCommunicationData,
+} from './communication-data'
+
+import {
+  getWhatsAppNumber,
+  replaceTemplateVariables,
+} from './communication-helpers'
+
+
 type CommunicationSection =
   | 'direct'
   | 'group'
@@ -50,64 +65,6 @@ type FilterType =
   | 'invalid_personal_id'
   | 'attendance_award'
 
-type Student = {
-  id: string
-  name: string
-  phone: string
-  whatsapp: string
-  personalId: string
-  academicYearId: string
-  enrollmentId: string | null
-  feeExempt: boolean
-}
-
-type Teacher = {
-  id: string
-  name: string
-}
-
-type Course = {
-  id: string
-  name: string
-  academicYearId: string
-}
-
-type TeacherAssignment = {
-  teacherId: string
-  courseId: string
-  studentId: string
-}
-
-type AttendanceRecord = {
-  studentId: string
-  courseId: string | null
-  enrollmentId: string | null
-  attendanceDate: string
-  statusId: string
-}
-
-type AttendanceStatus = {
-  id: string
-  name: string
-}
-
-type Payment = {
-  studentId: string
-  amount: number
-}
-
-type AcademicYear = {
-  id: string
-  annualFee: number
-}
-
-type MessageTemplate = {
-  id: string
-  name: string
-  content: string
-  createdAt: string
-  updatedAt: string
-}
 
 /*
  * =========================================================
@@ -158,34 +115,6 @@ const MESSAGE_VARIABLES = [
   },
 ]
 
-/*
- * =========================================================
- * Cache
- * =========================================================
- */
-
-type CommunicationCache = {
-  academicYear: AcademicYear | null
-  students: Student[]
-  teachers: Teacher[]
-  courses: Course[]
-  assignments: TeacherAssignment[]
-  attendance: AttendanceRecord[]
-  attendanceStatuses: AttendanceStatus[]
-  payments: Payment[]
-  messageTemplates: MessageTemplate[]
-  attendanceAwardEligibleStudentIds: string[]
-}
-
-let communicationCache:
-  CommunicationCache | null = null
-
-let communicationCacheLoading = false
-
-const TODAY =
-  new Date()
-    .toISOString()
-    .split('T')[0]
 
 export function CommunicationView() {
   const [
