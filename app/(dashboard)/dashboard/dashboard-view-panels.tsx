@@ -1255,148 +1255,150 @@ export function DashboardViewPanels({
       )}
 
       
-      {/* Teacher comments */}
-      <Card>
-        <CardHeader>
+     
+{/* Teacher comments */}
+<Card>
+  <CardHeader>
+    <div
+      dir="rtl"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
+    >
+      <div className="min-w-0 sm:col-start-1 sm:row-start-1">
+        <CardTitle className="flex items-center gap-2">
+          <ClipboardCheck className="size-5 text-slate-500" />
+          ملاحظات المعلمين على الطلبة
+        </CardTitle>
+
+        <p className="mt-1 text-xs text-muted-foreground">
+          ملاحظات المعلمين المسجلة في التاريخ المحدد
+        </p>
+      </div>
+
+      <div className="relative justify-self-start sm:col-start-2 sm:row-start-1">
+        <Button
+          type="button"
+          onClick={() =>
+            setNotesDownloadOpen((value) => !value)
+          }
+          disabled={allCourseNotes.length === 0}
+          className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Download className="size-4" />
+          تنزيل الملاحظات
+          <ChevronDown
+            className={`size-4 transition-transform ${
+              notesDownloadOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </Button>
+
+        {notesDownloadOpen && (
           <div
             dir="rtl"
-            className="flex flex-col gap-3 sm:flex-row sm:items-center"
+            className="absolute right-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
           >
-            <div className="min-w-0 flex-1">
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="size-5 text-slate-500" />
-                ملاحظات المعلمين على الطلبة
-              </CardTitle>
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                ملاحظات المعلمين المسجلة في التاريخ المحدد
-              </p>
-            </div>
-
-            <div className="relative self-start sm:mr-auto">
-              <Button
-                type="button"
-                onClick={() =>
-                  setNotesDownloadOpen((value) => !value)
-                }
-                disabled={allCourseNotes.length === 0}
-                className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download className="size-4" />
-                تنزيل الملاحظات
-                <ChevronDown
-                  className={`size-4 transition-transform ${
-                    notesDownloadOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </Button>
-
-              {notesDownloadOpen && (
-                <div
-                  dir="rtl"
-                  className="absolute right-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
+            {!customDownloadOpen ? (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={downloadFromCourseStart}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
                 >
-                  {!customDownloadOpen ? (
-                    <div className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={downloadFromCourseStart}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
-                      >
-                        <Download className="size-4 shrink-0 text-sky-600" />
-                        <span>
-                          من بداية الدورة حتى التاريخ المحدد
-                        </span>
-                      </button>
+                  <Download className="size-4 shrink-0 text-sky-600" />
+                  <span>
+                    من بداية الدورة حتى التاريخ المحدد
+                  </span>
+                </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNotesFromDate(
-                            selectedCourse?.startDate ?? selectedDate,
-                          )
-                          setNotesToDate(selectedDate)
-                          setCustomDownloadOpen(true)
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
-                      >
-                        <CalendarDays className="size-4 shrink-0 text-sky-600" />
-                        <span>مخصص</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4 p-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">
-                          تحديد الفترة
-                        </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotesFromDate(
+                      selectedCourse?.startDate ?? selectedDate,
+                    )
+                    setNotesToDate(selectedDate)
+                    setCustomDownloadOpen(true)
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
+                >
+                  <CalendarDays className="size-4 shrink-0 text-sky-600" />
+                  <span>مخصص</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 p-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">
+                    تحديد الفترة
+                  </p>
 
-                        <button
-                          type="button"
-                          onClick={() => setCustomDownloadOpen(false)}
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                          aria-label="رجوع"
-                          title="رجوع"
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                            من تاريخ
-                          </label>
-
-                          <input
-                            type="date"
-                            value={notesFromDate}
-                            max={notesToDate || selectedDate}
-                            onChange={(event) =>
-                              setNotesFromDate(event.target.value)
-                            }
-                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                            إلى تاريخ
-                          </label>
-
-                          <input
-                            type="date"
-                            value={notesToDate}
-                            min={notesFromDate}
-                            max={selectedDate}
-                            onChange={(event) =>
-                              setNotesToDate(event.target.value)
-                            }
-                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                          />
-                        </div>
-                      </div>
-
-                      <Button
-                        type="button"
-                        onClick={downloadCustomNotes}
-                        disabled={
-                          !notesFromDate ||
-                          !notesToDate ||
-                          notesFromDate > notesToDate
-                        }
-                        className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Download className="size-4" />
-                        تنزيل الفترة
-                      </Button>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setCustomDownloadOpen(false)}
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="رجوع"
+                    title="رجوع"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
-              )}
-            </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      من تاريخ
+                    </label>
+
+                    <input
+                      type="date"
+                      value={notesFromDate}
+                      max={notesToDate || selectedDate}
+                      onChange={(event) =>
+                        setNotesFromDate(event.target.value)
+                      }
+                      className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      إلى تاريخ
+                    </label>
+
+                    <input
+                      type="date"
+                      value={notesToDate}
+                      min={notesFromDate}
+                      max={selectedDate}
+                      onChange={(event) =>
+                        setNotesToDate(event.target.value)
+                      }
+                      className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={downloadCustomNotes}
+                  disabled={
+                    !notesFromDate ||
+                    !notesToDate ||
+                    notesFromDate > notesToDate
+                  }
+                  className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download className="size-4" />
+                  تنزيل الفترة
+                </Button>
+              </div>
+            )}
           </div>
-        </CardHeader>
+        )}
+      </div>
+    </div>
+  </CardHeader>
+
 
 
         <CardContent>
