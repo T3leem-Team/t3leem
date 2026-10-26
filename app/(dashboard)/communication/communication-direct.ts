@@ -5,13 +5,10 @@ import type { Dispatch, SetStateAction } from 'react'
 
 import {
   Check,
-  FileText,
-  MessageCircle,
   RotateCcw,
   Search,
   Send,
   SlidersHorizontal,
-  Users,
 } from 'lucide-react'
 
 import {
@@ -21,9 +18,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 
-import {
-  getWhatsAppNumber,
-} from '@/app/(dashboard)/communication/communication-helpers'
+import { getWhatsAppNumber } from '@/app/(dashboard)/communication/communication-helpers'
 
 import type {
   Student,
@@ -53,6 +48,7 @@ interface CommunicationDirectProps {
   filteredStudents: Student[]
   selectedStudents: Student[]
   selectedStudentIds: string[]
+  setSelectedStudentIds: Dispatch<SetStateAction<string[]>>
   filterType: FilterType
   setFilterType: Dispatch<SetStateAction<FilterType>>
   selectedTeacherIds: string[]
@@ -104,6 +100,7 @@ export function CommunicationDirect({
   filteredStudents,
   selectedStudents,
   selectedStudentIds,
+  setSelectedStudentIds,
   filterType,
   setFilterType,
   selectedTeacherIds,
@@ -338,12 +335,7 @@ export function CommunicationDirect({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  // Clear the selection through the existing parent state.
-                  setSearch((current) => current)
-                  // The parent provides the selection state setter below.
-                }}
-                disabled
+                onClick={() => setSelectedStudentIds([])}
               >
                 إلغاء التحديد
               </Button>
