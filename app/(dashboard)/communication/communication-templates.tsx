@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { FileText, Pencil, Save, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -21,6 +21,19 @@ type CommunicationTemplatesProps = {
   onTemplatesChange: (templates: MessageTemplate[]) => void
 }
 
+const MESSAGE_VARIABLES = [
+  { key: '{{name}}', label: 'اسم الطالب' },
+  { key: '{{phone}}', label: 'رقم الهاتف' },
+  { key: '{{whatsapp}}', label: 'رقم WhatsApp' },
+  { key: '{{course}}', label: 'الدورة' },
+  { key: '{{teacher}}', label: 'المعلم' },
+  { key: '{{attendance}}', label: 'الحضور' },
+  { key: '{{paid}}', label: 'المبلغ المدفوع' },
+  { key: '{{remaining}}', label: 'المبلغ المتبقي' },
+  { key: '{{payment_status}}', label: 'حالة الدفع' },
+  { key: '{{date}}', label: 'التاريخ' },
+]
+
 export function CommunicationTemplates({
   templates,
   onTemplatesChange,
@@ -31,12 +44,15 @@ export function CommunicationTemplates({
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const contentRef = useRef<HTMLTextAreaElement>(null)
+  const cursorPositionRef = useRef<number | null>(null)
 
   function startEditing(template: MessageTemplate) {
     setEditingId(template.id)
     setName(template.name)
     setContent(template.content)
     setMessage('')
+    cursorPositionRef.current = null
   }
 
   function cancelEditing() {
@@ -44,6 +60,37 @@ export function CommunicationTemplates({
     setName('')
     setContent('')
     setMessage('')
+    cursorPositionRef.current = null
+  }
+
+  function insertVariable(variable: string) {
+    const textarea = contentRef.current
+
+    if (!textarea) {
+      setContent((current) => current + variable)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const nextContent =
+      content.substring(0, start) + variable + content.substring(end)
+    const nextCursorPosition = start + variable.length
+
+    setContent(nextContent)
+    cursorPositionRef.current = nextCursorPosition
+
+    requestAnimationFrame(() => {
+      const currentTextarea = contentRef.current
+
+      if (currentTextarea) {
+        currentTextarea.focus()
+        currentTextarea.setSelectionRange(
+          nextCursorPosition,
+          nextCursorPosition
+        )
+      }
+    })
   }
 
   async function saveTemplate() {
@@ -138,6 +185,7 @@ export function CommunicationTemplates({
             <FileText className="size-5" />
             الرسائل المحفوظة
           </h2>
+
           <p className="mt-1 text-sm text-muted-foreground">
             إدارة قوالب الرسائل وتعديلها لاستخدامها في التواصل المباشر.
           </p>
@@ -165,11 +213,12 @@ export function CommunicationTemplates({
                 className="rounded-lg border p-4"
               >
                 {editingId === template.id ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="space-y-1">
                       <label className="text-sm font-medium">
                         اسم الرسالة
                       </label>
+
                       <input
                         value={name}
                         onChange={(event) => setName(event.target.value)}
@@ -178,24 +227,64 @@ export function CommunicationTemplates({
                       />
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       <label className="text-sm font-medium">
                         محتوى الرسالة
                       </label>
+
                       <textarea
+                        ref={contentRef}
                         value={content}
                         onChange={(event) => setContent(event.target.value)}
+                        onSelect={(event) => {
+                          cursorPositionRef.current =
+                            event.currentTarget.selectionStart
+                        }}
                         rows={7}
                         className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
                         placeholder="اكتب محتوى الرسالة..."
                       />
+
+                      <div className="space-y-2 rounded-md border p-3">
+                        <p className="text-sm font-medium">
+                          أضف متغيرًا إلى الرسالة
+                        </p>
+
+                        <p className="text-xs text-muted-foreground">
+                          اضغط على المتغير لإضافته عند موضع المؤشر في النص.
+                        </p>
+
+                        <div className="flex flex-wrap gap-2">
+                          {MESSAGE_VARIABLES.map((variable) => (
+                            <Button
+                              key={variable.key}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={saving}
+                              onMouseDown={(event) => {
+                                event.preventDefault()
+                              }}
+                              onClick={() => insertVariable(variable.key)}
+                              title={variable.key}
+                            >
+                              {variable.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        مثال: هلا {'{{name}}'}، نذكرك بموعد دورة{' '}
+                        {'{{course}}'}.
+                      </p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         onClick={saveTemplate}
-                        disabled={saving}
+                        disabled={saving || deletingId !== null}
                       >
                         <Save className="me-2 size-4" />
                         {saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
@@ -224,7 +313,9 @@ export function CommunicationTemplates({
                           size="icon"
                           aria-label="تعديل الرسالة"
                           onClick={() => startEditing(template)}
-                          disabled={deletingId !== null}
+                          disabled={
+                            deletingId !== null || editingId !== null
+                          }
                         >
                           <Pencil className="size-4" />
                         </Button>
@@ -235,7 +326,9 @@ export function CommunicationTemplates({
                           size="icon"
                           aria-label="حذف الرسالة"
                           onClick={() => deleteTemplate(template)}
-                          disabled={deletingId !== null}
+                          disabled={
+                            deletingId !== null || editingId !== null
+                          }
                         >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
