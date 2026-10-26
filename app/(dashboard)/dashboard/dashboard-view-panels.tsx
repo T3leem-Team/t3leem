@@ -1264,10 +1264,6 @@ export function DashboardViewPanels({
           <ClipboardCheck className="size-5 text-slate-500" />
           ملاحظات المعلمين على الطلبة
         </CardTitle>
-
-        <p className="mt-1 text-xs text-muted-foreground">
-          ملاحظات المعلمين المسجلة في التاريخ المحدد
-        </p>
       </div>
 
       <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start [&>*]:sm:ml-0">
