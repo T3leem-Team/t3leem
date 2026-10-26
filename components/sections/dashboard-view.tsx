@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -81,38 +82,29 @@ export function DashboardView() {
   )
 
   useEffect(() => {
-    const sections =
-      getDashboardSections()
+    const sections = getDashboardSections()
 
     if (!sections) {
       router.replace('/login')
       return
     }
 
-    const hasDashboard =
-      sections.some(
-        (section) =>
-          section.section_key ===
-          'dashboard',
-      )
+    const hasDashboard = sections.some(
+      (section) => section.section_key === 'dashboard',
+    )
 
     if (hasDashboard) {
       setCheckingAccess(false)
       return
     }
 
-    const firstAllowedSection =
-      sections.find(
-        (section) =>
-          typeof section.href ===
-            'string' &&
-          section.href.trim(),
-      )
+    const firstAllowedSection = sections.find(
+      (section) =>
+        typeof section.href === 'string' && section.href.trim(),
+    )
 
     if (firstAllowedSection?.href) {
-      router.replace(
-        firstAllowedSection.href,
-      )
+      router.replace(firstAllowedSection.href)
       return
     }
 
@@ -149,525 +141,361 @@ export function DashboardView() {
   }
 
   return (
-    <>
-      <div
-        dir="rtl"
-        className="min-h-screen space-y-4 bg-rose-50/50 sm:space-y-5"
-      >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              لوحة المعلومات
-            </h1>
+    <div
+      dir="rtl"
+      className="min-h-screen space-y-4 bg-background sm:space-y-5"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            لوحة المعلومات
+          </h1>
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              نظرة سريعة على الطلاب والدورات والحضور
+          <p className="mt-1 text-sm text-muted-foreground">
+            نظرة سريعة على الطلاب والدورات والحضور
+          </p>
+
+          {academicYear && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              السنة الدراسية:{' '}
+              <span className="font-medium text-foreground">
+                {academicYear.name}
+              </span>
             </p>
+          )}
+        </div>
 
-            {academicYear && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                السنة الدراسية:{' '}
-                <span className="font-medium text-foreground">
-                  {academicYear.name}
-                </span>
-              </p>
-            )}
+        <Button
+          type="button"
+          onClick={() => void loadData(true)}
+          disabled={refreshing}
+          className="h-10 w-full gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 sm:w-auto sm:min-w-[120px]"
+        >
+          <RefreshCw
+            className={refreshing ? 'size-4 animate-spin' : 'size-4'}
+          />
+          تحديث
+        </Button>
+      </div>
+
+      <DashboardStudentSearch
+        students={students}
+        enrollments={enrollments}
+        assignments={assignments}
+        courses={courses}
+        teachers={teachers}
+        attendanceRecords={attendanceRecords}
+        attendanceStatusMap={statusMap}
+        selectedCourseId={selectedCourseId}
+        selectedDate={selectedDate}
+        lessonDateStatus={lessonDateStatus}
+        onSelectStudent={setSelectedStudent}
+      />
+
+      <Card className="border-sky-100 bg-gradient-to-br from-sky-50/70 to-white">
+        <CardContent className="p-4 sm:p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <BookOpen className="size-4 text-sky-600" />
+                الدورة
+              </label>
+
+              <select
+                value={selectedCourseId}
+                onChange={(event) => setSelectedCourseId(event.target.value)}
+                className="h-10 w-full rounded-md border border-sky-100 bg-white px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
+              >
+                {courses.length === 0 && (
+                  <option value="">لا توجد دورات</option>
+                )}
+
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <CalendarCheck className="size-4 text-sky-600" />
+                التاريخ
+              </label>
+
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+                className="h-10 w-full rounded-md border border-sky-100 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card className="border-sky-200 bg-gradient-to-br from-sky-50 to-white shadow-sm">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  المسجلون لهذه السنة
+                </p>
+                <p className="mt-2 text-3xl font-bold text-sky-800">
+                  {stats.studentsCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sky-700">
+                <Users className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-sm">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  المنضمون لهذه الدورة
+                </p>
+                <p className="mt-2 text-3xl font-bold text-emerald-800">
+                  {stats.assignedCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-100 text-emerald-700">
+                <UserCheck className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-rose-200 bg-gradient-to-br from-rose-50 to-white shadow-sm">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  غير منضمين لهذه الدورة
+                </p>
+                <p className="mt-2 text-3xl font-bold text-rose-800">
+                  {stats.unassignedCount}
+                </p>
+              </div>
+
+              <div className="flex size-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-100 text-rose-700">
+                <UserX className="size-5" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-violet-200 bg-gradient-to-br from-violet-50/70 to-white shadow-sm">
+        <CardHeader>
+          <div className="flex flex-col items-stretch gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarCheck className="size-5 text-violet-600" />
+              ملخص الحضور
+            </CardTitle>
+
+            <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start [&>*]:sm:ml-0">
+              <Button
+                type="button"
+                onClick={() => setAttendanceDetailsOpen(true)}
+                disabled={
+                  !selectedCourseId ||
+                  !selectedDate ||
+                  lessonDateStatus !== 'lesson'
+                }
+                className="h-10 w-full min-w-0 gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm text-violet-700 shadow-sm hover:bg-violet-100 sm:w-auto sm:min-w-[150px] sm:px-4"
+              >
+                <Users className="size-4" />
+                تفاصيل الحضور
+              </Button>
+
+              <DashboardAttendanceExport
+                course={selectedCourse}
+                academicYear={academicYear}
+                assignments={assignments}
+                teachers={teachers}
+                students={students}
+                attendanceRecords={attendanceRecords}
+                attendanceStatuses={attendanceStatuses}
+              />
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="rounded-xl border border-violet-100 bg-white/90 p-4">
+            <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+              <div>
+                {lessonDateStatus === 'lesson' ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      نسبة الحضور
+                    </p>
+
+                    <p
+                      className={`mt-1 text-3xl font-bold ${
+                        attendancePercentage >= 60
+                          ? 'text-emerald-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {attendancePercentage}%
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {stats.presentCount} حاضر من أصل {stats.assignedCount}{' '}
+                      موزعين في الدورة
+                    </p>
+
+                    {stats.recordedCount > 0 &&
+                      stats.recordedCount < stats.assignedCount && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          تم تسجيل الحضور لـ {stats.recordedCount} من أصل{' '}
+                          {stats.assignedCount}
+                        </p>
+                      )}
+                  </>
+                ) : (
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {lessonDateStatus === 'not-started'
+                      ? 'لم تبدأ الدورة بعد'
+                      : lessonDateStatus === 'ended'
+                        ? 'انتهت الدورة'
+                        : lessonDateStatus === 'no-lesson'
+                          ? 'لا يوجد درس هذا اليوم'
+                          : 'اختر دورة لعرض ملخص الحضور'}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          <Button
-            type="button"
-            onClick={() =>
-              void loadData(true)
-            }
-            disabled={refreshing}
-            className="h-10 w-full gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 sm:w-auto sm:min-w-[120px]"
-          >
-            <RefreshCw
-              className={
-                refreshing
-                  ? 'size-4 animate-spin'
-                  : 'size-4'
-              }
-            />
-            تحديث
-          </Button>
-        </div>
+          {lessonDateStatus === 'not-started' && (
+            <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+              <CalendarCheck className="mx-auto size-7 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                لم تبدأ الدورة بعد
+              </p>
 
-        <DashboardStudentSearch
-          students={students}
-          enrollments={enrollments}
-          assignments={assignments}
-          courses={courses}
-          teachers={teachers}
-          attendanceRecords={
-            attendanceRecords
-          }
-          attendanceStatusMap={
-            statusMap
-          }
-          selectedCourseId={
-            selectedCourseId
-          }
-          selectedDate={selectedDate}
-          lessonDateStatus={
-            lessonDateStatus
-          }
-          onSelectStudent={
-            setSelectedStudent
-          }
-        />
-
-        <Card>
-          <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <BookOpen className="size-4 text-slate-500" />
-                  الدورة
-                </label>
-
-                <select
-                  value={
-                    selectedCourseId
-                  }
-                  onChange={(
-                    event,
-                  ) => {
-                    setSelectedCourseId(
-                      event.target
-                        .value,
-                    )
-                  }}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:ring-2 focus:ring-sky-200"
-                >
-                  {courses.length ===
-                    0 && (
-                    <option value="">
-                      لا توجد دورات
-                    </option>
-                  )}
-
-                  {courses.map(
-                    (course) => (
-                      <option
-                        key={
-                          course.id
-                        }
-                        value={
-                          course.id
-                        }
-                      >
-                        {
-                          course.name
-                        }
-                      </option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <CalendarCheck className="size-4 text-slate-500" />
-                  التاريخ
-                </label>
-
-                <input
-                  type="date"
-                  value={
-                    selectedDate
-                  }
-                  onChange={(
-                    event,
-                  ) => {
-                    setSelectedDate(
-                      event.target
-                        .value,
-                    )
-                  }}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-sky-200"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    المسجلون لهذه السنة
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold">
-                    {
-                      stats.studentsCount
-                    }
-                  </p>
-                </div>
-
-                <div className="flex size-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600">
-                  <Users className="size-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    المنضمون لهذه الدورة
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold">
-                    {
-                      stats.assignedCount
-                    }
-                  </p>
-                </div>
-
-                <div className="flex size-11 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-                  <UserCheck className="size-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    غير منضمين لهذه الدورة
-                  </p>
-
-                  <p className="mt-2 text-3xl font-bold">
-                    {
-                      stats.unassignedCount
-                    }
-                  </p>
-                </div>
-
-                <div className="flex size-11 items-center justify-center rounded-xl border border-rose-200 bg-rose-50 text-rose-600">
-                  <UserX className="size-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col items-stretch gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarCheck className="size-5 text-slate-500" />
-                ملخص الحضور
-              </CardTitle>
-
-              <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start [&>*]:sm:ml-0">
-                <Button
-                  type="button"
-                  onClick={() =>
-                    setAttendanceDetailsOpen(
-                      true,
-                    )
-                  }
-                  disabled={
-                    !selectedCourseId ||
-                    !selectedDate ||
-                    lessonDateStatus !==
-                      'lesson'
-                  }
-                  className="h-10 w-full min-w-0 gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 text-sm text-violet-700 shadow-sm hover:bg-violet-100 sm:w-auto sm:min-w-[150px] sm:px-4"
-                >
-                  <Users className="size-4" />
-                  تفاصيل الحضور
-                </Button>
-
-                <DashboardAttendanceExport
-                  course={selectedCourse}
-                  academicYear={
-                    academicYear
-                  }
-                  assignments={
-                    assignments
-                  }
-                  teachers={teachers}
-                  students={students}
-                  attendanceRecords={
-                    attendanceRecords
-                  }
-                  attendanceStatuses={
-                    attendanceStatuses
-                  }
-                />
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            <div className="rounded-xl border bg-background p-4">
-              <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-                <div>
-                  {lessonDateStatus ===
-                  'lesson' ? (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        نسبة الحضور
-                      </p>
-
-                      <p
-                        className={`mt-1 text-3xl font-bold ${
-                          attendancePercentage >=
-                          60
-                            ? 'text-emerald-600'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {
-                          attendancePercentage
-                        }
-                        %
-                      </p>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {
-                          stats.presentCount
-                        }{' '}
-                        حاضر من أصل{' '}
-                        {
-                          stats.assignedCount
-                        }{' '}
-                        موزعين في الدورة
-                      </p>
-
-                      {stats.recordedCount >
-                        0 &&
-                        stats.recordedCount <
-                          stats.assignedCount && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            تم تسجيل الحضور لـ{' '}
-                            {
-                              stats.recordedCount
-                            }{' '}
-                            من أصل{' '}
-                            {
-                              stats.assignedCount
-                            }
-                          </p>
-                        )}
-                    </>
-                  ) : (
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {lessonDateStatus ===
-                      'not-started'
-                        ? 'لم تبدأ الدورة بعد'
-                        : lessonDateStatus ===
-                            'ended'
-                          ? 'انتهت الدورة'
-                          : lessonDateStatus ===
-                              'no-lesson'
-                            ? 'لا يوجد درس هذا اليوم'
-                            : 'اختر دورة لعرض ملخص الحضور'}
-                    </p>
-                  )}
-                </div>
-
-              </div>
-            </div>
-
-            {lessonDateStatus ===
-              'not-started' && (
-              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-slate-300" />
-
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لم تبدأ الدورة بعد
-                </p>
-
-                {selectedCourse?.startDate && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    تبدأ الدورة في{' '}
-                    {formatDate(
-                      selectedCourse.startDate,
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {lessonDateStatus ===
-              'ended' && (
-              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-slate-300" />
-
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  انتهت الدورة
-                </p>
-
-                {selectedCourse?.endDate && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    انتهت الدورة في{' '}
-                    {formatDate(
-                      selectedCourse.endDate,
-                    )}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {lessonDateStatus ===
-              'no-lesson' && (
-              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-slate-300" />
-
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا يوجد درس هذا اليوم
-                </p>
-
+              {selectedCourse?.startDate && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  هذا التاريخ داخل فترة الدورة، لكنه ليس من أيام الدراسة المحددة للدورة.
+                  تبدأ الدورة في {formatDate(selectedCourse.startDate)}
                 </p>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {lessonDateStatus ===
-              'no-course' && (
-              <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
-                <CalendarCheck className="mx-auto size-7 text-slate-300" />
+          {lessonDateStatus === 'ended' && (
+            <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+              <CalendarCheck className="mx-auto size-7 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                انتهت الدورة
+              </p>
 
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا توجد دورة محددة
+              {selectedCourse?.endDate && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  انتهت الدورة في {formatDate(selectedCourse.endDate)}
                 </p>
-              </div>
-            )}
-
-            {lessonDateStatus ===
-              'lesson' &&
-              attendanceItems.length >
-                0 && (
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {attendanceItems.map(
-                    (item) => {
-                      const Icon =
-                        item.icon
-
-                      return (
-                        <div
-                          key={
-                            item.label
-                          }
-                          className={`rounded-xl border p-4 ${item.color}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex size-10 items-center justify-center rounded-lg ${item.iconColor}`}
-                            >
-                              <Icon className="size-5" />
-                            </div>
-
-                            <div>
-                              <p className="text-xs opacity-80">
-                                {
-                                  item.label
-                                }
-                              </p>
-
-                              <p className="mt-1 text-2xl font-bold">
-                                {
-                                  item.count
-                                }
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    },
-                  )}
-                </div>
               )}
+            </div>
+          )}
 
-            {lessonDateStatus ===
-              'lesson' &&
-              attendanceItems.length ===
-                0 && (
-                <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
-                  <CalendarCheck className="mx-auto size-7 text-slate-300" />
+          {lessonDateStatus === 'no-lesson' && (
+            <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+              <CalendarCheck className="mx-auto size-7 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                لا يوجد درس هذا اليوم
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                هذا التاريخ داخل فترة الدورة، لكنه ليس من أيام الدراسة المحددة
+                للدورة.
+              </p>
+            </div>
+          )}
 
-                  <p className="mt-3 text-sm font-medium text-muted-foreground">
-                    لا توجد سجلات حضور لهذا اليوم
-                  </p>
+          {lessonDateStatus === 'no-course' && (
+            <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+              <CalendarCheck className="mx-auto size-7 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                لا توجد دورة محددة
+              </p>
+            </div>
+          )}
 
-                  {stats.assignedCount >
-                    0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      عدد الطلاب الموزعين:{' '}
-                      {
-                        stats.assignedCount
-                      }
-                    </p>
-                  )}
-                </div>
+          {lessonDateStatus === 'lesson' && attendanceItems.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {attendanceItems.map((item) => {
+                const Icon = item.icon
+
+                return (
+                  <div
+                    key={item.label}
+                    className={`rounded-xl border p-4 ${item.color}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex size-10 items-center justify-center rounded-lg ${item.iconColor}`}
+                      >
+                        <Icon className="size-5" />
+                      </div>
+
+                      <div>
+                        <p className="text-xs opacity-80">{item.label}</p>
+                        <p className="mt-1 text-2xl font-bold">{item.count}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {lessonDateStatus === 'lesson' && attendanceItems.length === 0 && (
+            <div className="mt-4 rounded-xl border border-dashed px-6 py-8 text-center">
+              <CalendarCheck className="mx-auto size-7 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-muted-foreground">
+                لا توجد سجلات حضور لهذا اليوم
+              </p>
+
+              {stats.assignedCount > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  عدد الطلاب الموزعين: {stats.assignedCount}
+                </p>
               )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <DashboardViewPanels
-          selectedCourse={
-            selectedCourse
-          }
-          academicYear={
-            academicYear
-          }
-          pendingRegistrationCount={
-            pendingRegistrationCount
-          }
-          assignments={
-            assignments
-          }
-          courses={courses}
-          teachers={teachers}
-          students={students}
-          attendanceRecords={
-            attendanceRecords
-          }
-          attendanceStatuses={
-            attendanceStatuses
-          }
-          selectedCourseId={
-            selectedCourseId
-          }
-          selectedDate={
-            selectedDate
-          }
-          lessonDateStatus={
-            lessonDateStatus
-          }
-          teacherAttendanceDetails={
-            teacherAttendanceDetails
-          }
-          attendancePercentage={
-            attendancePercentage
-          }
-          attendanceDetailsOpen={
-            attendanceDetailsOpen
-          }
-          setAttendanceDetailsOpen={
-            setAttendanceDetailsOpen
-          }
-          selectedStudent={
-            selectedStudent
-          }
-          setSelectedStudent={
-            setSelectedStudent
-          }
-          router={router}
-        />
-      </div>
-    </>
+      <DashboardViewPanels
+        selectedCourse={selectedCourse}
+        academicYear={academicYear}
+        pendingRegistrationCount={pendingRegistrationCount}
+        assignments={assignments}
+        courses={courses}
+        teachers={teachers}
+        students={students}
+        attendanceRecords={attendanceRecords}
+        attendanceStatuses={attendanceStatuses}
+        selectedCourseId={selectedCourseId}
+        selectedDate={selectedDate}
+        lessonDateStatus={lessonDateStatus}
+        teacherAttendanceDetails={teacherAttendanceDetails}
+        attendancePercentage={attendancePercentage}
+        attendanceDetailsOpen={attendanceDetailsOpen}
+        setAttendanceDetailsOpen={setAttendanceDetailsOpen}
+        selectedStudent={selectedStudent}
+        setSelectedStudent={setSelectedStudent}
+        router={router}
+      />
+    </div>
   )
 }
