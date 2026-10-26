@@ -84,6 +84,7 @@ export type StudentTableStudent = {
   studentPhone: string | null
   enrollmentCourseId: string | null
   enrollmentCourseName: string | null
+  currentTeacherName: string
   status: string
   paymentStatus: string
   amountDue: number
@@ -690,6 +691,12 @@ export function StudentsTable({
                   {visibleColumns.enrollmentCourseName && (
                     <TableCell className="text-slate-600 dark:text-slate-300">
                       {student.enrollmentCourseName || '-'}
+                    </TableCell>
+                  )}
+
+                  {visibleColumns.currentTeacherName && (
+                    <TableCell className="text-slate-600 dark:text-slate-300">
+                      {student.currentTeacherName || '-'}
                     </TableCell>
                   )}
 
