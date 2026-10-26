@@ -1254,347 +1254,254 @@ export function DashboardViewPanels({
         </button>
       )}
 
-      {/* Teacher comments */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="size-5 text-slate-500" />
-                ملاحظات المعلمين على الطلبة
-              </CardTitle>
+     
+{/* Teacher comments */}
+<Card>
+  <CardHeader>
+    <div className="flex flex-col items-stretch gap-3">
+      <div>
+        <CardTitle className="flex items-center gap-2">
+          <ClipboardCheck className="size-5 text-slate-500" />
+          ملاحظات المعلمين على الطلبة
+        </CardTitle>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                ملاحظات المعلمين المسجلة في التاريخ المحدد
-              </p>
-            </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          ملاحظات المعلمين المسجلة في التاريخ المحدد
+        </p>
+      </div>
 
-            <div className="relative">
-              <Button
-                type="button"
-                onClick={() =>
-                  setNotesDownloadOpen(
-                    (value) => !value,
-                  )
-                }
-                disabled={
-                  allCourseNotes.length ===
-                  0
-                }
-                className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Download className="size-4" />
+      <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start [&>*]:sm:ml-0">
+        <div className="relative w-full sm:w-auto">
+          <Button
+            type="button"
+            onClick={() =>
+              setNotesDownloadOpen((value) => !value)
+            }
+            disabled={allCourseNotes.length === 0}
+            className="h-10 w-full gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            <Download className="size-4" />
+            تنزيل الملاحظات
+            <ChevronDown
+              className={`size-4 transition-transform ${
+                notesDownloadOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </Button>
 
-                تنزيل الملاحظات
+          {notesDownloadOpen && (
+            <div
+              dir="rtl"
+              className="absolute right-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
+            >
+              {!customDownloadOpen ? (
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={downloadFromCourseStart}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
+                  >
+                    <Download className="size-4 shrink-0 text-sky-600" />
+                    <span>
+                      من بداية الدورة حتى التاريخ المحدد
+                    </span>
+                  </button>
 
-                <ChevronDown
-                  className={`size-4 transition-transform ${
-                    notesDownloadOpen
-                      ? 'rotate-180'
-                      : ''
-                  }`}
-                />
-              </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotesFromDate(
+                        selectedCourse?.startDate ?? selectedDate,
+                      )
+                      setNotesToDate(selectedDate)
+                      setCustomDownloadOpen(true)
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
+                  >
+                    <CalendarDays className="size-4 shrink-0 text-sky-600" />
+                    <span>مخصص</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 p-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">
+                      تحديد الفترة
+                    </p>
 
-              {notesDownloadOpen && (
-                <div
-                  dir="rtl"
-                  className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
-                >
-                  {!customDownloadOpen ? (
-                    <div className="space-y-1">
-                      <button
-                        type="button"
-                        onClick={
-                          downloadFromCourseStart
+                    <button
+                      type="button"
+                      onClick={() => setCustomDownloadOpen(false)}
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="رجوع"
+                      title="رجوع"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        من تاريخ
+                      </label>
+
+                      <input
+                        type="date"
+                        value={notesFromDate}
+                        max={notesToDate || selectedDate}
+                        onChange={(event) =>
+                          setNotesFromDate(event.target.value)
                         }
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
-                      >
-                        <Download className="size-4 shrink-0 text-sky-600" />
-
-                        <span>
-                          من بداية الدورة حتى التاريخ المحدد
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNotesFromDate(
-                            selectedCourse?.startDate ??
-                              selectedDate,
-                          )
-
-                          setNotesToDate(
-                            selectedDate,
-                          )
-
-                          setCustomDownloadOpen(
-                            true,
-                          )
-                        }}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
-                      >
-                        <CalendarDays className="size-4 shrink-0 text-sky-600" />
-
-                        <span>
-                          مخصص
-                        </span>
-                      </button>
+                        className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      />
                     </div>
-                  ) : (
-                    <div className="space-y-4 p-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold">
-                          تحديد الفترة
-                        </p>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCustomDownloadOpen(
-                              false,
-                            )
-                          }
-                          className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                          aria-label="رجوع"
-                          title="رجوع"
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                        إلى تاريخ
+                      </label>
 
-                      <div className="space-y-3">
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                            من تاريخ
-                          </label>
-
-                          <input
-                            type="date"
-                            value={
-                              notesFromDate
-                            }
-                            max={
-                              notesToDate ||
-                              selectedDate
-                            }
-                            onChange={(
-                              event,
-                            ) =>
-                              setNotesFromDate(
-                                event
-                                  .target
-                                  .value,
-                              )
-                            }
-                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                            إلى تاريخ
-                          </label>
-
-                          <input
-                            type="date"
-                            value={
-                              notesToDate
-                            }
-                            min={
-                              notesFromDate
-                            }
-                            max={
-                              selectedDate
-                            }
-                            onChange={(
-                              event,
-                            ) =>
-                              setNotesToDate(
-                                event
-                                  .target
-                                  .value,
-                              )
-                            }
-                            className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                          />
-                        </div>
-                      </div>
-
-                      <Button
-                        type="button"
-                        onClick={
-                          downloadCustomNotes
+                      <input
+                        type="date"
+                        value={notesToDate}
+                        min={notesFromDate}
+                        max={selectedDate}
+                        onChange={(event) =>
+                          setNotesToDate(event.target.value)
                         }
-                        disabled={
-                          !notesFromDate ||
-                          !notesToDate ||
-                          notesFromDate >
-                            notesToDate
-                        }
-                        className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Download className="size-4" />
-                        تنزيل الفترة
-                      </Button>
+                        className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      />
                     </div>
-                  )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={downloadCustomNotes}
+                    disabled={
+                      !notesFromDate ||
+                      !notesToDate ||
+                      notesFromDate > notesToDate
+                    }
+                    className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Download className="size-4" />
+                    تنزيل الفترة
+                  </Button>
                 </div>
               )}
             </div>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          {attendanceNotes.length ===
-          0 ? (
-            <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
-              <div>
-                <ClipboardCheck className="mx-auto size-7 text-slate-300" />
-
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  لا توجد ملاحظات في هذا التاريخ
-                </p>
-
-                <p className="mt-1 text-xs text-muted-foreground">
-                  ستظهر هنا أي ملاحظة يكتبها المعلم أثناء تسجيل حضور الطالب.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border">
-              <div className="hidden grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
-                <div>
-                  التاريخ
-                </div>
-
-                <div>
-                  الطالب
-                </div>
-
-                <div>
-                  المعلم
-                </div>
-
-                <div>
-                  الحالة
-                </div>
-
-                <div>
-                  الملاحظة
-                </div>
-              </div>
-
-              <div className="divide-y">
-                {attendanceNotes.map(
-                  (item) => {
-                    const student =
-                      students.find(
-                        (student) =>
-                          normalizeId(
-                            student.id,
-                          ) ===
-                          normalizeId(
-                            item.studentId,
-                          ),
-                      )
-
-                    return (
-                      <div
-                        key={
-                          item.id
-                        }
-                        className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] md:items-start md:gap-4"
-                      >
-                        <div>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            التاريخ
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium md:mt-0">
-                            {formatDate(
-                              item.attendanceDate,
-                            )}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            الطالب
-                          </p>
-
-                          <p className="mt-1 font-medium md:mt-0">
-                            {student?.name ??
-                              'طالب غير معروف'}
-                          </p>
-
-                          {student?.studentId && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              رقم الطالب:{' '}
-                              {
-                                student.studentId
-                              }
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            المعلم
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium md:mt-0">
-                            {
-                              item.teacherName
-                            }
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            الحالة
-                          </p>
-
-                          <span
-                            className={`mt-1 inline-flex rounded-full border px-3 py-1 text-xs font-medium md:mt-0 ${
-                              isPresentStatus(
-                                item.statusName,
-                              )
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : isAbsentStatus(
-                                      item.statusName,
-                                    )
-                                  ? 'border-red-200 bg-red-50 text-red-700'
-                                  : 'border-slate-200 bg-slate-50 text-slate-700'
-                            }`}
-                          >
-                            {
-                              item.statusName
-                            }
-                          </span>
-                        </div>
-
-                        <div>
-                          <p className="text-xs text-muted-foreground md:hidden">
-                            الملاحظة
-                          </p>
-
-                          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 md:mt-0">
-                            {
-                              item.note
-                            }
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  },
-                )}
-              </div>
-            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+    </div>
+  </CardHeader>
+
+  <CardContent>
+    {attendanceNotes.length === 0 ? (
+      <div className="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed px-6 text-center">
+        <div>
+          <ClipboardCheck className="mx-auto size-7 text-slate-300" />
+
+          <p className="mt-3 text-sm font-medium text-muted-foreground">
+            لا توجد ملاحظات في هذا التاريخ
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            ستظهر هنا أي ملاحظة يكتبها المعلم أثناء تسجيل حضور الطالب.
+          </p>
+        </div>
+      </div>
+    ) : (
+      <div className="overflow-hidden rounded-xl border">
+        <div className="hidden grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] gap-4 border-b bg-muted/40 px-4 py-3 text-xs font-medium text-muted-foreground md:grid">
+          <div>التاريخ</div>
+          <div>الطالب</div>
+          <div>المعلم</div>
+          <div>الحالة</div>
+          <div>الملاحظة</div>
+        </div>
+
+        <div className="divide-y">
+          {attendanceNotes.map((item) => {
+            const student = students.find(
+              (student) =>
+                normalizeId(student.id) ===
+                normalizeId(item.studentId),
+            )
+
+            return (
+              <div
+                key={item.id}
+                className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/20 md:grid-cols-[120px_minmax(180px,1fr)_180px_120px_1fr] md:items-start md:gap-4"
+              >
+                <div>
+                  <p className="text-xs text-muted-foreground md:hidden">
+                    التاريخ
+                  </p>
+                  <p className="mt-1 text-sm font-medium md:mt-0">
+                    {formatDate(item.attendanceDate)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground md:hidden">
+                    الطالب
+                  </p>
+                  <p className="mt-1 font-medium md:mt-0">
+                    {student?.name ?? 'طالب غير معروف'}
+                  </p>
+
+                  {student?.studentId && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      رقم الطالب: {student.studentId}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground md:hidden">
+                    المعلم
+                  </p>
+                  <p className="mt-1 text-sm font-medium md:mt-0">
+                    {item.teacherName}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground md:hidden">
+                    الحالة
+                  </p>
+                  <span
+                    className={`mt-1 inline-flex rounded-full border px-3 py-1 text-xs font-medium md:mt-0 ${
+                      isPresentStatus(item.statusName)
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : isAbsentStatus(item.statusName)
+                          ? 'border-red-200 bg-red-50 text-red-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    {item.statusName}
+                  </span>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground md:hidden">
+                    الملاحظة
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 md:mt-0">
+                    {item.note}
+                  </p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )}
+  </CardContent>
+</Card>
+
 
       {/* Student details modal */}
       {selectedStudent && (
