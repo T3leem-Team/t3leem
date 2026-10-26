@@ -11,11 +11,7 @@ import {
 import {
   MessageCircle,
   Users,
-  Search,
   Send,
-  Check,
-  RotateCcw,
-  SlidersHorizontal,
   Save,
   Pencil,
   FileText,
@@ -25,16 +21,13 @@ import {
 import { supabase } from '@/lib/supabase'
 
 import { PageHeader } from '@/components/dashboard/page-header'
-
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card'
-
 import { Button } from '@/components/ui/button'
 
 import { CommunicationViewGroups } from '@/app/(dashboard)/communication/communication-groups'
 import { CommunicationTemplates } from '@/app/(dashboard)/communication/communication-templates'
+import { CommunicationDirect } from '@/app/(dashboard)/communication/communication-direct'
+
+import type { FilterType } from '@/app/(dashboard)/communication/communication-direct'
 
 import {
   getCommunicationCache,
@@ -67,83 +60,22 @@ type CommunicationSection =
   | 'group'
   | 'templates'
 
-type FilterType =
-  | 'all'
-  | 'teacher'
-  | 'course'
-  | 'teacher_course'
-  | 'attendance_status'
-  | 'teacher_attendance'
-  | 'teacher_course_attendance'
-  | 'payment'
-  | 'not_assigned_current_course'
-  | 'invalid_personal_id'
-  | 'attendance_award'
-
-/*
- * =========================================================
- * Message variables
- * =========================================================
- */
-
 const MESSAGE_VARIABLES = [
-  {
-    key: '{{name}}',
-    label: 'اسم الطالب',
-  },
-  {
-    key: '{{phone}}',
-    label: 'رقم الهاتف',
-  },
-  {
-    key: '{{whatsapp}}',
-    label: 'رقم WhatsApp',
-  },
-  {
-    key: '{{course}}',
-    label: 'الدورة',
-  },
-  {
-    key: '{{teacher}}',
-    label: 'المعلم',
-  },
-  {
-    key: '{{attendance}}',
-    label: 'الحضور',
-  },
-  {
-    key: '{{paid}}',
-    label: 'المبلغ المدفوع',
-  },
-  {
-    key: '{{remaining}}',
-    label: 'المبلغ المتبقي',
-  },
-  {
-    key: '{{payment_status}}',
-    label: 'حالة الدفع',
-  },
-  {
-    key: '{{date}}',
-    label: 'التاريخ',
-  },
+  { key: '{{name}}', label: 'اسم الطالب' },
+  { key: '{{phone}}', label: 'رقم الهاتف' },
+  { key: '{{whatsapp}}', label: 'رقم WhatsApp' },
+  { key: '{{course}}', label: 'الدورة' },
+  { key: '{{teacher}}', label: 'المعلم' },
+  { key: '{{attendance}}', label: 'الحضور' },
+  { key: '{{paid}}', label: 'المبلغ المدفوع' },
+  { key: '{{remaining}}', label: 'المبلغ المتبقي' },
+  { key: '{{payment_status}}', label: 'حالة الدفع' },
+  { key: '{{date}}', label: 'التاريخ' },
 ] as const
-
-/*
- * =========================================================
- * Component
- * =========================================================
- */
 
 export function CommunicationView() {
   const [activeSection, setActiveSection] =
     useState<CommunicationSection>('direct')
-
-  /*
-   * =========================================================
-   * Data states
-   * =========================================================
-   */
 
   const [students, setStudents] = useState<Student[]>(
     () => getCommunicationCache()?.students ?? []
@@ -199,12 +131,6 @@ export function CommunicationView() {
     () => !getCommunicationCache()
   )
 
-  /*
-   * =========================================================
-   * Filter states
-   * =========================================================
-   */
-
   const [search, setSearch] = useState('')
 
   const [selectedStudentIds, setSelectedStudentIds] =
@@ -227,23 +153,11 @@ export function CommunicationView() {
   const [openedStudentIds, setOpenedStudentIds] =
     useState<string[]>([])
 
-  /*
-   * =========================================================
-   * Active saved message
-   * =========================================================
-   */
-
   const [activeSavedMessage, setActiveSavedMessage] =
     useState<{
       templateId: string
       content: string
     } | null>(null)
-
-  /*
-   * =========================================================
-   * Message modal
-   * =========================================================
-   */
 
   const [messageModalOpen, setMessageModalOpen] =
     useState(false)
@@ -270,11 +184,8 @@ export function CommunicationView() {
     useState('')
 
   /*
-   * =========================================================
-   * Load data through communication-data.ts
-   * =========================================================
+   * تحميل البيانات مع استخدام الذاكرة المؤقتة المشتركة.
    */
-
   useEffect(() => {
     let cancelled = false
 
@@ -303,10 +214,6 @@ export function CommunicationView() {
         return
       }
 
-      /*
-       * إذا كانت عملية تحميل أخرى جارية،
-       * ننتظرها دون بدء تحميل مكرر.
-       */
       if (isCommunicationCacheLoading()) {
         let attempts = 0
 
@@ -349,10 +256,7 @@ export function CommunicationView() {
         setCommunicationCache(data)
         applyCache(data)
       } catch (error) {
-        console.error(
-          'Communication load error:',
-          error
-        )
+        console.error('Communication load error:', error)
       } finally {
         setCommunicationCacheLoading(false)
 
@@ -370,11 +274,8 @@ export function CommunicationView() {
   }, [])
 
   /*
-   * =========================================================
-   * Filtering
-   * =========================================================
+   * تصفية الطلاب حسب المعلم والدورة والحضور والدفع وغيرها.
    */
-
   const filteredStudents = useMemo(() => {
     let result = [...students]
 
@@ -403,8 +304,7 @@ export function CommunicationView() {
         const ids = new Set(
           assignments
             .filter(
-              (item) =>
-                item.courseId === selectedCourseId
+              (item) => item.courseId === selectedCourseId
             )
             .map((item) => item.studentId)
         )
@@ -438,9 +338,6 @@ export function CommunicationView() {
       }
     }
 
-    /*
-     * Students without an assignment in current courses.
-     */
     if (filterType === 'not_assigned_current_course') {
       const currentCourseIds = new Set(
         courses.map((course) => course.id)
@@ -455,14 +352,10 @@ export function CommunicationView() {
       )
 
       result = result.filter(
-        (student) =>
-          !assignedStudentIds.has(student.id)
+        (student) => !assignedStudentIds.has(student.id)
       )
     }
 
-    /*
-     * Attendance award eligibility is based on saved results.
-     */
     if (filterType === 'attendance_award') {
       const eligibleIds = new Set(
         attendanceAwardEligibleStudentIds
@@ -473,10 +366,6 @@ export function CommunicationView() {
       )
     }
 
-    /*
-     * Invalid personal IDs:
-     * fewer than 9 digits, including empty values.
-     */
     if (filterType === 'invalid_personal_id') {
       result = result.filter((student) => {
         const digits = (student.personalId ?? '')
@@ -486,9 +375,6 @@ export function CommunicationView() {
       })
     }
 
-    /*
-     * Attendance filters.
-     */
     if (
       filterType === 'attendance_status' ||
       filterType === 'teacher_attendance' ||
@@ -514,16 +400,13 @@ export function CommunicationView() {
               assignments
                 .filter((item) => {
                   if (
-                    !selectedTeacherIds.includes(
-                      item.teacherId
-                    )
+                    !selectedTeacherIds.includes(item.teacherId)
                   ) {
                     return false
                   }
 
                   if (
-                    filterType ===
-                    'teacher_course_attendance'
+                    filterType === 'teacher_course_attendance'
                   ) {
                     return (
                       Boolean(selectedCourseId) &&
@@ -557,12 +440,6 @@ export function CommunicationView() {
       }
     }
 
-    /*
-     * Payment filter:
-     * students who have paid less than the annual fee.
-     * Fee-exempt students remain included, matching the
-     * existing behavior.
-     */
     if (filterType === 'payment') {
       const totals = new Map<string, number>()
 
@@ -585,9 +462,6 @@ export function CommunicationView() {
       })
     }
 
-    /*
-     * Search by name, phone, WhatsApp, or personal ID.
-     */
     const query = search.trim().toLowerCase()
 
     if (query) {
@@ -606,7 +480,6 @@ export function CommunicationView() {
     return result
   }, [
     students,
-    teachers,
     courses,
     assignments,
     attendance,
@@ -629,11 +502,8 @@ export function CommunicationView() {
   )
 
   /*
-   * =========================================================
-   * Message modal
-   * =========================================================
+   * فتح نافذة إرسال الرسالة.
    */
-
   const openMessageModal = useCallback(
     (student: Student) => {
       setMessageStudent(student)
@@ -648,10 +518,7 @@ export function CommunicationView() {
           activeSavedMessage.templateId
         )
 
-        setComposedMessage(
-          activeSavedMessage.content
-        )
-
+        setComposedMessage(activeSavedMessage.content)
         return
       }
 
@@ -690,11 +557,8 @@ export function CommunicationView() {
   }
 
   /*
-   * =========================================================
-   * Save message template
-   * =========================================================
+   * حفظ قالب رسالة مشترك.
    */
-
   const saveMessageTemplate = async () => {
     const name = templateName.trim()
     const content = composedMessage.trim()
@@ -713,10 +577,7 @@ export function CommunicationView() {
     setTemplateMessage('')
 
     try {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('communication_message_templates')
         .insert({
           name,
@@ -788,11 +649,8 @@ export function CommunicationView() {
   }
 
   /*
-   * =========================================================
-   * Send WhatsApp message
-   * =========================================================
+   * تجهيز الرسالة وفتح WhatsApp.
    */
-
   const sendCurrentMessage = () => {
     if (!messageStudent) {
       return
@@ -862,11 +720,8 @@ export function CommunicationView() {
   }
 
   /*
-   * =========================================================
-   * Student selection
-   * =========================================================
+   * تحديد الطلاب.
    */
-
   const toggleStudent = (studentId: string) => {
     setSelectedStudentIds((current) =>
       current.includes(studentId)
@@ -904,36 +759,8 @@ export function CommunicationView() {
     setSelectedAttendanceStatusId('')
   }
 
-  /*
-   * =========================================================
-   * Filter helpers
-   * =========================================================
-   */
-
-  const filterNeedsTeacher =
-    filterType === 'teacher' ||
-    filterType === 'teacher_course' ||
-    filterType === 'teacher_attendance' ||
-    filterType === 'teacher_course_attendance'
-
-  const filterNeedsCourse =
-    filterType === 'course' ||
-    filterType === 'teacher_course' ||
-    filterType === 'teacher_course_attendance'
-
-  const filterNeedsAttendanceStatus =
-    filterType === 'attendance_status' ||
-    filterType === 'teacher_attendance' ||
-    filterType === 'teacher_course_attendance'
-
   const isStarted = (studentId: string) =>
     openedStudentIds.includes(studentId)
-
-  /*
-   * =========================================================
-   * Render
-   * =========================================================
-   */
 
   return (
     <div className="space-y-6">
@@ -942,7 +769,7 @@ export function CommunicationView() {
         description="التواصل مع الطلاب وأولياء الأمور عبر WhatsApp"
       />
 
-      {/* Main navigation */}
+      {/* التنقل الرئيسي */}
       <div className="flex flex-wrap gap-2 border-b pb-3">
         <Button
           type="button"
@@ -984,468 +811,40 @@ export function CommunicationView() {
         </Button>
       </div>
 
-      {/* =====================================================
-          Direct communication
-         ===================================================== */}
-
+      {/* قسم التواصل المباشر: الواجهة موجودة في الملف المفصول */}
       {activeSection === 'direct' && (
-        <Card>
-          <CardContent className="space-y-5 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  تواصل مباشر
-                </h2>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  اختر الفئة والطلاب ثم اختر الرسالة عند الإرسال.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <SlidersHorizontal className="size-4" />
-                تخصيص المستلمين
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="grid gap-3 md:grid-cols-2">
-              <select
-                value={filterType}
-                onChange={(event) => {
-                  setFilterType(
-                    event.target.value as FilterType
-                  )
-
-                  setSelectedTeacherIds([])
-                  setSelectedCourseId('')
-                  setSelectedAttendanceStatusId('')
-                }}
-                className="h-10 rounded-md border bg-background px-3 text-sm outline-none"
-              >
-                <option value="all">جميع الطلاب</option>
-
-                <option value="teacher">طلاب معلم</option>
-
-                <option value="course">طلاب دورة</option>
-
-                <option value="teacher_course">
-                  طلاب معلم في دورة
-                </option>
-
-                <option value="attendance_status">
-                  حسب حضور اليوم
-                </option>
-
-                <option value="teacher_attendance">
-                  حضور اليوم لمعلم
-                </option>
-
-                <option value="teacher_course_attendance">
-                  حضور اليوم لمعلم في دورة
-                </option>
-
-                <option value="payment">
-                  حسب حالة الدفع
-                </option>
-
-                <option value="attendance_award">
-                  مستحق للتكريم
-                </option>
-
-                <option value="not_assigned_current_course">
-                  غير مشاركين في الدورة الحالية
-                </option>
-
-                <option value="invalid_personal_id">
-                  رقم شخصي أقل من 9 أرقام
-                </option>
-              </select>
-
-              {filterType === 'payment' && (
-                <div className="flex items-center rounded-md border bg-muted/30 px-3 text-sm">
-                  مدفوع أقل من الرسوم السنوية
-                </div>
-              )}
-
-              {filterType === 'invalid_personal_id' && (
-                <div className="flex items-center rounded-md border border-red-200 bg-red-50 px-3 text-sm text-red-700">
-                  تنبيه: هؤلاء الطلاب لديهم رقم شخصي غير صحيح ويحتاج إلى تصحيح.
-                </div>
-              )}
-            </div>
-
-            {/* Teacher selection */}
-            {filterNeedsTeacher && (
-              <div className="rounded-md border bg-background p-3">
-                <div className="mb-2 text-sm font-medium">
-                  اختر المعلمين
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {teachers.map((teacher) => {
-                    const selected =
-                      selectedTeacherIds.includes(
-                        teacher.id
-                      )
-
-                    return (
-                      <button
-                        key={teacher.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTeacherIds(
-                            (current) =>
-                              current.includes(
-                                teacher.id
-                              )
-                                ? current.filter(
-                                    (id) =>
-                                      id !== teacher.id
-                                  )
-                                : [
-                                    ...current,
-                                    teacher.id,
-                                  ]
-                          )
-                        }}
-                        className={`rounded-md border px-3 py-2 text-right text-sm transition ${
-                          selected
-                            ? 'border-primary bg-primary/10 font-medium'
-                            : 'hover:bg-muted'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={`flex size-4 shrink-0 items-center justify-center rounded border ${
-                              selected
-                                ? 'bg-primary text-primary-foreground'
-                                : ''
-                            }`}
-                          >
-                            {selected && (
-                              <Check className="size-3" />
-                            )}
-                          </span>
-
-                          {teacher.name}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {selectedTeacherIds.length > 0 && (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    تم اختيار {selectedTeacherIds.length} معلم
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Course selection */}
-            {filterNeedsCourse && (
-              <select
-                value={selectedCourseId}
-                onChange={(event) =>
-                  setSelectedCourseId(
-                    event.target.value
-                  )
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              >
-                <option value="">اختر الدورة</option>
-
-                {courses.map((course) => (
-                  <option
-                    key={course.id}
-                    value={course.id}
-                  >
-                    {course.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {/* Attendance status selection */}
-            {filterNeedsAttendanceStatus && (
-              <select
-                value={selectedAttendanceStatusId}
-                onChange={(event) =>
-                  setSelectedAttendanceStatusId(
-                    event.target.value
-                  )
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
-              >
-                <option value="">
-                  اختر حالة الحضور اليوم
-                </option>
-
-                {attendanceStatuses.map((status) => (
-                  <option
-                    key={status.id}
-                    value={status.id}
-                  >
-                    {status.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {filterType !== 'all' && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={resetFilter}
-                className="w-fit"
-              >
-                <RotateCcw className="size-4" />
-                إعادة التصفية
-              </Button>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
-              <input
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
-                placeholder="بحث داخل النتائج..."
-                className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none"
-              />
-            </div>
-
-            {/* Selection summary */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
-              <div className="text-sm">
-                <span className="text-muted-foreground">
-                  النتائج:
-                </span>{' '}
-                <span className="font-semibold">
-                  {filteredStudents.length}
-                </span>{' '}
-                <span className="text-muted-foreground">
-                  | المحدد:
-                </span>{' '}
-                <span className="font-semibold">
-                  {selectedStudentIds.length}
-                </span>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={selectAllVisible}
-                  disabled={filteredStudents.length === 0}
-                >
-                  <Check className="size-4" />
-                  تحديد الظاهر
-                </Button>
-
-                {selectedStudentIds.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      setSelectedStudentIds([])
-                    }
-                  >
-                    إلغاء التحديد
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Students list */}
-            <div className="max-h-80 space-y-2 overflow-y-auto rounded-md border p-2">
-              {loading ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  جاري تحميل البيانات...
-                </div>
-              ) : filteredStudents.length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  لا توجد نتائج مطابقة
-                </div>
-              ) : (
-                filteredStudents.map((student) => {
-                  const selected =
-                    selectedStudentIds.includes(
-                      student.id
-                    )
-
-                  const number =
-                    getWhatsAppNumber(student)
-
-                  const started =
-                    isStarted(student.id)
-
-                  return (
-                    <div
-                      key={student.id}
-                      className={`flex items-center justify-between gap-3 rounded-md border p-3 ${
-                        selected ? 'bg-muted' : ''
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          toggleStudent(student.id)
-                        }
-                        className="flex min-w-0 flex-1 items-center gap-3 text-right"
-                      >
-                        <span
-                          className={`flex size-5 shrink-0 items-center justify-center rounded border ${
-                            selected
-                              ? 'bg-primary text-primary-foreground'
-                              : ''
-                          }`}
-                        >
-                          {selected && (
-                            <Check className="size-3" />
-                          )}
-                        </span>
-
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
-                            {student.name}
-                          </span>
-
-                          <span className="block truncate text-xs text-muted-foreground">
-                            الرقم الشخصي:{' '}
-                            {student.personalId ||
-                              'غير موجود'}
-                            {' • '}
-                            {number ||
-                              'لا يوجد رقم WhatsApp'}
-                          </span>
-                        </span>
-                      </button>
-
-                      {number && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={
-                            started
-                              ? 'outline'
-                              : 'default'
-                          }
-                          className={
-                            started
-                              ? 'border-orange-400 text-orange-600 hover:bg-orange-50'
-                              : ''
-                          }
-                          onClick={() =>
-                            openMessageModal(student)
-                          }
-                        >
-                          {started ? (
-                            <>
-                              <RotateCcw className="size-4" />
-                              إعادة إرسال
-                            </>
-                          ) : (
-                            <>
-                              <Send className="size-4" />
-                              إرسال
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {/* Selected students */}
-            {selectedStudents.length > 0 && (
-              <div className="rounded-md border bg-muted/30 p-4">
-                <div className="mb-3 text-sm font-medium">
-                  الطلاب المحددون
-                </div>
-
-                <div className="space-y-2">
-                  {selectedStudents.map(
-                    (student, index) => {
-                      const number =
-                        getWhatsAppNumber(student)
-
-                      const started =
-                        isStarted(student.id)
-
-                      return (
-                        <div
-                          key={student.id}
-                          className="flex items-center justify-between gap-3 rounded-md border bg-background p-2.5"
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {index + 1}
-                            </span>
-
-                            <span className="truncate text-sm">
-                              {student.name}
-                            </span>
-                          </div>
-
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={!number}
-                            variant={
-                              started
-                                ? 'outline'
-                                : 'default'
-                            }
-                            className={
-                              started
-                                ? 'border-orange-400 text-orange-600 hover:bg-orange-50'
-                                : ''
-                            }
-                            onClick={() =>
-                              openMessageModal(student)
-                            }
-                          >
-                            {started ? (
-                              <>
-                                <RotateCcw className="size-4" />
-                                إعادة إرسال
-                              </>
-                            ) : (
-                              <>
-                                <Send className="size-4" />
-                                إرسال
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      )
-                    }
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              عند الضغط على «إرسال» تختار الرسالة المحفوظة أو تنشئ رسالة جديدة.
-              إذا بدأت برسالة محفوظة فسيتم استخدامها تلقائياً للطلاب التاليين
-              مع تحديث المتغيرات حسب كل طالب.
-            </div>
-          </CardContent>
-        </Card>
+        <CommunicationDirect
+          teachers={teachers}
+          courses={courses}
+          attendanceStatuses={attendanceStatuses}
+          loading={loading}
+          filteredStudents={filteredStudents}
+          selectedStudents={selectedStudents}
+          selectedStudentIds={selectedStudentIds}
+          setSelectedStudentIds={setSelectedStudentIds}
+          filterType={filterType}
+          setFilterType={setFilterType}
+          selectedTeacherIds={selectedTeacherIds}
+          setSelectedTeacherIds={setSelectedTeacherIds}
+          selectedCourseId={selectedCourseId}
+          setSelectedCourseId={setSelectedCourseId}
+          selectedAttendanceStatusId={
+            selectedAttendanceStatusId
+          }
+          setSelectedAttendanceStatusId={
+            setSelectedAttendanceStatusId
+          }
+          search={search}
+          setSearch={setSearch}
+          selectAllVisible={selectAllVisible}
+          resetFilter={resetFilter}
+          toggleStudent={toggleStudent}
+          isStarted={isStarted}
+          openMessageModal={openMessageModal}
+        />
       )}
 
-      {/* =====================================================
-          Group communication
-         ===================================================== */}
-
+      {/* التواصل الجماعي */}
       {activeSection === 'group' && (
         <CommunicationViewGroups
           students={students}
@@ -1453,10 +852,7 @@ export function CommunicationView() {
         />
       )}
 
-      {/* =====================================================
-          Saved templates
-         ===================================================== */}
-
+      {/* الرسائل المحفوظة */}
       {activeSection === 'templates' && (
         <CommunicationTemplates
           templates={messageTemplates}
@@ -1475,14 +871,10 @@ export function CommunicationView() {
         />
       )}
 
-      {/* =====================================================
-          Message modal
-         ===================================================== */}
-
+      {/* نافذة الرسالة */}
       {messageModalOpen && messageStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl">
-            {/* Modal header */}
             <div className="flex items-center justify-between border-b p-4">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -1511,14 +903,12 @@ export function CommunicationView() {
             </div>
 
             <div className="space-y-5 p-5">
-              {/* Choose message type */}
+              {/* اختيار نوع الرسالة */}
               {messageMode === 'choose' && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      setMessageMode('saved')
-                    }
+                    onClick={() => setMessageMode('saved')}
                     className="rounded-xl border p-5 text-right transition hover:bg-muted"
                   >
                     <FileText className="mb-3 size-7" />
@@ -1550,7 +940,7 @@ export function CommunicationView() {
                 </div>
               )}
 
-              {/* Saved message */}
+              {/* الرسائل المحفوظة */}
               {messageMode === 'saved' && (
                 <>
                   <div className="flex items-center justify-between">
@@ -1597,9 +987,7 @@ export function CommunicationView() {
                       <textarea
                         value={composedMessage}
                         onChange={(event) =>
-                          setComposedMessage(
-                            event.target.value
-                          )
+                          setComposedMessage(event.target.value)
                         }
                         rows={7}
                         className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
@@ -1615,8 +1003,7 @@ export function CommunicationView() {
                     <div className="space-y-2">
                       {messageTemplates.map((template) => {
                         const selected =
-                          selectedTemplateId ===
-                          template.id
+                          selectedTemplateId === template.id
 
                         return (
                           <div
@@ -1630,9 +1017,7 @@ export function CommunicationView() {
                             <button
                               type="button"
                               onClick={() =>
-                                chooseSavedTemplate(
-                                  template
-                                )
+                                chooseSavedTemplate(template)
                               }
                               className="min-w-0 w-full text-right"
                             >
@@ -1660,9 +1045,7 @@ export function CommunicationView() {
                         <textarea
                           value={composedMessage}
                           onChange={(event) =>
-                            setComposedMessage(
-                              event.target.value
-                            )
+                            setComposedMessage(event.target.value)
                           }
                           rows={7}
                           className="w-full resize-y rounded-md border bg-background p-3 text-sm outline-none"
@@ -1672,7 +1055,7 @@ export function CommunicationView() {
                 </>
               )}
 
-              {/* New message */}
+              {/* إنشاء رسالة جديدة */}
               {messageMode === 'new' && (
                 <>
                   <div className="space-y-2">
@@ -1683,9 +1066,7 @@ export function CommunicationView() {
                     <textarea
                       value={composedMessage}
                       onChange={(event) =>
-                        setComposedMessage(
-                          event.target.value
-                        )
+                        setComposedMessage(event.target.value)
                       }
                       placeholder="اكتب الرسالة التي تريد إرسالها..."
                       rows={7}
@@ -1694,7 +1075,7 @@ export function CommunicationView() {
                     />
                   </div>
 
-                  {/* Message variables */}
+                  {/* متغيرات الرسالة */}
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
                     <div className="mb-2 font-medium text-foreground">
                       يمكنك استخدام المتغيرات:
@@ -1706,9 +1087,8 @@ export function CommunicationView() {
                           key={variable.key}
                           type="button"
                           onClick={() =>
-                            setComposedMessage(
-                              (current) =>
-                                `${current}${current ? ' ' : ''}${variable.key}`
+                            setComposedMessage((current) =>
+                              `${current}${current ? ' ' : ''}${variable.key}`
                             )
                           }
                           className="rounded border bg-background px-2.5 py-1.5 text-xs hover:bg-muted"
@@ -1723,7 +1103,7 @@ export function CommunicationView() {
                     </div>
                   </div>
 
-                  {/* Save as shared template */}
+                  {/* حفظ القالب */}
                   <div className="rounded-lg border p-3">
                     <div className="mb-2 text-sm font-medium">
                       حفظ هذه الرسالة كقالب للجميع
@@ -1733,9 +1113,7 @@ export function CommunicationView() {
                       <input
                         value={templateName}
                         onChange={(event) =>
-                          setTemplateName(
-                            event.target.value
-                          )
+                          setTemplateName(event.target.value)
                         }
                         placeholder="اسم الرسالة، مثلاً: تنبيه غياب"
                         className="h-10 flex-1 rounded-md border bg-background px-3 text-sm outline-none"
@@ -1762,14 +1140,14 @@ export function CommunicationView() {
                 </>
               )}
 
-              {/* Feedback */}
+              {/* رسائل الحالة */}
               {templateMessage && (
                 <div className="rounded-md border bg-muted/30 p-3 text-sm">
                   {templateMessage}
                 </div>
               )}
 
-              {/* Modal actions */}
+              {/* أزرار نافذة الرسالة */}
               {messageMode !== 'choose' && (
                 <div className="flex flex-wrap justify-between gap-2 border-t pt-4">
                   <Button
