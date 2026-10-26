@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -32,7 +33,7 @@ type Filters = StudentTableFilters
 const emptyFilters: Filters = {
   name: '',
   personalId: '',
-  grade: '',
+  grade: [],
   phone: '',
   whatsapp: '',
   paymentStatus: '',
@@ -263,10 +264,11 @@ export function StudentsView() {
 
   /*
    * تحديث الفلاتر
+   * يقبل النصوص لبقية الفلاتر والمصفوفة للمستويات الدراسية
    */
   const updateFilter = (
     key: keyof Filters,
-    value: string
+    value: string | string[]
   ) => {
     setFilters((current) => ({
       ...current,
@@ -357,9 +359,12 @@ export function StudentsView() {
             filters.personalId
           ),
 
+        // مطابقة الطالب مع أي مستوى دراسي محدد
         grade:
-          !filters.grade ||
-          student.grade === filters.grade,
+          filters.grade.length === 0 ||
+          filters.grade.includes(
+            String(student.grade ?? '')
+          ),
 
         phone:
           !filters.phone ||
