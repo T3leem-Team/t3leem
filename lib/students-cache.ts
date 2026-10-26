@@ -981,6 +981,20 @@ export async function loadStudentsCache(options?: {
             )
           : 'لم يحضر'
 
+        const currentTeacherAssignment = currentCourse
+          ? assignments.find(
+              (item) =>
+                item.student_id === student.id &&
+                item.course_id === currentCourse.id
+            )
+          : undefined
+
+        const currentTeacherName = currentTeacherAssignment
+          ? teacherNames.get(
+              currentTeacherAssignment.teacher_id
+            ) ?? ''
+          : ''
+
         return {
           id: student.id,
 
@@ -1012,6 +1026,8 @@ export async function loadStudentsCache(options?: {
 
           enrollmentCourseName:
             enrollment?.courseName ?? '',
+
+          currentTeacherName,
 
           status: student.status ?? '',
 
