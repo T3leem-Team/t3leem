@@ -15,7 +15,6 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Save,
-  Trash2,
   Pencil,
   FileText,
   X,
@@ -364,11 +363,6 @@ export function CommunicationView() {
     templateSaving,
     setTemplateSaving,
   ] = useState(false)
-
-  const [
-    templateDeletingId,
-    setTemplateDeletingId,
-  ] = useState<string | null>(null)
 
   const [
     templateMessage,
@@ -1555,90 +1549,7 @@ export function CommunicationView() {
       setTemplateSaving(false)
     }
 
-  const deleteMessageTemplate =
-    async (
-      template: MessageTemplate
-    ) => {
-      const confirmed =
-        window.confirm(
-          `هل تريد مسح القالب «${template.name}»؟`
-        )
-
-      if (!confirmed) {
-        return
-      }
-
-      setTemplateDeletingId(
-        template.id
-      )
-
-      setTemplateMessage('')
-
-      const {
-        error,
-      } = await supabase
-        .from(
-          'communication_message_templates'
-        )
-        .delete()
-        .eq(
-          'id',
-          template.id
-        )
-
-      if (error) {
-        console.error(
-          'Delete message template error:',
-          error
-        )
-
-        setTemplateMessage(
-          'تعذر مسح القالب.'
-        )
-
-        setTemplateDeletingId(null)
-        return
-      }
-
-      setMessageTemplates(
-        (current) =>
-          current.filter(
-            (item) =>
-              item.id !==
-              template.id
-          )
-      )
-
-      if (communicationCache) {
-        communicationCache.messageTemplates =
-          communicationCache.messageTemplates.filter(
-            (item) =>
-              item.id !==
-              template.id
-          )
-      }
-
-      if (
-        selectedTemplateId ===
-        template.id
-      ) {
-        setSelectedTemplateId('')
-      }
-
-      if (
-        activeSavedMessage?.templateId ===
-        template.id
-      ) {
-        setActiveSavedMessage(null)
-      }
-
-      setTemplateDeletingId(null)
-
-      setTemplateMessage(
-        'تم مسح القالب.'
-      )
-    }
-
+ 
   const sendCurrentMessage =
     () => {
       if (!messageStudent) {
@@ -2606,24 +2517,6 @@ export function CommunicationView() {
                                       }
                                     </div>
                                   </button>
-
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled={
-                                      templateDeletingId ===
-                                      template.id
-                                    }
-                                    onClick={() =>
-                                      deleteMessageTemplate(
-                                        template
-                                      )
-                                    }
-                                    className="shrink-0 text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
                                 </div>
                               </div>
                             )
