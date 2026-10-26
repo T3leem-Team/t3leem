@@ -1,7 +1,7 @@
+
 'use client'
 
 import { Filter } from 'lucide-react'
-
 import { useMemo, useState } from 'react'
 
 import {
@@ -129,7 +129,7 @@ type Props = {
 
   onUpdateFilter: (
     key: keyof StudentTableFilters,
-    value: string,
+    value: string | string[],
   ) => void
 
   onOpenNotes: (student: StudentTableStudent) => void
@@ -238,8 +238,19 @@ export function StudentsTable({
     return [...ordered, ...remaining]
   }, [students, courses])
 
+  // إضافة مستوى أو إلغاء تحديده مع الاحتفاظ ببقية الاختيارات
+  const toggleGrade = (grade: string) => {
+    const currentGrades = filters.grade ?? []
+
+    const nextGrades = currentGrades.includes(grade)
+      ? currentGrades.filter((item) => item !== grade)
+      : [...currentGrades, grade]
+
+    onUpdateFilter('grade', nextGrades)
+  }
+
   const filterInput = (
-    key: keyof StudentTableFilters,
+    key: Exclude<keyof StudentTableFilters, 'grade'>,
     placeholder: string,
   ) => {
     return (
@@ -247,7 +258,7 @@ export function StudentsTable({
         <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
 
         <input
-          value={filters[key]}
+          value={filters[key] as string}
           onChange={(event) =>
             onUpdateFilter(key, event.target.value)
           }
@@ -260,7 +271,7 @@ export function StudentsTable({
   }
 
   const filterSelect = (
-    key: keyof StudentTableFilters,
+    key: Exclude<keyof StudentTableFilters, 'grade'>,
     placeholder: string,
     options: string[],
   ) => {
@@ -269,7 +280,7 @@ export function StudentsTable({
         <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
 
         <select
-          value={filters[key]}
+          value={filters[key] as string}
           onChange={(event) =>
             onUpdateFilter(key, event.target.value)
           }
@@ -355,11 +366,39 @@ export function StudentsTable({
 
               {visibleColumns.grade !== false && (
                 <TableHead className="min-w-[170px]">
-                  {filterSelect(
-                    'grade',
-                    'كل المستويات',
-                    gradeOptions,
-                  )}
+                  <div className="flex items-center gap-1">
+                    <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
+
+                    <select
+                      value=""
+                      onChange={(event) => {
+                        const grade = event.target.value
+
+                        if (grade) {
+                          toggleGrade(grade)
+                        }
+                      }}
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label="تصفية حسب المستويات"
+                      className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+                    >
+                      <option value="" disabled>
+                        {filters.grade.length === 0
+                          ? 'كل المستويات'
+                          : filters.grade.length === 1
+                            ? filters.grade[0]
+                            : `${filters.grade.length} مستويات محددة`}
+                      </option>
+
+                      {gradeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {filters.grade.includes(option)
+                            ? `✓ ${option}`
+                            : option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </TableHead>
               )}
 
