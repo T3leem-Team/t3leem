@@ -39,7 +39,7 @@ import {
 export type StudentTableFilters = {
   name: string
   personalId: string
-  grade: string
+  grade: string[]
   phone: string
   whatsapp: string
   paymentStatus: string
