@@ -42,7 +42,7 @@ import {
   isCommunicationCacheLoading,
   setCommunicationCacheLoading,
   loadCommunicationData,
-} from './communication-data'
+} from '@/app/(dashboard)/communication/communication-data'
 
 import type {
   Student,
@@ -55,12 +55,12 @@ import type {
   AcademicYear,
   MessageTemplate,
   CommunicationCache,
-} from './communication-data'
+} from '@/app/(dashboard)/communication/communication-data'
 
 import {
   getWhatsAppNumber,
   replaceTemplateVariables,
-} from './communication-helpers'
+} from '@/app/(dashboard)/communication/communication-helpers'
 
 type CommunicationSection =
   | 'direct'
