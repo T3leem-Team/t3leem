@@ -1299,7 +1299,7 @@ export function DashboardViewPanels({
               {notesDownloadOpen && (
                 <div
                   dir="rtl"
-                  className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
+                  className="absolute right-0 top-full z-30 mt-2 w-[300px] rounded-xl border bg-background p-2 shadow-lg"
                 >
                   {!customDownloadOpen ? (
                     <div className="space-y-1">
