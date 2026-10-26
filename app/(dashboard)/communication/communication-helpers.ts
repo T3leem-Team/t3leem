@@ -10,137 +10,123 @@ import type {
   AcademicYear,
 } from '@/app/(dashboard)/communication/communication-data'
 
-export function normalizeWhatsAppNumber(
-  value: string | null | undefined,
-): string {
-  let number = (value ?? '').replace(/\D/g, '')
+export function getWhatsAppNumber(student: Student): string {
+  const value = student.whatsapp || student.phone || ''
+  const digits = value.replace(/\D/g, '')
 
-  if (number.startsWith('00')) {
-    number = number.slice(2)
+  if (digits.startsWith('973')) {
+    return digits
   }
 
-  if (number.startsWith('973')) {
-    return number
+  if (digits.length === 8) {
+    return `973${digits}`
   }
 
-  if (number.length === 8) {
-    return `973${number}`
-  }
-
-  return number
+  return digits
 }
 
-export function getStudentCourses(
-  studentId: string,
-  assignments: TeacherAssignment[],
-  courses: Course[],
-): Course[] {
-  const courseIds = new Set(
-    assignments
-      .filter((assignment) => assignment.studentId === studentId)
-      .map((assignment) => assignment.courseId),
-  )
-
-  return courses.filter((course) => courseIds.has(course.id))
-}
-
-export function getStudentTeachers(
-  studentId: string,
-  assignments: TeacherAssignment[],
-  teachers: Teacher[],
-): Teacher[] {
-  const teacherIds = new Set(
-    assignments
-      .filter((assignment) => assignment.studentId === studentId)
-      .map((assignment) => assignment.teacherId),
-  )
-
-  return teachers.filter((teacher) => teacherIds.has(teacher.id))
-}
-
-export function getStudentAttendance(
-  studentId: string,
-  attendance: AttendanceRecord[],
-  attendanceStatuses: AttendanceStatus[],
-): string {
-  const records = attendance.filter(
-    (record) => record.studentId === studentId,
-  )
-
-  if (records.length === 0) {
-    return 'غير مسجل'
-  }
-
-  return records
-    .map((record) => {
-      const status = attendanceStatuses.find(
-        (item) => item.id === record.statusId,
-      )
-
-      return status?.name ?? 'غير محدد'
-    })
-    .join('، ')
-}
-
-export function getStudentPaidTotal(
-  studentId: string,
-  payments: Payment[],
-): number {
-  return payments
-    .filter((payment) => payment.studentId === studentId)
-    .reduce((total, payment) => total + (Number(payment.amount) || 0), 0)
-}
-
-type TemplateVariables = {
-  student: Student
+type ReplaceTemplateVariablesContext = {
+  assignments: TeacherAssignment[]
   courses: Course[]
   teachers: Teacher[]
-  attendance: string
-  paid: number
-  annualFee: number
-  phone?: string
-  whatsapp?: string
+  attendance: AttendanceRecord[]
+  attendanceStatuses: AttendanceStatus[]
+  payments: Payment[]
+  academicYear: AcademicYear | null
 }
 
 export function replaceTemplateVariables(
   template: string,
-  variables: TemplateVariables,
+  student: Student,
+  context: ReplaceTemplateVariablesContext,
 ): string {
   const {
-    student,
+    assignments,
     courses,
     teachers,
     attendance,
-    paid,
-    annualFee,
-    phone,
-    whatsapp,
-  } = variables
+    attendanceStatuses,
+    payments,
+    academicYear,
+  } = context
 
-  const remaining = Math.max(annualFee - paid, 0)
+  const studentAssignments = assignments.filter(
+    (item) => item.studentId === student.id,
+  )
 
-  const paymentStatus =
-    remaining <= 0
-      ? 'مسدد'
-      : paid > 0
-        ? 'مسدد جزئياً'
-        : 'غير مسدد'
+  const courseIds = Array.from(
+    new Set(studentAssignments.map((item) => item.courseId)),
+  )
 
-  const replacements: Record<string, string> = {
-    '{{name}}': student.name ?? '',
-    '{{phone}}': phone ?? student.phone ?? '',
-    '{{whatsapp}}': whatsapp ?? student.whatsapp ?? '',
-    '{{course}}': courses.map((course) => course.name).join('، ') || 'غير محدد',
-    '{{teacher}}': teachers.map((teacher) => teacher.name).join('، ') || 'غير محدد',
-    '{{attendance}}': attendance || 'غير مسجل',
-    '{{paid}}': String(paid),
-    '{{remaining}}': String(remaining),
-    '{{payment_status}}': paymentStatus,
-    '{{date}}': new Date().toLocaleDateString('en-GB'),
+  const teacherIds = Array.from(
+    new Set(studentAssignments.map((item) => item.teacherId)),
+  )
+
+  const studentCourses = courseIds
+    .map((courseId) =>
+      courses.find((course) => course.id === courseId)?.name,
+    )
+    .filter((value): value is string => Boolean(value))
+
+  const studentTeachers = teacherIds
+    .map((teacherId) =>
+      teachers.find((teacher) => teacher.id === teacherId)?.name,
+    )
+    .filter((value): value is string => Boolean(value))
+
+  const studentAttendance = Array.from(
+    new Set(
+      attendance
+        .filter((record) => record.studentId === student.id)
+        .map(
+          (record) =>
+            attendanceStatuses.find(
+              (status) => status.id === record.statusId,
+            )?.name,
+        ),
+    ),
+  ).filter((value): value is string => Boolean(value))
+
+  const paid = payments
+    .filter((payment) => payment.studentId === student.id)
+    .reduce((total, payment) => total + payment.amount, 0)
+
+  const annualFee = academicYear?.annualFee ?? 0
+
+  const remaining = student.feeExempt
+    ? 0
+    : Math.max(annualFee - paid, 0)
+
+  const attendanceText =
+    studentAttendance.length > 0
+      ? studentAttendance.join('، ')
+      : 'لم يسجل'
+
+  const values: Record<string, string> = {
+    name: student.name || '',
+    phone: student.phone || student.whatsapp || '',
+    whatsapp: student.whatsapp || student.phone || '',
+    course: studentCourses.join('، '),
+    teacher: studentTeachers.join('، '),
+    attendance: attendanceText,
+    paid: paid.toFixed(3),
+    remaining: remaining.toFixed(3),
+    payment_status: student.feeExempt
+      ? 'معفي'
+      : paid >= annualFee && annualFee > 0
+        ? 'مدفوع بالكامل'
+        : paid > 0
+          ? 'مدفوع جزئياً'
+          : 'غير مدفوع',
+    date: new Intl.DateTimeFormat('ar-BH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date()),
   }
 
   return template.replace(
-    /\{\{name\}\}|\{\{phone\}\}|\{\{whatsapp\}\}|\{\{course\}\}|\{\{teacher\}\}|\{\{attendance\}\}|\{\{paid\}\}|\{\{remaining\}\}|\{\{payment_status\}\}|\{\{date\}\}/g,
-    (match) => replacements[match] ?? match,
+    /\{\{\s*([a-zA-Z_]+)\s*\}\}/g,
+    (_match, key: string) => values[key] ?? `{{${key}}}`,
   )
 }
