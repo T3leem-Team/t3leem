@@ -1254,11 +1254,15 @@ export function DashboardViewPanels({
         </button>
       )}
 
+      
       {/* Teacher comments */}
       <Card>
         <CardHeader>
-          <div dir="rtl" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div
+            dir="rtl"
+            className="flex flex-col gap-3 sm:flex-row sm:items-center"
+          >
+            <div className="min-w-0 flex-1">
               <CardTitle className="flex items-center gap-2">
                 <ClipboardCheck className="size-5 text-slate-500" />
                 ملاحظات المعلمين على الطلبة
@@ -1269,29 +1273,20 @@ export function DashboardViewPanels({
               </p>
             </div>
 
-            <div className="relative">
+            <div className="relative self-start sm:mr-auto">
               <Button
                 type="button"
                 onClick={() =>
-                  setNotesDownloadOpen(
-                    (value) => !value,
-                  )
+                  setNotesDownloadOpen((value) => !value)
                 }
-                disabled={
-                  allCourseNotes.length ===
-                  0
-                }
+                disabled={allCourseNotes.length === 0}
                 className="h-10 gap-2 border border-sky-200 bg-sky-50 px-4 text-sky-700 shadow-sm hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="size-4" />
-
                 تنزيل الملاحظات
-
                 <ChevronDown
                   className={`size-4 transition-transform ${
-                    notesDownloadOpen
-                      ? 'rotate-180'
-                      : ''
+                    notesDownloadOpen ? 'rotate-180' : ''
                   }`}
                 />
               </Button>
@@ -1305,13 +1300,10 @@ export function DashboardViewPanels({
                     <div className="space-y-1">
                       <button
                         type="button"
-                        onClick={
-                          downloadFromCourseStart
-                        }
+                        onClick={downloadFromCourseStart}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
                       >
                         <Download className="size-4 shrink-0 text-sky-600" />
-
                         <span>
                           من بداية الدورة حتى التاريخ المحدد
                         </span>
@@ -1321,25 +1313,15 @@ export function DashboardViewPanels({
                         type="button"
                         onClick={() => {
                           setNotesFromDate(
-                            selectedCourse?.startDate ??
-                              selectedDate,
+                            selectedCourse?.startDate ?? selectedDate,
                           )
-
-                          setNotesToDate(
-                            selectedDate,
-                          )
-
-                          setCustomDownloadOpen(
-                            true,
-                          )
+                          setNotesToDate(selectedDate)
+                          setCustomDownloadOpen(true)
                         }}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-right text-sm transition-colors hover:bg-muted"
                       >
                         <CalendarDays className="size-4 shrink-0 text-sky-600" />
-
-                        <span>
-                          مخصص
-                        </span>
+                        <span>مخصص</span>
                       </button>
                     </div>
                   ) : (
@@ -1351,11 +1333,7 @@ export function DashboardViewPanels({
 
                         <button
                           type="button"
-                          onClick={() =>
-                            setCustomDownloadOpen(
-                              false,
-                            )
-                          }
+                          onClick={() => setCustomDownloadOpen(false)}
                           className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                           aria-label="رجوع"
                           title="رجوع"
@@ -1372,21 +1350,10 @@ export function DashboardViewPanels({
 
                           <input
                             type="date"
-                            value={
-                              notesFromDate
-                            }
-                            max={
-                              notesToDate ||
-                              selectedDate
-                            }
-                            onChange={(
-                              event,
-                            ) =>
-                              setNotesFromDate(
-                                event
-                                  .target
-                                  .value,
-                              )
+                            value={notesFromDate}
+                            max={notesToDate || selectedDate}
+                            onChange={(event) =>
+                              setNotesFromDate(event.target.value)
                             }
                             className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                           />
@@ -1399,23 +1366,11 @@ export function DashboardViewPanels({
 
                           <input
                             type="date"
-                            value={
-                              notesToDate
-                            }
-                            min={
-                              notesFromDate
-                            }
-                            max={
-                              selectedDate
-                            }
-                            onChange={(
-                              event,
-                            ) =>
-                              setNotesToDate(
-                                event
-                                  .target
-                                  .value,
-                              )
+                            value={notesToDate}
+                            min={notesFromDate}
+                            max={selectedDate}
+                            onChange={(event) =>
+                              setNotesToDate(event.target.value)
                             }
                             className="h-10 w-full rounded-lg border bg-background px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                           />
@@ -1424,14 +1379,11 @@ export function DashboardViewPanels({
 
                       <Button
                         type="button"
-                        onClick={
-                          downloadCustomNotes
-                        }
+                        onClick={downloadCustomNotes}
                         disabled={
                           !notesFromDate ||
                           !notesToDate ||
-                          notesFromDate >
-                            notesToDate
+                          notesFromDate > notesToDate
                         }
                         className="h-10 w-full gap-2 bg-sky-600 text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -1445,6 +1397,7 @@ export function DashboardViewPanels({
             </div>
           </div>
         </CardHeader>
+
 
         <CardContent>
           {attendanceNotes.length ===
