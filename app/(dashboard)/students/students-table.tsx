@@ -117,14 +117,9 @@ type Props = {
   selectionMode: boolean
   selectedStudentIds: string[]
 
-  // حالة تحديد جميع الطلاب الظاهرين، يديرها الملف الرئيسي
   allStudentsSelected: boolean
-
-  // دالة تحديد الكل أو إلغاء تحديده من الملف الرئيسي
   onToggleSelectAll: () => void
-
   onToggleStudentSelection: (studentId: string) => void
-
   onSelectStudent: (studentId: string) => void
 
   onUpdateFilter: (
@@ -133,7 +128,6 @@ type Props = {
   ) => void
 
   onOpenNotes: (student: StudentTableStudent) => void
-
   onOpenAttendance: (student: StudentTableStudent) => void
 }
 
@@ -364,6 +358,7 @@ export function StudentsTable({
                 </TableHead>
               )}
 
+              {/* فلتر المستويات الدراسية المتعددة */}
               {visibleColumns.grade !== false && (
                 <TableHead className="min-w-[170px]">
                   <div className="flex items-center gap-1">
@@ -374,15 +369,16 @@ export function StudentsTable({
                       onChange={(event) => {
                         const grade = event.target.value
 
-                        if (grade) {
-                          toggleGrade(grade)
-                        }
+                        if (!grade) return
+
+                        toggleGrade(grade)
+                        event.currentTarget.value = ''
                       }}
                       onClick={(event) => event.stopPropagation()}
                       aria-label="تصفية حسب المستويات"
                       className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
                     >
-                      <option value="" disabled>
+                      <option value="">
                         {filters.grade.length === 0
                           ? 'كل المستويات'
                           : filters.grade.length === 1
@@ -393,8 +389,9 @@ export function StudentsTable({
                       {gradeOptions.map((option) => (
                         <option key={option} value={option}>
                           {filters.grade.includes(option)
-                            ? `✓ ${option}`
-                            : option}
+                            ? '✓ '
+                            : ''}
+                          {option}
                         </option>
                       ))}
                     </select>
