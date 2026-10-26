@@ -52,6 +52,11 @@ jobs:
             exit 1
           }
 
+          grep -qE '^[[:space:]]+uuid:[[:space:]]*\^?11\.1\.1' pnpm-workspace.yaml || {
+            echo "ERROR: uuid override to 11.1.1 or newer is missing."
+            exit 1
+          }
+
       - name: Verify ExcelJS dependency
         run: |
           node --input-type=module <<'NODE'
@@ -69,8 +74,7 @@ jobs:
           NODE
 
       - name: Regenerate lockfile
-        run: |
-          pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
+        run: pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
 
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -78,6 +82,7 @@ jobs:
       - name: Verify dependency versions
         run: |
           pnpm why exceljs
+          pnpm why uuid
           pnpm why ip-address
           pnpm why nanoid
           pnpm why zod
@@ -93,6 +98,10 @@ jobs:
             {
               name: 'exceljs',
               pattern: /exceljs@[^:\s(]+(?:\(|:)/,
+            },
+            {
+              name: 'uuid 11.1.1 or newer',
+              pattern: /uuid@(?:11\.(?:[1-9]\d*|[1-9]\d*\.\d+)|1[2-9]\.\d+\.\d+|[2-9]\d*\.\d+\.\d+)(?:\(|:)/,
             },
             {
               name: 'ip-address 10.7.4',
@@ -139,5 +148,5 @@ jobs:
           fi
 
           git diff --cached --stat
-          git commit -m "fix: sync pnpm lockfile for exceljs"
+          git commit -m "fix: update uuid dependency security"
           git push origin main
