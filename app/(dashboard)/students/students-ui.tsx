@@ -67,7 +67,7 @@ interface StudentsUIProps {
   setSearch: (value: string) => void
 
   filters: Filters
-  updateFilter: (key: keyof Filters, value: string) => void
+  updateFilter: (key: keyof Filters, value: string | string[]) => void
 
   visibleColumns: Record<string, boolean>
   toggleColumn: (key: string) => void
