@@ -113,6 +113,7 @@ export function StudentsView() {
     guardianRelation: false,
     studentPhone: false,
     enrollmentCourseName: false,
+    currentTeacherName: false,
   })
 
   // بيانات الطلاب والحقول الإضافية
