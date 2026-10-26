@@ -1,18 +1,15 @@
 
-export type AcademicYear = {
-  id: string
-  name: string
-  annualFee: number
-}
+import { supabase } from '@/lib/supabase'
 
 export type Student = {
   id: string
-  studentId: string | null
   name: string
-  personalId: string | null
-  phone: string | null
-  whatsapp: string | null
-  status: string | null
+  phone: string
+  whatsapp: string
+  personalId: string
+  academicYearId: string
+  enrollmentId: string | null
+  feeExempt: boolean
 }
 
 export type Teacher = {
@@ -23,22 +20,21 @@ export type Teacher = {
 export type Course = {
   id: string
   name: string
+  academicYearId: string
 }
 
 export type TeacherAssignment = {
-  id: string
-  courseId: string
   teacherId: string
+  courseId: string
   studentId: string
 }
 
 export type AttendanceRecord = {
-  id: string
   studentId: string
+  courseId: string | null
+  enrollmentId: string | null
   attendanceDate: string
   statusId: string
-  note: string | null
-  courseId: string
 }
 
 export type AttendanceStatus = {
@@ -47,11 +43,13 @@ export type AttendanceStatus = {
 }
 
 export type Payment = {
-  id: string
   studentId: string
   amount: number
-  paymentDate: string | null
-  paymentMethod: string | null
+}
+
+export type AcademicYear = {
+  id: string
+  annualFee: number
 }
 
 export type MessageTemplate = {
@@ -75,14 +73,21 @@ export type CommunicationCache = {
   attendanceAwardEligibleStudentIds: string[]
 }
 
-export let communicationCache: CommunicationCache | null = null
+let communicationCache: CommunicationCache | null = null
+let communicationCacheLoading = false
 
-export let communicationCacheLoading = false
+export function getCommunicationCache() {
+  return communicationCache
+}
 
 export function setCommunicationCache(
   cache: CommunicationCache | null,
 ) {
   communicationCache = cache
+}
+
+export function isCommunicationCacheLoading() {
+  return communicationCacheLoading
 }
 
 export function setCommunicationCacheLoading(
@@ -92,3 +97,216 @@ export function setCommunicationCacheLoading(
 }
 
 export const TODAY = new Date().toISOString().split('T')[0]
+
+function emptyCommunicationCache(): CommunicationCache {
+  return {
+    academicYear: null,
+    students: [],
+    teachers: [],
+    courses: [],
+    assignments: [],
+    attendance: [],
+    attendanceStatuses: [],
+    payments: [],
+    messageTemplates: [],
+    attendanceAwardEligibleStudentIds: [],
+  }
+}
+
+export async function loadCommunicationData(): Promise<CommunicationCache> {
+  const { data: yearData, error: yearError } = await supabase
+    .from('academic_years')
+    .select('id, annual_fee')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (yearError) {
+    throw yearError
+  }
+
+  if (!yearData) {
+    return emptyCommunicationCache()
+  }
+
+  const currentAcademicYear: AcademicYear = {
+    id: yearData.id,
+    annualFee: Number(yearData.annual_fee) || 0,
+  }
+
+  const [
+    studentsResult,
+    teachersResult,
+    coursesResult,
+    assignmentsResult,
+    attendanceResult,
+    statusesResult,
+    paymentsResult,
+    templatesResult,
+    attendanceAwardResult,
+  ] = await Promise.all([
+    supabase
+      .from('students')
+      .select(
+        'id, name, phone, whatsapp, personal_id, academic_year_id, fee_exempt',
+      )
+      .eq('academic_year_id', yearData.id)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('teachers')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('courses')
+      .select('id, name, academic_year_id')
+      .eq('academic_year_id', yearData.id)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('teacher_student_assignments')
+      .select('teacher_id, course_id, student_id'),
+
+    supabase
+      .from('attendance')
+      .select(
+        'student_id, course_id, enrollment_id, attendance_date, status_id',
+      )
+      .eq('attendance_date', TODAY),
+
+    supabase
+      .from('attendance_statuses')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
+
+    supabase
+      .from('payments')
+      .select('student_id, amount')
+      .eq('academic_year_id', yearData.id),
+
+    supabase
+      .from('communication_message_templates')
+      .select('id, name, content, created_at, updated_at')
+      .order('created_at', { ascending: false }),
+
+    supabase
+      .from('attendance_award_results')
+      .select('student_id')
+      .eq('academic_year_id', yearData.id)
+      .eq('status', 'eligible'),
+  ])
+
+  if (templatesResult.error) {
+    console.error(
+      'Message templates load error:',
+      templatesResult.error,
+    )
+  }
+
+  if (attendanceAwardResult.error) {
+    console.error(
+      'Attendance award results load error:',
+      attendanceAwardResult.error,
+    )
+  }
+
+  const currentCourseIds = new Set(
+    (coursesResult.data ?? []).map((course) => course.id),
+  )
+
+  const students: Student[] = (studentsResult.data ?? []).map(
+    (student) => ({
+      id: student.id,
+      name: student.name ?? '',
+      phone: student.phone ?? '',
+      whatsapp: student.whatsapp ?? '',
+      personalId: student.personal_id ?? '',
+      academicYearId: student.academic_year_id,
+      enrollmentId: null,
+      feeExempt: Boolean(student.fee_exempt),
+    }),
+  )
+
+  const teachers: Teacher[] = (teachersResult.data ?? []).map(
+    (teacher) => ({
+      id: teacher.id,
+      name: teacher.name ?? '',
+    }),
+  )
+
+  const courses: Course[] = (coursesResult.data ?? []).map(
+    (course) => ({
+      id: course.id,
+      name: course.name ?? '',
+      academicYearId: course.academic_year_id,
+    }),
+  )
+
+  const assignments: TeacherAssignment[] = (
+    assignmentsResult.data ?? []
+  )
+    .filter((item) => currentCourseIds.has(item.course_id))
+    .map((item) => ({
+      teacherId: item.teacher_id,
+      courseId: item.course_id,
+      studentId: item.student_id,
+    }))
+
+  const attendance: AttendanceRecord[] = (
+    attendanceResult.data ?? []
+  ).map((item) => ({
+    studentId: item.student_id,
+    courseId: item.course_id,
+    enrollmentId: item.enrollment_id,
+    attendanceDate: item.attendance_date,
+    statusId: item.status_id,
+  }))
+
+  const attendanceStatuses: AttendanceStatus[] = (
+    statusesResult.data ?? []
+  ).map((status) => ({
+    id: status.id,
+    name: status.name ?? '',
+  }))
+
+  const payments: Payment[] = (paymentsResult.data ?? []).map(
+    (payment) => ({
+      studentId: payment.student_id,
+      amount: Number(payment.amount) || 0,
+    }),
+  )
+
+  const messageTemplates: MessageTemplate[] = (
+    templatesResult.data ?? []
+  ).map((template) => ({
+    id: template.id,
+    name: template.name ?? '',
+    content: template.content ?? '',
+    createdAt: template.created_at ?? '',
+    updatedAt: template.updated_at ?? '',
+  }))
+
+  const attendanceAwardEligibleStudentIds = Array.from(
+    new Set(
+      (attendanceAwardResult.data ?? [])
+        .map((item) => item.student_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  )
+
+  return {
+    academicYear: currentAcademicYear,
+    students,
+    teachers,
+    courses,
+    assignments,
+    attendance,
+    attendanceStatuses,
+    payments,
+    messageTemplates,
+    attendanceAwardEligibleStudentIds,
+  }
+}
