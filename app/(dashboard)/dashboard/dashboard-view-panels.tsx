@@ -1257,7 +1257,7 @@ export function DashboardViewPanels({
       {/* Teacher comments */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div dir="rtl" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardCheck className="size-5 text-slate-500" />
