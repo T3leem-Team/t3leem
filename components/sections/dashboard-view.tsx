@@ -152,7 +152,7 @@ export function DashboardView() {
     <>
       <div
         dir="rtl"
-        className="space-y-4 sm:space-y-5"
+        className="min-h-screen space-y-4 bg-rose-50/50 sm:space-y-5"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -368,7 +368,7 @@ export function DashboardView() {
                 ملخص الحضور
               </CardTitle>
 
-              <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start">
+              <div className="flex w-full flex-col items-stretch gap-2 sm:w-full sm:flex-row sm:flex-wrap sm:items-center sm:justify-start [&>*]:sm:ml-0">
                 <Button
                   type="button"
                   onClick={() =>
@@ -477,29 +477,6 @@ export function DashboardView() {
                   )}
                 </div>
 
-                <div className="text-sm text-muted-foreground">
-                  {selectedCourse && (
-                    <p>
-                      الدورة:{' '}
-                      <span className="font-medium text-foreground">
-                        {
-                          selectedCourse.name
-                        }
-                      </span>
-                    </p>
-                  )}
-
-                  {selectedDate && (
-                    <p className="mt-1">
-                      التاريخ:{' '}
-                      <span className="font-medium text-foreground">
-                        {formatDate(
-                          selectedDate,
-                        )}
-                      </span>
-                    </p>
-                  )}
-                </div>
               </div>
             </div>
 
