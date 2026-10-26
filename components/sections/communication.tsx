@@ -31,10 +31,12 @@ import {
 import { Button } from '@/components/ui/button'
 
 import { CommunicationViewGroups } from '@/app/(dashboard)/communication/communication-groups'
+import { CommunicationTemplates } from '@/app/(dashboard)/communication/communication-templates'
 
 type CommunicationSection =
   | 'direct'
   | 'group'
+  | 'templates'
 
 type FilterType =
   | 'all'
@@ -1835,37 +1837,40 @@ export function CommunicationView() {
         <Button
           type="button"
           variant={
-            activeSection ===
-            'direct'
+            activeSection === 'direct'
               ? 'default'
               : 'outline'
           }
-          onClick={() =>
-            setActiveSection(
-              'direct'
-            )
-          }
+          onClick={() => setActiveSection('direct')}
         >
           <MessageCircle className="size-4" />
           تواصل مباشر
         </Button>
-
+      
         <Button
           type="button"
           variant={
-            activeSection ===
-            'group'
+            activeSection === 'group'
               ? 'default'
               : 'outline'
           }
-          onClick={() =>
-            setActiveSection(
-              'group'
-            )
-          }
+          onClick={() => setActiveSection('group')}
         >
           <Users className="size-4" />
           تواصل كمجموعة
+        </Button>
+      
+        <Button
+          type="button"
+          variant={
+            activeSection === 'templates'
+              ? 'default'
+              : 'outline'
+          }
+          onClick={() => setActiveSection('templates')}
+        >
+          <FileText className="size-4" />
+          الرسائل المحفوظة
         </Button>
       </div>
 
@@ -2399,9 +2404,21 @@ export function CommunicationView() {
       {activeSection === 'group' && (
         <CommunicationViewGroups
           students={students}
-          selectedStudentIds={
-            selectedStudentIds
-          }
+          selectedStudentIds={selectedStudentIds}
+        />
+      )}
+      
+      {activeSection === 'templates' && (
+        <CommunicationTemplates
+          templates={messageTemplates}
+          onTemplatesChange={(nextTemplates) => {
+            setMessageTemplates(nextTemplates)
+      
+            if (communicationCache) {
+              communicationCache.messageTemplates =
+                nextTemplates
+            }
+          }}
         />
       )}
 
