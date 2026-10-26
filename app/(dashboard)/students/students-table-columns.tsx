@@ -1,3 +1,4 @@
+
 export const baseColumns = [
   { key: 'name', label: 'الاسم' },
   { key: 'personalId', label: 'رقم الهوية' },
@@ -13,6 +14,7 @@ export const extraColumns = [
   { key: 'guardianRelation', label: 'صلة القرابة' },
   { key: 'studentPhone', label: 'رقم الطالب' },
   { key: 'enrollmentCourseName', label: 'دورة الالتحاق' },
+  { key: 'currentTeacherName', label: 'اسم المعلم الحالي' },
   { key: 'gender', label: 'الجنس' },
   { key: 'age', label: 'العمر' },
   { key: 'phone', label: 'الهاتف' },
