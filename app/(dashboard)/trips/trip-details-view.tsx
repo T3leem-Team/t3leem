@@ -1853,71 +1853,52 @@ function handlePaymentChange(
                           <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                             {formatDateTime(student.responded_at)}
                           </td>
-                          
+          
                           {/* الدفع: حفظ تلقائي دون زر حفظ */}
                           <td className="px-4 py-3">
                             <div className="min-w-[120px]">
                               <input
                                 type="number"
                                 min="0"
-                                max={trip.fee}
                                 step="0.001"
                                 value={paymentInputs[student.id] ?? ''}
                                 disabled={!canEditParticipantData}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                          
-                                  if (value === '') {
-                                    handlePaymentChange(student, '')
-                                    return
-                                  }
-                          
-                                  const amount = Number(value)
-                          
-                                  if (!Number.isFinite(amount) || amount < 0) {
-                                    return
-                                  }
-                          
+                                onChange={(event) =>
                                   handlePaymentChange(
                                     student,
-                                    String(
-                                      Math.min(
-                                        Math.round(amount * 1000) / 1000,
-                                        trip.fee,
-                                      ),
-                                    ),
+                                    event.target.value,
                                   )
-                                }}
+                                }
                                 placeholder="0.000"
-                                className="payment-input-no-arrows h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                                className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
                               />
-                          
+          
                               <div className="mt-1 text-xs">
                                 {paymentStatus[student.id] === 'saving' && (
                                   <span className="text-muted-foreground">
                                     جاري الحفظ...
                                   </span>
                                 )}
-                          
+          
                                 {paymentStatus[student.id] === 'saved' && (
                                   <span className="text-emerald-600 dark:text-emerald-400">
                                     تم الحفظ ✓
                                   </span>
                                 )}
-                          
+          
                                 {paymentStatus[student.id] === 'error' && (
                                   <span className="text-destructive">
                                     تعذّر الحفظ
                                   </span>
                                 )}
                               </div>
-                          
+          
                               <div className="mt-1 text-xs text-muted-foreground">
                                 {formatPayment(student.payment_amount)}
                               </div>
                             </div>
                           </td>
-                          
+          
                           <td className="max-w-[280px] px-4 py-3">
                             {student.response_note ? (
                               <span className="text-sm text-muted-foreground">
@@ -1929,16 +1910,16 @@ function handlePaymentChange(
                               </span>
                             )}
                           </td>
-                          </tr>
-                          ))
-                          )}
-                          </tbody>
-                          </table>
-                          </div>
-                          </div>
-                          )}
-                          </div>
-                          ) : null}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          </div>
+          ) : null}
 
 
       {/* Published / Closed notice */}
