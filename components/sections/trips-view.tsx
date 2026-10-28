@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -13,6 +14,7 @@ import {
   Search,
   Trash2,
   Users,
+  Wallet,
 } from 'lucide-react'
 
 import { TripsForm } from '@/app/(dashboard)/trips/trips-form'
@@ -117,6 +119,9 @@ export function TripsView() {
   >([])
   const [courses, setCourses] = useState<Course[]>([])
 
+  // إجمالي المبالغ المدفوعة
+  const [totalPaid, setTotalPaid] = useState(0)
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -128,11 +133,9 @@ export function TripsView() {
 
   const [formOpen, setFormOpen] = useState(false)
 
-  // الرحلة التي نريد تعديلها
   const [editingTrip, setEditingTrip] =
     useState<Trip | null>(null)
 
-  // الرحلة التي يتم حذفها حالياً
   const [deletingTripId, setDeletingTripId] =
     useState<string | null>(null)
 
@@ -163,6 +166,16 @@ export function TripsView() {
       )
 
       setCourses(data.courses as Course[])
+
+      setTotalPaid(
+        Number(
+          (
+            data as typeof data & {
+              totalPaid?: number
+            }
+          ).totalPaid ?? 0
+        )
+      )
     } catch (error) {
       console.error('Load trips error:', error)
 
@@ -312,12 +325,11 @@ export function TripsView() {
           </p>
         </div>
 
-      {/* الأزرار */}
+        {/* الأزرار */}
         <div
           dir="ltr"
           className="flex w-full items-center justify-between gap-3"
         >
-          {/* تحديث - يسار */}
           <button
             type="button"
             onClick={() =>
@@ -334,11 +346,10 @@ export function TripsView() {
             ) : (
               <RefreshCw className="size-4" />
             )}
-        
+
             <span dir="rtl">تحديث</span>
           </button>
-        
-          {/* إضافة رحلة - يمين */}
+
           <button
             type="button"
             onClick={handleCreateTrip}
@@ -351,9 +362,10 @@ export function TripsView() {
       </div>
 
       {/* الإحصائيات */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* إجمالي الرحلات */}
+        <div className="rounded-xl border bg-card p-4 transition hover:shadow-sm">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm text-muted-foreground">
                 إجمالي الرحلات
@@ -364,62 +376,91 @@ export function TripsView() {
               </p>
             </div>
 
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Map className="size-5" />
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between">
+        {/* الرحلات المنشورة */}
+        <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/50 p-4 transition hover:shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-emerald-800/80 dark:text-emerald-300/80">
                 الرحلات المنشورة
               </p>
 
-              <p className="mt-1 text-2xl font-bold">
+              <p className="mt-1 text-2xl font-bold text-emerald-700 dark:text-emerald-300">
                 {publishedCount}
               </p>
             </div>
 
-            <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <Users className="size-5" />
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between">
+        {/* بانتظار الموافقة */}
+        <div className="rounded-xl border border-amber-200/70 bg-amber-50/50 p-4 transition hover:shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-amber-800/80 dark:text-amber-300/80">
                 بانتظار الموافقة
               </p>
 
-              <p className="mt-1 text-2xl font-bold">
+              <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">
                 {pendingCount}
               </p>
             </div>
 
-            <div className="flex size-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
               <Clock3 className="size-5" />
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between">
+        {/* الرحلات المغلقة */}
+        <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-4 transition hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/30">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
                 الرحلات المغلقة
               </p>
 
-              <p className="mt-1 text-2xl font-bold">
+              <p className="mt-1 text-2xl font-bold text-slate-700 dark:text-slate-200">
                 {closedCount}
               </p>
             </div>
 
-            <div className="flex size-10 items-center justify-center rounded-lg bg-slate-500/10 text-slate-600">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-500/10 text-slate-600 dark:text-slate-400">
               <CalendarDays className="size-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* إجمالي المبالغ المدفوعة */}
+        <div className="rounded-xl border border-green-200 bg-green-50/70 p-4 transition hover:shadow-sm dark:border-green-900/60 dark:bg-green-950/25">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm text-green-800/80 dark:text-green-300/80">
+                إجمالي المبالغ المدفوعة
+              </p>
+
+              <p
+                className="mt-1 text-xl font-bold text-green-700 dark:text-green-300"
+                dir="rtl"
+              >
+                {formatFee(totalPaid)}
+              </p>
+
+              <p className="mt-1 text-xs text-green-700/70 dark:text-green-400/70">
+                دينار بحريني
+              </p>
+            </div>
+
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-green-500/15 text-green-700 dark:text-green-400">
+              <Wallet className="size-5" />
             </div>
           </div>
         </div>
@@ -567,9 +608,7 @@ export function TripsView() {
                         </span>
 
                         <span className="font-medium">
-                          {formatDate(
-                            trip.trip_date
-                          )}
+                          {formatDate(trip.trip_date)}
                         </span>
                       </div>
 
@@ -582,9 +621,7 @@ export function TripsView() {
                           </span>
 
                           <span className="font-medium">
-                            {formatTime(
-                              trip.meeting_time
-                            )}
+                            {formatTime(trip.meeting_time)}
                           </span>
                         </div>
                       )}
@@ -598,9 +635,7 @@ export function TripsView() {
                           </span>
 
                           <span className="font-medium">
-                            {formatTime(
-                              trip.return_time
-                            )}
+                            {formatTime(trip.return_time)}
                           </span>
                         </div>
                       )}
@@ -629,18 +664,15 @@ export function TripsView() {
                         </span>
                       </div>
 
-                      {trip.attendance_min !==
-                        null && (
+                      {trip.attendance_min !== null && (
                         <div className="flex items-center gap-2 text-sm">
                           <span className="text-muted-foreground">
                             الحضور:
                           </span>
 
                           <span className="font-medium">
-                            من{' '}
-                            {trip.attendance_min}%
-                            {trip.attendance_max !==
-                              null &&
+                            من {trip.attendance_min}%
+                            {trip.attendance_max !== null &&
                               ` إلى ${trip.attendance_max}%`}
                           </span>
                         </div>
