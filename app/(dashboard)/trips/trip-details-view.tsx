@@ -1,6 +1,13 @@
+
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+
 import {
   Archive,
   ArrowRight,
@@ -311,6 +318,15 @@ export function TripDetailsView({
   const [paymentInputs, setPaymentInputs] =
     useState<Record<string, string>>({})
 
+  const paymentTimers = useRef<
+  Record<string, ReturnType<typeof setTimeout>>
+  >({})
+
+  const [paymentStatus, setPaymentStatus] =
+    useState<
+      Record<string, 'saving' | 'saved' | 'error'>
+    >({})
+    
   async function loadPublishSetting() {
     setSettingsLoading(true)
 
@@ -747,125 +763,164 @@ export function TripDetailsView({
     }
   }
 
-  async function savePayment(
-    student: Student,
+ 
+
+async function savePayment(
+  student: Student,
+  inputValue?: string,
+) {
+  if (!canEditParticipantData) return
+
+  const rawValue =
+    inputValue ??
+    paymentInputs[student.id] ??
+    ''
+
+  const normalizedValue =
+    rawValue.trim().replace(',', '.')
+
+  const amount =
+    normalizedValue === ''
+      ? 0
+      : Number(normalizedValue)
+
+  if (
+    !Number.isFinite(amount) ||
+    amount < 0
   ) {
-    if (!canEditParticipantData) return
+    setPaymentStatus((current) => ({
+      ...current,
+      [student.id]: 'error',
+    }))
 
-    const rawValue =
-      paymentInputs[student.id] ?? ''
+    setError(
+      'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+    )
+    return
+  }
 
-    const normalizedValue =
-      rawValue.trim().replace(',', '.')
+  const roundedAmount =
+    Math.round(amount * 1000) / 1000
 
-    const amount =
-      normalizedValue === ''
-        ? 0
-        : Number(normalizedValue)
+  setPaymentSavingId(student.id)
 
-    if (
-      !Number.isFinite(amount) ||
-      amount < 0
-    ) {
-      setError(
-        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+  setPaymentStatus((current) => ({
+    ...current,
+    [student.id]: 'saving',
+  }))
+
+  setError('')
+  setSuccess('')
+
+  try {
+    const response = await fetch(
+      `/api/trips/${encodeURIComponent(
+        tripId,
+      )}/students`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'payment',
+          student_id: student.id,
+          payment_amount: roundedAmount,
+        }),
+      },
+    )
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        result?.error ?? 'تعذر حفظ مبلغ الدفع.',
       )
-      return
     }
 
-    const roundedAmount =
-      Math.round(amount * 1000) /
-      1000
+    setData((current) => {
+      if (!current) return current
 
-    setPaymentSavingId(student.id)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(
-        `/api/trips/${encodeURIComponent(
-          tripId,
-        )}/students`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            action: 'payment',
-            student_id: student.id,
-            payment_amount:
-              roundedAmount,
-          }),
-        },
-      )
-
-      const result =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ??
-            'تعذر حفظ مبلغ الدفع.',
-        )
+      const nextData = {
+        ...current,
+        students: current.students.map((item) =>
+          item.id === student.id
+            ? {
+                ...item,
+                payment_amount: roundedAmount,
+              }
+            : item,
+        ),
       }
 
-      setData((current) => {
-        if (!current) return current
+      syncDetailsCache(nextData)
 
-        const nextData = {
-          ...current,
-          students:
-            current.students.map(
-              (item) =>
-                item.id === student.id
-                  ? {
-                      ...item,
-                      payment_amount:
-                        roundedAmount,
-                    }
-                  : item,
-            ),
-        }
+      return nextData
+    })
 
-        syncDetailsCache(
-          nextData,
-        )
+    setPaymentInputs((current) => ({
+      ...current,
+      [student.id]:
+        roundedAmount > 0
+          ? String(roundedAmount)
+          : '',
+    }))
 
-        return nextData
-      })
+    setPaymentStatus((current) => ({
+      ...current,
+      [student.id]: 'saved',
+    }))
+  } catch (error) {
+    console.error(
+      'Save trip payment error:',
+      error,
+    )
 
-      setPaymentInputs(
-        (current) => ({
-          ...current,
-          [student.id]:
-            roundedAmount > 0
-              ? String(
-                  roundedAmount,
-                )
-              : '',
-        }),
-      )
+    setPaymentStatus((current) => ({
+      ...current,
+      [student.id]: 'error',
+    }))
 
-      setSuccess(
-        `تم حفظ دفع الطالب ${student.name}.`,
-      )
-    } catch (error) {
-      console.error(
-        'Save trip payment error:',
-        error,
-      )
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر حفظ مبلغ الدفع.',
-      )
-    } finally {
-      setPaymentSavingId(null)
-    }
+    setError(
+      error instanceof Error
+        ? error.message
+        : 'تعذر حفظ مبلغ الدفع.',
+    )
+  } finally {
+    setPaymentSavingId(null)
   }
+}
+
+  
+function handlePaymentChange(
+  student: Student,
+  value: string,
+) {
+  setPaymentInputs((current) => ({
+    ...current,
+    [student.id]: value,
+  }))
+
+  setPaymentStatus((current) => {
+    const next = { ...current }
+    delete next[student.id]
+    return next
+  })
+
+  const existingTimer =
+    paymentTimers.current[student.id]
+
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+  }
+
+  paymentTimers.current[student.id] =
+    setTimeout(() => {
+      void savePayment(student, value)
+      delete paymentTimers.current[student.id]
+    }, 800)
+}
+
 
   async function saveResponse(
     student: Student,
@@ -1663,101 +1718,59 @@ export function TripDetailsView({
           </div>
 
 
+          
           {showResults && (
             <div className="border-t">
               <div className="border-b bg-muted/20 p-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="relative">
                     <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
+          
                     <input
                       value={search}
                       onChange={(event) =>
-                        setSearch(
-                          event.target.value,
-                        )
+                        setSearch(event.target.value)
                       }
                       placeholder="بحث باسم الطالب أو الرقم الشخصي أو الهاتف..."
                       className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
                     />
                   </div>
-
+          
                   <select
-                    value={
-                      responseFilter
-                    }
+                    value={responseFilter}
                     onChange={(event) =>
                       setResponseFilter(
-                        event.target
-                          .value as typeof responseFilter,
+                        event.target.value as typeof responseFilter,
                       )
                     }
                     className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
                   >
-                    <option value="all">
-                      جميع الردود
-                    </option>
-
-                    <option value="accepted">
-                      الموافقون فقط
-                    </option>
-
-                    <option value="rejected">
-                      الرافضون فقط
-                    </option>
-
-                    <option value="pending">
-                      الذين لم يردوا
-                    </option>
+                    <option value="all">جميع الردود</option>
+                    <option value="accepted">الموافقون فقط</option>
+                    <option value="rejected">الرافضون فقط</option>
+                    <option value="pending">الذين لم يردوا</option>
                   </select>
                 </div>
               </div>
-
+          
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[1250px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30 text-right">
-                      <th className="w-12 px-4 py-3">
-                        #
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        الطالب
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        المستوى
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        الهاتف
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        الرد
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        نوع الرد
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        تاريخ الرد
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        الدفع
-                      </th>
-
-                      <th className="px-4 py-3 font-medium">
-                        الملاحظة
-                      </th>
+                      <th className="w-12 px-4 py-3">#</th>
+                      <th className="px-4 py-3 font-medium">الطالب</th>
+                      <th className="px-4 py-3 font-medium">المستوى</th>
+                      <th className="px-4 py-3 font-medium">الهاتف</th>
+                      <th className="px-4 py-3 font-medium">الرد</th>
+                      <th className="px-4 py-3 font-medium">نوع الرد</th>
+                      <th className="px-4 py-3 font-medium">تاريخ الرد</th>
+                      <th className="px-4 py-3 font-medium">الدفع</th>
+                      <th className="px-4 py-3 font-medium">الملاحظة</th>
                     </tr>
                   </thead>
-
+          
                   <tbody>
-                    {resultStudents.length ===
-                    0 ? (
+                    {resultStudents.length === 0 ? (
                       <tr>
                         <td
                           colSpan={9}
@@ -1767,200 +1780,147 @@ export function TripDetailsView({
                         </td>
                       </tr>
                     ) : (
-                      resultStudents.map(
-                        (
-                          student,
-                          index,
-                        ) => (
-                          <tr
-                            key={
-                              student.id
-                            }
-                            className="border-b last:border-0 hover:bg-muted/20"
-                          >
-                            <td className="px-4 py-3 text-muted-foreground">
-                              {index + 1}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <div className="font-medium">
-                                {
-                                  student.name
-                                }
+                      resultStudents.map((student, index) => (
+                        <tr
+                          key={student.id}
+                          className="border-b last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {index + 1}
+                          </td>
+          
+                          <td className="px-4 py-3">
+                            <div className="font-medium">
+                              {student.name}
+                            </div>
+          
+                            {student.personal_id && (
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {student.personal_id}
                               </div>
-
-                              {student.personal_id && (
-                                <div className="mt-0.5 text-xs text-muted-foreground">
-                                  {
-                                    student.personal_id
-                                  }
-                                </div>
+                            )}
+                          </td>
+          
+                          <td className="px-4 py-3">
+                            {student.level?.name || 'غير محدد'}
+                          </td>
+          
+                          <td className="px-4 py-3">
+                            {student.phone ||
+                              student.whatsapp ||
+                              'غير متوفر'}
+                          </td>
+          
+                          <td className="px-4 py-3">
+                            <select
+                              value={student.response}
+                              disabled={
+                                !canEditParticipantData ||
+                                responseSavingId === student.id
+                              }
+                              onChange={(event) =>
+                                saveResponse(
+                                  student,
+                                  event.target.value as ResponseStatus,
+                                )
+                              }
+                              className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
+                                student.response === 'accepted'
+                                  ? 'border-emerald-500/30'
+                                  : student.response === 'rejected'
+                                    ? 'border-red-500/30'
+                                    : ''
+                              }`}
+                            >
+                              <option value="pending">بانتظار الرد</option>
+                              <option value="accepted">موافق</option>
+                              <option value="rejected">رافض</option>
+                            </select>
+                          </td>
+          
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
+                                student.response_source,
+                              )}`}
+                            >
+                              {getResponseSourceLabel(
+                                student.response_source,
                               )}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              {student.level
-                                ?.name ||
-                                'غير محدد'}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              {student.phone ||
-                                student.whatsapp ||
-                                'غير متوفر'}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <select
-                                value={
-                                  student.response
-                                }
-                                disabled={
-                                  !canEditParticipantData ||
-                                  responseSavingId ===
-                                    student.id
-                                }
-                                onChange={(
-                                  event,
-                                ) =>
-                                  saveResponse(
+                            </span>
+                          </td>
+          
+                          <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                            {formatDateTime(student.responded_at)}
+                          </td>
+          
+                          {/* الدفع: حفظ تلقائي دون زر حفظ */}
+                          <td className="px-4 py-3">
+                            <div className="min-w-[120px]">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={paymentInputs[student.id] ?? ''}
+                                disabled={!canEditParticipantData}
+                                onChange={(event) =>
+                                  handlePaymentChange(
                                     student,
-                                    event
-                                      .target
-                                      .value as ResponseStatus,
+                                    event.target.value,
                                   )
                                 }
-                                className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
-                                  student.response ===
-                                  'accepted'
-                                    ? 'border-emerald-500/30'
-                                    : student.response ===
-                                        'rejected'
-                                      ? 'border-red-500/30'
-                                      : ''
-                                }`}
-                              >
-                                <option value="pending">
-                                  بانتظار الرد
-                                </option>
-
-                                <option value="accepted">
-                                  موافق
-                                </option>
-
-                                <option value="rejected">
-                                  رافض
-                                </option>
-                              </select>
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
-                                  student.response_source,
-                                )}`}
-                              >
-                                {getResponseSourceLabel(
-                                  student.response_source,
+                                placeholder="0.000"
+                                className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                              />
+          
+                              <div className="mt-1 text-xs">
+                                {paymentStatus[student.id] === 'saving' && (
+                                  <span className="text-muted-foreground">
+                                    جاري الحفظ...
+                                  </span>
                                 )}
-                              </span>
-                            </td>
-
-                            <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                              {formatDateTime(
-                                student.responded_at,
-                              )}
-                            </td>
-
-                            <td className="px-4 py-3">
-                              <div className="flex min-w-[150px] items-center gap-2">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.001"
-                                  value={
-                                    paymentInputs[
-                                      student.id
-                                    ] ?? ''
-                                  }
-                                  disabled={
-                                    !canEditParticipantData ||
-                                    paymentSavingId ===
-                                      student.id
-                                  }
-                                  onChange={(
-                                    event,
-                                  ) =>
-                                    setPaymentInputs(
-                                      (
-                                        current,
-                                      ) => ({
-                                        ...current,
-                                        [student.id]:
-                                          event
-                                            .target
-                                            .value,
-                                      }),
-                                    )
-                                  }
-                                  placeholder="0.000"
-                                  className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                                />
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    savePayment(
-                                      student,
-                                    )
-                                  }
-                                  disabled={
-                                    !canEditParticipantData ||
-                                    paymentSavingId ===
-                                      student.id
-                                  }
-                                  className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {paymentSavingId ===
-                                  student.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    'حفظ'
-                                  )}
-                                </button>
+          
+                                {paymentStatus[student.id] === 'saved' && (
+                                  <span className="text-emerald-600 dark:text-emerald-400">
+                                    تم الحفظ ✓
+                                  </span>
+                                )}
+          
+                                {paymentStatus[student.id] === 'error' && (
+                                  <span className="text-destructive">
+                                    تعذّر الحفظ
+                                  </span>
+                                )}
                               </div>
-
+          
                               <div className="mt-1 text-xs text-muted-foreground">
-                                {formatPayment(
-                                  student.payment_amount,
-                                )}
+                                {formatPayment(student.payment_amount)}
                               </div>
-                            </td>
-
-                            <td className="max-w-[280px] px-4 py-3">
-                              {student.response_note ? (
-                                <span className="text-sm text-muted-foreground">
-                                  {
-                                    student.response_note
-                                  }
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  لا توجد ملاحظة
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ),
-                      )
+                            </div>
+                          </td>
+          
+                          <td className="max-w-[280px] px-4 py-3">
+                            {student.response_note ? (
+                              <span className="text-sm text-muted-foreground">
+                                {student.response_note}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                لا توجد ملاحظة
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
-        </div>
-      ) : null}
+          </div>
+          ) : null}
+
 
       {/* Published / Closed notice */}
       {!canEdit && (
