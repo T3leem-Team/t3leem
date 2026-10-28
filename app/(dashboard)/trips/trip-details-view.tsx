@@ -17,6 +17,7 @@ import {
   UserCheck,
   UserX,
   Clock3,
+  Wallet,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -532,7 +533,19 @@ export function TripDetailsView({
     search,
     responseFilter,
   ])
+  
+  const totalPaid = useMemo(() => {
+    if (!data) return 0
 
+    return data.students
+      .filter((student) => student.selected)
+      .reduce(
+        (sum, student) =>
+          sum + Number(student.payment_amount ?? 0),
+        0,
+      )
+  }, [data])
+  
   const filteredStudents = useMemo(() => {
     if (
       !data ||
@@ -1465,6 +1478,31 @@ export function TripDetailsView({
         </div>
       </div>
 
+      {/* Total paid */}
+      {trip.status === 'published' && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                إجمالي المبالغ المدفوعة
+              </p>
+
+              <p className="mt-2 text-3xl font-bold text-emerald-700 dark:text-emerald-400">
+                {formatFee(totalPaid)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                دينار بحريني
+              </p>
+            </div>
+
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10">
+              <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* More details */}
       <div className="rounded-xl border bg-card p-5">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
