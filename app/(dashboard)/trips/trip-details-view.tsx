@@ -1478,30 +1478,7 @@ export function TripDetailsView({
         </div>
       </div>
 
-      {/* Total paid */}
-      {trip.status === 'published' && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                إجمالي المبالغ المدفوعة
-              </p>
-
-              <p className="mt-2 text-3xl font-bold text-emerald-700 dark:text-emerald-400">
-                {formatFee(totalPaid)}
-              </p>
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                دينار بحريني
-              </p>
-            </div>
-
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10">
-              <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </div>
-        </div>
-      )}
+     
       
       {/* More details */}
       <div className="rounded-xl border bg-card p-5">
@@ -1567,9 +1544,9 @@ export function TripDetailsView({
         )}
       </div>
 
+      
       {/* Results */}
-      {trip.status ===
-        'published' ||
+      {trip.status === 'published' ||
       trip.status === 'closed' ? (
         <div className="overflow-hidden rounded-xl border bg-card">
           <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between">
@@ -1604,14 +1581,15 @@ export function TripDetailsView({
             </button>
           </div>
 
-          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
+            {/* Total students */}
             <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
                   إجمالي الطلاب
                 </span>
 
-                <Users className="h-5 w-5 text-muted-foreground" />
+                <Users className="h-5 w-5 shrink-0 text-muted-foreground" />
               </div>
 
               <p className="mt-2 text-2xl font-bold">
@@ -1619,13 +1597,14 @@ export function TripDetailsView({
               </p>
             </div>
 
+            {/* Accepted */}
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-emerald-700 dark:text-emerald-400">
                   موافق
                 </span>
 
-                <UserCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <UserCheck className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
               </div>
 
               <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
@@ -1633,13 +1612,14 @@ export function TripDetailsView({
               </p>
             </div>
 
+            {/* Rejected */}
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-red-700 dark:text-red-400">
                   رافض
                 </span>
 
-                <UserX className="h-5 w-5 text-red-600 dark:text-red-400" />
+                <UserX className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
               </div>
 
               <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-400">
@@ -1647,20 +1627,41 @@ export function TripDetailsView({
               </p>
             </div>
 
+            {/* Pending */}
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-amber-700 dark:text-amber-400">
                   بانتظار الرد
                 </span>
 
-                <Clock3 className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <Clock3 className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
               </div>
 
               <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
                 {tripResults.pending}
               </p>
             </div>
+
+            {/* Total paid */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-emerald-700 dark:text-emerald-400">
+                  إجمالي المبالغ المدفوعة
+                </span>
+
+                <Wallet className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              </div>
+
+              <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+                {formatFee(totalPaid)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                دينار بحريني
+              </p>
+            </div>
           </div>
+
 
           {showResults && (
             <div className="border-t">
