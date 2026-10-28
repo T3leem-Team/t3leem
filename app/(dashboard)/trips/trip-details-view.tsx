@@ -1854,24 +1854,42 @@ function handlePaymentChange(
                             {formatDateTime(student.responded_at)}
                           </td>
           
-                          {/* الدفع: حفظ تلقائي دون زر حفظ */}
-                          <td className="px-4 py-3">
-                            <div className="min-w-[120px]">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={paymentInputs[student.id] ?? ''}
-                                disabled={!canEditParticipantData}
-                                onChange={(event) =>
-                                  handlePaymentChange(
-                                    student,
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="0.000"
-                                className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                              />
+                          
+                          <input
+                            type="number"
+                            min="0"
+                            max={trip.fee}
+                            step="0.001"
+                            value={paymentInputs[student.id] ?? ''}
+                            disabled={!canEditParticipantData}
+                            onChange={(event) => {
+                              const value = event.target.value
+                          
+                              if (value === '') {
+                                handlePaymentChange(student, '')
+                                return
+                              }
+                          
+                              const amount = Number(value)
+                          
+                              if (!Number.isFinite(amount) || amount < 0) {
+                                return
+                              }
+                          
+                              handlePaymentChange(
+                                student,
+                                String(
+                                  Math.min(
+                                    Math.round(amount * 1000) / 1000,
+                                    trip.fee,
+                                  ),
+                                ),
+                              )
+                            }}
+                            placeholder="0.000"
+                            className="payment-input-no-arrows h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                          />
+
           
                               <div className="mt-1 text-xs">
                                 {paymentStatus[student.id] === 'saving' && (
