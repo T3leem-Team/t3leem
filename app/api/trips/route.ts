@@ -78,6 +78,7 @@ async function getTripSettings(
   }
 }
 
+
 /*
  * =========================================================
  * GET
@@ -105,6 +106,7 @@ export async function GET() {
     academicYearsResult,
     coursesResult,
     levelsResult,
+    paymentsResult,
   ] = await Promise.all([
     supabase
       .from('trips')
@@ -159,6 +161,10 @@ export async function GET() {
       .order('sort_order', {
         ascending: true,
       }),
+
+    supabase
+      .from('trip_students')
+      .select('payment_amount'),
   ])
 
   if (tripsResult.error) {
@@ -213,6 +219,27 @@ export async function GET() {
     )
   }
 
+  if (paymentsResult.error) {
+    console.error(
+      'GET /api/trips - payments error:',
+      paymentsResult.error,
+    )
+
+    return jsonError(
+      'تعذر تحميل مبالغ المدفوعات',
+      500,
+      paymentsResult.error.message,
+    )
+  }
+
+  const totalPaid = (
+    paymentsResult.data ?? []
+  ).reduce(
+    (sum, payment) =>
+      sum + Number(payment.payment_amount ?? 0),
+    0,
+  )
+
   const trips =
     tripsResult.data ?? []
 
@@ -264,6 +291,7 @@ export async function GET() {
     levels:
       levelsResult.data ?? [],
     tripLevels,
+    totalPaid,
   })
 }
 
