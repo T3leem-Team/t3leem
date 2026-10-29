@@ -2336,8 +2336,7 @@ function handlePaymentChange(
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-              </div>
-              )
-              }
+               </div>
+            )}
+          </div>
+        )}
