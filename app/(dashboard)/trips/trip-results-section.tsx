@@ -45,12 +45,16 @@ type TripResultsSectionProps = {
   canEditParticipantData: boolean
 
   onPaymentChange: (
-    student: Student,
+    student: Parameters<
+      React.ComponentProps<typeof TripResultsTable>["onPaymentChange"]
+    >[0],
     value: string,
   ) => void
 
   onResponseChange: (
-    student: Student,
+    student: Parameters<
+      React.ComponentProps<typeof TripResultsTable>["onResponseChange"]
+    >[0],
     value: ResponseStatus,
   ) => void
 
