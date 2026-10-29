@@ -7,7 +7,7 @@ import {
   FileSpreadsheet,
   X,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
@@ -1019,59 +1019,81 @@ export function DashboardAttendanceExport({
 
         /*
          * 6. إنشاء ملف Excel بالورقتين الأصليتين.
+         * اتجاه الورقتين من اليمين إلى اليسار.
          */
-        const workbook = XLSX.utils.book_new()
+        const workbook = new ExcelJS.Workbook()
 
-        const detailsSheet =
-          XLSX.utils.json_to_sheet(detailsRows)
-
-        const summarySheet =
-          XLSX.utils.json_to_sheet(summaryRows)
-
-        detailsSheet['!cols'] = [
-          { wch: 24 },
-          { wch: 24 },
-          { wch: 28 },
-          { wch: 16 },
-          { wch: 18 },
-          { wch: 14 },
-          { wch: 14 },
-          { wch: 22 },
-          { wch: 30 },
-        ]
-
-        summarySheet['!cols'] = [
-          { wch: 24 },
-          { wch: 24 },
-          { wch: 28 },
-          { wch: 16 },
-          { wch: 18 },
-          { wch: 14 },
-          { wch: 14 },
-          { wch: 18 },
-          { wch: 10 },
-          { wch: 10 },
-          { wch: 10 },
-          { wch: 10 },
-          { wch: 12 },
-          { wch: 20 },
-          { wch: 18 },
-          { wch: 16 },
-          { wch: 16 },
-          { wch: 18 },
-        ]
-
-        XLSX.utils.book_append_sheet(
-          workbook,
-          detailsSheet,
+        const detailsSheet = workbook.addWorksheet(
           'تفاصيل الحضور',
+          {
+            views: [{ rightToLeft: true, showGridLines: true }],
+          },
         )
 
-        XLSX.utils.book_append_sheet(
-          workbook,
-          summarySheet,
+        const summarySheet = workbook.addWorksheet(
           'ملخص الطلاب',
+          {
+            views: [{ rightToLeft: true, showGridLines: true }],
+          },
         )
+
+        detailsSheet.columns = [
+          { header: 'المعلم', key: 'المعلم', width: 24 },
+          { header: 'الدورة', key: 'الدورة', width: 24 },
+          { header: 'اسم الطالب', key: 'اسم الطالب', width: 28 },
+          { header: 'رقم الطالب', key: 'رقم الطالب', width: 16 },
+          { header: 'الرقم الشخصي', key: 'الرقم الشخصي', width: 18 },
+          { header: 'التاريخ', key: 'التاريخ', width: 14 },
+          { header: 'اليوم', key: 'اليوم', width: 14 },
+          { header: 'الحالة', key: 'الحالة', width: 22 },
+          { header: 'ملاحظة', key: 'ملاحظة', width: 30 },
+        ]
+
+        summarySheet.columns = [
+          { header: 'المعلم', key: 'المعلم', width: 24 },
+          { header: 'الدورة', key: 'الدورة', width: 24 },
+          { header: 'اسم الطالب', key: 'اسم الطالب', width: 28 },
+          { header: 'رقم الطالب', key: 'رقم الطالب', width: 16 },
+          { header: 'الرقم الشخصي', key: 'الرقم الشخصي', width: 18 },
+          { header: 'من تاريخ', key: 'من تاريخ', width: 14 },
+          { header: 'إلى تاريخ', key: 'إلى تاريخ', width: 14 },
+          { header: 'عدد أيام الدراسة', key: 'عدد أيام الدراسة', width: 18 },
+          { header: 'حاضر', key: 'حاضر', width: 10 },
+          { header: 'غائب', key: 'غائب', width: 10 },
+          { header: 'متأخر', key: 'متأخر', width: 10 },
+          { header: 'مستأذن', key: 'مستأذن', width: 10 },
+          { header: 'لم يسجل', key: 'لم يسجل', width: 12 },
+          { header: 'لم ينضم للدورة', key: 'لم ينضم للدورة', width: 20 },
+          { header: 'الأيام غير المنضمة', key: 'الأيام غير المنضمة', width: 18 },
+          { header: 'الأيام المسجلة', key: 'الأيام المسجلة', width: 16 },
+          { header: 'أيام الحضور', key: 'أيام الحضور', width: 16 },
+          { header: 'نسبة الحضور', key: 'نسبة الحضور', width: 18 },
+        ]
+
+        detailsSheet.addRows(detailsRows)
+        summarySheet.addRows(summaryRows)
+
+        // تنسيق صف العناوين ومحاذاة النصوص العربية.
+        for (const sheet of [detailsSheet, summarySheet]) {
+          const headerRow = sheet.getRow(1)
+          headerRow.font = { bold: true }
+          headerRow.alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+            wrapText: true,
+          }
+          headerRow.height = 28
+
+          sheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+              row.alignment = {
+                horizontal: 'right',
+                vertical: 'middle',
+                wrapText: true,
+              }
+            }
+          })
+        }
 
         const safeCourseName =
           course.name
@@ -1081,7 +1103,19 @@ export function DashboardAttendanceExport({
         const fileName =
           `تقرير حضور ${safeCourseName} ${safeFromDate} إلى ${safeToDate}.xlsx`
 
-        XLSX.writeFile(workbook, fileName)
+        const buffer = await workbook.xlsx.writeBuffer()
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+
+        link.href = url
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(url)
 
         return true
       } catch (exportError) {
