@@ -492,69 +492,15 @@ export function TripDetailsView({
     }
   }, [data])
 
-  const resultStudents = useMemo(() => {
-    if (!data) return []
+ 
+const resultStudents = useMemo(() => {
+  if (!data) return []
 
-    const normalizedSearch =
-      search.trim().toLowerCase()
+  return data.students.filter(
+    (student) => student.selected
+  )
+}, [data])
 
-    return data.students
-      .filter(
-        (student) => student.selected,
-      )
-      .filter((student) => {
-        if (responseFilter === 'all') {
-          return true
-        }
-
-        return (
-          student.response ===
-          responseFilter
-        )
-      })
-      .filter((student) => {
-        if (!normalizedSearch) {
-          return true
-        }
-
-        const name =
-          typeof student.name === 'string'
-            ? student.name
-            : ''
-
-        const personalId =
-          typeof student.personal_id ===
-          'string'
-            ? student.personal_id
-            : ''
-
-        const phone =
-          typeof student.phone === 'string'
-            ? student.phone
-            : ''
-
-        return (
-          name
-            .toLowerCase()
-            .includes(normalizedSearch) ||
-          personalId
-            .toLowerCase()
-            .includes(
-              normalizedSearch,
-            ) ||
-          phone
-            .toLowerCase()
-            .includes(
-              normalizedSearch,
-            )
-        )
-      })
-  }, [
-    data,
-    search,
-    responseFilter,
-  ])
-  
   const totalPaid = useMemo(() => {
     if (!data) return 0
 
