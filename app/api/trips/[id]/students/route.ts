@@ -1830,22 +1830,19 @@ export async function POST(
  * بدون التأثير على selected.
  */
 
+
 export async function PATCH(
   request: Request,
   { params }: RouteContext,
 ) {
   try {
-    const { access, response } =
-      await requireAuth()
+    const { access, response } = await requireAuth()
 
     if (response) return response
 
     if (!access) {
       return NextResponse.json(
-        {
-          error:
-            'غير مصرح بالوصول',
-        },
+        { error: 'غير مصرح بالوصول' },
         { status: 401 },
       )
     }
@@ -1854,36 +1851,24 @@ export async function PATCH(
 
     if (!id) {
       return NextResponse.json(
-        {
-          error:
-            'معرف الرحلة مطلوب',
-        },
+        { error: 'معرف الرحلة مطلوب' },
         { status: 400 },
       )
     }
 
-    const supabase =
-      await createSupabaseServerClient()
+    const supabase = await createSupabaseServerClient()
 
-    const {
-      data: trip,
-      error: tripError,
-    } = await supabase
+    const { data: trip, error: tripError } = await supabase
       .from('trips')
-      .select(`
-        id,
-        status
-      `)
+      .select('id, status')
       .eq('id', id)
       .maybeSingle()
 
     if (tripError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر التحقق من الرحلة',
-          details:
-            tripError.message,
+          error: 'تعذر التحقق من الرحلة',
+          details: tripError.message,
         },
         { status: 500 },
       )
@@ -1891,10 +1876,7 @@ export async function PATCH(
 
     if (!trip) {
       return NextResponse.json(
-        {
-          error:
-            'الرحلة غير موجودة',
-        },
+        { error: 'الرحلة غير موجودة' },
         { status: 404 },
       )
     }
@@ -1905,52 +1887,165 @@ export async function PATCH(
       body = await request.json()
     } catch {
       return NextResponse.json(
-        {
-          error:
-            'بيانات الطلب غير صحيحة',
-        },
+        { error: 'بيانات الطلب غير صحيحة' },
+        { status: 400 },
+      )
+    }
+
+    const studentId =
+      typeof body.student_id === 'string'
+        ? body.student_id.trim()
+        : ''
+
+    if (!studentId) {
+      return NextResponse.json(
+        { error: 'معرف الطالب مطلوب' },
         { status: 400 },
       )
     }
 
     /*
      * --------------------------------------------------------
-     * تحديث مبلغ الدفع
+     * تحديث المبلغ والرد معًا
+     * action: participant_update
      * --------------------------------------------------------
      */
+    if (body.action === 'participant_update') {
+      if (trip.status === 'closed') {
+        return NextResponse.json(
+          { error: 'لا يمكن تعديل طالب في رحلة مغلقة' },
+          { status: 400 },
+        )
+      }
 
-    if (
-      body.action === 'payment'
-    ) {
-      const studentId =
-        typeof body.student_id ===
-        'string'
-          ? body.student_id
-          : ''
+      const hasPayment =
+        Object.prototype.hasOwnProperty.call(
+          body,
+          'payment_amount',
+        )
 
-      if (!studentId) {
+      const hasResponse =
+        Object.prototype.hasOwnProperty.call(
+          body,
+          'response',
+        )
+
+      if (!hasPayment || !hasResponse) {
         return NextResponse.json(
           {
-            error:
-              'معرف الطالب مطلوب',
+            error: 'المبلغ والرد مطلوبان للحفظ معًا',
           },
           { status: 400 },
         )
       }
 
-      /*
-       * الرحلة المغلقة فقط تمنع تعديل الدفع.
-       *
-       * الرحلة المنشورة يسمح فيها بتعديل الدفع
-       * لأن الدفع يتم يدوياً من الإدارة.
-       */
+      const rawAmount = body.payment_amount
+
+      const paymentAmount =
+        rawAmount === '' || rawAmount === null
+          ? 0
+          : Number(rawAmount)
+
       if (
-        trip.status === 'closed'
+        !Number.isFinite(paymentAmount) ||
+        paymentAmount < 0
       ) {
         return NextResponse.json(
+          { error: 'مبلغ الدفع غير صحيح' },
+          { status: 400 },
+        )
+      }
+
+      const roundedAmount =
+        Math.round(paymentAmount * 1000) / 1000
+
+      const tripResponse = body.response
+
+      if (
+        tripResponse !== 'pending' &&
+        tripResponse !== 'accepted' &&
+        tripResponse !== 'rejected'
+      ) {
+        return NextResponse.json(
+          { error: 'حالة الرد غير صحيحة' },
+          { status: 400 },
+        )
+      }
+
+      const responseNote =
+        typeof body.response_note === 'string'
+          ? body.response_note.trim() || null
+          : null
+
+      const isPending = tripResponse === 'pending'
+
+      const { data: updated, error: updateError } =
+        await supabase
+          .from('trip_students')
+          .update({
+            payment_amount: roundedAmount,
+            response: tripResponse,
+            response_note: responseNote,
+            responded_at: isPending
+              ? null
+              : new Date().toISOString(),
+            response_source: isPending
+              ? null
+              : 'admin',
+          })
+          .eq('trip_id', id)
+          .eq('student_id', studentId)
+          .select(`
+            id,
+            trip_id,
+            student_id,
+            selected,
+            payment_amount,
+            response,
+            response_note,
+            responded_at,
+            response_source
+          `)
+          .maybeSingle()
+
+      if (updateError) {
+        console.error(
+          'PATCH participant_update error:',
+          updateError,
+        )
+
+        return NextResponse.json(
           {
-            error:
-              'لا يمكن تعديل الدفع في رحلة مغلقة',
+            error: 'تعذر حفظ المبلغ والرد',
+            details: updateError.message,
+          },
+          { status: 500 },
+        )
+      }
+
+      if (!updated) {
+        return NextResponse.json(
+          { error: 'الطالب غير موجود في الرحلة' },
+          { status: 404 },
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        student: updated,
+      })
+    }
+
+    /*
+     * --------------------------------------------------------
+     * تحديث مبلغ الدفع فقط — للتوافق مع الاستخدامات القديمة
+     * --------------------------------------------------------
+     */
+    if (body.action === 'payment') {
+      if (trip.status === 'closed') {
+        return NextResponse.json(
+          {
+            error: 'لا يمكن تعديل الدفع في رحلة مغلقة',
           },
           { status: 400 },
         )
@@ -1959,79 +2054,50 @@ export async function PATCH(
       let paymentAmount = 0
 
       if (
-        body.payment_amount !==
-          null &&
-        body.payment_amount !==
-          undefined &&
+        body.payment_amount !== null &&
+        body.payment_amount !== undefined &&
         body.payment_amount !== ''
       ) {
-        paymentAmount =
-          Number(
-            body.payment_amount,
-          )
+        paymentAmount = Number(body.payment_amount)
       }
 
       if (
-        !Number.isFinite(
-          paymentAmount,
-        ) ||
+        !Number.isFinite(paymentAmount) ||
         paymentAmount < 0
       ) {
         return NextResponse.json(
-          {
-            error:
-              'مبلغ الدفع غير صحيح',
-          },
+          { error: 'مبلغ الدفع غير صحيح' },
           { status: 400 },
         )
       }
 
-      /*
-       * نخلي الدقة 3 منازل عشرية
-       * لأن الدينار البحريني 3 منازل.
-       */
       paymentAmount =
-        Math.round(
-          paymentAmount * 1000,
-        ) / 1000
+        Math.round(paymentAmount * 1000) / 1000
 
-      const {
-        data: updated,
-        error: updateError,
-      } = await supabase
-        .from('trip_students')
-        .update({
-          payment_amount:
-            paymentAmount,
-        })
-        .eq(
-          'trip_id',
-          id,
-        )
-        .eq(
-          'student_id',
-          studentId,
-        )
-        .select(`
-          id,
-          trip_id,
-          student_id,
-          payment_amount
-        `)
-        .maybeSingle()
+      const { data: updated, error: updateError } =
+        await supabase
+          .from('trip_students')
+          .update({ payment_amount: paymentAmount })
+          .eq('trip_id', id)
+          .eq('student_id', studentId)
+          .select(`
+            id,
+            trip_id,
+            student_id,
+            payment_amount
+          `)
+          .maybeSingle()
 
       if (updateError) {
         console.error(
-          'PATCH /api/trips/[id]/students - payment error:',
+          'PATCH payment error:',
           updateError,
         )
 
         return NextResponse.json(
           {
-            error:
-              'تعذر حفظ مبلغ الدفع',
-            details:
-              updateError.message,
+            error: 'تعذر حفظ مبلغ الدفع',
+            details: updateError.message,
           },
           { status: 500 },
         )
@@ -2039,10 +2105,7 @@ export async function PATCH(
 
       if (!updated) {
         return NextResponse.json(
-          {
-            error:
-              'الطالب غير موجود في الرحلة',
-          },
+          { error: 'الطالب غير موجود في الرحلة' },
           { status: 404 },
         )
       }
@@ -2050,130 +2113,82 @@ export async function PATCH(
       return NextResponse.json({
         success: true,
         student_id: studentId,
-        payment_amount:
-          updated.payment_amount ?? 0,
+        payment_amount: updated.payment_amount ?? 0,
       })
     }
 
     /*
      * --------------------------------------------------------
-     * تحديث الرد
+     * تحديث الرد فقط — للتوافق مع الاستخدامات القديمة
      * --------------------------------------------------------
      */
+    if (body.action === 'response') {
+      const tripResponse = body.response
 
-    if (
-      body.action === 'response'
-    ) {
-      const studentId =
-        typeof body.student_id ===
-        'string'
-          ? body.student_id
-          : ''
-
-      const tripResponse =
-        body.response
-
-      if (!studentId) {
+      if (
+        tripResponse !== 'pending' &&
+        tripResponse !== 'accepted' &&
+        tripResponse !== 'rejected'
+      ) {
         return NextResponse.json(
-          {
-            error:
-              'معرف الطالب مطلوب',
-          },
+          { error: 'حالة الرد غير صحيحة' },
           { status: 400 },
         )
       }
 
-      if (
-        tripResponse !==
-          'pending' &&
-        tripResponse !==
-          'accepted' &&
-        tripResponse !==
-          'rejected'
-      ) {
+      if (trip.status === 'closed') {
         return NextResponse.json(
           {
-            error:
-              'حالة الرد غير صحيحة',
-          },
-          { status: 400 },
-        )
-      }
-
-      if (
-        trip.status === 'closed'
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              'لا يمكن تعديل الرد في رحلة مغلقة',
+            error: 'لا يمكن تعديل الرد في رحلة مغلقة',
           },
           { status: 400 },
         )
       }
 
       const responseNote =
-        typeof body.response_note ===
-        'string'
-          ? body.response_note.trim() ||
-            null
+        typeof body.response_note === 'string'
+          ? body.response_note.trim() || null
           : null
 
-      const isPending =
-        tripResponse ===
-        'pending'
+      const isPending = tripResponse === 'pending'
 
-      const {
-        data: updated,
-        error: updateError,
-      } = await supabase
-        .from('trip_students')
-        .update({
-          response:
-            tripResponse,
-          response_note:
-            responseNote,
-          responded_at:
-            isPending
+      const { data: updated, error: updateError } =
+        await supabase
+          .from('trip_students')
+          .update({
+            response: tripResponse,
+            response_note: responseNote,
+            responded_at: isPending
               ? null
               : new Date().toISOString(),
-          response_source:
-            isPending
+            response_source: isPending
               ? null
               : 'admin',
-        })
-        .eq(
-          'trip_id',
-          id,
-        )
-        .eq(
-          'student_id',
-          studentId,
-        )
-        .select(`
-          id,
-          trip_id,
-          student_id,
-          selected,
-          response,
-          response_note,
-          responded_at,
-          response_source
-        `)
-        .maybeSingle()
+          })
+          .eq('trip_id', id)
+          .eq('student_id', studentId)
+          .select(`
+            id,
+            trip_id,
+            student_id,
+            selected,
+            response,
+            response_note,
+            responded_at,
+            response_source
+          `)
+          .maybeSingle()
 
       if (updateError) {
         console.error(
-          'PATCH /api/trips/[id]/students - response error:',
+          'PATCH response error:',
           updateError,
         )
 
         return NextResponse.json(
           {
-            error:
-              'تعذر حفظ رد الطالب',
-            details:
-              updateError.message,
+            error: 'تعذر حفظ رد الطالب',
+            details: updateError.message,
           },
           { status: 500 },
         )
@@ -2181,10 +2196,7 @@ export async function PATCH(
 
       if (!updated) {
         return NextResponse.json(
-          {
-            error:
-              'الطالب غير موجود في الرحلة',
-          },
+          { error: 'الطالب غير موجود في الرحلة' },
           { status: 404 },
         )
       }
@@ -2196,10 +2208,7 @@ export async function PATCH(
     }
 
     return NextResponse.json(
-      {
-        error:
-          'نوع العملية غير معروف',
-      },
+      { error: 'نوع العملية غير معروف' },
       { status: 400 },
     )
   } catch (error) {
@@ -2209,10 +2218,7 @@ export async function PATCH(
     )
 
     return NextResponse.json(
-      {
-        error:
-          'حدث خطأ أثناء تحديث طالب الرحلة',
-      },
+      { error: 'حدث خطأ أثناء تحديث طالب الرحلة' },
       { status: 500 },
     )
   }
