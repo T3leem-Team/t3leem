@@ -31,8 +31,8 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { TripResultsTable } from './trip-results-table'
 import { EligibleStudentsSection } from './eligible-students-section'
+import { TripResultsSection } from "./trip-results-section"
 
 import type {
   ApiResponse,
@@ -1470,164 +1470,48 @@ function handlePaymentChange(
       </div>
 
       
-      {/* Results */}
-      {trip.status === 'published' ||
-      trip.status === 'closed' ? (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="flex flex-col gap-4 border-b p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
+          {/* Results */}
+      {(trip.status === 'published' ||
+        trip.status === 'closed') && (
+        <TripResultsSection
+          tripId={tripId}
+          tripResults={tripResults}
+          totalPaid={totalPaid}
+          showResults={showResults}
+          onToggleResults={() =>
+            setShowResults((current) => !current)
+          }
+          resultStudents={resultStudents}
+          search={search}
+          onSearchChange={setSearch}
+          responseFilter={responseFilter}
+          onResponseFilterChange={setResponseFilter}
+          paymentInputs={paymentInputs}
+          paymentStatus={paymentStatus}
+          responseSavingId={responseSavingId}
+          canEditParticipantData={canEditParticipantData}
+          onPaymentChange={(student, value) => {
+            const fullStudent = data.students.find(
+              (item) => item.id === student.id,
+            )
 
-                <h2 className="text-lg font-semibold">
-                  نتائج الرحلة
-                </h2>
-              </div>
+            if (fullStudent) {
+              handlePaymentChange(fullStudent, value)
+            }
+          }}
+          onResponseChange={(student, value) => {
+            const fullStudent = data.students.find(
+              (item) => item.id === student.id,
+            )
 
-              <p className="mt-1 text-sm text-muted-foreground">
-                نتائج ردود الطلاب على الرحلة.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                setShowResults(
-                  (current) => !current,
-                )
-              }
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition hover:bg-muted"
-            >
-              <BarChart3 className="h-4 w-4" />
-
-              {showResults
-                ? 'إخفاء النتائج'
-                : 'عرض النتائج'}
-            </button>
-          </div>
-
-          <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-5">
-            {/* Total students */}
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground">
-                  إجمالي الطلاب
-                </span>
-
-                <Users className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold">
-                {tripResults.total}
-              </p>
-            </div>
-
-            {/* Accepted */}
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-emerald-700 dark:text-emerald-400">
-                  موافق
-                </span>
-
-                <UserCheck className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                {tripResults.accepted}
-              </p>
-            </div>
-
-            {/* Rejected */}
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-red-700 dark:text-red-400">
-                  رافض
-                </span>
-
-                <UserX className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-400">
-                {tripResults.rejected}
-              </p>
-            </div>
-
-            {/* Pending */}
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-amber-700 dark:text-amber-400">
-                  بانتظار الرد
-                </span>
-
-                <Clock3 className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
-                {tripResults.pending}
-              </p>
-            </div>
-
-            {/* Total paid */}
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-emerald-700 dark:text-emerald-400">
-                  إجمالي المبالغ المدفوعة
-                </span>
-
-                <Wallet className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              </div>
-
-              <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                {formatFee(totalPaid)}
-              </p>
-
-              <p className="mt-1 text-xs text-muted-foreground">
-                دينار بحريني
-              </p>
-            </div>
-          </div>
-
-
-          
-         
-      
-          {showResults && (
-            <TripResultsTable
-              tripId={tripId}
-              students={resultStudents}
-              search={search}
-              onSearchChange={setSearch}
-              responseFilter={responseFilter}
-              onResponseFilterChange={setResponseFilter}
-              paymentInputs={paymentInputs}
-              paymentStatus={paymentStatus}
-              responseSavingId={responseSavingId}
-              canEditParticipantData={canEditParticipantData}
-              onPaymentChange={(student, value) => {
-                const fullStudent = data?.students.find(
-                  (item) => item.id === student.id
-                )
-
-                if (fullStudent) {
-                  handlePaymentChange(fullStudent, value)
-                }
-              }}
-              onResponseChange={(student, value) => {
-                const fullStudent = data?.students.find(
-                  (item) => item.id === student.id
-                )
-
-                if (fullStudent) {
-                  void saveResponse(fullStudent, value)
-                }
-              }}
-              formatDateTime={formatDateTime}
-              formatPayment={formatPayment}
-            />
-          )}
-          </div>
-          ) : null}
-
+            if (fullStudent) {
+              void saveResponse(fullStudent, value)
+            }
+          }}
+          formatDateTime={formatDateTime}
+          formatPayment={formatPayment}
+        />
+      )}
 
       {/* Published / Closed notice */}
       {!canEdit && (
@@ -1653,7 +1537,7 @@ function handlePaymentChange(
         </div>
       )}
 
-           {/* Students section */}
+      {/* Students section */}
       {canEdit && data && (
         <EligibleStudentsSection
           trip={data.trip}
@@ -1697,6 +1581,3 @@ function handlePaymentChange(
           formatPayment={formatPayment}
         />
       )}
-    </div>
-  )
-}
