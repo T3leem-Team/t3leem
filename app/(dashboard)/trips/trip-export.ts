@@ -58,86 +58,125 @@ export async function exportTripStudents(
     throw new Error('لا يوجد طلاب محددون لتنزيلهم.')
   }
 
-  const XLSX = await import('xlsx')
+  const ExcelJS = await import('exceljs')
 
-  const rows = selectedStudents.map((student, index) => ({
-    '#': index + 1,
-    الطالب: student.name,
-    'الرقم الشخصي': student.personal_id ?? '',
-    المستوى: student.level?.name ?? '',
-    الهاتف: student.phone ?? student.whatsapp ?? '',
-    الحضور:
-      student.attendance_percentage != null
-        ? `${student.attendance_percentage.toFixed(1)}%`
-        : 'لا توجد بيانات',
-    حاضر: student.attendance_present,
-    غائب: student.attendance_absent,
-    متأخر: student.attendance_late,
-    مستأذن: student.attendance_excused,
-    الرد: getResponseLabel(student.response),
-    'نوع الرد': getResponseSourceLabel(
-      student.response_source,
-    ),
-    'تاريخ الرد': student.responded_at
-      ? formatDateTime(student.responded_at)
-      : '',
-    الدفع:
-      student.payment_amount > 0
-        ? student.payment_amount
-        : 0,
-    'حالة الدفع':
-      student.payment_amount > 0
-        ? 'مدفوع'
-        : 'غير مدفوع',
-    'ملاحظة الرد': student.response_note ?? '',
-    'ملاحظات الدورة': student.course_notes
-      .map((note) => note.note)
-      .join(' | '),
-  }))
+  const workbook = new ExcelJS.Workbook()
 
-  const worksheet = XLSX.utils.json_to_sheet(rows)
-  const workbook = XLSX.utils.book_new()
+  const worksheet = workbook.addWorksheet('طلاب الرحلة', {
+    views: [
+      {
+        rightToLeft: true,
+        showGridLines: true,
+      },
+    ],
+  })
 
-  // اتجاه ورقة Excel من اليمين إلى اليسار
-  worksheet['!views'] = [
-    {
-      rightToLeft: true,
-    },
+  // تعريف الأعمدة وعرض كل عمود
+  worksheet.columns = [
+    { header: '#', key: 'number', width: 6 },
+    { header: 'الطالب', key: 'student', width: 28 },
+    { header: 'الرقم الشخصي', key: 'personalId', width: 16 },
+    { header: 'المستوى', key: 'level', width: 18 },
+    { header: 'الهاتف', key: 'phone', width: 16 },
+    { header: 'الحضور', key: 'attendance', width: 14 },
+    { header: 'حاضر', key: 'present', width: 10 },
+    { header: 'غائب', key: 'absent', width: 10 },
+    { header: 'متأخر', key: 'late', width: 10 },
+    { header: 'مستأذن', key: 'excused', width: 10 },
+    { header: 'الرد', key: 'response', width: 14 },
+    { header: 'نوع الرد', key: 'responseSource', width: 14 },
+    { header: 'تاريخ الرد', key: 'respondedAt', width: 22 },
+    { header: 'الدفع', key: 'payment', width: 14 },
+    { header: 'حالة الدفع', key: 'paymentStatus', width: 14 },
+    { header: 'ملاحظة الرد', key: 'responseNote', width: 30 },
+    { header: 'ملاحظات الدورة', key: 'courseNotes', width: 40 },
   ]
 
-  // ضبط عرض الأعمدة
-  worksheet['!cols'] = [
-    { wch: 6 },
-    { wch: 28 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 16 },
-    { wch: 14 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 30 },
-    { wch: 40 },
-  ]
+  // إضافة بيانات الطلاب المحددين
+  selectedStudents.forEach((student, index) => {
+    worksheet.addRow({
+      number: index + 1,
+      student: student.name,
+      personalId: student.personal_id ?? '',
+      level: student.level?.name ?? '',
+      phone: student.phone ?? student.whatsapp ?? '',
+      attendance:
+        student.attendance_percentage != null
+          ? `${student.attendance_percentage.toFixed(1)}%`
+          : 'لا توجد بيانات',
+      present: student.attendance_present,
+      absent: student.attendance_absent,
+      late: student.attendance_late,
+      excused: student.attendance_excused,
+      response: getResponseLabel(student.response),
+      responseSource: getResponseSourceLabel(
+        student.response_source,
+      ),
+      respondedAt: student.responded_at
+        ? formatDateTime(student.responded_at)
+        : '',
+      payment:
+        student.payment_amount > 0
+          ? student.payment_amount
+          : 0,
+      paymentStatus:
+        student.payment_amount > 0
+          ? 'مدفوع'
+          : 'غير مدفوع',
+      responseNote: student.response_note ?? '',
+      courseNotes: student.course_notes
+        .map((note) => note.note)
+        .join(' | '),
+    })
+  })
 
+  // تنسيق العناوين
+  const headerRow = worksheet.getRow(1)
+
+  headerRow.font = {
+    bold: true,
+  }
+
+  headerRow.alignment = {
+    horizontal: 'right',
+    vertical: 'middle',
+    wrapText: true,
+  }
+
+  headerRow.height = 28
+
+  // تنسيق ومحاذاة بيانات الطلاب
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1) {
+      row.alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+        wrapText: true,
+      }
+    }
+  })
+
+  // اسم ملف آمن
   const safeName =
     tripName.replace(/[\\/:*?"<>|]/g, '').trim() ||
     'الرحلة'
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    worksheet,
-    'طلاب الرحلة',
-  )
+  // إنشاء ملف Excel وتنزيله
+  const buffer = await workbook.xlsx.writeBuffer()
 
-  XLSX.writeFile(
-    workbook,
-    `${safeName}-طلاب.xlsx`,
-  )
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = `${safeName}-طلاب.xlsx`
+
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  URL.revokeObjectURL(url)
 }
