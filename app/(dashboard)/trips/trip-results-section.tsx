@@ -1,3 +1,4 @@
+
 "use client"
 
 import {
@@ -11,6 +12,10 @@ import {
 
 import { TripResultsTable } from "./trip-results-table"
 import type { ResponseStatus, Student } from "./trip-types"
+
+type TableStudent = Parameters<
+  React.ComponentProps<typeof TripResultsTable>["onPaymentChange"]
+>[0]
 
 type TripResultsSectionProps = {
   tripId: string
@@ -45,18 +50,29 @@ type TripResultsSectionProps = {
   canEditParticipantData: boolean
 
   onPaymentChange: (
-    student: Parameters<
-      React.ComponentProps<typeof TripResultsTable>["onPaymentChange"]
-    >[0],
+    student: TableStudent,
     value: string,
   ) => void
 
   onResponseChange: (
-    student: Parameters<
-      React.ComponentProps<typeof TripResultsTable>["onResponseChange"]
-    >[0],
+    student: TableStudent,
     value: ResponseStatus,
   ) => void
+
+  onSaveStudent: (
+    student: TableStudent,
+  ) => void | Promise<void>
+
+  hasUnsavedChanges: (
+    student: TableStudent,
+  ) => boolean
+
+  savingStudentId: string | null
+
+  saveStatus: Record<
+    string,
+    "saved" | "error"
+  >
 
   formatDateTime: (value: string | null) => string
   formatPayment: (value: number) => string
@@ -79,6 +95,10 @@ export function TripResultsSection({
   canEditParticipantData,
   onPaymentChange,
   onResponseChange,
+  onSaveStudent,
+  hasUnsavedChanges,
+  savingStudentId,
+  saveStatus,
   formatDateTime,
   formatPayment,
 }: TripResultsSectionProps) {
@@ -173,6 +193,10 @@ export function TripResultsSection({
           canEditParticipantData={canEditParticipantData}
           onPaymentChange={onPaymentChange}
           onResponseChange={onResponseChange}
+          onSaveStudent={onSaveStudent}
+          hasUnsavedChanges={hasUnsavedChanges}
+          savingStudentId={savingStudentId}
+          saveStatus={saveStatus}
           formatDateTime={formatDateTime}
           formatPayment={formatPayment}
         />
