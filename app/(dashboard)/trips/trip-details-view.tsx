@@ -2231,7 +2231,7 @@ function handlePaymentChange(
                                 نشر الرحلة
                               </>
                             )}
-                          </button>
+                           </button>
                         </div>
                       </div>
                     )}
@@ -2240,3 +2240,8 @@ function handlePaymentChange(
               )}
             </div>
           )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
