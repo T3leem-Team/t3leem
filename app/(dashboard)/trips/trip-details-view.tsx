@@ -897,41 +897,50 @@ async function savePayment(
 }
 
   
-function handlePaymentChange(
-  student: Student,
-  value: string,
-) {
-  setPaymentInputs((current) => ({
-    ...current,
-    [student.id]: value,
-  }))
+  function handlePaymentChange(
+    student: Student,
+    value: string,
+  ) {
+    setPaymentInputs((current) => ({
+      ...current,
+      [student.id]: value,
+    }))
 
-  setPaymentStatus((current) => {
-    const next = { ...current }
-    delete next[student.id]
-    return next
-  })
+    setPaymentStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
 
-  const existingTimer =
-    paymentTimers.current[student.id]
+    // حفظ الدفع تلقائيًا للطلاب المؤهلين فقط.
+    // جدول النتائج له آلية حفظ مستقلة.
+    if (data?.trip.status !== 'draft') return
 
-  if (existingTimer) {
-    clearTimeout(existingTimer)
+    const existingTimer =
+      paymentTimers.current[student.id]
+
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    paymentTimers.current[student.id] =
+      setTimeout(() => {
+        void savePayment(student, value)
+        delete paymentTimers.current[student.id]
+      }, 800)
   }
-
-  paymentTimers.current[student.id] =
-    setTimeout(() => {
-      void savePayment(student, value)
-      delete paymentTimers.current[student.id]
-    }, 800)
-}
-
 
   async function saveResponse(
     student: Student,
     responseValue: ResponseStatus,
   ) {
     if (!canEditParticipantData) return
+
+    // في الرحلات المنشورة أو المغلقة،
+    // تعديل الرد يتم حفظه من جدول النتائج.
+    if (data?.trip.status !== 'draft') {
+      return
+    }
 
     setResponseSavingId(student.id)
     setError('')
@@ -945,75 +954,57 @@ function handlePaymentChange(
         {
           method: 'PATCH',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'response',
             student_id: student.id,
-            response:
-              responseValue,
+            response: responseValue,
           }),
         },
       )
 
-      const result =
-        await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ??
-            'تعذر حفظ رد الطالب.',
+          result?.error ?? 'تعذر حفظ رد الطالب.',
         )
       }
 
-      const updatedStudent =
-        result?.student
+      const updatedStudent = result?.student
 
       setData((current) => {
         if (!current) return current
 
         const nextData = {
           ...current,
-          students:
-            current.students.map(
-              (item) => {
-                if (
-                  item.id !==
-                  student.id
-                ) {
-                  return item
-                }
+          students: current.students.map((item) => {
+            if (item.id !== student.id) {
+              return item
+            }
 
-                return {
-                  ...item,
-                  response:
-                    updatedStudent?.response ??
-                    responseValue,
-                  response_note:
-                    updatedStudent?.response_note ??
-                    null,
-                  response_source:
-                    updatedStudent?.response_source ??
-                    (responseValue ===
-                    'pending'
-                      ? null
-                      : 'admin'),
-                  responded_at:
-                    updatedStudent?.responded_at ??
-                    (responseValue ===
-                    'pending'
-                      ? null
-                      : new Date().toISOString()),
-                }
-              },
-            ),
+            return {
+              ...item,
+              response:
+                updatedStudent?.response ?? responseValue,
+              response_note:
+                updatedStudent?.response_note ?? null,
+              response_source:
+                updatedStudent?.response_source ??
+                (responseValue === 'pending'
+                  ? null
+                  : 'admin'),
+              responded_at:
+                updatedStudent?.responded_at ??
+                (responseValue === 'pending'
+                  ? null
+                  : new Date().toISOString()),
+            }
+          }),
         }
 
-        syncDetailsCache(
-          nextData,
-        )
-
+        syncDetailsCache(nextData)
         return nextData
       })
 
@@ -1021,10 +1012,7 @@ function handlePaymentChange(
         `تم تحديث رد الطالب ${student.name}.`,
       )
     } catch (error) {
-      console.error(
-        'Save trip response error:',
-        error,
-      )
+      console.error('Save trip response error:', error)
 
       setError(
         error instanceof Error
@@ -1033,156 +1021,6 @@ function handlePaymentChange(
       )
     } finally {
       setResponseSavingId(null)
-    }
-  }
-
-  async function publishTrip() {
-    if (!data) return
-
-    if (data.trip.status !== 'draft') {
-      return
-    }
-
-    if (!directPublishAllowed) {
-      setError(
-        'النشر المباشر موقوف من إعدادات النظام.',
-      )
-      return
-    }
-
-    if (selectedCount === 0) {
-      setError(
-        'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة.',
-      )
-      return
-    }
-
-    const confirmed =
-      window.confirm(
-        'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
-      )
-
-    if (!confirmed) return
-
-    setPublishing(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            id: tripId,
-            status: 'published',
-          }),
-        },
-      )
-
-      const result =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ??
-            'تعذر نشر الرحلة.',
-        )
-      }
-
-      setSuccess(
-        'تم نشر الرحلة بنجاح.',
-      )
-
-      await loadData({
-        silent: true,
-        force: true,
-      })
-    } catch (error) {
-      console.error(
-        'Publish trip error:',
-        error,
-      )
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر نشر الرحلة.',
-      )
-    } finally {
-      setPublishing(false)
-    }
-  }
-
-  async function closeTrip() {
-    if (!data) return
-
-    if (data.trip.status !== 'published') {
-      return
-    }
-
-    const confirmed =
-      window.confirm(
-        'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
-      )
-
-    if (!confirmed) return
-
-    setClosing(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            id: tripId,
-            status: 'closed',
-          }),
-        },
-      )
-
-      const result =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ??
-            'تعذر إغلاق الرحلة.',
-        )
-      }
-
-      setSuccess(
-        'تم إغلاق الرحلة بنجاح، وتم نقلها إلى الرحلات السابقة.',
-      )
-
-      await loadData({
-        silent: true,
-        force: true,
-      })
-    } catch (error) {
-      console.error(
-        'Close trip error:',
-        error,
-      )
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر إغلاق الرحلة.',
-      )
-    } finally {
-      setClosing(false)
     }
   }
 
