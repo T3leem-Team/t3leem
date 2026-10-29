@@ -33,6 +33,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { EligibleStudentsSection } from './eligible-students-section'
 import { TripResultsSection } from "./trip-results-section"
+import { useTripDetails } from './trip-details-hook'
 
 import type {
   ApiResponse,
@@ -186,232 +187,60 @@ export function TripDetailsView({
 }: {
   tripId: string
 }) {
-  const [data, setData] =
-    useState<ApiResponse | null>(null)
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [refreshing, setRefreshing] =
-    useState(false)
-
-  const [saving, setSaving] =
-    useState(false)
-
-  const [publishing, setPublishing] =
-    useState(false)
-
-  const [closing, setClosing] =
-    useState(false)
-
-  const [paymentSavingId, setPaymentSavingId] =
-    useState<string | null>(null)
-
-  const [responseSavingId, setResponseSavingId] =
-    useState<string | null>(null)
-
-  const [
+  const {
+    data,
+    setData,
+    loading,
+    refreshing,
+    saving,
+    setSaving,
+    publishing,
+    setPublishing,
+    closing,
+    setClosing,
+    paymentSavingId,
+    setPaymentSavingId,
+    responseSavingId,
+    setResponseSavingId,
     directPublishAllowed,
-    setDirectPublishAllowed,
-  ] = useState(false)
+    settingsLoading,
+    error,
+    setError,
+    success,
+    setSuccess,
+    search,
+    setSearch,
+    levelFilter,
+    setLevelFilter,
+    showEligibleOnly,
+    setShowEligibleOnly,
+    selectedIds,
+    setSelectedIds,
+    showResults,
+    setShowResults,
+    responseFilter,
+    setResponseFilter,
+    paymentInputs,
+    setPaymentInputs,
+    paymentStatus,
+    setPaymentStatus,
+    eligibleStudents,
+    tripResults,
+    resultStudents,
+    totalPaid,
+    filteredStudents,
+    selectedCount,
+    canEdit,
+    canEditParticipantData,
+    loadData,
+    syncDetailsCache,
+    toggleStudent,
+    selectAllVisible,
+    clearVisibleSelection,
+    saveStudents,
+  } = useTripDetails(tripId)
 
-  const [settingsLoading, setSettingsLoading] =
-    useState(true)
 
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-
-  const [search, setSearch] = useState('')
-  const [levelFilter, setLevelFilter] =
-    useState('all')
-
-  const [showEligibleOnly, setShowEligibleOnly] =
-    useState(true)
-
-  const [selectedIds, setSelectedIds] =
-    useState<string[]>([])
-
-  const [showResults, setShowResults] =
-    useState(false)
-
-  const [responseFilter, setResponseFilter] =
-    useState<
-      'all' | 'accepted' | 'rejected' | 'pending'
-    >('all')
-
-  const [paymentInputs, setPaymentInputs] =
-    useState<Record<string, string>>({})
-
-  const paymentTimers = useRef<
-    Record<string, ReturnType<typeof setTimeout>>
-  >({})
-
-  const [paymentStatus, setPaymentStatus] =
-    useState<
-      Record<string, 'saving' | 'saved' | 'error'>
-    >({})
-
-  async function loadPublishSetting() {
-    setSettingsLoading(true)
-
-    const {
-      data: settings,
-      error: settingsError,
-    } = await supabase
-      .from('student_status_settings')
-      .select('allow_direct_trip_publish')
-      .limit(1)
-      .maybeSingle()
-
-    if (settingsError) {
-      console.error(
-        'Load trip publish setting error:',
-        settingsError,
-      )
-
-      setDirectPublishAllowed(false)
-    } else {
-      setDirectPublishAllowed(
-        settings?.allow_direct_trip_publish === true,
-      )
-    }
-
-    setSettingsLoading(false)
-  }
-
-  async function loadData(options?: {
-    silent?: boolean
-    force?: boolean
-  }) {
-    const silent =
-      options?.silent ?? false
-
-    const force =
-      options?.force ?? false
-
-    if (silent) {
-      setRefreshing(true)
-    } else {
-      setLoading(true)
-    }
-
-    setError('')
-    setSuccess('')
-
-    try {
-      const result =
-        await loadTripDetailsCache(
-          tripId,
-          {
-            force,
-          },
-        )
-
-      const nextData =
-        result as unknown as ApiResponse
-
-      setData(nextData)
-
-      setSelectedIds(
-        nextData.students
-          .filter(
-            (student) => student.selected,
-          )
-          .map(
-            (student) => student.id,
-          ),
-      )
-
-      const nextPaymentInputs: Record<
-        string,
-        string
-      > = {}
-
-      nextData.students.forEach(
-        (student) => {
-          nextPaymentInputs[student.id] =
-            student.payment_amount > 0
-              ? String(
-                  student.payment_amount,
-                )
-              : ''
-        },
-      )
-
-      setPaymentInputs(
-        nextPaymentInputs,
-      )
-    } catch (error) {
-      console.error(
-        'Load trip students error:',
-        error,
-      )
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل بيانات الرحلة.',
-      )
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!tripId) return
-
-    loadData()
-    loadPublishSetting()
-  }, [tripId])
-
-  const eligibleStudents = useMemo(() => {
-    if (!data) return []
-
-    return data.students.filter(
-      (student) => student.eligible,
-    )
-  }, [data])
-
-  const tripResults = useMemo(() => {
-    if (!data) {
-      return {
-        total: 0,
-        accepted: 0,
-        rejected: 0,
-        pending: 0,
-      }
-    }
-
-    const students =
-      data.students.filter(
-        (student) => student.selected,
-      )
-
-    return {
-      total: students.length,
-
-      accepted: students.filter(
-        (student) =>
-          student.response ===
-          'accepted',
-      ).length,
-
-      rejected: students.filter(
-        (student) =>
-          student.response ===
-          'rejected',
-      ).length,
-
-      pending: students.filter(
-        (student) =>
-          student.response ===
-          'pending',
-      ).length,
-    }
-  }, [data])
-
- 
 const resultStudents = useMemo(() => {
   if (!data) return []
 
