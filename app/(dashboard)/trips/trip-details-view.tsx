@@ -1,4 +1,5 @@
 
+
 'use client'
 
 import {
@@ -25,6 +26,7 @@ import {
   UserX,
   Clock3,
   Wallet,
+  Settings2,
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -127,6 +129,34 @@ type ApiResponse = {
   lesson_dates: string[]
   students: Student[]
 }
+
+/** الأعمدة القابلة للتخصيص في جدول النتائج فقط */
+type ResultColumn =
+  | 'student'
+  | 'level'
+  | 'phone'
+  | 'response'
+  | 'source'
+  | 'date'
+  | 'payment'
+  | 'note'
+
+const RESULT_COLUMNS: {
+  id: ResultColumn
+  label: string
+  defaultVisible: boolean
+}[] = [
+  { id: 'student', label: 'الطالب', defaultVisible: true },
+  { id: 'level', label: 'المستوى', defaultVisible: true },
+  { id: 'phone', label: 'الهاتف', defaultVisible: true },
+  { id: 'response', label: 'الرد', defaultVisible: true },
+  { id: 'source', label: 'نوع الرد', defaultVisible: true },
+  { id: 'date', label: 'تاريخ الرد', defaultVisible: false },
+  { id: 'payment', label: 'الدفع', defaultVisible: true },
+  { id: 'note', label: 'الملاحظة', defaultVisible: false },
+]
+
+const RESULT_COLUMNS_STORAGE_KEY = 'trip-results-columns'
 
 function formatDate(value: string | null) {
   if (!value) return 'بدون تاريخ'
@@ -319,14 +349,93 @@ export function TripDetailsView({
     useState<Record<string, string>>({})
 
   const paymentTimers = useRef<
-  Record<string, ReturnType<typeof setTimeout>>
+    Record<string, ReturnType<typeof setTimeout>>
   >({})
 
   const [paymentStatus, setPaymentStatus] =
     useState<
       Record<string, 'saving' | 'saved' | 'error'>
     >({})
-    
+
+  
+  const [showColumnSettings, setShowColumnSettings] =
+    useState(false)
+
+  const [visibleResultColumns, setVisibleResultColumns] =
+    useState<ResultColumn[]>(
+      () =>
+        RESULT_COLUMNS
+          .filter((column) => column.defaultVisible)
+          .map((column) => column.id)
+    )
+
+  const [columnsLoaded, setColumnsLoaded] =
+    useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(
+        `${RESULT_COLUMNS_STORAGE_KEY}:${tripId}`
+      )
+
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved)
+
+        if (Array.isArray(parsed)) {
+          const validColumns = parsed.filter(
+            (column): column is ResultColumn =>
+              RESULT_COLUMNS.some(
+                (item) => item.id === column
+              )
+          )
+
+          setVisibleResultColumns([
+            'student',
+            ...new Set(
+              validColumns.filter(
+                (column) => column !== 'student'
+              )
+            ),
+          ])
+        }
+      }
+    } catch (error) {
+      console.error(
+        'Load result column settings error:',
+        error
+      )
+    } finally {
+      setColumnsLoaded(true)
+    }
+  }, [tripId])
+
+  useEffect(() => {
+    if (!columnsLoaded) return
+
+    try {
+      localStorage.setItem(
+        `${RESULT_COLUMNS_STORAGE_KEY}:${tripId}`,
+        JSON.stringify(visibleResultColumns)
+      )
+    } catch (error) {
+      console.error(
+        'Save result column settings error:',
+        error
+      )
+    }
+  }, [tripId, visibleResultColumns, columnsLoaded])
+
+  function toggleResultColumn(column: ResultColumn) {
+    if (column === 'student') return
+
+    setVisibleResultColumns((current) =>
+      current.includes(column)
+        ? current.filter((item) => item !== column)
+        : [...current, column]
+    )
+  }
+
+
   async function loadPublishSetting() {
     setSettingsLoading(true)
 
@@ -1719,13 +1828,76 @@ function handlePaymentChange(
 
 
           
+         
           {showResults && (
             <div className="border-t">
               <div className="border-b bg-muted/20 p-4">
+                {/* تخصيص الأعمدة */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowColumnSettings((current) => !current)
+                    }
+                    aria-expanded={showColumnSettings}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition hover:bg-muted"
+                  >
+                    <Settings2 className="h-4 w-4" />
+                    تخصيص الأعمدة
+                  </button>
+
+                  {showColumnSettings && (
+                    <div className="mt-3 rounded-lg border bg-background p-4">
+                      <p className="mb-1 text-sm font-semibold">
+                        اختر الأعمدة التي تريد إظهارها
+                      </p>
+
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        اختياراتك محفوظة لكل رحلة، وعمود الطالب ثابت.
+                      </p>
+
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {RESULT_COLUMNS.map((column) => (
+                          <label
+                            key={column.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visibleResultColumns.includes(column.id)}
+                              disabled={column.id === 'student'}
+                              onChange={() =>
+                                toggleResultColumn(column.id)
+                              }
+                              className="h-4 w-4"
+                            />
+                            {column.label}
+                          </label>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVisibleResultColumns(
+                            RESULT_COLUMNS
+                              .filter((column) => column.defaultVisible)
+                              .map((column) => column.id)
+                          )
+                        }
+                        className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted"
+                      >
+                        استعادة الأعمدة الافتراضية
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* البحث والتصفية */}
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="relative">
                     <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          
+
                     <input
                       value={search}
                       onChange={(event) =>
@@ -1735,12 +1907,12 @@ function handlePaymentChange(
                       className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
                     />
                   </div>
-          
+
                   <select
                     value={responseFilter}
                     onChange={(event) =>
                       setResponseFilter(
-                        event.target.value as typeof responseFilter,
+                        event.target.value as typeof responseFilter
                       )
                     }
                     className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
@@ -1752,28 +1924,53 @@ function handlePaymentChange(
                   </select>
                 </div>
               </div>
-          
+
+              {/* جدول النتائج */}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1250px] text-sm">
+                <table className="w-full min-w-[900px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30 text-right">
                       <th className="w-12 px-4 py-3">#</th>
-                      <th className="px-4 py-3 font-medium">الطالب</th>
-                      <th className="px-4 py-3 font-medium">المستوى</th>
-                      <th className="px-4 py-3 font-medium">الهاتف</th>
-                      <th className="px-4 py-3 font-medium">الرد</th>
-                      <th className="px-4 py-3 font-medium">نوع الرد</th>
-                      <th className="px-4 py-3 font-medium">تاريخ الرد</th>
-                      <th className="px-4 py-3 font-medium">الدفع</th>
-                      <th className="px-4 py-3 font-medium">الملاحظة</th>
+
+                      {visibleResultColumns.includes('student') && (
+                        <th className="px-4 py-3 font-medium">الطالب</th>
+                      )}
+
+                      {visibleResultColumns.includes('level') && (
+                        <th className="px-4 py-3 font-medium">المستوى</th>
+                      )}
+
+                      {visibleResultColumns.includes('phone') && (
+                        <th className="px-4 py-3 font-medium">الهاتف</th>
+                      )}
+
+                      {visibleResultColumns.includes('response') && (
+                        <th className="px-4 py-3 font-medium">الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('source') && (
+                        <th className="px-4 py-3 font-medium">نوع الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('date') && (
+                        <th className="px-4 py-3 font-medium">تاريخ الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('payment') && (
+                        <th className="px-4 py-3 font-medium">الدفع</th>
+                      )}
+
+                      {visibleResultColumns.includes('note') && (
+                        <th className="px-4 py-3 font-medium">الملاحظة</th>
+                      )}
                     </tr>
                   </thead>
-          
+
                   <tbody>
                     {resultStudents.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={9}
+                          colSpan={1 + visibleResultColumns.length}
                           className="px-4 py-12 text-center text-muted-foreground"
                         >
                           لا توجد نتائج مطابقة.
@@ -1788,128 +1985,144 @@ function handlePaymentChange(
                           <td className="px-4 py-3 text-muted-foreground">
                             {index + 1}
                           </td>
-          
-                          <td className="px-4 py-3">
-                            <div className="font-medium">
-                              {student.name}
-                            </div>
-          
-                            {student.personal_id && (
-                              <div className="mt-0.5 text-xs text-muted-foreground">
-                                {student.personal_id}
+
+                          {visibleResultColumns.includes('student') && (
+                            <td className="px-4 py-3">
+                              <div className="font-medium">
+                                {student.name}
                               </div>
-                            )}
-                          </td>
-          
-                          <td className="px-4 py-3">
-                            {student.level?.name || 'غير محدد'}
-                          </td>
-          
-                          <td className="px-4 py-3">
-                            {student.phone ||
-                              student.whatsapp ||
-                              'غير متوفر'}
-                          </td>
-          
-                          <td className="px-4 py-3">
-                            <select
-                              value={student.response}
-                              disabled={
-                                !canEditParticipantData ||
-                                responseSavingId === student.id
-                              }
-                              onChange={(event) =>
-                                saveResponse(
-                                  student,
-                                  event.target.value as ResponseStatus,
-                                )
-                              }
-                              className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
-                                student.response === 'accepted'
-                                  ? 'border-emerald-500/30'
-                                  : student.response === 'rejected'
-                                    ? 'border-red-500/30'
-                                    : ''
-                              }`}
-                            >
-                              <option value="pending">بانتظار الرد</option>
-                              <option value="accepted">موافق</option>
-                              <option value="rejected">رافض</option>
-                            </select>
-                          </td>
-          
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
-                                student.response_source,
-                              )}`}
-                            >
-                              {getResponseSourceLabel(
-                                student.response_source,
+
+                              {student.personal_id && (
+                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                  {student.personal_id}
+                                </div>
                               )}
-                            </span>
-                          </td>
-          
-                          <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                            {formatDateTime(student.responded_at)}
-                          </td>
-          
-                          {/* الدفع: حفظ تلقائي دون زر حفظ */}
-                          <td className="px-4 py-3">
-                            <div className="min-w-[120px]">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={paymentInputs[student.id] ?? ''}
-                                disabled={!canEditParticipantData}
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('level') && (
+                            <td className="px-4 py-3">
+                              {student.level?.name || 'غير محدد'}
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('phone') && (
+                            <td className="px-4 py-3">
+                              {student.phone ||
+                                student.whatsapp ||
+                                'غير متوفر'}
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('response') && (
+                            <td className="px-4 py-3">
+                              <select
+                                value={student.response}
+                                disabled={
+                                  !canEditParticipantData ||
+                                  responseSavingId === student.id
+                                }
                                 onChange={(event) =>
-                                  handlePaymentChange(
+                                  saveResponse(
                                     student,
-                                    event.target.value,
+                                    event.target.value as ResponseStatus
                                   )
                                 }
-                                placeholder="0.000"
-                                className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                              />
-          
-                              <div className="mt-1 text-xs">
-                                {paymentStatus[student.id] === 'saving' && (
-                                  <span className="text-muted-foreground">
-                                    جاري الحفظ...
-                                  </span>
+                                className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
+                                  student.response === 'accepted'
+                                    ? 'border-emerald-500/30'
+                                    : student.response === 'rejected'
+                                      ? 'border-red-500/30'
+                                      : ''
+                                }`}
+                              >
+                                <option value="pending">بانتظار الرد</option>
+                                <option value="accepted">موافق</option>
+                                <option value="rejected">رافض</option>
+                              </select>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('source') && (
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
+                                  student.response_source
+                                )}`}
+                              >
+                                {getResponseSourceLabel(
+                                  student.response_source
                                 )}
-          
-                                {paymentStatus[student.id] === 'saved' && (
-                                  <span className="text-emerald-600 dark:text-emerald-400">
-                                    تم الحفظ ✓
-                                  </span>
-                                )}
-          
-                                {paymentStatus[student.id] === 'error' && (
-                                  <span className="text-destructive">
-                                    تعذّر الحفظ
-                                  </span>
-                                )}
-                              </div>
-          
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {formatPayment(student.payment_amount)}
-                              </div>
-                            </div>
-                          </td>
-          
-                          <td className="max-w-[280px] px-4 py-3">
-                            {student.response_note ? (
-                              <span className="text-sm text-muted-foreground">
-                                {student.response_note}
                               </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                لا توجد ملاحظة
-                              </span>
-                            )}
-                          </td>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('date') && (
+                            <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                              {formatDateTime(student.responded_at)}
+                            </td>
+                          )}
+
+                          {/* الدفع: حفظ تلقائي دون زر حفظ */}
+                          {visibleResultColumns.includes('payment') && (
+                            <td className="px-4 py-3">
+                              <div className="min-w-[120px]">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={paymentInputs[student.id] ?? ''}
+                                  disabled={!canEditParticipantData}
+                                  onChange={(event) =>
+                                    handlePaymentChange(
+                                      student,
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="0.000"
+                                  className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                                />
+
+                                <div className="mt-1 text-xs">
+                                  {paymentStatus[student.id] === 'saving' && (
+                                    <span className="text-muted-foreground">
+                                      جاري الحفظ...
+                                    </span>
+                                  )}
+
+                                  {paymentStatus[student.id] === 'saved' && (
+                                    <span className="text-emerald-600 dark:text-emerald-400">
+                                      تم الحفظ ✓
+                                    </span>
+                                  )}
+
+                                  {paymentStatus[student.id] === 'error' && (
+                                    <span className="text-destructive">
+                                      تعذّر الحفظ
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {formatPayment(student.payment_amount)}
+                                </div>
+                              </div>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('note') && (
+                            <td className="max-w-[280px] px-4 py-3">
+                              {student.response_note ? (
+                                <span className="text-sm text-muted-foreground">
+                                  {student.response_note}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد ملاحظة
+                                </span>
+                              )}
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -1925,8 +2138,7 @@ function handlePaymentChange(
       {/* Published / Closed notice */}
       {!canEdit && (
         <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-          {trip.status ===
-          'published'
+          {trip.status === 'published'
             ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
             : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
         </div>
@@ -1936,7 +2148,6 @@ function handlePaymentChange(
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
           <X className="mt-0.5 h-4 w-4 shrink-0" />
-
           <span>{error}</span>
         </div>
       )}
@@ -1944,7 +2155,6 @@ function handlePaymentChange(
       {success && (
         <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
           <Check className="mt-0.5 h-4 w-4 shrink-0" />
-
           <span>{success}</span>
         </div>
       )}
@@ -1957,7 +2167,6 @@ function handlePaymentChange(
               <div>
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-
                   <h2 className="text-lg font-semibold">
                     الطلاب المؤهلون
                   </h2>
@@ -1970,17 +2179,11 @@ function handlePaymentChange(
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                  المؤهلون:{' '}
-                  <strong>
-                    {eligibleStudents.length}
-                  </strong>
+                  المؤهلون: <strong>{eligibleStudents.length}</strong>
                 </div>
 
                 <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                  المحددون:{' '}
-                  <strong>
-                    {selectedCount}
-                  </strong>
+                  المحددون: <strong>{selectedCount}</strong>
                 </div>
               </div>
             </div>
@@ -1993,11 +2196,7 @@ function handlePaymentChange(
 
                 <input
                   value={search}
-                  onChange={(event) =>
-                    setSearch(
-                      event.target.value,
-                    )
-                  }
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
                   className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
                 />
@@ -2005,22 +2204,13 @@ function handlePaymentChange(
 
               <select
                 value={levelFilter}
-                onChange={(event) =>
-                  setLevelFilter(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setLevelFilter(event.target.value)}
                 className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
               >
-                <option value="all">
-                  كل المستويات
-                </option>
+                <option value="all">كل المستويات</option>
 
                 {levels.map((level) => (
-                  <option
-                    key={level.id}
-                    value={level.id}
-                  >
+                  <option key={level.id} value={level.id}>
                     {level.name}
                   </option>
                 ))}
@@ -2029,18 +2219,12 @@ function handlePaymentChange(
               <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
                 <input
                   type="checkbox"
-                  checked={
-                    showEligibleOnly
-                  }
+                  checked={showEligibleOnly}
                   onChange={(event) =>
-                    setShowEligibleOnly(
-                      event.target
-                        .checked,
-                    )
+                    setShowEligibleOnly(event.target.checked)
                   }
                   className="h-4 w-4"
                 />
-
                 عرض المؤهلين فقط
               </label>
             </div>
@@ -2048,33 +2232,22 @@ function handlePaymentChange(
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={
-                  selectAllVisible
-                }
+                onClick={selectAllVisible}
                 disabled={
                   !canEdit ||
-                  filteredStudents.filter(
-                    (student) =>
-                      student.eligible,
-                  ).length === 0
+                  filteredStudents.filter((student) => student.eligible)
+                    .length === 0
                 }
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckSquare className="h-4 w-4" />
-
                 تحديد الظاهر
               </button>
 
               <button
                 type="button"
-                onClick={
-                  clearVisibleSelection
-                }
-                disabled={
-                  !canEdit ||
-                  filteredStudents.length ===
-                    0
-                }
+                onClick={clearVisibleSelection}
+                disabled={!canEdit || filteredStudents.length === 0}
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 إلغاء تحديد الظاهر
@@ -2086,43 +2259,19 @@ function handlePaymentChange(
             <table className="w-full min-w-[1150px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/30 text-right">
-                  <th className="w-12 px-4 py-3">
-                    #
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    الطالب
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    المستوى
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    الحضور
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    ملاحظات الدورة
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    الرد
-                  </th>
-
-                  <th className="px-4 py-3 font-medium">
-                    الدفع
-                  </th>
-
-                  <th className="px-4 py-3 text-center font-medium">
-                    اختيار
-                  </th>
+                  <th className="w-12 px-4 py-3">#</th>
+                  <th className="px-4 py-3 font-medium">الطالب</th>
+                  <th className="px-4 py-3 font-medium">المستوى</th>
+                  <th className="px-4 py-3 font-medium">الحضور</th>
+                  <th className="px-4 py-3 font-medium">ملاحظات الدورة</th>
+                  <th className="px-4 py-3 font-medium">الرد</th>
+                  <th className="px-4 py-3 font-medium">الدفع</th>
+                  <th className="px-4 py-3 text-center font-medium">اختيار</th>
                 </tr>
               </thead>
 
               <tbody>
-                {filteredStudents.length ===
-                0 ? (
+                {filteredStudents.length === 0 ? (
                   <tr>
                     <td
                       colSpan={8}
@@ -2132,306 +2281,195 @@ function handlePaymentChange(
                     </td>
                   </tr>
                 ) : (
-                  filteredStudents.map(
-                    (
-                      student,
-                      index,
-                    ) => {
-                      const isSelected =
-                        selectedIds.includes(
-                          student.id,
-                        )
+                  filteredStudents.map((student, index) => {
+                    const isSelected = selectedIds.includes(student.id)
 
-                      return (
-                        <tr
-                          key={
-                            student.id
-                          }
-                          className={`border-b last:border-0 ${
-                            isSelected
-                              ? 'bg-primary/5'
-                              : 'hover:bg-muted/20'
-                          }`}
-                        >
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {index + 1}
-                          </td>
+                    return (
+                      <tr
+                        key={student.id}
+                        className={`border-b last:border-0 ${
+                          isSelected ? 'bg-primary/5' : 'hover:bg-muted/20'
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {index + 1}
+                        </td>
 
-                          <td className="px-4 py-3">
-                            <div className="font-medium">
-                              {
-                                student.name
-                              }
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{student.name}</div>
+
+                          {student.personal_id && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {student.personal_id}
                             </div>
+                          )}
+                        </td>
 
-                            {student.personal_id && (
-                              <div className="mt-0.5 text-xs text-muted-foreground">
-                                {
-                                  student.personal_id
-                                }
-                              </div>
+                        <td className="px-4 py-3">
+                          {student.level?.name || 'غير محدد'}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div
+                            className={`font-semibold ${
+                              student.attendance_percentage === null
+                                ? 'text-muted-foreground'
+                                : getAttendanceClass(
+                                    student.attendance_percentage
+                                  )
+                            }`}
+                          >
+                            {student.attendance_percentage === null
+                              ? 'لا توجد بيانات'
+                              : `${student.attendance_percentage.toFixed(1)}%`}
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            حاضر {student.attendance_present}
+                            {' · '}غائب {student.attendance_absent}
+                            {' · '}متأخر {student.attendance_late}
+                            {' · '}مستأذن {student.attendance_excused}
+                          </div>
+                        </td>
+
+                        <td className="max-w-[260px] px-4 py-3">
+                          {student.course_notes.length > 0 ? (
+                            <div className="space-y-1">
+                              {student.course_notes.slice(0, 2).map(
+                                (note, noteIndex) => (
+                                  <div
+                                    key={`${student.id}-${noteIndex}`}
+                                    className="rounded-md bg-muted/50 px-2 py-1 text-xs"
+                                  >
+                                    {note.note}
+                                  </div>
+                                )
+                              )}
+
+                              {student.course_notes.length > 2 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +{student.course_notes.length - 2} ملاحظات أخرى
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              لا توجد ملاحظات
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <select
+                            value={student.response}
+                            disabled={
+                              !canEditParticipantData ||
+                              responseSavingId === student.id
+                            }
+                            onChange={(event) =>
+                              saveResponse(
+                                student,
+                                event.target.value as ResponseStatus
+                              )
+                            }
+                            className="h-9 rounded-lg border bg-background px-2 text-xs outline-none focus:border-primary"
+                          >
+                            <option value="pending">بانتظار الرد</option>
+                            <option value="accepted">موافق</option>
+                            <option value="rejected">رافض</option>
+                          </select>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
+                                student.response_source
+                              )}`}
+                            >
+                              {getResponseSourceLabel(student.response_source)}
+                            </span>
+
+                            {student.responded_at && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatDateTime(student.responded_at)}
+                              </span>
                             )}
-                          </td>
+                          </div>
 
-                          <td className="px-4 py-3">
-                            {student.level
-                              ?.name ||
-                              'غير محدد'}
-                          </td>
+                          {student.response_note && (
+                            <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                              {student.response_note}
+                            </div>
+                          )}
+                        </td>
 
-                          <td className="px-4 py-3">
-                            <div
-                              className={`font-semibold ${
-                                student.attendance_percentage ===
-                                null
-                                  ? 'text-muted-foreground'
-                                  : getAttendanceClass(
-                                      student.attendance_percentage,
-                                    )
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-[150px] items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              value={paymentInputs[student.id] ?? ''}
+                              onChange={(event) =>
+                                setPaymentInputs((current) => ({
+                                  ...current,
+                                  [student.id]: event.target.value,
+                                }))
+                              }
+                              placeholder="0.000"
+                              className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() => savePayment(student)}
+                              disabled={paymentSavingId === student.id}
+                              className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {paymentSavingId === student.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'حفظ'
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {formatPayment(student.payment_amount)}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {student.eligible ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleStudent(student.id)}
+                              disabled={!canEdit}
+                              aria-label={
+                                isSelected
+                                  ? 'إلغاء اختيار الطالب'
+                                  : 'اختيار الطالب'
+                              }
+                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'bg-background hover:bg-muted'
+                              } ${
+                                !canEdit
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : ''
                               }`}
                             >
-                              {student.attendance_percentage ===
-                              null
-                                ? 'لا توجد بيانات'
-                                : `${student.attendance_percentage.toFixed(
-                                    1,
-                                  )}%`}
-                            </div>
-
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              حاضر{' '}
-                              {
-                                student.attendance_present
-                              }
-                              {' · '}
-                              غائب{' '}
-                              {
-                                student.attendance_absent
-                              }
-                              {' · '}
-                              متأخر{' '}
-                              {
-                                student.attendance_late
-                              }
-                              {' · '}
-                              مستأذن{' '}
-                              {
-                                student.attendance_excused
-                              }
-                            </div>
-                          </td>
-
-                          <td className="max-w-[260px] px-4 py-3">
-                            {student
-                              .course_notes
-                              .length > 0 ? (
-                              <div className="space-y-1">
-                                {student.course_notes
-                                  .slice(
-                                    0,
-                                    2,
-                                  )
-                                  .map(
-                                    (
-                                      note,
-                                      noteIndex,
-                                    ) => (
-                                      <div
-                                        key={`${student.id}-${noteIndex}`}
-                                        className="rounded-md bg-muted/50 px-2 py-1 text-xs"
-                                      >
-                                        {
-                                          note.note
-                                        }
-                                      </div>
-                                    ),
-                                  )}
-
-                                {student
-                                  .course_notes
-                                  .length >
-                                  2 && (
-                                  <div className="text-xs text-muted-foreground">
-                                    +
-                                    {student
-                                      .course_notes
-                                      .length -
-                                      2}{' '}
-                                    ملاحظات أخرى
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                لا توجد ملاحظات
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <select
-                              value={
-                                student.response
-                              }
-                              disabled={
-                                !canEditParticipantData ||
-                                responseSavingId ===
-                                  student.id
-                              }
-                              onChange={(
-                                event,
-                              ) =>
-                                saveResponse(
-                                  student,
-                                  event
-                                    .target
-                                    .value as ResponseStatus,
-                                )
-                              }
-                              className="h-9 rounded-lg border bg-background px-2 text-xs outline-none focus:border-primary"
-                            >
-                              <option value="pending">
-                                بانتظار الرد
-                              </option>
-
-                              <option value="accepted">
-                                موافق
-                              </option>
-
-                              <option value="rejected">
-                                رافض
-                              </option>
-                            </select>
-
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
-                                  student.response_source,
-                                )}`}
-                              >
-                                {getResponseSourceLabel(
-                                  student.response_source,
-                                )}
-                              </span>
-
-                              {student.responded_at && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  {formatDateTime(
-                                    student.responded_at,
-                                  )}
-                                </span>
-                              )}
-                            </div>
-
-                            {student.response_note && (
-                              <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
-                                {
-                                  student.response_note
-                                }
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <div className="flex min-w-[150px] items-center gap-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={
-                                  paymentInputs[
-                                    student.id
-                                  ] ?? ''
-                                }
-                                onChange={(
-                                  event,
-                                ) =>
-                                  setPaymentInputs(
-                                    (
-                                      current,
-                                    ) => ({
-                                      ...current,
-                                      [student.id]:
-                                        event
-                                          .target
-                                          .value,
-                                    }),
-                                  )
-                                }
-                                placeholder="0.000"
-                                className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                              />
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  savePayment(
-                                    student,
-                                  )
-                                }
-                                disabled={
-                                  paymentSavingId ===
-                                  student.id
-                                }
-                                className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {paymentSavingId ===
-                                student.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  'حفظ'
-                                )}
-                              </button>
-                            </div>
-
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {formatPayment(
-                                student.payment_amount,
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-center">
-                            {student.eligible ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  toggleStudent(
-                                    student.id,
-                                  )
-                                }
-                                disabled={
-                                  !canEdit
-                                }
-                                aria-label={
-                                  isSelected
-                                    ? 'إلغاء اختيار الطالب'
-                                    : 'اختيار الطالب'
-                                }
-                                className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
-                                  isSelected
-                                    ? 'border-primary bg-primary text-primary-foreground'
-                                    : 'bg-background hover:bg-muted'
-                                } ${
-                                  !canEdit
-                                    ? 'cursor-not-allowed opacity-50'
-                                    : ''
-                                }`}
-                              >
-                                {isSelected && (
-                                  <Check className="h-4 w-4" />
-                                )}
-                              </button>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                غير مؤهل
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    },
-                  )
+                              {isSelected && <Check className="h-4 w-4" />}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              غير مؤهل
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -2441,9 +2479,7 @@ function handlePaymentChange(
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
                 تم تحديد{' '}
-                <strong className="text-foreground">
-                  {selectedCount}
-                </strong>{' '}
+                <strong className="text-foreground">{selectedCount}</strong>{' '}
                 طالب من أصل{' '}
                 <strong className="text-foreground">
                   {eligibleStudents.length}
@@ -2453,24 +2489,18 @@ function handlePaymentChange(
 
               <button
                 type="button"
-                onClick={
-                  saveStudents
-                }
-                disabled={
-                  !canEdit || saving
-                }
+                onClick={saveStudents}
+                disabled={!canEdit || saving}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-
                     جاري الحفظ...
                   </>
                 ) : (
                   <>
                     <Check className="h-4 w-4" />
-
                     حفظ الطلاب
                   </>
                 )}
@@ -2478,36 +2508,29 @@ function handlePaymentChange(
             </div>
 
             {/* Publish */}
-            {trip.status ===
-              'draft' && (
+            {trip.status === 'draft' && (
               <div className="border-t pt-4">
                 <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <Send className="h-4 w-4" />
-
-                      <p className="font-semibold">
-                        نشر الرحلة
-                      </p>
+                      <p className="font-semibold">نشر الرحلة</p>
                     </div>
 
                     <p className="mt-1 text-sm text-muted-foreground">
                       بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
                     </p>
 
-                    {!settingsLoading &&
-                      !directPublishAllowed && (
-                        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                          النشر المباشر موقوف من إعدادات النظام.
-                        </p>
-                      )}
+                    {!settingsLoading && !directPublishAllowed && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        النشر المباشر موقوف من إعدادات النظام.
+                      </p>
+                    )}
                   </div>
 
                   <button
                     type="button"
-                    onClick={
-                      publishTrip
-                    }
+                    onClick={publishTrip}
                     disabled={
                       settingsLoading ||
                       !directPublishAllowed ||
@@ -2519,13 +2542,11 @@ function handlePaymentChange(
                     {publishing ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-
                         جاري النشر...
                       </>
                     ) : (
                       <>
                         <Send className="h-4 w-4" />
-
                         نشر الرحلة
                       </>
                     )}
