@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 import { supabase } from '@/lib/supabase'
 
@@ -550,138 +550,190 @@ export default function AttendanceAwardsResults({
     )
   }, [selectedCourses.length])
 
-  const downloadExcel = (
-    rows: Record<string, string | number>[],
-    fileName: string,
-  ) => {
-    const worksheet =
-      XLSX.utils.json_to_sheet(rows)
+ const downloadExcel = async (
+  rows: Record<string, string | number>[],
+  fileName: string,
+) => {
+  if (rows.length === 0) return
 
-    worksheet['!sheetViews'] = [
-      {
-        rightToLeft: true,
-      },
-    ]
+  const workbook = new ExcelJS.Workbook()
 
-    const workbook =
-      XLSX.utils.book_new()
+  workbook.creator = 'T3leem'
+  workbook.created = new Date()
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      'نتائج الحضور',
-    )
+  const worksheet = workbook.addWorksheet(
+    'نتائج الحضور',
+    {
+      views: [
+        {
+          rightToLeft: true,
+          showGridLines: true,
+        },
+      ],
+    },
+  )
 
-    XLSX.writeFile(
-      workbook,
-      fileName,
-    )
-  }
+  const headers = Object.keys(rows[0])
 
-  const exportCurrentToExcel = () => {
-    if (sortedResults.length === 0) {
-      setError(
-        'لا توجد نتائج مطابقة للفلاتر لتصديرها إلى Excel.',
-      )
-      return
+  worksheet.columns = headers.map((header) => ({
+    header,
+    key: header,
+    width: Math.max(
+      14,
+      Math.min(header.length + 8, 30),
+    ),
+  }))
+
+  worksheet.addRows(rows)
+
+  // تنسيق صف العناوين
+  const headerRow = worksheet.getRow(1)
+  headerRow.height = 30
+
+  headerRow.eachCell((cell) => {
+    cell.font = {
+      bold: true,
+      size: 12,
+      color: { argb: 'FFFFFFFF' },
     }
 
-    try {
-      const exportRows =
-        sortedResults.map((student, index) => {
-          const row: Record<
-            string,
-            string | number
-          > = {
-            التسلسل: index + 1,
-            الطالب: student.name,
-            'رقم الطالب':
-              student.studentNumber || '',
-            'الرقم الشخصي':
-              student.personalId || '',
-            الصف: student.grade || '',
-            المعلم: student.teacher || '',
-            'عدد الدورات':
-              student.courseCount,
-          }
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF166534' },
+    }
 
-          for (const course of selectedCourses) {
-            const courseResult =
-              student.courses[course.id]
+    cell.alignment = {
+      horizontal: 'right',
+      vertical: 'middle',
+      wrapText: true,
+    }
+  })
 
-            row[course.name] =
-              courseResult?.percentage !==
-                null &&
-              courseResult?.percentage !==
-                undefined
-                ? Number(
-                    courseResult.percentage.toFixed(
-                      1,
-                    ),
-                  )
-                : ''
+  // تنسيق بيانات الطلاب
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1) {
+      row.eachCell((cell) => {
+        cell.alignment = {
+          horizontal: 'right',
+          vertical: 'middle',
+          wrapText: true,
+        }
+      })
+    }
+  })
 
-            row[
-              `${course.name} - الحالة`
-            ] =
-              courseResult?.registered
-                ? courseResult.denominator > 0
-                  ? 'لديه حضور'
-                  : 'غير حاضر'
-                : 'غير مسجل'
-          }
+  // ضمان اتجاه الورقة من اليمين إلى اليسار
+  worksheet.views = [
+    {
+      rightToLeft: true,
+      showGridLines: true,
+    },
+  ]
 
-          row['النسبة الإجمالية'] =
-            student.annualPercentage !==
-            null
+  const buffer = await workbook.xlsx.writeBuffer()
+
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = fileName
+
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 1000)
+
+  const exportCurrentToExcel = async () => {
+  if (sortedResults.length === 0) {
+    setError(
+      'لا توجد نتائج مطابقة للفلاتر لتصديرها إلى Excel.',
+    )
+    return
+  }
+
+  try {
+    const exportRows = sortedResults.map(
+      (student, index) => {
+        const row: Record<
+          string,
+          string | number
+        > = {
+          التسلسل: index + 1,
+          الطالب: student.name,
+          'رقم الطالب':
+            student.studentNumber || '',
+          'الرقم الشخصي':
+            student.personalId || '',
+          الصف: student.grade || '',
+          المعلم: student.teacher || '',
+          'عدد الدورات':
+            student.courseCount,
+        }
+
+        for (const course of selectedCourses) {
+          const courseResult =
+            student.courses[course.id]
+
+          row[course.name] =
+            courseResult?.percentage !== null &&
+            courseResult?.percentage !== undefined
               ? Number(
-                  student.annualPercentage.toFixed(
-                    1,
-                  ),
+                  courseResult.percentage.toFixed(1),
                 )
               : ''
 
-          row['الحالة'] =
-            student.eligible
-              ? 'مستحق'
-              : 'غير مستحق'
+          row[`${course.name} - الحالة`] =
+            courseResult?.registered
+              ? courseResult.denominator > 0
+                ? 'لديه حضور'
+                : 'غير حاضر'
+              : 'غير مسجل'
+        }
 
-          return row
-        })
+        row['النسبة الإجمالية'] =
+          student.annualPercentage !== null
+            ? Number(
+                student.annualPercentage.toFixed(1),
+              )
+            : ''
 
-      const yearName =
-        academicYears
-          .find(
-            (year) =>
-              year.id === selectedYearId,
-          )
-          ?.name || selectedYearName
+        row['الحالة'] = student.eligible
+          ? 'مستحق'
+          : 'غير مستحق'
 
-      const fileName =
-        `نتائج-الحضور-فلترة-${safeFilePart(
-          yearName,
-        )}-${fromDate || 'بدون-تاريخ'}-${
-          toDate || 'بدون-تاريخ'
-        }.xlsx`
+        return row
+      },
+    )
 
-      downloadExcel(
-        exportRows,
-        fileName,
-      )
+    const yearName =
+      academicYears.find(
+        (year) => year.id === selectedYearId,
+      )?.name || selectedYearName
 
-      setError('')
-    } catch (exportError) {
-      const message =
-        exportError instanceof Error
-          ? exportError.message
-          : 'حدث خطأ أثناء إنشاء ملف Excel.'
+    const fileName =
+      `نتائج-الحضور-فلترة-${safeFilePart(yearName)}-${fromDate || 'بدون-تاريخ'}-${toDate || 'بدون-تاريخ'}.xlsx`
 
-      setError(
-        `تعذر تصدير ملف Excel: ${message}`,
-      )
-    }
+    await downloadExcel(exportRows, fileName)
+
+    setError('')
+  } catch (exportError) {
+    const message =
+      exportError instanceof Error
+        ? exportError.message
+        : 'حدث خطأ أثناء إنشاء ملف Excel.'
+
+    setError(`تعذر تصدير ملف Excel: ${message}`)
   }
-
+}
+  
   const saveFinalResult = async () => {
     if (!selectedYearId) {
       setError('لا توجد سنة دراسية محددة.')
@@ -994,7 +1046,7 @@ export default function AttendanceAwardsResults({
           yearName,
         )}.xlsx`
 
-      downloadExcel(
+      await downloadExcel(
         exportRows,
         fileName,
       )
