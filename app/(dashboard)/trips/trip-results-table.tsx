@@ -63,6 +63,7 @@ type Props = {
   responseFilter: 'all' | ResponseStatus
   onResponseFilterChange: (value: 'all' | ResponseStatus) => void
   paymentInputs: Record<string, string>
+  responseInputs: Record<string, ResponseStatus>
   paymentStatus: Record<string, 'saving' | 'saved' | 'error'>
   responseSavingId: string | null
   canEditParticipantData: boolean
@@ -84,6 +85,7 @@ export function TripResultsTable({
   responseFilter,
   onResponseFilterChange,
   paymentInputs,
+  responseInputs,
   paymentStatus,
   responseSavingId,
   canEditParticipantData,
@@ -98,6 +100,7 @@ export function TripResultsTable({
 }: Props) {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [columnsLoaded, setColumnsLoaded] = useState(false)
+
   const [visibleColumns, setVisibleColumns] = useState<ResultColumn[]>(
     RESULT_COLUMNS
       .filter((column) => column.defaultVisible)
@@ -139,6 +142,12 @@ export function TripResultsTable({
       }
     } catch (error) {
       console.error('Load result column settings error:', error)
+
+      setVisibleColumns(
+        RESULT_COLUMNS.filter((column) => column.defaultVisible).map(
+          (column) => column.id,
+        ),
+      )
     } finally {
       setColumnsLoaded(true)
     }
@@ -167,14 +176,21 @@ export function TripResultsTable({
     )
   }
 
+  function getResponse(student: ResultStudent): ResponseStatus {
+    return responseInputs[student.id] ?? student.response
+  }
+
   const filteredStudents = students
-    .filter((student) =>
-      responseFilter === 'all'
+    .filter((student) => {
+      const currentResponse = getResponse(student)
+
+      return responseFilter === 'all'
         ? true
-        : student.response === responseFilter,
-    )
+        : currentResponse === responseFilter
+    })
     .filter((student) => {
       const query = search.trim().toLowerCase()
+
       if (!query) return true
 
       return [
@@ -277,6 +293,7 @@ export function TripResultsTable({
         <div className="grid gap-3 md:grid-cols-2">
           <div className="relative">
             <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
             <input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
@@ -311,27 +328,35 @@ export function TripResultsTable({
               {visibleColumns.includes('student') && (
                 <th className="px-4 py-3 font-medium">الطالب</th>
               )}
+
               {visibleColumns.includes('level') && (
                 <th className="px-4 py-3 font-medium">المستوى</th>
               )}
+
               {visibleColumns.includes('phone') && (
                 <th className="px-4 py-3 font-medium">الهاتف</th>
               )}
+
               {visibleColumns.includes('response') && (
                 <th className="px-4 py-3 font-medium">الرد</th>
               )}
+
               {visibleColumns.includes('source') && (
                 <th className="px-4 py-3 font-medium">نوع الرد</th>
               )}
+
               {visibleColumns.includes('date') && (
                 <th className="px-4 py-3 font-medium">تاريخ الرد</th>
               )}
+
               {visibleColumns.includes('payment') && (
                 <th className="px-4 py-3 font-medium">الدفع</th>
               )}
+
               {visibleColumns.includes('note') && (
                 <th className="px-4 py-3 font-medium">الملاحظة</th>
               )}
+
               <th className="px-4 py-3 font-medium">الإجراءات</th>
             </tr>
           </thead>
@@ -348,10 +373,13 @@ export function TripResultsTable({
               </tr>
             ) : (
               filteredStudents.map((student, index) => {
+                const currentResponse = getResponse(student)
                 const dirty = hasUnsavedChanges(student)
+
                 const isSaving =
                   savingStudentId === student.id ||
                   paymentStatus[student.id] === 'saving'
+
                 const status = saveStatus[student.id]
 
                 return (
@@ -366,6 +394,7 @@ export function TripResultsTable({
                     {visibleColumns.includes('student') && (
                       <td className="px-4 py-3">
                         <div className="font-medium">{student.name}</div>
+
                         {student.personal_id && (
                           <div className="mt-0.5 text-xs text-muted-foreground">
                             {student.personal_id}
@@ -389,7 +418,7 @@ export function TripResultsTable({
                     {visibleColumns.includes('response') && (
                       <td className="px-4 py-3">
                         <select
-                          value={student.response}
+                          value={currentResponse}
                           disabled={
                             !canEditParticipantData ||
                             isSaving ||
@@ -401,7 +430,7 @@ export function TripResultsTable({
                               event.target.value as ResponseStatus,
                             )
                           }
-                          className={`h-9 rounded-lg border px-2 text-xs outline-none focus:ring-2 focus:ring-primary/20 ${responseClass(student.response)}`}
+                          className={`h-9 rounded-lg border px-2 text-xs outline-none focus:ring-2 focus:ring-primary/20 ${responseClass(currentResponse)}`}
                         >
                           <option value="pending">بانتظار الرد</option>
                           <option value="accepted">موافق</option>
