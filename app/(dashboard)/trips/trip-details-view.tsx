@@ -14,6 +14,7 @@ import {
 import { EligibleStudentsSection } from './eligible-students-section'
 import { TripResultsSection } from './trip-results-section'
 import { useTripDetails } from './trip-details-hook'
+import { exportTripStudents } from './trip-export'
 
 import type {
   ResponseSource,
@@ -574,108 +575,30 @@ export function TripDetailsView({
     }
   }
 
-  async function downloadExcel() {
-    if (!data) return
+  
+async function downloadExcel() {
+  if (!data) return
 
-    try {
-      const XLSX = await import('xlsx')
+  try {
+    await exportTripStudents(
+      data.trip.name,
+      data.students,
+    )
 
-      const students = data.students.filter(
-        (student) => student.selected,
-      )
+    setSuccess(
+      'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
+    )
+  } catch (err) {
+    console.error('Export trip students error:', err)
 
-      if (students.length === 0) {
-        setError(
-          'لا يوجد طلاب محددون لتنزيلهم.',
-        )
-        return
-      }
-
-      const rows = students.map((student, index) => ({
-        '#': index + 1,
-        الطالب: student.name,
-        'الرقم الشخصي': student.personal_id ?? '',
-        المستوى: student.level?.name ?? '',
-        الهاتف: student.phone ?? student.whatsapp ?? '',
-        الحضور:
-          student.attendance_percentage !== null
-            ? `${student.attendance_percentage.toFixed(1)}%`
-            : 'لا توجد بيانات',
-        حاضر: student.attendance_present,
-        غائب: student.attendance_absent,
-        متأخر: student.attendance_late,
-        مستأذن: student.attendance_excused,
-        الرد: getResponseLabel(student.response),
-        'نوع الرد': getResponseSourceLabel(
-          student.response_source,
-        ),
-        'تاريخ الرد': student.responded_at
-          ? formatDateTime(student.responded_at)
-          : '',
-        الدفع:
-          student.payment_amount > 0
-            ? student.payment_amount
-            : 0,
-        'حالة الدفع':
-          student.payment_amount > 0
-            ? 'مدفوع'
-            : 'غير مدفوع',
-        'ملاحظة الرد': student.response_note ?? '',
-        'ملاحظات الدورة': student.course_notes
-          .map((note) => note.note)
-          .join(' | '),
-      }))
-
-      const worksheet = XLSX.utils.json_to_sheet(rows)
-      const workbook = XLSX.utils.book_new()
-
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        'طلاب الرحلة',
-      )
-
-      worksheet['!cols'] = [
-        { wch: 6 },
-        { wch: 28 },
-        { wch: 16 },
-        { wch: 18 },
-        { wch: 16 },
-        { wch: 14 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 22 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 30 },
-        { wch: 40 },
-      ]
-
-      const safeName =
-        data.trip.name
-          .replace(/[\\/:*?"<>|]/g, '')
-          .trim() || 'الرحلة'
-
-      XLSX.writeFile(
-        workbook,
-        `${safeName}-طلاب.xlsx`,
-      )
-
-      setSuccess(
-        'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
-      )
-    } catch (err) {
-      console.error('Export trip students error:', err)
-
-      setError(
-        'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
-      )
-    }
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
+    )
   }
+}
+
 
   function goBack() {
     window.location.href = '/trips'
