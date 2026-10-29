@@ -2,7 +2,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Search, Settings2, Loader2 } from 'lucide-react'
+import {
+  Search,
+  Settings2,
+  Save,
+  Loader2,
+  Check,
+  AlertCircle,
+} from 'lucide-react'
 
 type ResponseStatus = 'pending' | 'accepted' | 'rejected'
 type ResponseSource = 'student' | 'admin' | null
@@ -61,6 +68,10 @@ type Props = {
   canEditParticipantData: boolean
   onPaymentChange: (student: ResultStudent, value: string) => void
   onResponseChange: (student: ResultStudent, value: ResponseStatus) => void
+  onSaveStudent: (student: ResultStudent) => void | Promise<void>
+  hasUnsavedChanges: (student: ResultStudent) => boolean
+  savingStudentId: string | null
+  saveStatus: Record<string, 'saved' | 'error'>
   formatDateTime: (value: string | null) => string
   formatPayment: (value: number) => string
 }
@@ -78,6 +89,10 @@ export function TripResultsTable({
   canEditParticipantData,
   onPaymentChange,
   onResponseChange,
+  onSaveStudent,
+  hasUnsavedChanges,
+  savingStudentId,
+  saveStatus,
   formatDateTime,
   formatPayment,
 }: Props) {
@@ -110,14 +125,16 @@ export function TripResultsTable({
           ])
         } else {
           setVisibleColumns(
-            RESULT_COLUMNS.filter((column) => column.defaultVisible)
-              .map((column) => column.id),
+            RESULT_COLUMNS.filter((column) => column.defaultVisible).map(
+              (column) => column.id,
+            ),
           )
         }
       } else {
         setVisibleColumns(
-          RESULT_COLUMNS.filter((column) => column.defaultVisible)
-            .map((column) => column.id),
+          RESULT_COLUMNS.filter((column) => column.defaultVisible).map(
+            (column) => column.id,
+          ),
         )
       }
     } catch (error) {
@@ -186,6 +203,18 @@ export function TripResultsTable({
     return 'bg-muted text-muted-foreground'
   }
 
+  function responseClass(response: ResponseStatus) {
+    if (response === 'accepted') {
+      return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+    }
+
+    if (response === 'rejected') {
+      return 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-400'
+    }
+
+    return 'border-gray-400/40 bg-gray-500/10 text-gray-600 dark:text-gray-300'
+  }
+
   return (
     <div className="border-t">
       <div className="border-b bg-muted/20 p-4">
@@ -232,9 +261,9 @@ export function TripResultsTable({
                 type="button"
                 onClick={() =>
                   setVisibleColumns(
-                    RESULT_COLUMNS
-                      .filter((column) => column.defaultVisible)
-                      .map((column) => column.id),
+                    RESULT_COLUMNS.filter((column) => column.defaultVisible).map(
+                      (column) => column.id,
+                    ),
                   )
                 }
                 className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted"
@@ -259,7 +288,9 @@ export function TripResultsTable({
           <select
             value={responseFilter}
             onChange={(event) =>
-              onResponseFilterChange(event.target.value as 'all' | ResponseStatus)
+              onResponseFilterChange(
+                event.target.value as 'all' | ResponseStatus,
+              )
             }
             className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
           >
@@ -272,7 +303,7 @@ export function TripResultsTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[1000px] text-sm">
           <thead>
             <tr className="border-b bg-muted/30 text-right">
               <th className="w-12 px-4 py-3">#</th>
@@ -301,6 +332,7 @@ export function TripResultsTable({
               {visibleColumns.includes('note') && (
                 <th className="px-4 py-3 font-medium">الملاحظة</th>
               )}
+              <th className="px-4 py-3 font-medium">الإجراءات</th>
             </tr>
           </thead>
 
@@ -308,148 +340,200 @@ export function TripResultsTable({
             {filteredStudents.length === 0 ? (
               <tr>
                 <td
-                  colSpan={1 + visibleColumns.length}
+                  colSpan={2 + visibleColumns.length}
                   className="px-4 py-12 text-center text-muted-foreground"
                 >
                   لا توجد نتائج مطابقة.
                 </td>
               </tr>
             ) : (
-              filteredStudents.map((student, index) => (
-                <tr
-                  key={student.id}
-                  className="border-b last:border-0 hover:bg-muted/20"
-                >
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {index + 1}
-                  </td>
+              filteredStudents.map((student, index) => {
+                const dirty = hasUnsavedChanges(student)
+                const isSaving =
+                  savingStudentId === student.id ||
+                  paymentStatus[student.id] === 'saving'
+                const status = saveStatus[student.id]
 
-                  {visibleColumns.includes('student') && (
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{student.name}</div>
-                      {student.personal_id && (
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {student.personal_id}
-                        </div>
-                      )}
+                return (
+                  <tr
+                    key={student.id}
+                    className="border-b last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {index + 1}
                     </td>
-                  )}
 
-                  {visibleColumns.includes('level') && (
-                    <td className="px-4 py-3">
-                      {student.level?.name || 'غير محدد'}
-                    </td>
-                  )}
+                    {visibleColumns.includes('student') && (
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{student.name}</div>
+                        {student.personal_id && (
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {student.personal_id}
+                          </div>
+                        )}
+                      </td>
+                    )}
 
-                  {visibleColumns.includes('phone') && (
-                    <td className="px-4 py-3">
-                      {student.phone || student.whatsapp || 'غير متوفر'}
-                    </td>
-                  )}
+                    {visibleColumns.includes('level') && (
+                      <td className="px-4 py-3">
+                        {student.level?.name || 'غير محدد'}
+                      </td>
+                    )}
 
-                  {visibleColumns.includes('response') && (
-                    <td className="px-4 py-3">
-                      <select
-                        value={student.response}
-                        disabled={
-                          !canEditParticipantData ||
-                          responseSavingId === student.id
-                        }
-                        onChange={(event) =>
-                          onResponseChange(
-                            student,
-                            event.target.value as ResponseStatus,
-                          )
-                        }
-                        className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
-                          student.response === 'accepted'
-                            ? 'border-emerald-500/30'
-                            : student.response === 'rejected'
-                              ? 'border-red-500/30'
-                              : ''
-                        }`}
-                      >
-                        <option value="pending">بانتظار الرد</option>
-                        <option value="accepted">موافق</option>
-                        <option value="rejected">رافض</option>
-                      </select>
-                    </td>
-                  )}
+                    {visibleColumns.includes('phone') && (
+                      <td className="px-4 py-3">
+                        {student.phone || student.whatsapp || 'غير متوفر'}
+                      </td>
+                    )}
 
-                  {visibleColumns.includes('source') && (
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs ${sourceClass(student.response_source)}`}>
-                        {sourceLabel(student.response_source)}
-                      </span>
-                    </td>
-                  )}
-
-                  {visibleColumns.includes('date') && (
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {formatDateTime(student.responded_at)}
-                    </td>
-                  )}
-
-                  {visibleColumns.includes('payment') && (
-                    <td className="px-4 py-3">
-                      <div className="min-w-[120px]">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.001"
-                          value={paymentInputs[student.id] ?? ''}
-                          disabled={!canEditParticipantData}
-                          onChange={(event) =>
-                            onPaymentChange(student, event.target.value)
+                    {visibleColumns.includes('response') && (
+                      <td className="px-4 py-3">
+                        <select
+                          value={student.response}
+                          disabled={
+                            !canEditParticipantData ||
+                            isSaving ||
+                            responseSavingId === student.id
                           }
-                          placeholder="0.000"
-                          className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                        />
+                          onChange={(event) =>
+                            onResponseChange(
+                              student,
+                              event.target.value as ResponseStatus,
+                            )
+                          }
+                          className={`h-9 rounded-lg border px-2 text-xs outline-none focus:ring-2 focus:ring-primary/20 ${responseClass(student.response)}`}
+                        >
+                          <option value="pending">بانتظار الرد</option>
+                          <option value="accepted">موافق</option>
+                          <option value="rejected">رافض</option>
+                        </select>
+                      </td>
+                    )}
 
-                        <div className="mt-1 text-xs">
-                          {paymentStatus[student.id] === 'saving' && (
-                            <span className="text-muted-foreground">
-                              جاري الحفظ...
-                            </span>
-                          )}
-                          {paymentStatus[student.id] === 'saved' && (
-                            <span className="text-emerald-600 dark:text-emerald-400">
-                              تم الحفظ ✓
-                            </span>
-                          )}
-                          {paymentStatus[student.id] === 'error' && (
-                            <span className="text-destructive">
-                              تعذّر الحفظ
-                            </span>
-                          )}
-                        </div>
+                    {visibleColumns.includes('source') && (
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs ${sourceClass(student.response_source)}`}
+                        >
+                          {sourceLabel(student.response_source)}
+                        </span>
+                      </td>
+                    )}
 
-                        <div className="mt-1 text-xs text-muted-foreground">
-                          {formatPayment(student.payment_amount)}
+                    {visibleColumns.includes('date') && (
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                        {formatDateTime(student.responded_at)}
+                      </td>
+                    )}
+
+                    {visibleColumns.includes('payment') && (
+                      <td className="px-4 py-3">
+                        <div className="min-w-[120px]">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            value={paymentInputs[student.id] ?? ''}
+                            disabled={!canEditParticipantData || isSaving}
+                            onChange={(event) =>
+                              onPaymentChange(student, event.target.value)
+                            }
+                            placeholder="0.000"
+                            className="payment-input-no-arrows h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                          />
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            المبلغ المحفوظ:{' '}
+                            {formatPayment(student.payment_amount)}
+                          </div>
                         </div>
+                      </td>
+                    )}
+
+                    {visibleColumns.includes('note') && (
+                      <td className="max-w-[280px] px-4 py-3">
+                        {student.response_note ? (
+                          <span className="text-sm text-muted-foreground">
+                            {student.response_note}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            لا توجد ملاحظة
+                          </span>
+                        )}
+                      </td>
+                    )}
+
+                    <td className="px-4 py-3">
+                      <div className="flex min-w-[132px] flex-col items-start gap-1.5">
+                        <button
+                          type="button"
+                          disabled={
+                            !canEditParticipantData || !dirty || isSaving
+                          }
+                          onClick={() => void onSaveStudent(student)}
+                          className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                            isSaving
+                              ? 'bg-amber-600 text-white'
+                              : status === 'error'
+                                ? 'bg-red-600 text-white hover:bg-red-700'
+                                : status === 'saved' && !dirty
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  : dirty
+                                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                    : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              جارٍ الحفظ
+                            </>
+                          ) : status === 'saved' && !dirty ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              تم الحفظ
+                            </>
+                          ) : status === 'error' ? (
+                            <>
+                              <AlertCircle className="h-4 w-4" />
+                              إعادة المحاولة
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              حفظ التعديلات
+                            </>
+                          )}
+                        </button>
+
+                        {dirty && !isSaving && (
+                          <span className="text-xs text-amber-700 dark:text-amber-400">
+                            توجد تعديلات غير محفوظة
+                          </span>
+                        )}
                       </div>
                     </td>
-                  )}
-
-                  {visibleColumns.includes('note') && (
-                    <td className="max-w-[280px] px-4 py-3">
-                      {student.response_note ? (
-                        <span className="text-sm text-muted-foreground">
-                          {student.response_note}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          لا توجد ملاحظة
-                        </span>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
       </div>
+
+      <style jsx>{`
+        .payment-input-no-arrows::-webkit-outer-spin-button,
+        .payment-input-no-arrows::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+
+        .payment-input-no-arrows {
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+      `}</style>
     </div>
   )
 }
