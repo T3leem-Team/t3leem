@@ -1799,128 +1799,28 @@ function handlePaymentChange(
                 دينار بحريني
               </p>
             </div>
-          </div>
-
-
-          
+          </div> 
          
           {showResults && (
             <div className="border-t">
-              <div className="border-b bg-muted/20 p-4">
-                {/* تخصيص الأعمدة */}
-                <div className="mb-4">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowColumnSettings((current) => !current)
-                    }
-                    aria-expanded={showColumnSettings}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition hover:bg-muted"
-                  >
-                    <Settings2 className="h-4 w-4" />
-                    تخصيص الأعمدة
-                  </button>
-
-                  {showColumnSettings && (
-                    <div className="mt-3 rounded-lg border bg-background p-4">
-                      <p className="mb-1 text-sm font-semibold">
-                        اختر الأعمدة التي تريد إظهارها
-                      </p>
-
-                      <p className="mb-3 text-xs text-muted-foreground">
-                        اختياراتك محفوظة لكل رحلة، وعمود الطالب ثابت.
-                      </p>
-
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {RESULT_COLUMNS.map((column) => (
-                          <label
-                            key={column.id}
-                            className="flex cursor-pointer items-center gap-2 text-sm"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={visibleResultColumns.includes(column.id)}
-                              disabled={column.id === 'student'}
-                              onChange={() =>
-                                toggleResultColumn(column.id)
-                              }
-                              className="h-4 w-4"
-                            />
-                            {column.label}
-                          </label>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setVisibleResultColumns(
-                            RESULT_COLUMNS
-                              .filter((column) => column.defaultVisible)
-                              .map((column) => column.id)
-                          )
-                        }
-                        className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted"
-                      >
-                        استعادة الأعمدة الافتراضية
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* البحث والتصفية */}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-                    <input
-                      value={search}
-                      onChange={(event) =>
-                        setSearch(event.target.value)
-                      }
-                      placeholder="بحث باسم الطالب أو الرقم الشخصي أو الهاتف..."
-                      className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
-                    />
-                  </div>
-
-                  <select
-                    value={responseFilter}
-                    onChange={(event) =>
-                      setResponseFilter(
-                        event.target.value as typeof responseFilter
-                      )
-                    }
-                    className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
-                  >
-                    <option value="all">جميع الردود</option>
-                    <option value="accepted">الموافقون فقط</option>
-                    <option value="rejected">الرافضون فقط</option>
-                    <option value="pending">الذين لم يردوا</option>
-                  </select>
-                </div>
-              </div>
-
-              
               {/* جدول النتائج */}
-              {showResults && (
-                <TripResultsTable
-                  tripId={tripId}
-                  students={data.students.filter((student) => student.selected)}
-                  search={search}
-                  onSearchChange={setSearch}
-                  responseFilter={responseFilter}
-                  onResponseFilterChange={setResponseFilter}
-                  paymentInputs={paymentInputs}
-                  paymentStatus={paymentStatus}
-                  responseSavingId={responseSavingId}
-                  canEditParticipantData={canEditParticipantData}
-                  onPaymentChange={handlePaymentChange}
-                  onResponseChange={saveResponse}
-                  formatDateTime={formatDateTime}
-                  formatPayment={formatPayment}
-                />
-              )}
-              
+              <TripResultsTable
+                tripId={tripId}
+                students={data.students.filter((student) => student.selected)}
+                search={search}
+                onSearchChange={setSearch}
+                responseFilter={responseFilter}
+                onResponseFilterChange={setResponseFilter}
+                paymentInputs={paymentInputs}
+                paymentStatus={paymentStatus}
+                responseSavingId={responseSavingId}
+                canEditParticipantData={canEditParticipantData}
+                onPaymentChange={handlePaymentChange}
+                onResponseChange={saveResponse}
+                formatDateTime={formatDateTime}
+                formatPayment={formatPayment}
+              />
+          
               {/* Published / Closed notice */}
               {!canEdit && (
                 <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
@@ -1929,7 +1829,7 @@ function handlePaymentChange(
                     : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
                 </div>
               )}
-              
+          
               {/* Messages */}
               {error && (
                 <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
@@ -1937,14 +1837,14 @@ function handlePaymentChange(
                   <span>{error}</span>
                 </div>
               )}
-              
+          
               {success && (
                 <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
                   <Check className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{success}</span>
                 </div>
               )}
-              
+          
               {/* Students section */}
               {canEdit && (
                 <div className="overflow-hidden rounded-xl border bg-card">
@@ -1957,29 +1857,29 @@ function handlePaymentChange(
                             الطلاب المؤهلون
                           </h2>
                         </div>
-              
+          
                         <p className="mt-1 text-sm text-muted-foreground">
                           حدد الطلاب الذين تريد إضافتهم إلى الرحلة.
                         </p>
                       </div>
-              
+          
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="rounded-lg bg-muted px-3 py-2 text-sm">
                           المؤهلون: <strong>{eligibleStudents.length}</strong>
                         </div>
-              
+          
                         <div className="rounded-lg bg-muted px-3 py-2 text-sm">
                           المحددون: <strong>{selectedCount}</strong>
                         </div>
                       </div>
                     </div>
                   </div>
-              
+          
                   <div className="border-b bg-muted/20 p-4">
                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
                       <div className="relative">
                         <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              
+          
                         <input
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
@@ -1987,21 +1887,21 @@ function handlePaymentChange(
                           className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
                         />
                       </div>
-              
+          
                       <select
                         value={levelFilter}
                         onChange={(event) => setLevelFilter(event.target.value)}
                         className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
                       >
                         <option value="all">كل المستويات</option>
-              
+          
                         {levels.map((level) => (
                           <option key={level.id} value={level.id}>
                             {level.name}
                           </option>
                         ))}
                       </select>
-              
+          
                       <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
                         <input
                           type="checkbox"
@@ -2014,7 +1914,7 @@ function handlePaymentChange(
                         عرض المؤهلين فقط
                       </label>
                     </div>
-              
+          
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -2028,7 +1928,7 @@ function handlePaymentChange(
                         <CheckSquare className="h-4 w-4" />
                         تحديد الظاهر
                       </button>
-              
+          
                       <button
                         type="button"
                         onClick={clearVisibleSelection}
@@ -2039,7 +1939,7 @@ function handlePaymentChange(
                       </button>
                     </div>
                   </div>
-              
+          
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[1150px] text-sm">
                       <thead>
@@ -2054,7 +1954,7 @@ function handlePaymentChange(
                           <th className="px-4 py-3 text-center font-medium">اختيار</th>
                         </tr>
                       </thead>
-              
+          
                       <tbody>
                         {filteredStudents.length === 0 ? (
                           <tr>
@@ -2068,7 +1968,7 @@ function handlePaymentChange(
                         ) : (
                           filteredStudents.map((student, index) => {
                             const isSelected = selectedIds.includes(student.id)
-              
+          
                             return (
                               <tr
                                 key={student.id}
@@ -2079,21 +1979,21 @@ function handlePaymentChange(
                                 <td className="px-4 py-3 text-muted-foreground">
                                   {index + 1}
                                 </td>
-              
+          
                                 <td className="px-4 py-3">
                                   <div className="font-medium">{student.name}</div>
-              
+          
                                   {student.personal_id && (
                                     <div className="mt-0.5 text-xs text-muted-foreground">
                                       {student.personal_id}
                                     </div>
                                   )}
                                 </td>
-              
+          
                                 <td className="px-4 py-3">
                                   {student.level?.name || 'غير محدد'}
                                 </td>
-              
+          
                                 <td className="px-4 py-3">
                                   <div
                                     className={`font-semibold ${
@@ -2106,7 +2006,7 @@ function handlePaymentChange(
                                       ? 'لا توجد بيانات'
                                       : `${student.attendance_percentage.toFixed(1)}%`}
                                   </div>
-              
+          
                                   <div className="mt-1 text-xs text-muted-foreground">
                                     حاضر {student.attendance_present}
                                     {' · '}غائب {student.attendance_absent}
@@ -2114,7 +2014,7 @@ function handlePaymentChange(
                                     {' · '}مستأذن {student.attendance_excused}
                                   </div>
                                 </td>
-              
+          
                                 <td className="max-w-[260px] px-4 py-3">
                                   {student.course_notes.length > 0 ? (
                                     <div className="space-y-1">
@@ -2128,7 +2028,7 @@ function handlePaymentChange(
                                           </div>
                                         )
                                       )}
-              
+          
                                       {student.course_notes.length > 2 && (
                                         <div className="text-xs text-muted-foreground">
                                           +{student.course_notes.length - 2} ملاحظات أخرى
@@ -2141,7 +2041,7 @@ function handlePaymentChange(
                                     </span>
                                   )}
                                 </td>
-              
+          
                                 <td className="px-4 py-3">
                                   <select
                                     value={student.response}
@@ -2161,7 +2061,7 @@ function handlePaymentChange(
                                     <option value="accepted">موافق</option>
                                     <option value="rejected">رافض</option>
                                   </select>
-              
+          
                                   <div className="mt-1 flex flex-wrap items-center gap-1">
                                     <span
                                       className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
@@ -2170,21 +2070,21 @@ function handlePaymentChange(
                                     >
                                       {getResponseSourceLabel(student.response_source)}
                                     </span>
-              
+          
                                     {student.responded_at && (
                                       <span className="text-[10px] text-muted-foreground">
                                         {formatDateTime(student.responded_at)}
                                       </span>
                                     )}
                                   </div>
-              
+          
                                   {student.response_note && (
                                     <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
                                       {student.response_note}
                                     </div>
                                   )}
                                 </td>
-              
+          
                                 <td className="px-4 py-3">
                                   <div className="flex min-w-[150px] items-center gap-2">
                                     <input
@@ -2201,7 +2101,7 @@ function handlePaymentChange(
                                       placeholder="0.000"
                                       className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
                                     />
-              
+          
                                     <button
                                       type="button"
                                       onClick={() => savePayment(student)}
@@ -2215,12 +2115,12 @@ function handlePaymentChange(
                                       )}
                                     </button>
                                   </div>
-              
+          
                                   <div className="mt-1 text-xs text-muted-foreground">
                                     {formatPayment(student.payment_amount)}
                                   </div>
                                 </td>
-              
+          
                                 <td className="px-4 py-3 text-center">
                                   {student.eligible ? (
                                     <button
@@ -2255,7 +2155,7 @@ function handlePaymentChange(
                       </tbody>
                     </table>
                   </div>
-              
+          
                   <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm text-muted-foreground">
@@ -2267,7 +2167,7 @@ function handlePaymentChange(
                         </strong>{' '}
                         طالب مؤهل.
                       </div>
-              
+          
                       <button
                         type="button"
                         onClick={saveStudents}
@@ -2287,7 +2187,7 @@ function handlePaymentChange(
                         )}
                       </button>
                     </div>
-              
+          
                     {/* Publish */}
                     {trip.status === 'draft' && (
                       <div className="border-t pt-4">
@@ -2297,18 +2197,18 @@ function handlePaymentChange(
                               <Send className="h-4 w-4" />
                               <p className="font-semibold">نشر الرحلة</p>
                             </div>
-              
+          
                             <p className="mt-1 text-sm text-muted-foreground">
                               بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
                             </p>
-              
+          
                             {!settingsLoading && !directPublishAllowed && (
                               <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                                 النشر المباشر موقوف من إعدادات النظام.
                               </p>
                             )}
                           </div>
-              
+          
                           <button
                             type="button"
                             onClick={publishTrip}
@@ -2336,7 +2236,7 @@ function handlePaymentChange(
                       </div>
                     )}
                   </div>
-               </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </div>
+          )}
