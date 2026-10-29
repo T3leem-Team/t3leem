@@ -1,56 +1,26 @@
 
-
-
 'use client'
-
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
 
 import {
   Archive,
   ArrowRight,
   Check,
-  CheckSquare,
   Download,
   Loader2,
   RefreshCw,
-  Search,
-  Send,
-  Users,
   X,
-  BarChart3,
-  UserCheck,
-  UserX,
-  Clock3,
-  Wallet,
-  Settings2,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
 import { EligibleStudentsSection } from './eligible-students-section'
-import { TripResultsSection } from "./trip-results-section"
+import { TripResultsSection } from './trip-results-section'
 import { useTripDetails } from './trip-details-hook'
 
 import type {
-  ApiResponse,
-  Course,
-  CourseNote,
-  Level,
   ResponseSource,
   ResponseStatus,
   Student,
-  Trip,
   TripStatus,
 } from './trip-types'
-
-import {
-  loadTripDetailsCache,
-  setTripDetailsCache,
-} from '@/lib/trips-cache'
 
 function formatDate(value: string | null) {
   if (!value) return 'بدون تاريخ'
@@ -181,7 +151,6 @@ function formatPayment(value: number) {
   return `${formatFee(value)} د.ب`
 }
 
-
 export function TripDetailsView({
   tripId,
 }: {
@@ -224,6 +193,7 @@ export function TripDetailsView({
     setPaymentInputs,
     paymentStatus,
     setPaymentStatus,
+    paymentTimers,
     eligibleStudents,
     tripResults,
     resultStudents,
@@ -240,386 +210,155 @@ export function TripDetailsView({
     saveStudents,
   } = useTripDetails(tripId)
 
+  async function savePayment(
+    student: Student,
+    inputValue?: string,
+  ) {
+    if (!canEditParticipantData) return
 
-const resultStudents = useMemo(() => {
-  if (!data) return []
+    const rawValue =
+      inputValue ??
+      paymentInputs[student.id] ??
+      ''
 
-  return data.students.filter(
-    (student) => student.selected
-  )
-}, [data])
+    const normalizedValue =
+      rawValue.trim().replace(',', '.')
 
-  const totalPaid = useMemo(() => {
-    if (!data) return 0
+    const amount =
+      normalizedValue === ''
+        ? 0
+        : Number(normalizedValue)
 
-    return data.students
-      .filter((student) => student.selected)
-      .reduce(
-        (sum, student) =>
-          sum + Number(student.payment_amount ?? 0),
-        0,
-      )
-  }, [data])
-  
-  const filteredStudents = useMemo(() => {
     if (
-      !data ||
-      !Array.isArray(data.students)
+      !Number.isFinite(amount) ||
+      amount < 0
     ) {
-      return []
+      setPaymentStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
+
+      setError(
+        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+      )
+      return
     }
 
-    const normalizedSearch =
-      search.trim().toLowerCase()
+    const roundedAmount =
+      Math.round(amount * 1000) / 1000
 
-    return data.students.filter(
-      (student) => {
-        if (
-          showEligibleOnly &&
-          student.eligible !== true
-        ) {
-          return false
-        }
+    setPaymentSavingId(student.id)
 
-        const name =
-          typeof student.name === 'string'
-            ? student.name
-            : ''
+    setPaymentStatus((current) => ({
+      ...current,
+      [student.id]: 'saving',
+    }))
 
-        const personalId =
-          typeof student.personal_id ===
-          'string'
-            ? student.personal_id
-            : ''
-
-        const phone =
-          typeof student.phone === 'string'
-            ? student.phone
-            : ''
-
-        const matchesSearch =
-          !normalizedSearch ||
-          name
-            .toLowerCase()
-            .includes(normalizedSearch) ||
-          personalId
-            .toLowerCase()
-            .includes(
-              normalizedSearch,
-            ) ||
-          phone
-            .toLowerCase()
-            .includes(
-              normalizedSearch,
-            )
-
-        const matchesLevel =
-          levelFilter === 'all' ||
-          student.level?.id ===
-            levelFilter
-
-        return (
-          matchesSearch &&
-          matchesLevel
-        )
-      },
-    )
-  }, [
-    data,
-    search,
-    levelFilter,
-    showEligibleOnly,
-  ])
-
-  const selectedCount =
-    selectedIds.length
-
-  const canEdit =
-    data?.trip.status !== 'closed' &&
-    data?.trip.status !== 'published'
-
-  const canEditParticipantData =
-    data?.trip.status !== 'closed'
-
-  function syncDetailsCache(
-    nextData: ApiResponse,
-  ) {
-    setTripDetailsCache(tripId, {
-      trip: nextData.trip,
-      course: nextData.course,
-      levels: nextData.levels,
-      lesson_dates:
-        nextData.lesson_dates,
-      students: nextData.students,
-    })
-  }
-
-  function toggleStudent(
-    studentId: string,
-  ) {
-    if (!canEdit) return
-
-    setSelectedIds((current) => {
-      if (current.includes(studentId)) {
-        return current.filter(
-          (id) => id !== studentId,
-        )
-      }
-
-      return [...current, studentId]
-    })
-  }
-
-  function selectAllVisible() {
-    if (!canEdit) return
-
-    setSelectedIds((current) => {
-      const next = new Set(current)
-
-      filteredStudents.forEach(
-        (student) => {
-          if (student.eligible) {
-            next.add(student.id)
-          }
-        },
-      )
-
-      return Array.from(next)
-    })
-  }
-
-  function clearVisibleSelection() {
-    if (!canEdit) return
-
-    const visibleIds = new Set(
-      filteredStudents.map(
-        (student) => student.id,
-      ),
-    )
-
-    setSelectedIds((current) =>
-      current.filter(
-        (id) => !visibleIds.has(id),
-      ),
-    )
-  }
-
-  async function saveStudents() {
-    if (!data || !canEdit) return
-
-    setSaving(true)
     setError('')
     setSuccess('')
 
     try {
       const response = await fetch(
-        `/api/trips/${encodeURIComponent(
-          tripId,
-        )}/students`,
+        `/api/trips/${encodeURIComponent(tripId)}/students`,
         {
-          method: 'POST',
+          method: 'PATCH',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            student_ids: selectedIds,
+            action: 'payment',
+            student_id: student.id,
+            payment_amount: roundedAmount,
           }),
         },
       )
 
-      const result =
-        await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ??
-            'تعذر حفظ الطلاب.',
+          result?.error ?? 'تعذر حفظ مبلغ الدفع.',
         )
       }
 
-      setSuccess(
-        'تم حفظ الطلاب في الرحلة بنجاح.',
-      )
+      setData((current) => {
+        if (!current) return current
 
-      await loadData({
-        silent: true,
-        force: true,
+        const nextData = {
+          ...current,
+          students: current.students.map((item) =>
+            item.id === student.id
+              ? {
+                  ...item,
+                  payment_amount: roundedAmount,
+                }
+              : item,
+          ),
+        }
+
+        syncDetailsCache(nextData)
+
+        return nextData
       })
-    } catch (error) {
-      console.error(
-        'Save trip students error:',
-        error,
-      )
+
+      setPaymentInputs((current) => ({
+        ...current,
+        [student.id]:
+          roundedAmount > 0
+            ? String(roundedAmount)
+            : '',
+      }))
+
+      setPaymentStatus((current) => ({
+        ...current,
+        [student.id]: 'saved',
+      }))
+    } catch (err) {
+      console.error('Save trip payment error:', err)
+
+      setPaymentStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
 
       setError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر حفظ الطلاب.',
+        err instanceof Error
+          ? err.message
+          : 'تعذر حفظ مبلغ الدفع.',
       )
     } finally {
-      setSaving(false)
+      setPaymentSavingId(null)
     }
   }
 
- 
-
-async function savePayment(
-  student: Student,
-  inputValue?: string,
-) {
-  if (!canEditParticipantData) return
-
-  const rawValue =
-    inputValue ??
-    paymentInputs[student.id] ??
-    ''
-
-  const normalizedValue =
-    rawValue.trim().replace(',', '.')
-
-  const amount =
-    normalizedValue === ''
-      ? 0
-      : Number(normalizedValue)
-
-  if (
-    !Number.isFinite(amount) ||
-    amount < 0
+  function handlePaymentChange(
+    student: Student,
+    value: string,
   ) {
-    setPaymentStatus((current) => ({
-      ...current,
-      [student.id]: 'error',
-    }))
-
-    setError(
-      'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
-    )
-    return
-  }
-
-  const roundedAmount =
-    Math.round(amount * 1000) / 1000
-
-  setPaymentSavingId(student.id)
-
-  setPaymentStatus((current) => ({
-    ...current,
-    [student.id]: 'saving',
-  }))
-
-  setError('')
-  setSuccess('')
-
-  try {
-    const response = await fetch(
-      `/api/trips/${encodeURIComponent(
-        tripId,
-      )}/students`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'payment',
-          student_id: student.id,
-          payment_amount: roundedAmount,
-        }),
-      },
-    )
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        result?.error ?? 'تعذر حفظ مبلغ الدفع.',
-      )
-    }
-
-    setData((current) => {
-      if (!current) return current
-
-      const nextData = {
-        ...current,
-        students: current.students.map((item) =>
-          item.id === student.id
-            ? {
-                ...item,
-                payment_amount: roundedAmount,
-              }
-            : item,
-        ),
-      }
-
-      syncDetailsCache(nextData)
-
-      return nextData
-    })
-
     setPaymentInputs((current) => ({
       ...current,
-      [student.id]:
-        roundedAmount > 0
-          ? String(roundedAmount)
-          : '',
+      [student.id]: value,
     }))
 
-    setPaymentStatus((current) => ({
-      ...current,
-      [student.id]: 'saved',
-    }))
-  } catch (error) {
-    console.error(
-      'Save trip payment error:',
-      error,
-    )
+    setPaymentStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
 
-    setPaymentStatus((current) => ({
-      ...current,
-      [student.id]: 'error',
-    }))
+    const existingTimer =
+      paymentTimers.current[student.id]
 
-    setError(
-      error instanceof Error
-        ? error.message
-        : 'تعذر حفظ مبلغ الدفع.',
-    )
-  } finally {
-    setPaymentSavingId(null)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    paymentTimers.current[student.id] =
+      setTimeout(() => {
+        void savePayment(student, value)
+        delete paymentTimers.current[student.id]
+      }, 800)
   }
-}
-
-  
-function handlePaymentChange(
-  student: Student,
-  value: string,
-) {
-  setPaymentInputs((current) => ({
-    ...current,
-    [student.id]: value,
-  }))
-
-  setPaymentStatus((current) => {
-    const next = { ...current }
-    delete next[student.id]
-    return next
-  })
-
-  const existingTimer =
-    paymentTimers.current[student.id]
-
-  if (existingTimer) {
-    clearTimeout(existingTimer)
-  }
-
-  paymentTimers.current[student.id] =
-    setTimeout(() => {
-      void savePayment(student, value)
-      delete paymentTimers.current[student.id]
-    }, 800)
-}
-
 
   async function saveResponse(
     student: Student,
@@ -633,80 +372,62 @@ function handlePaymentChange(
 
     try {
       const response = await fetch(
-        `/api/trips/${encodeURIComponent(
-          tripId,
-        )}/students`,
+        `/api/trips/${encodeURIComponent(tripId)}/students`,
         {
           method: 'PATCH',
           headers: {
-            'Content-Type':
-              'application/json',
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             action: 'response',
             student_id: student.id,
-            response:
-              responseValue,
+            response: responseValue,
           }),
         },
       )
 
-      const result =
-        await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ??
-            'تعذر حفظ رد الطالب.',
+          result?.error ?? 'تعذر حفظ رد الطالب.',
         )
       }
 
-      const updatedStudent =
-        result?.student
+      const updatedStudent = result?.student
 
       setData((current) => {
         if (!current) return current
 
         const nextData = {
           ...current,
-          students:
-            current.students.map(
-              (item) => {
-                if (
-                  item.id !==
-                  student.id
-                ) {
-                  return item
-                }
+          students: current.students.map((item) => {
+            if (item.id !== student.id) {
+              return item
+            }
 
-                return {
-                  ...item,
-                  response:
-                    updatedStudent?.response ??
-                    responseValue,
-                  response_note:
-                    updatedStudent?.response_note ??
-                    null,
-                  response_source:
-                    updatedStudent?.response_source ??
-                    (responseValue ===
-                    'pending'
-                      ? null
-                      : 'admin'),
-                  responded_at:
-                    updatedStudent?.responded_at ??
-                    (responseValue ===
-                    'pending'
-                      ? null
-                      : new Date().toISOString()),
-                }
-              },
-            ),
+            return {
+              ...item,
+              response:
+                updatedStudent?.response ??
+                responseValue,
+              response_note:
+                updatedStudent?.response_note ?? null,
+              response_source:
+                updatedStudent?.response_source ??
+                (responseValue === 'pending'
+                  ? null
+                  : 'admin'),
+              responded_at:
+                updatedStudent?.responded_at ??
+                (responseValue === 'pending'
+                  ? null
+                  : new Date().toISOString()),
+            }
+          }),
         }
 
-        syncDetailsCache(
-          nextData,
-        )
+        syncDetailsCache(nextData)
 
         return nextData
       })
@@ -714,15 +435,12 @@ function handlePaymentChange(
       setSuccess(
         `تم تحديث رد الطالب ${student.name}.`,
       )
-    } catch (error) {
-      console.error(
-        'Save trip response error:',
-        error,
-      )
+    } catch (err) {
+      console.error('Save trip response error:', err)
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : 'تعذر حفظ رد الطالب.',
       )
     } finally {
@@ -751,10 +469,9 @@ function handlePaymentChange(
       return
     }
 
-    const confirmed =
-      window.confirm(
-        'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
-      )
+    const confirmed = window.confirm(
+      'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
+    )
 
     if (!confirmed) return
 
@@ -763,48 +480,37 @@ function handlePaymentChange(
     setSuccess('')
 
     try {
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            id: tripId,
-            status: 'published',
-          }),
+      const response = await fetch('/api/trips', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      )
+        body: JSON.stringify({
+          id: tripId,
+          status: 'published',
+        }),
+      })
 
-      const result =
-        await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ??
-            'تعذر نشر الرحلة.',
+          result?.error ?? 'تعذر نشر الرحلة.',
         )
       }
 
-      setSuccess(
-        'تم نشر الرحلة بنجاح.',
-      )
+      setSuccess('تم نشر الرحلة بنجاح.')
 
       await loadData({
         silent: true,
         force: true,
       })
-    } catch (error) {
-      console.error(
-        'Publish trip error:',
-        error,
-      )
+    } catch (err) {
+      console.error('Publish trip error:', err)
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : 'تعذر نشر الرحلة.',
       )
     } finally {
@@ -819,10 +525,9 @@ function handlePaymentChange(
       return
     }
 
-    const confirmed =
-      window.confirm(
-        'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
-      )
+    const confirmed = window.confirm(
+      'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
+    )
 
     if (!confirmed) return
 
@@ -831,28 +536,22 @@ function handlePaymentChange(
     setSuccess('')
 
     try {
-      const response = await fetch(
-        '/api/trips',
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            id: tripId,
-            status: 'closed',
-          }),
+      const response = await fetch('/api/trips', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      )
+        body: JSON.stringify({
+          id: tripId,
+          status: 'closed',
+        }),
+      })
 
-      const result =
-        await response.json()
+      const result = await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ??
-            'تعذر إغلاق الرحلة.',
+          result?.error ?? 'تعذر إغلاق الرحلة.',
         )
       }
 
@@ -864,15 +563,12 @@ function handlePaymentChange(
         silent: true,
         force: true,
       })
-    } catch (error) {
-      console.error(
-        'Close trip error:',
-        error,
-      )
+    } catch (err) {
+      console.error('Close trip error:', err)
 
       setError(
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : 'تعذر إغلاق الرحلة.',
       )
     } finally {
@@ -884,14 +580,11 @@ function handlePaymentChange(
     if (!data) return
 
     try {
-      const XLSX =
-        await import('xlsx')
+      const XLSX = await import('xlsx')
 
-      const students =
-        data.students.filter(
-          (student) =>
-            student.selected,
-        )
+      const students = data.students.filter(
+        (student) => student.selected,
+      )
 
       if (students.length === 0) {
         setError(
@@ -900,79 +593,43 @@ function handlePaymentChange(
         return
       }
 
-      const rows = students.map(
-        (student, index) => ({
-          '#': index + 1,
-          الطالب: student.name,
-          'الرقم الشخصي':
-            student.personal_id ??
-            '',
-          المستوى:
-            student.level?.name ??
-            '',
-          الهاتف:
-            student.phone ??
-            student.whatsapp ??
-            '',
-          الحضور:
-            student.attendance_percentage !==
-            null
-              ? `${student.attendance_percentage.toFixed(
-                  1,
-                )}%`
-              : 'لا توجد بيانات',
-          حاضر:
-            student.attendance_present,
-          غائب:
-            student.attendance_absent,
-          متأخر:
-            student.attendance_late,
-          مستأذن:
-            student.attendance_excused,
-          الرد:
-            getResponseLabel(
-              student.response,
-            ),
-          'نوع الرد':
-            getResponseSourceLabel(
-              student.response_source,
-            ),
-          'تاريخ الرد':
-            student.responded_at
-              ? formatDateTime(
-                  student.responded_at,
-                )
-              : '',
-          الدفع:
-            student.payment_amount >
-            0
-              ? student.payment_amount
-              : 0,
-          'حالة الدفع':
-            student.payment_amount >
-            0
-              ? 'مدفوع'
-              : 'غير مدفوع',
-          'ملاحظة الرد':
-            student.response_note ??
-            '',
-          'ملاحظات الدورة':
-            student.course_notes
-              .map(
-                (note) =>
-                  note.note,
-              )
-              .join(' | '),
-        }),
-      )
+      const rows = students.map((student, index) => ({
+        '#': index + 1,
+        الطالب: student.name,
+        'الرقم الشخصي': student.personal_id ?? '',
+        المستوى: student.level?.name ?? '',
+        الهاتف: student.phone ?? student.whatsapp ?? '',
+        الحضور:
+          student.attendance_percentage !== null
+            ? `${student.attendance_percentage.toFixed(1)}%`
+            : 'لا توجد بيانات',
+        حاضر: student.attendance_present,
+        غائب: student.attendance_absent,
+        متأخر: student.attendance_late,
+        مستأذن: student.attendance_excused,
+        الرد: getResponseLabel(student.response),
+        'نوع الرد': getResponseSourceLabel(
+          student.response_source,
+        ),
+        'تاريخ الرد': student.responded_at
+          ? formatDateTime(student.responded_at)
+          : '',
+        الدفع:
+          student.payment_amount > 0
+            ? student.payment_amount
+            : 0,
+        'حالة الدفع':
+          student.payment_amount > 0
+            ? 'مدفوع'
+            : 'غير مدفوع',
+        'ملاحظة الرد': student.response_note ?? '',
+        'ملاحظات الدورة': student.course_notes
+          .map((note) => note.note)
+          .join(' | '),
+      }))
 
-      const worksheet =
-        XLSX.utils.json_to_sheet(
-          rows,
-        )
-
-      const workbook =
-        XLSX.utils.book_new()
+      const worksheet = XLSX.utils.json_to_sheet(rows)
+      const workbook = XLSX.utils.book_new()
 
       XLSX.utils.book_append_sheet(
         workbook,
@@ -1002,12 +659,8 @@ function handlePaymentChange(
 
       const safeName =
         data.trip.name
-          .replace(
-            /[\\/:*?"<>|]/g,
-            '',
-          )
-          .trim() ||
-        'الرحلة'
+          .replace(/[\\/:*?"<>|]/g, '')
+          .trim() || 'الرحلة'
 
       XLSX.writeFile(
         workbook,
@@ -1017,11 +670,8 @@ function handlePaymentChange(
       setSuccess(
         'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
       )
-    } catch (error) {
-      console.error(
-        'Export trip students error:',
-        error,
-      )
+    } catch (err) {
+      console.error('Export trip students error:', err)
 
       setError(
         'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
@@ -1030,8 +680,7 @@ function handlePaymentChange(
   }
 
   function goBack() {
-    window.location.href =
-      '/trips'
+    window.location.href = '/trips'
   }
 
   if (loading) {
@@ -1042,10 +691,7 @@ function handlePaymentChange(
       >
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-
-          <span>
-            جاري تحميل الرحلة...
-          </span>
+          <span>جاري تحميل الرحلة...</span>
         </div>
       </div>
     )
@@ -1053,39 +699,27 @@ function handlePaymentChange(
 
   if (!data) {
     return (
-      <div
-        dir="rtl"
-        className="space-y-4"
-      >
+      <div dir="rtl" className="space-y-4">
         <button
           type="button"
           onClick={goBack}
           className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4" />
-
           العودة إلى الرحلات
         </button>
 
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center text-destructive">
-          {error ||
-            'تعذر العثور على الرحلة.'}
+          {error || 'تعذر العثور على الرحلة.'}
         </div>
       </div>
     )
   }
 
-  const {
-    trip,
-    course,
-    levels,
-  } = data
+  const { trip, course, levels } = data
 
   return (
-    <div
-      dir="rtl"
-      className="space-y-6"
-    >
+    <div dir="rtl" className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
@@ -1095,7 +729,6 @@ function handlePaymentChange(
             className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowRight className="h-4 w-4" />
-
             العودة إلى الرحلات
           </button>
 
@@ -1106,9 +739,7 @@ function handlePaymentChange(
               </h1>
 
               <span className="rounded-full border px-3 py-1 text-xs font-medium">
-                {getStatusLabel(
-                  trip.status,
-                )}
+                {getStatusLabel(trip.status)}
               </span>
             </div>
 
@@ -1126,19 +757,16 @@ function handlePaymentChange(
             onClick={downloadExcel}
             disabled={
               data.students.filter(
-                (student) =>
-                  student.selected,
+                (student) => student.selected,
               ).length === 0
             }
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
-
             تنزيل Excel
           </button>
 
-          {trip.status ===
-            'published' && (
+          {trip.status === 'published' && (
             <button
               type="button"
               onClick={closeTrip}
@@ -1148,13 +776,11 @@ function handlePaymentChange(
               {closing ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-
                   جاري الإغلاق...
                 </>
               ) : (
                 <>
                   <Archive className="h-4 w-4" />
-
                   إغلاق الرحلة
                 </>
               )}
@@ -1174,12 +800,9 @@ function handlePaymentChange(
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                refreshing
-                  ? 'animate-spin'
-                  : ''
+                refreshing ? 'animate-spin' : ''
               }`}
             />
-
             تحديث
           </button>
         </div>
@@ -1191,10 +814,8 @@ function handlePaymentChange(
           <p className="text-xs text-muted-foreground">
             المقرر
           </p>
-
           <p className="mt-1 font-semibold">
-            {course?.name ??
-              'غير محدد'}
+            {course?.name ?? 'غير محدد'}
           </p>
         </div>
 
@@ -1202,11 +823,8 @@ function handlePaymentChange(
           <p className="text-xs text-muted-foreground">
             التاريخ
           </p>
-
           <p className="mt-1 font-semibold">
-            {formatDate(
-              trip.trip_date,
-            )}
+            {formatDate(trip.trip_date)}
           </p>
         </div>
 
@@ -1214,10 +832,8 @@ function handlePaymentChange(
           <p className="text-xs text-muted-foreground">
             المكان
           </p>
-
           <p className="mt-1 font-semibold">
-            {trip.location ||
-              'غير محدد'}
+            {trip.location || 'غير محدد'}
           </p>
         </div>
 
@@ -1225,15 +841,12 @@ function handlePaymentChange(
           <p className="text-xs text-muted-foreground">
             الرسوم
           </p>
-
           <p className="mt-1 font-semibold">
             {formatFee(trip.fee)} د.ب
           </p>
         </div>
       </div>
 
-     
-      
       {/* More details */}
       <div className="rounded-xl border bg-card p-5">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -1241,11 +854,8 @@ function handlePaymentChange(
             <p className="text-xs text-muted-foreground">
               وقت التجمع
             </p>
-
             <p className="mt-1 font-medium">
-              {formatTime(
-                trip.meeting_time,
-              ) ?? 'غير محدد'}
+              {formatTime(trip.meeting_time) ?? 'غير محدد'}
             </p>
           </div>
 
@@ -1253,11 +863,8 @@ function handlePaymentChange(
             <p className="text-xs text-muted-foreground">
               وقت العودة
             </p>
-
             <p className="mt-1 font-medium">
-              {formatTime(
-                trip.return_time,
-              ) ?? 'غير محدد'}
+              {formatTime(trip.return_time) ?? 'غير محدد'}
             </p>
           </div>
 
@@ -1265,10 +872,8 @@ function handlePaymentChange(
             <p className="text-xs text-muted-foreground">
               الحد الأدنى للحضور
             </p>
-
             <p className="mt-1 font-medium">
-              {trip.attendance_min !=
-              null
+              {trip.attendance_min != null
                 ? `${trip.attendance_min}%`
                 : 'بدون حد'}
             </p>
@@ -1278,10 +883,8 @@ function handlePaymentChange(
             <p className="text-xs text-muted-foreground">
               الحد الأعلى للحضور
             </p>
-
             <p className="mt-1 font-medium">
-              {trip.attendance_max !=
-              null
+              {trip.attendance_max != null
                 ? `${trip.attendance_max}%`
                 : 'بدون حد'}
             </p>
@@ -1298,7 +901,7 @@ function handlePaymentChange(
         )}
       </div>
 
-            {/* Results */}
+      {/* Results */}
       {(trip.status === 'published' ||
         trip.status === 'closed') && (
         <TripResultsSection
@@ -1369,7 +972,7 @@ function handlePaymentChange(
       {canEdit && data && (
         <EligibleStudentsSection
           trip={data.trip}
-          levels={data.levels}
+          levels={levels}
           eligibleStudents={eligibleStudents}
           filteredStudents={filteredStudents}
           selectedIds={selectedIds}
