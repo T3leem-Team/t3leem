@@ -10,7 +10,6 @@ import {
   Users,
 } from 'lucide-react'
 
-import type { Dispatch, SetStateAction } from 'react'
 import type {
   Level,
   ResponseSource,
@@ -30,11 +29,11 @@ type Props = {
   selectedCount: number
 
   search: string
-  setSearch: (value: string) => void
+  onSearchChange: (value: string) => void
   levelFilter: string
-  setLevelFilter: (value: string) => void
+  onLevelFilterChange: (value: string) => void
   showEligibleOnly: boolean
-  setShowEligibleOnly: (value: boolean) => void
+  onShowEligibleOnlyChange: (value: boolean) => void
 
   canEdit: boolean
   canEditParticipantData: boolean
@@ -46,7 +45,10 @@ type Props = {
   responseSavingId: string | null
   paymentSavingId: string | null
   paymentInputs: Record<string, string>
-  setPaymentInputs: Dispatch<SetStateAction<Record<string, string>>>
+  onPaymentInputChange: (
+    studentId: string,
+    value: string,
+  ) => void
   paymentStatus: Record<string, PaymentStatus>
 
   toggleStudent: (studentId: string) => void
