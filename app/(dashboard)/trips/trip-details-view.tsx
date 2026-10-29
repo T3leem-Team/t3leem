@@ -1,6 +1,8 @@
 
 'use client'
 
+import { useState } from 'react'
+
 import {
   Archive,
   ArrowRight,
@@ -22,6 +24,24 @@ import type {
   Student,
   TripStatus,
 } from './trip-types'
+
+type ResultStudent = {
+  id: string
+  name: string
+  personal_id: string | null
+  phone: string | null
+  whatsapp?: string | null
+  level: {
+    id: string
+    name: string
+    sort_order: number | null
+  } | null
+  response: ResponseStatus
+  response_note: string | null
+  response_source: ResponseSource
+  responded_at: string | null
+  payment_amount: number
+}
 
 function formatDate(value: string | null) {
   if (!value) return 'بدون تاريخ'
@@ -105,19 +125,6 @@ function getStatusLabel(status: TripStatus) {
   }
 }
 
-function getResponseLabel(response: ResponseStatus) {
-  switch (response) {
-    case 'accepted':
-      return 'موافق'
-
-    case 'rejected':
-      return 'رافض'
-
-    default:
-      return 'بانتظار الرد'
-  }
-}
-
 function getResponseSourceLabel(source: ResponseSource) {
   switch (source) {
     case 'student':
@@ -150,6 +157,26 @@ function formatPayment(value: number) {
   }
 
   return `${formatFee(value)} د.ب`
+}
+
+function normalizePaymentInput(value: string | number) {
+  const normalized = String(value).trim().replace(',', '.')
+
+  if (normalized === '') return ''
+
+  const amount = Number(normalized)
+
+  if (!Number.isFinite(amount)) return normalized
+
+  return String(Math.round(amount * 1000) / 1000)
+}
+
+function parsePaymentInput(value: string) {
+  const normalized = value.trim().replace(',', '.')
+
+  if (normalized === '') return 0
+
+  return Number(normalized)
 }
 
 export function TripDetailsView({
@@ -209,6 +236,313 @@ export function TripDetailsView({
     saveStudents,
   } = useTripDetails(tripId)
 
+  // قيم الردود المؤقتة في جدول النتائج.
+  // لا يتم حفظ الرد بمجرد تغييره.
+  const [responseInputs, setResponseInputs] = useState<
+    Record<string, ResponseStatus>
+  >({})
+
+  // حالة الحفظ الموحد لكل طالب.
+  const [savingStudentId, setSavingStudentId] = useState<
+    string | null
+  >(null)
+
+  const [saveStatus, setSaveStatus] = useState<
+    Record<string, 'saved' | 'error'>
+  >({})
+
+  function clearPaymentTimer(studentId: string) {
+    const existingTimer = paymentTimers.current[studentId]
+
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      delete paymentTimers.current[studentId]
+    }
+  }
+
+  function handlePaymentChange(
+    student: Student,
+    value: string,
+  ) {
+    // في جدول النتائج: تعديل مؤقت فقط، دون حفظ تلقائي.
+    setPaymentInputs((current) => ({
+      ...current,
+      [student.id]: value,
+    }))
+
+    clearPaymentTimer(student.id)
+
+    setPaymentStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
+
+    setSaveStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
+  }
+
+  function handleResponseChange(
+    student: ResultStudent,
+    value: ResponseStatus,
+  ) {
+    // الرد يبقى مؤقتًا إلى أن يضغط المستخدم زر الحفظ.
+    setResponseInputs((current) => ({
+      ...current,
+      [student.id]: value,
+    }))
+
+    setSaveStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
+  }
+
+  function hasUnsavedChanges(student: ResultStudent) {
+    const currentPayment =
+      paymentInputs[student.id] ??
+      normalizePaymentInput(student.payment_amount)
+
+    const currentResponse =
+      responseInputs[student.id] ?? student.response
+
+    const parsedPayment = parsePaymentInput(currentPayment)
+
+    const paymentChanged =
+      !Number.isFinite(parsedPayment) ||
+      parsedPayment < 0 ||
+      Math.round(parsedPayment * 1000) / 1000 !==
+        Math.round(Number(student.payment_amount || 0) * 1000) / 1000
+
+    const responseChanged =
+      currentResponse !== student.response
+
+    return paymentChanged || responseChanged
+  }
+
+  async function saveParticipantUpdate(
+    tableStudent: ResultStudent,
+  ) {
+    if (!canEditParticipantData) return
+
+    if (savingStudentId === tableStudent.id) return
+
+    const student = data?.students.find(
+      (item) => item.id === tableStudent.id,
+    )
+
+    if (!student) {
+      setError('تعذر العثور على بيانات الطالب.')
+      return
+    }
+
+    const rawPayment =
+      paymentInputs[student.id] ??
+      normalizePaymentInput(student.payment_amount)
+
+    const amount = parsePaymentInput(rawPayment)
+
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      setSaveStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
+
+      setError(
+        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+      )
+      return
+    }
+
+    const roundedAmount =
+      Math.round(amount * 1000) / 1000
+
+    const responseValue =
+      responseInputs[student.id] ?? student.response
+
+    if (
+      responseValue !== 'pending' &&
+      responseValue !== 'accepted' &&
+      responseValue !== 'rejected'
+    ) {
+      setSaveStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
+
+      setError('قيمة رد الطالب غير صحيحة.')
+      return
+    }
+
+    // لا نرسل طلبًا إذا لم تتغير أي قيمة.
+    if (
+      roundedAmount ===
+        Math.round(Number(student.payment_amount || 0) * 1000) / 1000 &&
+      responseValue === student.response
+    ) {
+      setSaveStatus((current) => ({
+        ...current,
+        [student.id]: 'saved',
+      }))
+      return
+    }
+
+    // منع أي مؤقت قديم من تعديل المبلغ بعد الحفظ اليدوي.
+    clearPaymentTimer(student.id)
+
+    setSavingStudentId(student.id)
+
+    setPaymentSavingId(student.id)
+
+    setPaymentStatus((current) => ({
+      ...current,
+      [student.id]: 'saving',
+    }))
+
+    setSaveStatus((current) => {
+      const next = { ...current }
+      delete next[student.id]
+      return next
+    })
+
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        `/api/trips/${encodeURIComponent(tripId)}/students`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'participant_update',
+            student_id: student.id,
+            payment_amount: roundedAmount,
+            response: responseValue,
+          }),
+        },
+      )
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر حفظ مبلغ الدفع ورد الطالب.',
+        )
+      }
+
+      const updatedStudent = result?.student
+
+      const savedPayment =
+        Number(
+          updatedStudent?.payment_amount ?? roundedAmount,
+        )
+
+      const savedResponse: ResponseStatus =
+        updatedStudent?.response ?? responseValue
+
+      const savedResponseNote: string | null =
+        updatedStudent?.response_note ?? null
+
+      const savedResponseSource: ResponseSource =
+        updatedStudent?.response_source ??
+        (savedResponse === 'pending' ? null : 'admin')
+
+      const savedRespondedAt: string | null =
+        updatedStudent?.responded_at ??
+        (savedResponse === 'pending'
+          ? null
+          : new Date().toISOString())
+
+      // تحديث بيانات الطالب في الواجهة والكاش.
+      setData((current) => {
+        if (!current) return current
+
+        const nextData = {
+          ...current,
+          students: current.students.map((item) =>
+            item.id === student.id
+              ? {
+                  ...item,
+                  payment_amount: savedPayment,
+                  response: savedResponse,
+                  response_note: savedResponseNote,
+                  response_source: savedResponseSource,
+                  responded_at: savedRespondedAt,
+                }
+              : item,
+          ),
+        }
+
+        syncDetailsCache(nextData)
+
+        return nextData
+      })
+
+      // مزامنة قيم الحقول مع القيم المحفوظة.
+      setPaymentInputs((current) => ({
+        ...current,
+        [student.id]:
+          savedPayment > 0 ? String(savedPayment) : '',
+      }))
+
+      setResponseInputs((current) => {
+        const next = { ...current }
+        delete next[student.id]
+        return next
+      })
+
+      setPaymentStatus((current) => ({
+        ...current,
+        [student.id]: 'saved',
+      }))
+
+      setSaveStatus((current) => ({
+        ...current,
+        [student.id]: 'saved',
+      }))
+
+      setSuccess(
+        `تم حفظ المبلغ والرد للطالب ${student.name}.`,
+      )
+    } catch (err) {
+      console.error(
+        'Save participant update error:',
+        err,
+      )
+
+      setPaymentStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
+
+      setSaveStatus((current) => ({
+        ...current,
+        [student.id]: 'error',
+      }))
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر حفظ مبلغ الدفع ورد الطالب.',
+      )
+    } finally {
+      setSavingStudentId(null)
+      setPaymentSavingId(null)
+    }
+  }
+
+  // الحفظ القديم لقسم الطلاب المؤهلين يبقى كما هو.
   async function savePayment(
     student: Student,
     inputValue?: string,
@@ -330,35 +664,7 @@ export function TripDetailsView({
     }
   }
 
-  function handlePaymentChange(
-    student: Student,
-    value: string,
-  ) {
-    setPaymentInputs((current) => ({
-      ...current,
-      [student.id]: value,
-    }))
-
-    setPaymentStatus((current) => {
-      const next = { ...current }
-      delete next[student.id]
-      return next
-    })
-
-    const existingTimer =
-      paymentTimers.current[student.id]
-
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
-
-    paymentTimers.current[student.id] =
-      setTimeout(() => {
-        void savePayment(student, value)
-        delete paymentTimers.current[student.id]
-      }, 800)
-  }
-
+  // الحفظ القديم لقسم الطلاب المؤهلين يبقى كما هو.
   async function saveResponse(
     student: Student,
     responseValue: ResponseStatus,
@@ -575,30 +881,28 @@ export function TripDetailsView({
     }
   }
 
-  
-async function downloadExcel() {
-  if (!data) return
+  async function downloadExcel() {
+    if (!data) return
 
-  try {
-    await exportTripStudents(
-      data.trip.name,
-      data.students,
-    )
+    try {
+      await exportTripStudents(
+        data.trip.name,
+        data.students,
+      )
 
-    setSuccess(
-      'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
-    )
-  } catch (err) {
-    console.error('Export trip students error:', err)
+      setSuccess(
+        'تم تنزيل قائمة طلاب الرحلة بصيغة Excel.',
+      )
+    } catch (err) {
+      console.error('Export trip students error:', err)
 
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
-    )
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'تعذر تنزيل ملف Excel. تأكد من وجود مكتبة xlsx في المشروع.',
+      )
+    }
   }
-}
-
 
   function goBack() {
     window.location.href = '/trips'
@@ -839,6 +1143,7 @@ async function downloadExcel() {
           responseFilter={responseFilter}
           onResponseFilterChange={setResponseFilter}
           paymentInputs={paymentInputs}
+          responseInputs={responseInputs}
           paymentStatus={paymentStatus}
           responseSavingId={responseSavingId}
           canEditParticipantData={canEditParticipantData}
@@ -852,14 +1157,12 @@ async function downloadExcel() {
             }
           }}
           onResponseChange={(student, value) => {
-            const fullStudent = data.students.find(
-              (item) => item.id === student.id,
-            )
-
-            if (fullStudent) {
-              void saveResponse(fullStudent, value)
-            }
+            handleResponseChange(student, value)
           }}
+          onSaveStudent={saveParticipantUpdate}
+          hasUnsavedChanges={hasUnsavedChanges}
+          savingStudentId={savingStudentId}
+          saveStatus={saveStatus}
           formatDateTime={formatDateTime}
           formatPayment={formatPayment}
         />
