@@ -1469,8 +1469,7 @@ function handlePaymentChange(
         )}
       </div>
 
-      
-          {/* Results */}
+            {/* Results */}
       {(trip.status === 'published' ||
         trip.status === 'closed') && (
         <TripResultsSection
@@ -1581,3 +1580,6 @@ function handlePaymentChange(
           formatPayment={formatPayment}
         />
       )}
+    </div>
+  )
+}
