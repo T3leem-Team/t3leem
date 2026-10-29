@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -17,8 +16,6 @@ import type {
   Student,
   Trip,
 } from './trip-types'
-
-type PaymentStatus = 'saving' | 'saved' | 'error'
 
 type Props = {
   trip: Trip
@@ -49,18 +46,17 @@ type Props = {
     studentId: string,
     value: string,
   ) => void
-  paymentStatus: Record<string, PaymentStatus>
 
-  toggleStudent: (studentId: string) => void
-  selectAllVisible: () => void
-  clearVisibleSelection: () => void
-  saveStudents: () => void
-  savePayment: (student: Student) => void
-  saveResponse: (
+  onToggleStudent: (studentId: string) => void
+  onSelectAllVisible: () => void
+  onClearVisibleSelection: () => void
+  onSaveStudents: () => void
+  onSavePayment: (student: Student) => void
+  onSaveResponse: (
     student: Student,
     value: ResponseStatus,
   ) => void
-  publishTrip: () => void
+  onPublishTrip: () => void
 
   getAttendanceClass: (value: number) => string
   getResponseSourceLabel: (source: ResponseSource) => string
@@ -77,11 +73,11 @@ export function EligibleStudentsSection({
   selectedIds,
   selectedCount,
   search,
-  setSearch,
+  onSearchChange,
   levelFilter,
-  setLevelFilter,
+  onLevelFilterChange,
   showEligibleOnly,
-  setShowEligibleOnly,
+  onShowEligibleOnlyChange,
   canEdit,
   canEditParticipantData,
   saving,
@@ -91,14 +87,14 @@ export function EligibleStudentsSection({
   responseSavingId,
   paymentSavingId,
   paymentInputs,
-  setPaymentInputs,
-  toggleStudent,
-  selectAllVisible,
-  clearVisibleSelection,
-  saveStudents,
-  savePayment,
-  saveResponse,
-  publishTrip,
+  onPaymentInputChange,
+  onToggleStudent,
+  onSelectAllVisible,
+  onClearVisibleSelection,
+  onSaveStudents,
+  onSavePayment,
+  onSaveResponse,
+  onPublishTrip,
   getAttendanceClass,
   getResponseSourceLabel,
   getResponseSourceClass,
@@ -141,7 +137,9 @@ export function EligibleStudentsSection({
 
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                onSearchChange(event.target.value)
+              }
               placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
               className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
             />
@@ -149,7 +147,9 @@ export function EligibleStudentsSection({
 
           <select
             value={levelFilter}
-            onChange={(event) => setLevelFilter(event.target.value)}
+            onChange={(event) =>
+              onLevelFilterChange(event.target.value)
+            }
             className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
           >
             <option value="all">كل المستويات</option>
@@ -166,7 +166,7 @@ export function EligibleStudentsSection({
               type="checkbox"
               checked={showEligibleOnly}
               onChange={(event) =>
-                setShowEligibleOnly(event.target.checked)
+                onShowEligibleOnlyChange(event.target.checked)
               }
               className="h-4 w-4"
             />
@@ -177,10 +177,11 @@ export function EligibleStudentsSection({
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={selectAllVisible}
+            onClick={onSelectAllVisible}
             disabled={
               !canEdit ||
-              filteredStudents.filter((student) => student.eligible).length === 0
+              filteredStudents.filter((student) => student.eligible)
+                .length === 0
             }
             className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -190,7 +191,7 @@ export function EligibleStudentsSection({
 
           <button
             type="button"
-            onClick={clearVisibleSelection}
+            onClick={onClearVisibleSelection}
             disabled={!canEdit || filteredStudents.length === 0}
             className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -210,7 +211,9 @@ export function EligibleStudentsSection({
               <th className="px-4 py-3 font-medium">ملاحظات الدورة</th>
               <th className="px-4 py-3 font-medium">الرد</th>
               <th className="px-4 py-3 font-medium">الدفع</th>
-              <th className="px-4 py-3 text-center font-medium">اختيار</th>
+              <th className="px-4 py-3 text-center font-medium">
+                اختيار
+              </th>
             </tr>
           </thead>
 
@@ -258,7 +261,9 @@ export function EligibleStudentsSection({
                         className={`font-semibold ${
                           student.attendance_percentage === null
                             ? 'text-muted-foreground'
-                            : getAttendanceClass(student.attendance_percentage)
+                            : getAttendanceClass(
+                                student.attendance_percentage,
+                              )
                         }`}
                       >
                         {student.attendance_percentage === null
@@ -309,7 +314,7 @@ export function EligibleStudentsSection({
                           responseSavingId === student.id
                         }
                         onChange={(event) =>
-                          saveResponse(
+                          onSaveResponse(
                             student,
                             event.target.value as ResponseStatus,
                           )
@@ -353,10 +358,10 @@ export function EligibleStudentsSection({
                           value={paymentInputs[student.id] ?? ''}
                           disabled={!canEditParticipantData}
                           onChange={(event) =>
-                            setPaymentInputs((current) => ({
-                              ...current,
-                              [student.id]: event.target.value,
-                            }))
+                            onPaymentInputChange(
+                              student.id,
+                              event.target.value,
+                            )
                           }
                           placeholder="0.000"
                           className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
@@ -364,7 +369,7 @@ export function EligibleStudentsSection({
 
                         <button
                           type="button"
-                          onClick={() => savePayment(student)}
+                          onClick={() => onSavePayment(student)}
                           disabled={
                             !canEditParticipantData ||
                             paymentSavingId === student.id
@@ -388,7 +393,7 @@ export function EligibleStudentsSection({
                       {student.eligible ? (
                         <button
                           type="button"
-                          onClick={() => toggleStudent(student.id)}
+                          onClick={() => onToggleStudent(student.id)}
                           disabled={!canEdit}
                           aria-label={
                             isSelected
@@ -435,7 +440,7 @@ export function EligibleStudentsSection({
 
           <button
             type="button"
-            onClick={saveStudents}
+            onClick={onSaveStudents}
             disabled={!canEdit || saving}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -475,7 +480,7 @@ export function EligibleStudentsSection({
 
               <button
                 type="button"
-                onClick={publishTrip}
+                onClick={onPublishTrip}
                 disabled={
                   !canEdit ||
                   settingsLoading ||
