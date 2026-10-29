@@ -2,6 +2,7 @@
 import type {
   ResponseSource,
   ResponseStatus,
+  Student,
 } from './trip-types'
 
 function formatDateTime(value: string | null) {
@@ -47,26 +48,7 @@ function getResponseSourceLabel(source: ResponseSource) {
 
 export async function exportTripStudents(
   tripName: string,
-  students: Array<{
-    id: string
-    selected: boolean
-    name: string
-    personal_id: string | null
-    level: { name: string } | null
-    phone: string | null
-    whatsapp: string | null
-    attendance_percentage: number | null
-    attendance_present: number
-    attendance_absent: number
-    attendance_late: number
-    attendance_excused: number
-    response: ResponseStatus
-    response_source: ResponseSource
-    responded_at: string | null
-    payment_amount: number
-    response_note: string | null
-    course_notes: Array<{ note: string }>
-  }>,
+  students: Student[],
 ) {
   const selectedStudents = students.filter(
     (student) => student.selected,
@@ -85,7 +67,7 @@ export async function exportTripStudents(
     المستوى: student.level?.name ?? '',
     الهاتف: student.phone ?? student.whatsapp ?? '',
     الحضور:
-      student.attendance_percentage !== null
+      student.attendance_percentage != null
         ? `${student.attendance_percentage.toFixed(1)}%`
         : 'لا توجد بيانات',
     حاضر: student.attendance_present,
@@ -116,31 +98,14 @@ export async function exportTripStudents(
   const worksheet = XLSX.utils.json_to_sheet(rows)
   const workbook = XLSX.utils.book_new()
 
-  // اتجاه الورقة من اليمين إلى اليسار
+  // اتجاه ورقة Excel من اليمين إلى اليسار
   worksheet['!views'] = [
     {
       rightToLeft: true,
     },
   ]
 
-  // محاذاة محتوى الخلايا إلى اليمين
-  for (const cellAddress of Object.keys(worksheet)) {
-    if (cellAddress.startsWith('!')) continue
-
-    const cell = worksheet[cellAddress]
-
-    if (cell && typeof cell === 'object') {
-      cell.s = {
-        ...(cell.s ?? {}),
-        alignment: {
-          horizontal: 'right',
-          vertical: 'center',
-          wrapText: true,
-        },
-      }
-    }
-  }
-
+  // ضبط عرض الأعمدة
   worksheet['!cols'] = [
     { wch: 6 },
     { wch: 28 },
