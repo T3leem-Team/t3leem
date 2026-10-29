@@ -1,5 +1,5 @@
 
-"use client"
+'use client'
 
 import {
   BarChart3,
@@ -8,13 +8,13 @@ import {
   Users,
   UserX,
   Wallet,
-} from "lucide-react"
+} from 'lucide-react'
 
-import { TripResultsTable } from "./trip-results-table"
-import type { ResponseStatus, Student } from "./trip-types"
+import { TripResultsTable } from './trip-results-table'
+import type { ResponseStatus, Student } from './trip-types'
 
 type TableStudent = Parameters<
-  React.ComponentProps<typeof TripResultsTable>["onPaymentChange"]
+  React.ComponentProps<typeof TripResultsTable>['onPaymentChange']
 >[0]
 
 type TripResultsSectionProps = {
@@ -35,15 +35,17 @@ type TripResultsSectionProps = {
   search: string
   onSearchChange: (value: string) => void
 
-  responseFilter: "all" | ResponseStatus
+  responseFilter: 'all' | ResponseStatus
   onResponseFilterChange: (
-    value: "all" | ResponseStatus,
+    value: 'all' | ResponseStatus,
   ) => void
 
   paymentInputs: Record<string, string>
+  responseInputs: Record<string, ResponseStatus>
+
   paymentStatus: Record<
     string,
-    "saving" | "saved" | "error"
+    'saving' | 'saved' | 'error'
   >
 
   responseSavingId: string | null
@@ -71,7 +73,7 @@ type TripResultsSectionProps = {
 
   saveStatus: Record<
     string,
-    "saved" | "error"
+    'saved' | 'error'
   >
 
   formatDateTime: (value: string | null) => string
@@ -90,6 +92,7 @@ export function TripResultsSection({
   responseFilter,
   onResponseFilterChange,
   paymentInputs,
+  responseInputs,
   paymentStatus,
   responseSavingId,
   canEditParticipantData,
@@ -118,7 +121,7 @@ export function TripResultsSection({
           onClick={onToggleResults}
           className="rounded-lg border px-4 py-2 text-sm transition hover:bg-muted"
         >
-          {showResults ? "إخفاء النتائج" : "عرض النتائج"}
+          {showResults ? 'إخفاء النتائج' : 'عرض النتائج'}
         </button>
       </div>
 
@@ -188,6 +191,7 @@ export function TripResultsSection({
           responseFilter={responseFilter}
           onResponseFilterChange={onResponseFilterChange}
           paymentInputs={paymentInputs}
+          responseInputs={responseInputs}
           paymentStatus={paymentStatus}
           responseSavingId={responseSavingId}
           canEditParticipantData={canEditParticipantData}
