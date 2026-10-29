@@ -14,7 +14,6 @@ import {
   Search,
   Trash2,
   Users,
-  Wallet,
 } from 'lucide-react'
 
 import { TripsForm } from '@/app/(dashboard)/trips/trips-form'
@@ -67,8 +66,7 @@ const statusLabels: Record<TripStatus, string> = {
 }
 
 const statusClasses: Record<TripStatus, string> = {
-  draft:
-    'bg-muted text-muted-foreground border-border',
+  draft: 'bg-muted text-muted-foreground border-border',
 
   pending_approval:
     'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400',
@@ -119,9 +117,6 @@ export function TripsView() {
   >([])
   const [courses, setCourses] = useState<Course[]>([])
 
-  // إجمالي المبالغ المدفوعة
-  const [totalPaid, setTotalPaid] = useState(0)
-
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -166,16 +161,6 @@ export function TripsView() {
       )
 
       setCourses(data.courses as Course[])
-
-      setTotalPaid(
-        Number(
-          (
-            data as typeof data & {
-              totalPaid?: number
-            }
-          ).totalPaid ?? 0
-        )
-      )
     } catch (error) {
       console.error('Load trips error:', error)
 
@@ -362,7 +347,7 @@ export function TripsView() {
       </div>
 
       {/* الإحصائيات */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* إجمالي الرحلات */}
         <div className="rounded-xl border bg-card p-4 transition hover:shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -435,32 +420,6 @@ export function TripsView() {
 
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-500/10 text-slate-600 dark:text-slate-400">
               <CalendarDays className="size-5" />
-            </div>
-          </div>
-        </div>
-
-        {/* إجمالي المبالغ المدفوعة */}
-        <div className="rounded-xl border border-green-200 bg-green-50/70 p-4 transition hover:shadow-sm dark:border-green-900/60 dark:bg-green-950/25">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm text-green-800/80 dark:text-green-300/80">
-                إجمالي المبالغ المدفوعة
-              </p>
-
-              <p
-                className="mt-1 text-xl font-bold text-green-700 dark:text-green-300"
-                dir="rtl"
-              >
-                {formatFee(totalPaid)}
-              </p>
-
-              <p className="mt-1 text-xs text-green-700/70 dark:text-green-400/70">
-                دينار بحريني
-              </p>
-            </div>
-
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-green-500/15 text-green-700 dark:text-green-400">
-              <Wallet className="size-5" />
             </div>
           </div>
         </div>
