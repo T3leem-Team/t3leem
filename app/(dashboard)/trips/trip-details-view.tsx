@@ -1,6 +1,5 @@
 
 
-
 'use client'
 
 import {
@@ -31,7 +30,6 @@ import {
 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { TripResultsTable } from './trip-results-table'
 
 import {
   loadTripDetailsCache,
@@ -132,6 +130,34 @@ type ApiResponse = {
   students: Student[]
 }
 
+/** الأعمدة القابلة للتخصيص في جدول النتائج فقط */
+type ResultColumn =
+  | 'student'
+  | 'level'
+  | 'phone'
+  | 'response'
+  | 'source'
+  | 'date'
+  | 'payment'
+  | 'note'
+
+const RESULT_COLUMNS: {
+  id: ResultColumn
+  label: string
+  defaultVisible: boolean
+}[] = [
+  { id: 'student', label: 'الطالب', defaultVisible: true },
+  { id: 'level', label: 'المستوى', defaultVisible: true },
+  { id: 'phone', label: 'الهاتف', defaultVisible: true },
+  { id: 'response', label: 'الرد', defaultVisible: true },
+  { id: 'source', label: 'نوع الرد', defaultVisible: true },
+  { id: 'date', label: 'تاريخ الرد', defaultVisible: false },
+  { id: 'payment', label: 'الدفع', defaultVisible: true },
+  { id: 'note', label: 'الملاحظة', defaultVisible: false },
+]
+
+const RESULT_COLUMNS_STORAGE_KEY = 'trip-results-columns'
+
 function formatDate(value: string | null) {
   if (!value) return 'بدون تاريخ'
 
@@ -213,7 +239,6 @@ function getStatusLabel(status: TripStatus) {
       return status
   }
 }
-
 
 function getResponseLabel(response: ResponseStatus) {
   switch (response) {
@@ -331,6 +356,85 @@ export function TripDetailsView({
     useState<
       Record<string, 'saving' | 'saved' | 'error'>
     >({})
+
+  
+  const [showColumnSettings, setShowColumnSettings] =
+    useState(false)
+
+  const [visibleResultColumns, setVisibleResultColumns] =
+    useState<ResultColumn[]>(
+      () =>
+        RESULT_COLUMNS
+          .filter((column) => column.defaultVisible)
+          .map((column) => column.id)
+    )
+
+  const [columnsLoaded, setColumnsLoaded] =
+    useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(
+        `${RESULT_COLUMNS_STORAGE_KEY}:${tripId}`
+      )
+
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved)
+
+        if (Array.isArray(parsed)) {
+          const validColumns = parsed.filter(
+            (column): column is ResultColumn =>
+              RESULT_COLUMNS.some(
+                (item) => item.id === column
+              )
+          )
+
+          setVisibleResultColumns([
+            'student',
+            ...new Set(
+              validColumns.filter(
+                (column) => column !== 'student'
+              )
+            ),
+          ])
+        }
+      }
+    } catch (error) {
+      console.error(
+        'Load result column settings error:',
+        error
+      )
+    } finally {
+      setColumnsLoaded(true)
+    }
+  }, [tripId])
+
+  useEffect(() => {
+    if (!columnsLoaded) return
+
+    try {
+      localStorage.setItem(
+        `${RESULT_COLUMNS_STORAGE_KEY}:${tripId}`,
+        JSON.stringify(visibleResultColumns)
+      )
+    } catch (error) {
+      console.error(
+        'Save result column settings error:',
+        error
+      )
+    }
+  }, [tripId, visibleResultColumns, columnsLoaded])
+
+  function toggleResultColumn(column: ResultColumn) {
+    if (column === 'student') return
+
+    setVisibleResultColumns((current) =>
+      current.includes(column)
+        ? current.filter((item) => item !== column)
+        : [...current, column]
+    )
+  }
+
 
   async function loadPublishSetting() {
     setSettingsLoading(true)
@@ -897,50 +1001,41 @@ async function savePayment(
 }
 
   
-  function handlePaymentChange(
-    student: Student,
-    value: string,
-  ) {
-    setPaymentInputs((current) => ({
-      ...current,
-      [student.id]: value,
-    }))
+function handlePaymentChange(
+  student: Student,
+  value: string,
+) {
+  setPaymentInputs((current) => ({
+    ...current,
+    [student.id]: value,
+  }))
 
-    setPaymentStatus((current) => {
-      const next = { ...current }
-      delete next[student.id]
-      return next
-    })
+  setPaymentStatus((current) => {
+    const next = { ...current }
+    delete next[student.id]
+    return next
+  })
 
-    // حفظ الدفع تلقائيًا للطلاب المؤهلين فقط.
-    // جدول النتائج له آلية حفظ مستقلة.
-    if (data?.trip.status !== 'draft') return
+  const existingTimer =
+    paymentTimers.current[student.id]
 
-    const existingTimer =
-      paymentTimers.current[student.id]
-
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
-
-    paymentTimers.current[student.id] =
-      setTimeout(() => {
-        void savePayment(student, value)
-        delete paymentTimers.current[student.id]
-      }, 800)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
   }
+
+  paymentTimers.current[student.id] =
+    setTimeout(() => {
+      void savePayment(student, value)
+      delete paymentTimers.current[student.id]
+    }, 800)
+}
+
 
   async function saveResponse(
     student: Student,
     responseValue: ResponseStatus,
   ) {
     if (!canEditParticipantData) return
-
-    // في الرحلات المنشورة أو المغلقة،
-    // تعديل الرد يتم حفظه من جدول النتائج.
-    if (data?.trip.status !== 'draft') {
-      return
-    }
 
     setResponseSavingId(student.id)
     setError('')
@@ -954,57 +1049,75 @@ async function savePayment(
         {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
           body: JSON.stringify({
             action: 'response',
             student_id: student.id,
-            response: responseValue,
+            response:
+              responseValue,
           }),
         },
       )
 
-      const result = await response.json()
+      const result =
+        await response.json()
 
       if (!response.ok) {
         throw new Error(
-          result?.error ?? 'تعذر حفظ رد الطالب.',
+          result?.error ??
+            'تعذر حفظ رد الطالب.',
         )
       }
 
-      const updatedStudent = result?.student
+      const updatedStudent =
+        result?.student
 
       setData((current) => {
         if (!current) return current
 
         const nextData = {
           ...current,
-          students: current.students.map((item) => {
-            if (item.id !== student.id) {
-              return item
-            }
+          students:
+            current.students.map(
+              (item) => {
+                if (
+                  item.id !==
+                  student.id
+                ) {
+                  return item
+                }
 
-            return {
-              ...item,
-              response:
-                updatedStudent?.response ?? responseValue,
-              response_note:
-                updatedStudent?.response_note ?? null,
-              response_source:
-                updatedStudent?.response_source ??
-                (responseValue === 'pending'
-                  ? null
-                  : 'admin'),
-              responded_at:
-                updatedStudent?.responded_at ??
-                (responseValue === 'pending'
-                  ? null
-                  : new Date().toISOString()),
-            }
-          }),
+                return {
+                  ...item,
+                  response:
+                    updatedStudent?.response ??
+                    responseValue,
+                  response_note:
+                    updatedStudent?.response_note ??
+                    null,
+                  response_source:
+                    updatedStudent?.response_source ??
+                    (responseValue ===
+                    'pending'
+                      ? null
+                      : 'admin'),
+                  responded_at:
+                    updatedStudent?.responded_at ??
+                    (responseValue ===
+                    'pending'
+                      ? null
+                      : new Date().toISOString()),
+                }
+              },
+            ),
         }
 
-        syncDetailsCache(nextData)
+        syncDetailsCache(
+          nextData,
+        )
+
         return nextData
       })
 
@@ -1012,7 +1125,10 @@ async function savePayment(
         `تم تحديث رد الطالب ${student.name}.`,
       )
     } catch (error) {
-      console.error('Save trip response error:', error)
+      console.error(
+        'Save trip response error:',
+        error,
+      )
 
       setError(
         error instanceof Error
@@ -1021,6 +1137,156 @@ async function savePayment(
       )
     } finally {
       setResponseSavingId(null)
+    }
+  }
+
+  async function publishTrip() {
+    if (!data) return
+
+    if (data.trip.status !== 'draft') {
+      return
+    }
+
+    if (!directPublishAllowed) {
+      setError(
+        'النشر المباشر موقوف من إعدادات النظام.',
+      )
+      return
+    }
+
+    if (selectedCount === 0) {
+      setError(
+        'يجب حفظ طالب واحد على الأقل قبل نشر الرحلة.',
+      )
+      return
+    }
+
+    const confirmed =
+      window.confirm(
+        'هل أنت متأكد من نشر الرحلة؟ بعد النشر ستظهر للطلاب المحددين في صفحة حالة الطالب.',
+      )
+
+    if (!confirmed) return
+
+    setPublishing(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        '/api/trips',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            id: tripId,
+            status: 'published',
+          }),
+        },
+      )
+
+      const result =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر نشر الرحلة.',
+        )
+      }
+
+      setSuccess(
+        'تم نشر الرحلة بنجاح.',
+      )
+
+      await loadData({
+        silent: true,
+        force: true,
+      })
+    } catch (error) {
+      console.error(
+        'Publish trip error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر نشر الرحلة.',
+      )
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function closeTrip() {
+    if (!data) return
+
+    if (data.trip.status !== 'published') {
+      return
+    }
+
+    const confirmed =
+      window.confirm(
+        'هل أنت متأكد من إغلاق الرحلة؟\n\nبعد الإغلاق ستختفي الرحلة من متابعة التسجيل لدى الطلاب، ولن يمكن تعديل قائمة الطلاب أو الردود أو الدفعات.\n\nستبقى الرحلة محفوظة ضمن الرحلات السابقة بكامل تفاصيلها.',
+      )
+
+    if (!confirmed) return
+
+    setClosing(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        '/api/trips',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            id: tripId,
+            status: 'closed',
+          }),
+        },
+      )
+
+      const result =
+        await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ??
+            'تعذر إغلاق الرحلة.',
+        )
+      }
+
+      setSuccess(
+        'تم إغلاق الرحلة بنجاح، وتم نقلها إلى الرحلات السابقة.',
+      )
+
+      await loadData({
+        silent: true,
+        force: true,
+      })
+    } catch (error) {
+      console.error(
+        'Close trip error:',
+        error,
+      )
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إغلاق الرحلة.',
+      )
+    } finally {
+      setClosing(false)
     }
   }
 
@@ -1558,449 +1824,739 @@ async function savePayment(
                 دينار بحريني
               </p>
             </div>
-          </div> 
+          </div>
+
+
+          
          
           {showResults && (
             <div className="border-t">
-              {/* جدول النتائج */}
-              <TripResultsTable
-                tripId={tripId}
-                students={data.students.filter((student) => student.selected)}
-                search={search}
-                onSearchChange={setSearch}
-                responseFilter={responseFilter}
-                onResponseFilterChange={setResponseFilter}
-                paymentInputs={paymentInputs}
-                paymentStatus={paymentStatus}
-                responseSavingId={responseSavingId}
-                canEditParticipantData={canEditParticipantData}
-                onPaymentChange={handlePaymentChange}
-                onResponseChange={saveResponse}
-                formatDateTime={formatDateTime}
-                formatPayment={formatPayment}
-              />
-          
-              {/* Published / Closed notice */}
-              {!canEdit && (
-                <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                  {trip.status === 'published'
-                    ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
-                    : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
-                </div>
-              )}
-          
-              {/* Messages */}
-              {error && (
-                <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-                  <X className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-          
-              {success && (
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{success}</span>
-                </div>
-              )}
-          
-              {/* Students section */}
-              {canEdit && (
-                <div className="overflow-hidden rounded-xl border bg-card">
-                  <div className="border-b p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Users className="h-5 w-5" />
-                          <h2 className="text-lg font-semibold">
-                            الطلاب المؤهلون
-                          </h2>
-                        </div>
-          
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          حدد الطلاب الذين تريد إضافتهم إلى الرحلة.
-                        </p>
-                      </div>
-          
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          المؤهلون: <strong>{eligibleStudents.length}</strong>
-                        </div>
-          
-                        <div className="rounded-lg bg-muted px-3 py-2 text-sm">
-                          المحددون: <strong>{selectedCount}</strong>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-          
-                  <div className="border-b bg-muted/20 p-4">
-                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
-                      <div className="relative">
-                        <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          
-                        <input
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
-                          className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
-                        />
-                      </div>
-          
-                      <select
-                        value={levelFilter}
-                        onChange={(event) => setLevelFilter(event.target.value)}
-                        className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
-                      >
-                        <option value="all">كل المستويات</option>
-          
-                        {levels.map((level) => (
-                          <option key={level.id} value={level.id}>
-                            {level.name}
-                          </option>
+              <div className="border-b bg-muted/20 p-4">
+                {/* تخصيص الأعمدة */}
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowColumnSettings((current) => !current)
+                    }
+                    aria-expanded={showColumnSettings}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-medium transition hover:bg-muted"
+                  >
+                    <Settings2 className="h-4 w-4" />
+                    تخصيص الأعمدة
+                  </button>
+
+                  {showColumnSettings && (
+                    <div className="mt-3 rounded-lg border bg-background p-4">
+                      <p className="mb-1 text-sm font-semibold">
+                        اختر الأعمدة التي تريد إظهارها
+                      </p>
+
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        اختياراتك محفوظة لكل رحلة، وعمود الطالب ثابت.
+                      </p>
+
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {RESULT_COLUMNS.map((column) => (
+                          <label
+                            key={column.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visibleResultColumns.includes(column.id)}
+                              disabled={column.id === 'student'}
+                              onChange={() =>
+                                toggleResultColumn(column.id)
+                              }
+                              className="h-4 w-4"
+                            />
+                            {column.label}
+                          </label>
                         ))}
-                      </select>
-          
-                      <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={showEligibleOnly}
-                          onChange={(event) =>
-                            setShowEligibleOnly(event.target.checked)
-                          }
-                          className="h-4 w-4"
-                        />
-                        عرض المؤهلين فقط
-                      </label>
-                    </div>
-          
-                    <div className="mt-3 flex flex-wrap gap-2">
+                      </div>
+
                       <button
                         type="button"
-                        onClick={selectAllVisible}
-                        disabled={
-                          !canEdit ||
-                          filteredStudents.filter((student) => student.eligible).length === 0
+                        onClick={() =>
+                          setVisibleResultColumns(
+                            RESULT_COLUMNS
+                              .filter((column) => column.defaultVisible)
+                              .map((column) => column.id)
+                          )
                         }
-                        className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-4 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-muted"
                       >
-                        <CheckSquare className="h-4 w-4" />
-                        تحديد الظاهر
-                      </button>
-          
-                      <button
-                        type="button"
-                        onClick={clearVisibleSelection}
-                        disabled={!canEdit || filteredStudents.length === 0}
-                        className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        إلغاء تحديد الظاهر
+                        استعادة الأعمدة الافتراضية
                       </button>
                     </div>
+                  )}
+                </div>
+
+                {/* البحث والتصفية */}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                    <input
+                      value={search}
+                      onChange={(event) =>
+                        setSearch(event.target.value)
+                      }
+                      placeholder="بحث باسم الطالب أو الرقم الشخصي أو الهاتف..."
+                      className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
+                    />
                   </div>
-          
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1150px] text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30 text-right">
-                          <th className="w-12 px-4 py-3">#</th>
-                          <th className="px-4 py-3 font-medium">الطالب</th>
-                          <th className="px-4 py-3 font-medium">المستوى</th>
-                          <th className="px-4 py-3 font-medium">الحضور</th>
-                          <th className="px-4 py-3 font-medium">ملاحظات الدورة</th>
-                          <th className="px-4 py-3 font-medium">الرد</th>
-                          <th className="px-4 py-3 font-medium">الدفع</th>
-                          <th className="px-4 py-3 text-center font-medium">اختيار</th>
-                        </tr>
-                      </thead>
-          
-                      <tbody>
-                        {filteredStudents.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={8}
-                              className="px-4 py-12 text-center text-muted-foreground"
-                            >
-                              لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
+
+                  <select
+                    value={responseFilter}
+                    onChange={(event) =>
+                      setResponseFilter(
+                        event.target.value as typeof responseFilter
+                      )
+                    }
+                    className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
+                  >
+                    <option value="all">جميع الردود</option>
+                    <option value="accepted">الموافقون فقط</option>
+                    <option value="rejected">الرافضون فقط</option>
+                    <option value="pending">الذين لم يردوا</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* جدول النتائج */}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-right">
+                      <th className="w-12 px-4 py-3">#</th>
+
+                      {visibleResultColumns.includes('student') && (
+                        <th className="px-4 py-3 font-medium">الطالب</th>
+                      )}
+
+                      {visibleResultColumns.includes('level') && (
+                        <th className="px-4 py-3 font-medium">المستوى</th>
+                      )}
+
+                      {visibleResultColumns.includes('phone') && (
+                        <th className="px-4 py-3 font-medium">الهاتف</th>
+                      )}
+
+                      {visibleResultColumns.includes('response') && (
+                        <th className="px-4 py-3 font-medium">الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('source') && (
+                        <th className="px-4 py-3 font-medium">نوع الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('date') && (
+                        <th className="px-4 py-3 font-medium">تاريخ الرد</th>
+                      )}
+
+                      {visibleResultColumns.includes('payment') && (
+                        <th className="px-4 py-3 font-medium">الدفع</th>
+                      )}
+
+                      {visibleResultColumns.includes('note') && (
+                        <th className="px-4 py-3 font-medium">الملاحظة</th>
+                      )}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {resultStudents.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={1 + visibleResultColumns.length}
+                          className="px-4 py-12 text-center text-muted-foreground"
+                        >
+                          لا توجد نتائج مطابقة.
+                        </td>
+                      </tr>
+                    ) : (
+                      resultStudents.map((student, index) => (
+                        <tr
+                          key={student.id}
+                          className="border-b last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {index + 1}
+                          </td>
+
+                          {visibleResultColumns.includes('student') && (
+                            <td className="px-4 py-3">
+                              <div className="font-medium">
+                                {student.name}
+                              </div>
+
+                              {student.personal_id && (
+                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                  {student.personal_id}
+                                </div>
+                              )}
                             </td>
-                          </tr>
-                        ) : (
-                          filteredStudents.map((student, index) => {
-                            const isSelected = selectedIds.includes(student.id)
-          
-                            return (
-                              <tr
-                                key={student.id}
-                                className={`border-b last:border-0 ${
-                                  isSelected ? 'bg-primary/5' : 'hover:bg-muted/20'
+                          )}
+
+                          {visibleResultColumns.includes('level') && (
+                            <td className="px-4 py-3">
+                              {student.level?.name || 'غير محدد'}
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('phone') && (
+                            <td className="px-4 py-3">
+                              {student.phone ||
+                                student.whatsapp ||
+                                'غير متوفر'}
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('response') && (
+                            <td className="px-4 py-3">
+                              <select
+                                value={student.response}
+                                disabled={
+                                  !canEditParticipantData ||
+                                  responseSavingId === student.id
+                                }
+                                onChange={(event) =>
+                                  saveResponse(
+                                    student,
+                                    event.target.value as ResponseStatus
+                                  )
+                                }
+                                className={`h-9 rounded-lg border bg-background px-2 text-xs outline-none ${
+                                  student.response === 'accepted'
+                                    ? 'border-emerald-500/30'
+                                    : student.response === 'rejected'
+                                      ? 'border-red-500/30'
+                                      : ''
                                 }`}
                               >
-                                <td className="px-4 py-3 text-muted-foreground">
-                                  {index + 1}
-                                </td>
-          
-                                <td className="px-4 py-3">
-                                  <div className="font-medium">{student.name}</div>
-          
-                                  {student.personal_id && (
-                                    <div className="mt-0.5 text-xs text-muted-foreground">
-                                      {student.personal_id}
-                                    </div>
-                                  )}
-                                </td>
-          
-                                <td className="px-4 py-3">
-                                  {student.level?.name || 'غير محدد'}
-                                </td>
-          
-                                <td className="px-4 py-3">
-                                  <div
-                                    className={`font-semibold ${
-                                      student.attendance_percentage === null
-                                        ? 'text-muted-foreground'
-                                        : getAttendanceClass(student.attendance_percentage)
-                                    }`}
-                                  >
-                                    {student.attendance_percentage === null
-                                      ? 'لا توجد بيانات'
-                                      : `${student.attendance_percentage.toFixed(1)}%`}
-                                  </div>
-          
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    حاضر {student.attendance_present}
-                                    {' · '}غائب {student.attendance_absent}
-                                    {' · '}متأخر {student.attendance_late}
-                                    {' · '}مستأذن {student.attendance_excused}
-                                  </div>
-                                </td>
-          
-                                <td className="max-w-[260px] px-4 py-3">
-                                  {student.course_notes.length > 0 ? (
-                                    <div className="space-y-1">
-                                      {student.course_notes.slice(0, 2).map(
-                                        (note, noteIndex) => (
-                                          <div
-                                            key={`${student.id}-${noteIndex}`}
-                                            className="rounded-md bg-muted/50 px-2 py-1 text-xs"
-                                          >
-                                            {note.note}
-                                          </div>
-                                        )
-                                      )}
-          
-                                      {student.course_notes.length > 2 && (
-                                        <div className="text-xs text-muted-foreground">
-                                          +{student.course_notes.length - 2} ملاحظات أخرى
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">
-                                      لا توجد ملاحظات
+                                <option value="pending">بانتظار الرد</option>
+                                <option value="accepted">موافق</option>
+                                <option value="rejected">رافض</option>
+                              </select>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('source') && (
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs ${getResponseSourceClass(
+                                  student.response_source
+                                )}`}
+                              >
+                                {getResponseSourceLabel(
+                                  student.response_source
+                                )}
+                              </span>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('date') && (
+                            <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                              {formatDateTime(student.responded_at)}
+                            </td>
+                          )}
+
+                          {/* الدفع: حفظ تلقائي دون زر حفظ */}
+                          {visibleResultColumns.includes('payment') && (
+                            <td className="px-4 py-3">
+                              <div className="min-w-[120px]">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={paymentInputs[student.id] ?? ''}
+                                  disabled={!canEditParticipantData}
+                                  onChange={(event) =>
+                                    handlePaymentChange(
+                                      student,
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="0.000"
+                                  className="h-9 w-28 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                                />
+
+                                <div className="mt-1 text-xs">
+                                  {paymentStatus[student.id] === 'saving' && (
+                                    <span className="text-muted-foreground">
+                                      جاري الحفظ...
                                     </span>
                                   )}
-                                </td>
-          
-                                <td className="px-4 py-3">
-                                  <select
-                                    value={student.response}
-                                    disabled={
-                                      !canEditParticipantData ||
-                                      responseSavingId === student.id
-                                    }
-                                    onChange={(event) =>
-                                      saveResponse(
-                                        student,
-                                        event.target.value as ResponseStatus
-                                      )
-                                    }
-                                    className="h-9 rounded-lg border bg-background px-2 text-xs outline-none focus:border-primary"
-                                  >
-                                    <option value="pending">بانتظار الرد</option>
-                                    <option value="accepted">موافق</option>
-                                    <option value="rejected">رافض</option>
-                                  </select>
-          
-                                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                                    <span
-                                      className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
-                                        student.response_source
-                                      )}`}
-                                    >
-                                      {getResponseSourceLabel(student.response_source)}
-                                    </span>
-          
-                                    {student.responded_at && (
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {formatDateTime(student.responded_at)}
-                                      </span>
-                                    )}
-                                  </div>
-          
-                                  {student.response_note && (
-                                    <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
-                                      {student.response_note}
-                                    </div>
-                                  )}
-                                </td>
-          
-                                <td className="px-4 py-3">
-                                  <div className="flex min-w-[150px] items-center gap-2">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.001"
-                                      value={paymentInputs[student.id] ?? ''}
-                                      onChange={(event) =>
-                                        setPaymentInputs((current) => ({
-                                          ...current,
-                                          [student.id]: event.target.value,
-                                        }))
-                                      }
-                                      placeholder="0.000"
-                                      className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
-                                    />
-          
-                                    <button
-                                      type="button"
-                                      onClick={() => savePayment(student)}
-                                      disabled={paymentSavingId === student.id}
-                                      className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                      {paymentSavingId === student.id ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        'حفظ'
-                                      )}
-                                    </button>
-                                  </div>
-          
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    {formatPayment(student.payment_amount)}
-                                  </div>
-                                </td>
-          
-                                <td className="px-4 py-3 text-center">
-                                  {student.eligible ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleStudent(student.id)}
-                                      disabled={!canEdit}
-                                      aria-label={
-                                        isSelected
-                                          ? 'إلغاء اختيار الطالب'
-                                          : 'اختيار الطالب'
-                                      }
-                                      className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
-                                        isSelected
-                                          ? 'border-primary bg-primary text-primary-foreground'
-                                          : 'bg-background hover:bg-muted'
-                                      } ${
-                                        !canEdit ? 'cursor-not-allowed opacity-50' : ''
-                                      }`}
-                                    >
-                                      {isSelected && <Check className="h-4 w-4" />}
-                                    </button>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">
-                                      غير مؤهل
+
+                                  {paymentStatus[student.id] === 'saved' && (
+                                    <span className="text-emerald-600 dark:text-emerald-400">
+                                      تم الحفظ ✓
                                     </span>
                                   )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-          
-                  <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm text-muted-foreground">
-                        تم تحديد{' '}
-                        <strong className="text-foreground">{selectedCount}</strong>{' '}
-                        طالب من أصل{' '}
-                        <strong className="text-foreground">
-                          {eligibleStudents.length}
-                        </strong>{' '}
-                        طالب مؤهل.
-                      </div>
-          
-                      <button
-                        type="button"
-                        onClick={saveStudents}
-                        disabled={!canEdit || saving}
-                        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {saving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            جاري الحفظ...
-                          </>
-                        ) : (
-                          <>
-                            <Check className="h-4 w-4" />
-                            حفظ الطلاب
-                          </>
-                        )}
-                      </button>
-                    </div>
-          
-                    {/* Publish */}
-                    {trip.status === 'draft' && (
-                      <div className="border-t pt-4">
-                        <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Send className="h-4 w-4" />
-                              <p className="font-semibold">نشر الرحلة</p>
-                            </div>
-          
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
-                            </p>
-          
-                            {!settingsLoading && !directPublishAllowed && (
-                              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                                النشر المباشر موقوف من إعدادات النظام.
-                              </p>
-                            )}
-                          </div>
-          
-                          <button
-                            type="button"
-                            onClick={publishTrip}
-                            disabled={
-                              settingsLoading ||
-                              !directPublishAllowed ||
-                              publishing ||
-                              selectedCount === 0
-                            }
-                            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {publishing ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                جاري النشر...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4" />
-                                نشر الرحلة
-                              </>
-                            )}
-                           </button>
-                        </div>
-                      </div>
+
+                                  {paymentStatus[student.id] === 'error' && (
+                                    <span className="text-destructive">
+                                      تعذّر الحفظ
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {formatPayment(student.payment_amount)}
+                                </div>
+                              </div>
+                            </td>
+                          )}
+
+                          {visibleResultColumns.includes('note') && (
+                            <td className="max-w-[280px] px-4 py-3">
+                              {student.response_note ? (
+                                <span className="text-sm text-muted-foreground">
+                                  {student.response_note}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  لا توجد ملاحظة
+                                </span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))
                     )}
-                  </div>
-                </div>
-              )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
+          </div>
+          ) : null}
+
+
+      {/* Published / Closed notice */}
+      {!canEdit && (
+        <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+          {trip.status === 'published'
+            ? 'هذه الرحلة منشورة، لذلك لا يمكن تعديل قائمة الطلاب. يمكنك متابعة النتائج وتعديل الرد والدفع.'
+            : 'هذه الرحلة مغلقة، لذلك لا يمكن تعديل قائمة الطلاب أو الرد أو الدفع. الرحلة محفوظة ضمن الرحلات السابقة.'}
         </div>
-      ) : null}
+      )}
+
+      {/* Messages */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+          <X className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="flex items-start gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
+          <Check className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{success}</span>
+        </div>
+      )}
+
+      {/* Students section */}
+      {canEdit && (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="border-b p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  <h2 className="text-lg font-semibold">
+                    الطلاب المؤهلون
+                  </h2>
+                </div>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  حدد الطلاب الذين تريد إضافتهم إلى الرحلة.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+                  المؤهلون: <strong>{eligibleStudents.length}</strong>
+                </div>
+
+                <div className="rounded-lg bg-muted px-3 py-2 text-sm">
+                  المحددون: <strong>{selectedCount}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b bg-muted/20 p-4">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_220px_auto]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="بحث بالاسم أو الرقم الشخصي أو الهاتف..."
+                  className="h-10 w-full rounded-lg border bg-background px-10 text-sm outline-none transition focus:border-primary"
+                />
+              </div>
+
+              <select
+                value={levelFilter}
+                onChange={(event) => setLevelFilter(event.target.value)}
+                className="h-10 rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary"
+              >
+                <option value="all">كل المستويات</option>
+
+                {levels.map((level) => (
+                  <option key={level.id} value={level.id}>
+                    {level.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex h-10 items-center gap-2 rounded-lg border bg-background px-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={showEligibleOnly}
+                  onChange={(event) =>
+                    setShowEligibleOnly(event.target.checked)
+                  }
+                  className="h-4 w-4"
+                />
+                عرض المؤهلين فقط
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={selectAllVisible}
+                disabled={
+                  !canEdit ||
+                  filteredStudents.filter((student) => student.eligible)
+                    .length === 0
+                }
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <CheckSquare className="h-4 w-4" />
+                تحديد الظاهر
+              </button>
+
+              <button
+                type="button"
+                onClick={clearVisibleSelection}
+                disabled={!canEdit || filteredStudents.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                إلغاء تحديد الظاهر
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1150px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30 text-right">
+                  <th className="w-12 px-4 py-3">#</th>
+                  <th className="px-4 py-3 font-medium">الطالب</th>
+                  <th className="px-4 py-3 font-medium">المستوى</th>
+                  <th className="px-4 py-3 font-medium">الحضور</th>
+                  <th className="px-4 py-3 font-medium">ملاحظات الدورة</th>
+                  <th className="px-4 py-3 font-medium">الرد</th>
+                  <th className="px-4 py-3 font-medium">الدفع</th>
+                  <th className="px-4 py-3 text-center font-medium">اختيار</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-4 py-12 text-center text-muted-foreground"
+                    >
+                      لا يوجد طلاب مطابقون للبحث أو شروط الرحلة.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudents.map((student, index) => {
+                    const isSelected = selectedIds.includes(student.id)
+
+                    return (
+                      <tr
+                        key={student.id}
+                        className={`border-b last:border-0 ${
+                          isSelected ? 'bg-primary/5' : 'hover:bg-muted/20'
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {index + 1}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{student.name}</div>
+
+                          {student.personal_id && (
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {student.personal_id}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {student.level?.name || 'غير محدد'}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div
+                            className={`font-semibold ${
+                              student.attendance_percentage === null
+                                ? 'text-muted-foreground'
+                                : getAttendanceClass(
+                                    student.attendance_percentage
+                                  )
+                            }`}
+                          >
+                            {student.attendance_percentage === null
+                              ? 'لا توجد بيانات'
+                              : `${student.attendance_percentage.toFixed(1)}%`}
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            حاضر {student.attendance_present}
+                            {' · '}غائب {student.attendance_absent}
+                            {' · '}متأخر {student.attendance_late}
+                            {' · '}مستأذن {student.attendance_excused}
+                          </div>
+                        </td>
+
+                        <td className="max-w-[260px] px-4 py-3">
+                          {student.course_notes.length > 0 ? (
+                            <div className="space-y-1">
+                              {student.course_notes.slice(0, 2).map(
+                                (note, noteIndex) => (
+                                  <div
+                                    key={`${student.id}-${noteIndex}`}
+                                    className="rounded-md bg-muted/50 px-2 py-1 text-xs"
+                                  >
+                                    {note.note}
+                                  </div>
+                                )
+                              )}
+
+                              {student.course_notes.length > 2 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +{student.course_notes.length - 2} ملاحظات أخرى
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              لا توجد ملاحظات
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <select
+                            value={student.response}
+                            disabled={
+                              !canEditParticipantData ||
+                              responseSavingId === student.id
+                            }
+                            onChange={(event) =>
+                              saveResponse(
+                                student,
+                                event.target.value as ResponseStatus
+                              )
+                            }
+                            className="h-9 rounded-lg border bg-background px-2 text-xs outline-none focus:border-primary"
+                          >
+                            <option value="pending">بانتظار الرد</option>
+                            <option value="accepted">موافق</option>
+                            <option value="rejected">رافض</option>
+                          </select>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] ${getResponseSourceClass(
+                                student.response_source
+                              )}`}
+                            >
+                              {getResponseSourceLabel(student.response_source)}
+                            </span>
+
+                            {student.responded_at && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatDateTime(student.responded_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {student.response_note && (
+                            <div className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">
+                              {student.response_note}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-[150px] items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              value={paymentInputs[student.id] ?? ''}
+                              onChange={(event) =>
+                                setPaymentInputs((current) => ({
+                                  ...current,
+                                  [student.id]: event.target.value,
+                                }))
+                              }
+                              placeholder="0.000"
+                              className="h-9 w-24 rounded-lg border bg-background px-2 text-left text-xs outline-none focus:border-primary"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={() => savePayment(student)}
+                              disabled={paymentSavingId === student.id}
+                              className="inline-flex h-9 items-center justify-center rounded-lg border px-2 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {paymentSavingId === student.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'حفظ'
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {formatPayment(student.payment_amount)}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-center">
+                          {student.eligible ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleStudent(student.id)}
+                              disabled={!canEdit}
+                              aria-label={
+                                isSelected
+                                  ? 'إلغاء اختيار الطالب'
+                                  : 'اختيار الطالب'
+                              }
+                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md border transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'bg-background hover:bg-muted'
+                              } ${
+                                !canEdit
+                                  ? 'cursor-not-allowed opacity-50'
+                                  : ''
+                              }`}
+                            >
+                              {isSelected && <Check className="h-4 w-4" />}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              غير مؤهل
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t bg-muted/20 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                تم تحديد{' '}
+                <strong className="text-foreground">{selectedCount}</strong>{' '}
+                طالب من أصل{' '}
+                <strong className="text-foreground">
+                  {eligibleStudents.length}
+                </strong>{' '}
+                طالب مؤهل.
+              </div>
+
+              <button
+                type="button"
+                onClick={saveStudents}
+                disabled={!canEdit || saving}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    حفظ الطلاب
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Publish */}
+            {trip.status === 'draft' && (
+              <div className="border-t pt-4">
+                <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4 w-4" />
+                      <p className="font-semibold">نشر الرحلة</p>
+                    </div>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      بعد النشر ستظهر الرحلة للطلاب المحددين في صفحة حالة الطالب.
+                    </p>
+
+                    {!settingsLoading && !directPublishAllowed && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        النشر المباشر موقوف من إعدادات النظام.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={publishTrip}
+                    disabled={
+                      settingsLoading ||
+                      !directPublishAllowed ||
+                      publishing ||
+                      selectedCount === 0
+                    }
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {publishing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        جاري النشر...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        نشر الرحلة
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
