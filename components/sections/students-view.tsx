@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 import { supabase } from '@/lib/supabase'
 
@@ -726,7 +726,7 @@ export function StudentsView() {
   /*
    * تصدير بيانات الطلاب إلى Excel
    */
-  const exportStudentsToExcel = () => {
+  const exportStudentsToExcel = async () => {
     if (filteredStudents.length === 0) {
       setSupabaseStatus(
         'لا توجد بيانات لتصديرها إلى Excel'
@@ -787,20 +787,42 @@ export function StudentsView() {
       }
     )
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData)
-    const workbook = XLSX.utils.book_new()
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'T3leem'
+    workbook.created = new Date()
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      'الطلاب'
-    )
+    const worksheet = workbook.addWorksheet('الطلاب', {
+      views: [{ rightToLeft: true, showGridLines: true }],
+    })
 
-    worksheet['!cols'] = Object.keys(
-      exportData[0] ?? {}
-    ).map((_, index) => ({
-      wch: index === 0 ? 6 : 24,
+    const headers = Object.keys(exportData[0] ?? {})
+
+    worksheet.columns = headers.map((header, index) => ({
+      header,
+      key: header,
+      width: index === 0 ? 6 : 24,
     }))
+
+    worksheet.addRows(exportData)
+
+    const headerRow = worksheet.getRow(1)
+    headerRow.font = { bold: true }
+    headerRow.alignment = {
+      horizontal: 'right',
+      vertical: 'middle',
+      wrapText: true,
+    }
+    headerRow.height = 28
+
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.alignment = {
+          horizontal: 'right',
+          vertical: 'middle',
+          wrapText: true,
+        }
+      })
+    })
 
     const safeYearName = currentAcademicYearName
       .replace(/[\\/:*?"<>|]/g, '-')
@@ -810,7 +832,19 @@ export function StudentsView() {
       ? `الطلاب-${safeYearName}.xlsx`
       : 'الطلاب.xlsx'
 
-    XLSX.writeFile(workbook, fileName)
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
 
     setSupabaseStatus(
       `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
