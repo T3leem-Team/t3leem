@@ -650,6 +650,7 @@ export default function AttendanceAwardsResults({
   setTimeout(() => {
     URL.revokeObjectURL(url)
   }, 1000)
+ }
 
   const exportCurrentToExcel = async () => {
   if (sortedResults.length === 0) {
