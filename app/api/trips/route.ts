@@ -102,143 +102,118 @@ export async function GET() {
     await createSupabaseServerClient()
 
   const [
-    tripsResult,
-    academicYearsResult,
-    coursesResult,
-    levelsResult,
-    paymentsResult,
-  ] = await Promise.all([
-    supabase
-      .from('trips')
-      .select(tripSelect)
-      .order('created_at', {
-        ascending: false,
-      }),
+  tripsResult,
+  academicYearsResult,
+  coursesResult,
+  levelsResult,
+] = await Promise.all([
+  supabase
+    .from('trips')
+    .select(tripSelect)
+    .order('created_at', {
+      ascending: false,
+    }),
 
-    supabase
-      .from('academic_years')
-      .select(`
-        id,
-        name,
-        start_date,
-        end_date,
-        is_current,
-        is_active,
-        annual_fee
-      `)
-      .eq('is_active', true)
-      .order('is_current', {
-        ascending: false,
-      })
-      .order('start_date', {
-        ascending: false,
-      }),
+  supabase
+    .from('academic_years')
+    .select(`
+      id,
+      name,
+      start_date,
+      end_date,
+      is_current,
+      is_active,
+      annual_fee
+    `)
+    .eq('is_active', true)
+    .order('is_current', {
+      ascending: false,
+    })
+    .order('start_date', {
+      ascending: false,
+    }),
 
-    supabase
-      .from('courses')
-      .select(`
-        id,
-        name,
-        academic_year_id,
-        start_date,
-        end_date,
-        days
-      `)
-      .order('name', {
-        ascending: true,
-      }),
+  supabase
+    .from('courses')
+    .select(`
+      id,
+      name,
+      academic_year_id,
+      start_date,
+      end_date,
+      days
+    `)
+    .order('name', {
+      ascending: true,
+    }),
 
-    supabase
-      .from('levels')
-      .select(`
-        id,
-        name,
-        sort_order,
-        is_active,
-        registration_enabled
-      `)
-      .eq('is_active', true)
-      .order('sort_order', {
-        ascending: true,
-      }),
+  supabase
+    .from('levels')
+    .select(`
+      id,
+      name,
+      sort_order,
+      is_active,
+      registration_enabled
+    `)
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+    }),
+])
 
-    supabase
-      .from('trip_students')
-      .select('payment_amount'),
-  ])
-
-  if (tripsResult.error) {
-    console.error(
-      'GET /api/trips - trips error:',
-      tripsResult.error,
-    )
-
-    return jsonError(
-      'تعذر تحميل الرحلات',
-      500,
-      tripsResult.error.message,
-    )
-  }
-
-  if (academicYearsResult.error) {
-    console.error(
-      'GET /api/trips - academic years error:',
-      academicYearsResult.error,
-    )
-
-    return jsonError(
-      'تعذر تحميل السنوات الدراسية',
-      500,
-      academicYearsResult.error.message,
-    )
-  }
-
-  if (coursesResult.error) {
-    console.error(
-      'GET /api/trips - courses error:',
-      coursesResult.error,
-    )
-
-    return jsonError(
-      'تعذر تحميل الدورات',
-      500,
-      coursesResult.error.message,
-    )
-  }
-
-  if (levelsResult.error) {
-    console.error(
-      'GET /api/trips - levels error:',
-      levelsResult.error,
-    )
-
-    return jsonError(
-      'تعذر تحميل المستويات',
-      500,
-      levelsResult.error.message,
-    )
-  }
-
-  if (paymentsResult.error) {
-    console.error(
-      'GET /api/trips - payments error:',
-      paymentsResult.error,
-    )
-
-    return jsonError(
-      'تعذر تحميل مبالغ المدفوعات',
-      500,
-      paymentsResult.error.message,
-    )
-  }
-
-  const totalPaid = (
-    paymentsResult.data ?? []
-  ).reduce(
-    (sum, payment) =>
-      sum + Number(payment.payment_amount ?? 0),
-    0,
+if (tripsResult.error) {
+  console.error(
+    'GET /api/trips - trips error:',
+    tripsResult.error,
   )
+
+  return jsonError(
+    'تعذر تحميل الرحلات',
+    500,
+    tripsResult.error.message,
+  )
+}
+
+if (academicYearsResult.error) {
+  console.error(
+    'GET /api/trips - academic years error:',
+    academicYearsResult.error,
+  )
+
+  return jsonError(
+    'تعذر تحميل السنوات الدراسية',
+    500,
+    academicYearsResult.error.message,
+  )
+}
+
+if (coursesResult.error) {
+  console.error(
+    'GET /api/trips - courses error:',
+    coursesResult.error,
+  )
+
+  return jsonError(
+    'تعذر تحميل الدورات',
+    500,
+    coursesResult.error.message,
+  )
+}
+
+if (levelsResult.error) {
+  console.error(
+    'GET /api/trips - levels error:',
+    levelsResult.error,
+  )
+
+  return jsonError(
+    'تعذر تحميل المستويات',
+    500,
+    levelsResult.error.message,
+  )
+}
+ 
 
   const trips =
     tripsResult.data ?? []
@@ -283,16 +258,16 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    trips,
-    academicYears:
-      academicYearsResult.data ?? [],
-    courses:
-      coursesResult.data ?? [],
-    levels:
-      levelsResult.data ?? [],
-    tripLevels,
-    totalPaid,
-  })
+  trips,
+  academicYears:
+    academicYearsResult.data ?? [],
+  courses:
+    coursesResult.data ?? [],
+  levels:
+    levelsResult.data ?? [],
+  tripLevels,
+})
+  
 }
 
 /*
