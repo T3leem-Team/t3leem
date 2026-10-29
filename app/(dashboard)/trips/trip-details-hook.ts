@@ -378,6 +378,7 @@ export function useTripDetails(tripId: string) {
     loading,
     refreshing,
     saving,
+    setSaving, 
     publishing,
     setPublishing,
     closing,
