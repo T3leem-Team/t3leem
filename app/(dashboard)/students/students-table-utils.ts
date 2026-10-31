@@ -1,4 +1,3 @@
-
 export function formatDate(value: string | null) {
   if (!value) return '-'
 
@@ -55,16 +54,7 @@ export function getPaymentStatusLabel(status: string) {
 }
 
 export function normalizePaymentStatus(status: string) {
-  const label = getPaymentStatusLabel(status)
-
-  if (
-    label === 'مدفوع جزئيًا' ||
-    label === 'مدفوع جزئياً'
-  ) {
-    return 'مدفوع جزئيًا'
-  }
-
-  return label
+  return getPaymentStatusLabel(status)
 }
 
 export function normalizeAttendanceStatus(
