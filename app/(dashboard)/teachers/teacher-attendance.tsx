@@ -9,7 +9,17 @@ import {
   type SetStateAction,
 } from 'react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadCourseCancellationRecords,
+  loadDateCancellationRecords,
+  findStudentAttendanceRecord,
+  createAttendanceRecord,
+  updateAttendanceRecord,
+  loadAttendanceForCourseDate,
+  verifyAttendanceForCourseDate,
+  deleteAttendanceRecord,
+  updateAttendanceNote,
+} from '@/lib/features/teachers/repositories/teacher-attendance.repository'
 
 import {
   TeacherAttendanceView,
@@ -180,19 +190,9 @@ export function AttendanceView(
         const {
           data,
           error,
-        } = await supabase
-          .from('supervision_records')
-          .select(
-            'record_date, type, teacher_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse.id,
-          )
-          .in('type', [
-            'day_cancelled',
-            'lesson_cancelled',
-          ])
+        } = await loadCourseCancellationRecords(
+          currentCourse.id,
+        )
 
         if (cancelled) {
           return
@@ -258,23 +258,10 @@ export function AttendanceView(
         const {
           data,
           error,
-        } = await supabase
-          .from('supervision_records')
-          .select(
-            'id, type, teacher_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse.id,
-          )
-          .eq(
-            'record_date',
-            activeDate,
-          )
-          .in('type', [
-            'day_cancelled',
-            'lesson_cancelled',
-          ])
+        } = await loadDateCancellationRecords(
+          currentCourse.id,
+          activeDate,
+        )
 
         if (cancelled) {
           return
@@ -363,240 +350,118 @@ export function AttendanceView(
     isCancelled,
   ])
 
-  
-const isAttendanceAvailable =
-  dateState === 'valid' &&
-  !isCheckingCancellation
+  const isAttendanceAvailable =
+    dateState === 'valid' &&
+    !isCheckingCancellation
 
-const getRecordForStudent = (
-  studentId: string,
-  date: string,
-) => {
-  if (!currentCourse) {
-    return undefined
-  }
-
-  console.log('[Attendance Debug]', {
-    studentId,
-    currentCourseId: currentCourse.id,
-    date,
-    matchingRecords: attendanceRecords
-      .filter(
-        (record) =>
-          record.studentId === studentId &&
-          record.courseId === currentCourse.id &&
-          record.attendanceDate === date,
-      )
-      .map((record) => ({
-        studentId: record.studentId,
-        courseId: record.courseId,
-        attendanceDate: record.attendanceDate,
-        statusId: record.statusId,
-      })),
-  })
-
-  return attendanceRecords.find(
-    (record) =>
-      record.studentId === studentId &&
-      record.courseId === currentCourse.id &&
-      record.attendanceDate === date,
-  )
-}
-
-
-const getStudentStatus = (
-  studentId: string,
-  date: string,
-): AttendanceStatusName | null => {
-  const key = `${date}:${studentId}`
-
-  const student = assignedStudents.find(
-    (item) => item.id === studentId,
-  )
-
-  const record = getRecordForStudent(
-    studentId,
-    date,
-  )
-
-  const statusFromDatabase = getStatusName(
-    attendanceStatuses,
-    record?.statusId,
-  )
-
-  const localStatus = localStatuses[key]
-
-  const beforeJoinDate =
-    !!student?.joinDate &&
-    date < student.joinDate
-
-  const finalStatus = beforeJoinDate
-    ? 'غير منضم'
-    : localStatus || statusFromDatabase
-
-  console.log('[Attendance Status Debug]', {
-    studentId,
-    date,
-    joinDate: student?.joinDate,
-    beforeJoinDate,
-    statusId: record?.statusId,
-    availableStatuses: attendanceStatuses.map(
-      (status) => ({
-        id: status.id,
-        name: status.name,
-      }),
-    ),
-    statusFromDatabase,
-    localStatus,
-    finalStatus,
-  })
-
-  return finalStatus
-}
-
-const isStudentEligibleForAttendance = (
-  student: Student,
-  date: string,
-) => {
-  if (!student.joinDate) {
-    return true
-  }
-
-  return date >= student.joinDate
-}
-
-const attendanceSummary = useMemo(() => {
-  let recorded = 0
-  let total = 0
-
-  for (const student of assignedStudents) {
-    if (
-      !isStudentEligibleForAttendance(
-        student,
-        activeDate,
-      )
-    ) {
-      continue
+  const getRecordForStudent = (
+    studentId: string,
+    date: string,
+  ) => {
+    if (!currentCourse) {
+      return undefined
     }
 
-    const status = getStudentStatus(
-      student.id,
-      activeDate,
+    console.log('[Attendance Debug]', {
+      studentId,
+      currentCourseId: currentCourse.id,
+      date,
+      matchingRecords: attendanceRecords
+        .filter(
+          (record) =>
+            record.studentId === studentId &&
+            record.courseId === currentCourse.id &&
+            record.attendanceDate === date,
+        )
+        .map((record) => ({
+          studentId: record.studentId,
+          courseId: record.courseId,
+          attendanceDate: record.attendanceDate,
+          statusId: record.statusId,
+        })),
+    })
+
+    return attendanceRecords.find(
+      (record) =>
+        record.studentId === studentId &&
+        record.courseId === currentCourse.id &&
+        record.attendanceDate === date,
+    )
+  }
+
+  const getStudentStatus = (
+    studentId: string,
+    date: string,
+  ): AttendanceStatusName | null => {
+    const key = `${date}:${studentId}`
+
+    const student = assignedStudents.find(
+      (item) => item.id === studentId,
     )
 
-    if (status === 'غير منضم') {
-      continue
-    }
+    const record = getRecordForStudent(
+      studentId,
+      date,
+    )
 
-    total += 1
-
-    if (status) {
-      recorded += 1
-    }
-  }
-
-  const unrecorded = Math.max(
-    total - recorded,
-    0,
-  )
-
-  return {
-    total,
-    recorded,
-    unrecorded,
-    allRecorded:
-      total > 0 && unrecorded === 0,
-  }
-}, [
-  assignedStudents,
-  activeDate,
-  attendanceRecords,
-  attendanceStatuses,
-  localStatuses,
-])
-
-const attendancePercentages = useMemo(() => {
-  if (!currentCourse) {
-    return {}
-  }
-
-  const result: Record<string, number> = {}
-
-  for (const student of assignedStudents) {
-    result[student.id] = getAttendancePercentage(
-      student.id,
-      currentCourse.id,
-      attendanceRecords,
+    const statusFromDatabase = getStatusName(
       attendanceStatuses,
-      cancelledDates,
+      record?.statusId,
     )
+
+    const localStatus = localStatuses[key]
+
+    const beforeJoinDate =
+      !!student?.joinDate &&
+      date < student.joinDate
+
+    const finalStatus = beforeJoinDate
+      ? 'غير منضم'
+      : localStatus || statusFromDatabase
+
+    console.log('[Attendance Status Debug]', {
+      studentId,
+      date,
+      joinDate: student?.joinDate,
+      beforeJoinDate,
+      statusId: record?.statusId,
+      availableStatuses: attendanceStatuses.map(
+        (status) => ({
+          id: status.id,
+          name: status.name,
+        }),
+      ),
+      statusFromDatabase,
+      localStatus,
+      finalStatus,
+    })
+
+    return finalStatus
   }
 
-  return result
-}, [
-  assignedStudents,
-  attendanceRecords,
-  attendanceStatuses,
-  currentCourse,
-  cancelledDates,
-])
-
-const filteredStudents = assignedStudents.filter(
-  (student) => {
-    if (!searchTerm.trim()) {
+  const isStudentEligibleForAttendance = (
+    student: Student,
+    date: string,
+  ) => {
+    if (!student.joinDate) {
       return true
     }
 
-    const search = searchTerm.trim().toLowerCase()
+    return date >= student.joinDate
+  }
 
-    return (
-      student.name.toLowerCase().includes(search) ||
-      student.studentId.toLowerCase().includes(search) ||
-      student.personalId.toLowerCase().includes(search)
-    )
-  },
-)
+  const attendanceSummary = useMemo(() => {
+    let recorded = 0
+    let total = 0
 
-const displayedStudents = showUnrecordedOnly
-  ? filteredStudents.filter(
-      (student) =>
-        isStudentEligibleForAttendance(
+    for (const student of assignedStudents) {
+      if (
+        !isStudentEligibleForAttendance(
           student,
           activeDate,
-        ) &&
-        !getStudentStatus(
-          student.id,
-          activeDate,
-        ),
-    )
-  : filteredStudents
-
-const moveToNextStudent = (
-  currentStudentId: string,
-  savedStudentName: string,
-  savedStatus: TeacherAttendanceStatus,
-) => {
-  const currentIndex = displayedStudents.findIndex(
-    (student) => student.id === currentStudentId,
-  )
-
-  const nextStudent =
-    currentIndex >= 0
-      ? displayedStudents[currentIndex + 1]
-      : undefined
-
-  const eligibleStudents = assignedStudents.filter(
-    (student) =>
-      isStudentEligibleForAttendance(
-        student,
-        activeDate,
-      ),
-  )
-
-  const allStudentsRecorded = eligibleStudents.every(
-    (student) => {
-      if (student.id === currentStudentId) {
-        return true
+        )
+      ) {
+        continue
       }
 
       const status = getStudentStatus(
@@ -604,42 +469,162 @@ const moveToNextStudent = (
         activeDate,
       )
 
-      return !!status && status !== 'غير منضم'
-    },
-  )
+      if (status === 'غير منضم') {
+        continue
+      }
 
-  if (!nextStudent) {
-    if (allStudentsRecorded) {
-      setStatusMessage(
-        `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
-      )
-    } else {
-      setStatusMessage(
-        `✓ تم تسجيل ${savedStatus} للطالب ${savedStudentName}`,
+      total += 1
+
+      if (status) {
+        recorded += 1
+      }
+    }
+
+    const unrecorded = Math.max(
+      total - recorded,
+      0,
+    )
+
+    return {
+      total,
+      recorded,
+      unrecorded,
+      allRecorded:
+        total > 0 && unrecorded === 0,
+    }
+  }, [
+    assignedStudents,
+    activeDate,
+    attendanceRecords,
+    attendanceStatuses,
+    localStatuses,
+  ])
+
+  const attendancePercentages = useMemo(() => {
+    if (!currentCourse) {
+      return {}
+    }
+
+    const result: Record<string, number> = {}
+
+    for (const student of assignedStudents) {
+      result[student.id] = getAttendancePercentage(
+        student.id,
+        currentCourse.id,
+        attendanceRecords,
+        attendanceStatuses,
+        cancelledDates,
       )
     }
 
-    return
-  }
+    return result
+  }, [
+    assignedStudents,
+    attendanceRecords,
+    attendanceStatuses,
+    currentCourse,
+    cancelledDates,
+  ])
 
-  setStatusMessage(
-    `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
+  const filteredStudents = assignedStudents.filter(
+    (student) => {
+      if (!searchTerm.trim()) {
+        return true
+      }
+
+      const search = searchTerm.trim().toLowerCase()
+
+      return (
+        student.name.toLowerCase().includes(search) ||
+        student.studentId.toLowerCase().includes(search) ||
+        student.personalId.toLowerCase().includes(search)
+      )
+    },
   )
 
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      const element =
-        studentCardRefs.current[nextStudent.id]
+  const displayedStudents = showUnrecordedOnly
+    ? filteredStudents.filter(
+        (student) =>
+          isStudentEligibleForAttendance(
+            student,
+            activeDate,
+          ) &&
+          !getStudentStatus(
+            student.id,
+            activeDate,
+          ),
+      )
+    : filteredStudents
 
-      if (element) {
-        element.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        })
+  const moveToNextStudent = (
+    currentStudentId: string,
+    savedStudentName: string,
+    savedStatus: TeacherAttendanceStatus,
+  ) => {
+    const currentIndex = displayedStudents.findIndex(
+      (student) => student.id === currentStudentId,
+    )
+
+    const nextStudent =
+      currentIndex >= 0
+        ? displayedStudents[currentIndex + 1]
+        : undefined
+
+    const eligibleStudents = assignedStudents.filter(
+      (student) =>
+        isStudentEligibleForAttendance(
+          student,
+          activeDate,
+        ),
+    )
+
+    const allStudentsRecorded = eligibleStudents.every(
+      (student) => {
+        if (student.id === currentStudentId) {
+          return true
+        }
+
+        const status = getStudentStatus(
+          student.id,
+          activeDate,
+        )
+
+        return !!status && status !== 'غير منضم'
+      },
+    )
+
+    if (!nextStudent) {
+      if (allStudentsRecorded) {
+        setStatusMessage(
+          `✓ اكتمل تسجيل الحضور — ${eligibleStudents.length} من ${eligibleStudents.length} طالب`,
+        )
+      } else {
+        setStatusMessage(
+          `✓ تم تسجيل ${savedStatus} للطالب ${savedStudentName}`,
+        )
       }
+
+      return
+    }
+
+    setStatusMessage(
+      `✓ تم تسجيل ${savedStatus} — التالي: ${nextStudent.name}`,
+    )
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const element =
+          studentCardRefs.current[nextStudent.id]
+
+        if (element) {
+          element.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        }
+      })
     })
-  })
-}
+  }
 
   const checkCancellationBeforeSave =
     async (
@@ -652,23 +637,10 @@ const moveToNextStudent = (
       const {
         data,
         error,
-      } = await supabase
-        .from('supervision_records')
-        .select(
-          'id, type, teacher_id',
-        )
-        .eq(
-          'course_id',
-          currentCourse.id,
-        )
-        .eq(
-          'record_date',
-          date,
-        )
-        .in('type', [
-          'day_cancelled',
-          'lesson_cancelled',
-        ])
+      } = await loadDateCancellationRecords(
+        currentCourse.id,
+        date,
+      )
 
       if (error) {
         throw error
@@ -687,152 +659,141 @@ const moveToNextStudent = (
       )
     }
 
-
-const saveAttendance = async (
-  student: Student,
-  date: string,
-  statusName: TeacherAttendanceStatus,
-) => {
-  if (!currentCourse) {
-    return
-  }
-
-  if (
-    isCancelled ||
-    !isAttendanceAvailable ||
-    date !== activeDate
-  ) {
-    setStatusMessage(
-      isCancelled
-        ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
-        : 'لا يمكن تسجيل الحضور في هذا اليوم.',
-    )
-    return
-  }
-
-  if (!isStudentEligibleForAttendance(student, date)) {
-    setStatusMessage(
-      'هذا الطالب لم يكن منضمًا في تاريخ الحضور المحدد.',
-    )
-    return
-  }
-
-  const statusId = getStatusIdByName(
-    attendanceStatuses,
-    statusName,
-  )
-
-  if (!statusId) {
-    setStatusMessage(
-      `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
-    )
-    return
-  }
-
-  const key = `${date}:${student.id}`
-
-  if (savingKey === key || isBulkSaving) {
-    return
-  }
-
-  const existing = getRecordForStudent(
-    student.id,
-    date,
-  )
-
-  const existingStatus = existing
-    ? getStatusName(
-        attendanceStatuses,
-        existing.statusId,
-      )
-    : null
-
-  if (existingStatus === 'غير منضم') {
-    setStatusMessage(
-      'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
-    )
-    return
-  }
-
-  const previousRecords = attendanceRecords
-  const previousLocalStatus = localStatuses[key]
-
-  setSavingKey(key)
-  setEditingStatusKey(null)
-
-  try {
-    const isCancelledNow =
-      await checkCancellationBeforeSave(date)
-
-    if (isCancelledNow) {
-      throw new Error(
-        'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
-      )
-    }
-
-    // التحقق من السجل مباشرة من قاعدة البيانات،
-    // لأن السجل قد لا يكون موجودًا في الذاكرة المحلية.
-    const {
-      data: databaseRecord,
-      error: lookupError,
-    } = await supabase
-      .from('attendance')
-      .select(
-        'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-      )
-      .eq('student_id', student.id)
-      .eq('attendance_date', date)
-      .eq('course_id', currentCourse.id)
-      .maybeSingle()
-
-    if (lookupError) {
-      throw lookupError
+  const saveAttendance = async (
+    student: Student,
+    date: string,
+    statusName: TeacherAttendanceStatus,
+  ) => {
+    if (!currentCourse) {
+      return
     }
 
     if (
-      databaseRecord &&
-      getStatusName(
-        attendanceStatuses,
-        databaseRecord.status_id,
-      ) === 'غير منضم'
+      isCancelled ||
+      !isAttendanceAvailable ||
+      date !== activeDate
     ) {
-      throw new Error(
-        'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
+      setStatusMessage(
+        isCancelled
+          ? 'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.'
+          : 'لا يمكن تسجيل الحضور في هذا اليوم.',
       )
+      return
     }
 
-    const noteValue =
-      attendanceNotes[key] ??
-      databaseRecord?.note ??
-      existing?.note ??
-      null
+    if (!isStudentEligibleForAttendance(student, date)) {
+      setStatusMessage(
+        'هذا الطالب لم يكن منضمًا في تاريخ الحضور المحدد.',
+      )
+      return
+    }
 
-    let savedData
-    let saveError
+    const statusId = getStatusIdByName(
+      attendanceStatuses,
+      statusName,
+    )
 
-    if (databaseRecord) {
-      // السجل موجود: تحديثه بدل إنشاء سجل مكرر.
-      const result = await supabase
-        .from('attendance')
-        .update({
-          status_id: statusId,
-          enrollment_id:
-            student.enrollmentId || null,
-          note: noteValue,
-        })
-        .eq('id', databaseRecord.id)
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+    if (!statusId) {
+      setStatusMessage(
+        `لم يتم العثور على حالة "${statusName}" في قاعدة البيانات.`,
+      )
+      return
+    }
+
+    const key = `${date}:${student.id}`
+
+    if (savingKey === key || isBulkSaving) {
+      return
+    }
+
+    const existing = getRecordForStudent(
+      student.id,
+      date,
+    )
+
+    const existingStatus = existing
+      ? getStatusName(
+          attendanceStatuses,
+          existing.statusId,
         )
-        .single()
+      : null
 
-      savedData = result.data
-      saveError = result.error
-    } else {
-      // لا يوجد سجل: إنشاء سجل جديد.
-      const result = await supabase
-        .from('attendance')
-        .insert({
+    if (existingStatus === 'غير منضم') {
+      setStatusMessage(
+        'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
+      )
+      return
+    }
+
+    const previousRecords = attendanceRecords
+    const previousLocalStatus = localStatuses[key]
+
+    setSavingKey(key)
+    setEditingStatusKey(null)
+
+    try {
+      const isCancelledNow =
+        await checkCancellationBeforeSave(date)
+
+      if (isCancelledNow) {
+        throw new Error(
+          'هذا اليوم أو الدرس ملغي ولا يمكن تسجيل الحضور فيه.',
+        )
+      }
+
+      // التحقق من السجل مباشرة من قاعدة البيانات،
+      // لأن السجل قد لا يكون موجودًا في الذاكرة المحلية.
+      const {
+        data: databaseRecord,
+        error: lookupError,
+      } = await findStudentAttendanceRecord(
+        student.id,
+        date,
+        currentCourse.id,
+      )
+
+      if (lookupError) {
+        throw lookupError
+      }
+
+      if (
+        databaseRecord &&
+        getStatusName(
+          attendanceStatuses,
+          databaseRecord.status_id,
+        ) === 'غير منضم'
+      ) {
+        throw new Error(
+          'لا يمكن تغيير حالة "غير منضم" من شاشة المعلم.',
+        )
+      }
+
+      const noteValue =
+        attendanceNotes[key] ??
+        databaseRecord?.note ??
+        existing?.note ??
+        null
+
+      let savedData
+      let saveError
+
+      if (databaseRecord) {
+        // السجل موجود: تحديثه بدل إنشاء سجل مكرر.
+        const result = await updateAttendanceRecord(
+          databaseRecord.id,
+          {
+            status_id: statusId,
+            enrollment_id:
+              student.enrollmentId || null,
+            note: noteValue,
+          },
+        )
+
+        savedData = result.data
+        saveError = result.error
+      } else {
+        // لا يوجد سجل: إنشاء سجل جديد.
+        const result = await createAttendanceRecord({
           student_id: student.id,
           enrollment_id:
             student.enrollmentId || null,
@@ -841,85 +802,81 @@ const saveAttendance = async (
           note: noteValue,
           course_id: currentCourse.id,
         })
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .single()
 
-      savedData = result.data
-      saveError = result.error
-    }
-
-    if (saveError) {
-      throw saveError
-    }
-
-    if (!savedData) {
-      throw new Error(
-        'لم تُرجع قاعدة البيانات سجل الحضور بعد الحفظ.',
-      )
-    }
-
-    const savedRecord: AttendanceRecord = {
-      id: savedData.id,
-      studentId: savedData.student_id,
-      enrollmentId:
-        savedData.enrollment_id ?? null,
-      courseId: savedData.course_id,
-      attendanceDate: savedData.attendance_date,
-      statusId: savedData.status_id,
-      note: savedData.note ?? '',
-    }
-
-    // استبدال السجل في الذاكرة المحلية،
-    // ومنع بقاء نسخة مؤقتة أو سجل مكرر.
-    setAttendanceRecords((records) => {
-      const withoutDuplicate = records.filter(
-        (record) =>
-          record.id !== savedRecord.id &&
-          !(
-            record.studentId === student.id &&
-            record.attendanceDate === date
-          ),
-      )
-
-      return [...withoutDuplicate, savedRecord]
-    })
-
-    setLocalStatuses((current) => ({
-      ...current,
-      [key]: statusName,
-    }))
-
-    moveToNextStudent(
-      student.id,
-      student.name,
-      statusName,
-    )
-  } catch (error: any) {
-    setAttendanceRecords(previousRecords)
-
-    setLocalStatuses((current) => {
-      const next = { ...current }
-
-      if (previousLocalStatus) {
-        next[key] = previousLocalStatus
-      } else {
-        delete next[key]
+        savedData = result.data
+        saveError = result.error
       }
 
-      return next
-    })
+      if (saveError) {
+        throw saveError
+      }
 
-    setStatusMessage(
-      `تعذر حفظ الحضور: ${
-        error?.message || 'خطأ غير معروف'
-      }`,
-    )
-  } finally {
-    setSavingKey(null)
+      if (!savedData) {
+        throw new Error(
+          'لم تُرجع قاعدة البيانات سجل الحضور بعد الحفظ.',
+        )
+      }
+
+      const savedRecord: AttendanceRecord = {
+        id: savedData.id,
+        studentId: savedData.student_id,
+        enrollmentId:
+          savedData.enrollment_id ?? null,
+        courseId: savedData.course_id,
+        attendanceDate: savedData.attendance_date,
+        statusId: savedData.status_id,
+        note: savedData.note ?? '',
+      }
+
+      // استبدال السجل في الذاكرة المحلية،
+      // ومنع بقاء نسخة مؤقتة أو سجل مكرر.
+      setAttendanceRecords((records) => {
+        const withoutDuplicate = records.filter(
+          (record) =>
+            record.id !== savedRecord.id &&
+            !(
+              record.studentId === student.id &&
+              record.attendanceDate === date
+            ),
+        )
+
+        return [...withoutDuplicate, savedRecord]
+      })
+
+      setLocalStatuses((current) => ({
+        ...current,
+        [key]: statusName,
+      }))
+
+      moveToNextStudent(
+        student.id,
+        student.name,
+        statusName,
+      )
+    } catch (error: any) {
+      setAttendanceRecords(previousRecords)
+
+      setLocalStatuses((current) => {
+        const next = { ...current }
+
+        if (previousLocalStatus) {
+          next[key] = previousLocalStatus
+        } else {
+          delete next[key]
+        }
+
+        return next
+      })
+
+      setStatusMessage(
+        `تعذر حفظ الحضور: ${
+          error?.message || 'خطأ غير معروف'
+        }`,
+      )
+    } finally {
+      setSavingKey(null)
+    }
   }
-}
 
   const saveAllAttendance =
     async (
@@ -1002,19 +959,10 @@ const saveAttendance = async (
         const {
           data: existingData,
           error: existingError,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse.id,
-          )
-          .eq(
-            'attendance_date',
-            activeDate,
-          )
+        } = await loadAttendanceForCourseDate(
+          currentCourse.id,
+          activeDate,
+        )
 
         if (existingError) {
           throw existingError
@@ -1087,9 +1035,9 @@ const saveAttendance = async (
             const {
               data,
               error,
-            } = await supabase
-              .from('attendance')
-              .update({
+            } = await updateAttendanceRecord(
+              existing.id,
+              {
                 status_id: statusId,
                 enrollment_id:
                   student.enrollmentId ||
@@ -1098,12 +1046,8 @@ const saveAttendance = async (
                   attendanceNotes[key] ??
                   existing.note ??
                   null,
-              })
-              .eq('id', existing.id)
-              .select(
-                'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-              )
-              .single()
+              },
+            )
 
             if (error) {
               throw new Error(
@@ -1133,26 +1077,20 @@ const saveAttendance = async (
             const {
               data,
               error,
-            } = await supabase
-              .from('attendance')
-              .insert({
-                student_id: student.id,
-                enrollment_id:
-                  student.enrollmentId ||
-                  null,
-                attendance_date:
-                  activeDate,
-                status_id: statusId,
-                note:
-                  attendanceNotes[key] ||
-                  null,
-                course_id:
-                  currentCourse.id,
-              })
-              .select(
-                'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-              )
-              .single()
+            } = await createAttendanceRecord({
+              student_id: student.id,
+              enrollment_id:
+                student.enrollmentId ||
+                null,
+              attendance_date:
+                activeDate,
+              status_id: statusId,
+              note:
+                attendanceNotes[key] ||
+                null,
+              course_id:
+                currentCourse.id,
+            })
 
             if (error) {
               throw new Error(
@@ -1232,19 +1170,10 @@ const saveAttendance = async (
         const {
           data: verificationData,
           error: verificationError,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'student_id, status_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse.id,
-          )
-          .eq(
-            'attendance_date',
-            activeDate,
-          )
+        } = await verifyAttendanceForCourseDate(
+          currentCourse.id,
+          activeDate,
+        )
 
         if (verificationError) {
           throw verificationError
@@ -1287,19 +1216,10 @@ const saveAttendance = async (
       } catch (error: any) {
         const {
           data: refreshedData,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .eq(
-            'course_id',
-            currentCourse.id,
-          )
-          .eq(
-            'attendance_date',
-            activeDate,
-          )
+        } = await loadAttendanceForCourseDate(
+          currentCourse.id,
+          activeDate,
+        )
 
         const refreshedRecords: AttendanceRecord[] =
           (refreshedData ?? []).map(
@@ -1479,10 +1399,9 @@ const saveAttendance = async (
 
       const {
         error,
-      } = await supabase
-        .from('attendance')
-        .delete()
-        .eq('id', existing.id)
+      } = await deleteAttendanceRecord(
+        existing.id,
+      )
 
       if (error) {
         throw error
@@ -1587,17 +1506,10 @@ const saveAttendance = async (
       const {
         data,
         error,
-      } = await supabase
-        .from('attendance')
-        .update({
-          note:
-            value.trim() || null,
-        })
-        .eq('id', existing.id)
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .single()
+      } = await updateAttendanceNote(
+        existing.id,
+        value.trim() || null,
+      )
 
       if (error) {
         throw error
