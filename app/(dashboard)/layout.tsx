@@ -1,8 +1,9 @@
+
 import { redirect } from 'next/navigation'
 import { unstable_noStore as noStore } from 'next/cache'
 
 import { DashboardShell } from '@/components/dashboard/shell'
-import { validateCurrentAccess } from '@/lib/auth-guard'
+import { getAuthContext } from '@/lib/auth/auth-context'
 import { isMaintenanceMode } from '@/lib/system-control'
 
 export default async function DashboardLayout({
@@ -12,7 +13,7 @@ export default async function DashboardLayout({
 }) {
   noStore()
 
-  const access = await validateCurrentAccess()
+  const access = await getAuthContext()
 
   if (!access.allowed) {
     if (access.reason === 'guard_error') {
