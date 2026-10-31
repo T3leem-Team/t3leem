@@ -11,7 +11,18 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  findDuplicateStudent,
+  updateStudentRecord,
+  findStudentEnrollment,
+  updateStudentEnrollment,
+  createStudentEnrollment,
+  createStudentRecord,
+  createStudentPayment,
+  deleteStudentEnrollment,
+  deleteStudentRecord,
+} from '@/lib/features/students/repositories/students-mutations.repository'
+
 import { Button } from '@/components/ui/button'
 
 type AcademicLevel = {
@@ -731,15 +742,9 @@ export function StudentForm({
     const {
       data: duplicateStudents,
       error: duplicateCheckError,
-    } = await supabase
-      .from('students')
-      .select(
-        'id, name, personal_id',
-      )
-      .eq(
-        'personal_id',
-        personalId,
-      )
+    } = await findDuplicateStudent(
+      personalId,
+    )
 
     if (duplicateCheckError) {
       showError(
@@ -774,28 +779,18 @@ export function StudentForm({
       const {
         data: updatedStudent,
         error,
-      } = await supabase
-        .from('students')
-        .update({
+      } = await updateStudentRecord(
+        editingStudent.id,
+        {
           name,
-          personal_id:
-            personalId,
-          guardian_relation:
-            guardianRelation,
+          personal_id: personalId,
+          guardian_relation: guardianRelation,
           phone,
           whatsapp,
           notes,
-          health_notes:
-            chronicDiseases,
-        })
-        .eq(
-          'id',
-          editingStudent.id,
-        )
-        .select(
-          'id, student_id, name, personal_id, guardian_relation, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
-        )
-        .single()
+          health_notes: chronicDiseases,
+        },
+      )
 
       if (error) {
         showError(
@@ -808,20 +803,11 @@ export function StudentForm({
 
       const {
         data: existingEnrollment,
-        error:
-          enrollmentLookupError,
-      } = await supabase
-        .from('enrollments')
-        .select('id')
-        .eq(
-          'student_id',
-          editingStudent.id,
-        )
-        .eq(
-          'academic_year_id',
-          currentAcademicYearId,
-        )
-        .maybeSingle()
+        error: enrollmentLookupError,
+      } = await findStudentEnrollment(
+        editingStudent.id,
+        currentAcademicYearId,
+      )
 
       if (enrollmentLookupError) {
         showError(
@@ -834,19 +820,11 @@ export function StudentForm({
 
       if (existingEnrollment) {
         const {
-          error:
-            enrollmentUpdateError,
-        } = await supabase
-          .from('enrollments')
-          .update({
-            level_id:
-              selectedLevel.id,
-            status: 'نشط',
-          })
-          .eq(
-            'id',
-            existingEnrollment.id,
-          )
+          error: enrollmentUpdateError,
+        } = await updateStudentEnrollment(
+          existingEnrollment.id,
+          selectedLevel.id,
+        )
 
         if (enrollmentUpdateError) {
           showError(
@@ -858,24 +836,16 @@ export function StudentForm({
         }
       } else {
         const {
-          error:
-            enrollmentInsertError,
-        } = await supabase
-          .from('enrollments')
-          .insert({
-            student_id:
-              editingStudent.id,
-            academic_year_id:
-              currentAcademicYearId,
-            level_id:
-              selectedLevel.id,
-            class_id: null,
-            course_id:
-              currentCourse?.id ?? null,
-            status: 'نشط',
-            join_date:
-              getTodayString(),
-          })
+          error: enrollmentInsertError,
+        } = await createStudentEnrollment({
+          student_id: editingStudent.id,
+          academic_year_id: currentAcademicYearId,
+          level_id: selectedLevel.id,
+          class_id: null,
+          course_id: currentCourse?.id ?? null,
+          status: 'نشط',
+          join_date: getTodayString(),
+        })
 
         if (enrollmentInsertError) {
           showError(
@@ -945,29 +915,19 @@ export function StudentForm({
     const {
       data: newStudent,
       error,
-    } = await supabase
-      .from('students')
-      .insert({
-        academic_year_id:
-          currentAcademicYearId,
-        name,
-        personal_id:
-          personalId,
-        guardian_relation:
-          guardianRelation,
-        phone,
-        whatsapp,
-        notes,
-        health_notes:
-          chronicDiseases,
-        status: 'نشط',
-        fee_exempt: false,
-        source: 'manual',
-      })
-      .select(
-        'id, student_id, name, personal_id, guardian_relation, phone, whatsapp, notes, health_notes, status, fee_exempt, source',
-      )
-      .single()
+    } = await createStudentRecord({
+      academic_year_id: currentAcademicYearId,
+      name,
+      personal_id: personalId,
+      guardian_relation: guardianRelation,
+      phone,
+      whatsapp,
+      notes,
+      health_notes: chronicDiseases,
+      status: 'نشط',
+      fee_exempt: false,
+      source: 'manual',
+    })
 
     if (error) {
       showError(
@@ -986,31 +946,20 @@ export function StudentForm({
 
     const {
       error: enrollmentError,
-    } = await supabase
-      .from('enrollments')
-      .insert({
-        student_id:
-          newStudent.id,
-        academic_year_id:
-          currentAcademicYearId,
-        level_id:
-          selectedLevel.id,
-        class_id: null,
-        course_id:
-          currentCourse?.id ?? null,
-        status: 'نشط',
-        join_date:
-          getTodayString(),
-      })
+    } = await createStudentEnrollment({
+      student_id: newStudent.id,
+      academic_year_id: currentAcademicYearId,
+      level_id: selectedLevel.id,
+      class_id: null,
+      course_id: currentCourse?.id ?? null,
+      status: 'نشط',
+      join_date: getTodayString(),
+    })
 
     if (enrollmentError) {
-      await supabase
-        .from('students')
-        .delete()
-        .eq(
-          'id',
-          newStudent.id,
-        )
+      await deleteStudentRecord(
+        newStudent.id,
+      )
 
       showError(
         `تم إنشاء الطالب، ولكن تعذر ربطه بالصف الأكاديمي.\n\n${getDatabaseErrorMessage(
@@ -1030,42 +979,25 @@ export function StudentForm({
     if (amountPaid > 0) {
       const {
         error: paymentError,
-      } = await supabase
-        .from('payments')
-        .insert({
-          student_id:
-            newStudent.id,
-          academic_year_id:
-            currentAcademicYearId,
-          amount: amountPaid,
-          payment_method:
-            'نقدي',
-          payment_date:
-            new Date()
-              .toISOString()
-              .slice(0, 10),
-        })
+      } = await createStudentPayment({
+        student_id: newStudent.id,
+        academic_year_id: currentAcademicYearId,
+        amount: amountPaid,
+        payment_method: 'نقدي',
+        payment_date: new Date()
+          .toISOString()
+          .slice(0, 10),
+      })
 
       if (paymentError) {
-        await supabase
-          .from('enrollments')
-          .delete()
-          .eq(
-            'student_id',
-            newStudent.id,
-          )
-          .eq(
-            'academic_year_id',
-            currentAcademicYearId,
-          )
+        await deleteStudentEnrollment(
+          newStudent.id,
+          currentAcademicYearId,
+        )
 
-        await supabase
-          .from('students')
-          .delete()
-          .eq(
-            'id',
-            newStudent.id,
-          )
+        await deleteStudentRecord(
+          newStudent.id,
+        )
 
         showError(
           `تم رفض الدفعة الأولى.\n\n${getDatabaseErrorMessage(
@@ -1252,9 +1184,7 @@ export function StudentForm({
 
               <button
                 type="button"
-                onClick={
-                  closeError
-                }
+                onClick={closeError}
                 className="rounded-md p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40"
                 aria-label="إغلاق رسالة الخطأ"
               >
@@ -1270,9 +1200,7 @@ export function StudentForm({
               <Button
                 type="button"
                 variant="destructive"
-                onClick={
-                  closeError
-                }
+                onClick={closeError}
               >
                 فهمت
               </Button>
@@ -1286,9 +1214,7 @@ export function StudentForm({
           type="button"
           aria-label="إغلاق"
           className="absolute inset-0 bg-black/40"
-          onClick={
-            closeStudentDrawer
-          }
+          onClick={closeStudentDrawer}
         />
 
         <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
@@ -1309,9 +1235,7 @@ export function StudentForm({
 
             <button
               type="button"
-              onClick={
-                closeStudentDrawer
-              }
+              onClick={closeStudentDrawer}
               className="rounded-md p-2 hover:bg-muted"
               aria-label="إغلاق"
             >
@@ -1324,9 +1248,7 @@ export function StudentForm({
               editingStudent?.id ??
               'new'
             }
-            onSubmit={
-              handleSubmit
-            }
+            onSubmit={handleSubmit}
           >
             <div className="space-y-6 p-6">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1389,20 +1311,16 @@ export function StudentForm({
                     value={
                       selectedGuardianRelation
                     }
-                    onChange={(
-                      event,
-                    ) => {
+                    onChange={(event) => {
                       const value =
-                        event.target
-                          .value
+                        event.target.value
 
                       setSelectedGuardianRelation(
                         value,
                       )
 
                       if (
-                        value !==
-                        'أخرى'
+                        value !== 'أخرى'
                       ) {
                         setCustomGuardianRelation(
                           '',
@@ -1453,12 +1371,9 @@ export function StudentForm({
                       value={
                         customGuardianRelation
                       }
-                      onChange={(
-                        event,
-                      ) =>
+                      onChange={(event) =>
                         setCustomGuardianRelation(
-                          event.target
-                            .value,
+                          event.target.value,
                         )
                       }
                       placeholder="اكتب صلة القرابة"
@@ -1490,16 +1405,10 @@ export function StudentForm({
                     {academicLevels.map(
                       (level) => (
                         <option
-                          key={
-                            level.id
-                          }
-                          value={
-                            level.name
-                          }
+                          key={level.id}
+                          value={level.name}
                         >
-                          {
-                            level.name
-                          }
+                          {level.name}
                         </option>
                       ),
                     )}
@@ -1602,9 +1511,7 @@ export function StudentForm({
 
                       <p className="mt-1 text-xs text-muted-foreground">
                         حسب السنة الدراسية الحالية:{' '}
-                        {
-                          currentAcademicYearName
-                        }
+                        {currentAcademicYearName}
                       </p>
                     </div>
 
@@ -1633,8 +1540,7 @@ export function StudentForm({
                         type="number"
                         min="0"
                         max={
-                          currentAnnualFee >
-                          0
+                          currentAnnualFee > 0
                             ? currentAnnualFee
                             : undefined
                         }
@@ -1711,9 +1617,7 @@ export function StudentForm({
               <Button
                 type="button"
                 variant="outline"
-                onClick={
-                  closeStudentDrawer
-                }
+                onClick={closeStudentDrawer}
               >
                 إلغاء
               </Button>
