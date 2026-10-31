@@ -11,14 +11,9 @@ export type StudentRow = {
   id: string
   name: string
   personalId: string
-
-  // المستوى المرتبط بالطالب في السنة الحالية
   levelId: string | null
   grade: string
-
-  // ترتيب المستوى من قاعدة البيانات
   levelSortOrder: number | null
-
   amountDue: number
   amountPaid: number
   feeExempt: boolean
@@ -30,8 +25,6 @@ export type PaymentStudentsCache = {
   currentAcademicYearId: string | null
   currentAcademicYearName: string
   currentAnnualFee: number
-
-  // مستويات السنة الحالية مرتبة حسب levels.sort_order
   levels: PaymentLevel[]
 }
 
@@ -56,7 +49,6 @@ export function getPaymentsCache() {
 export function setPaymentsCache(
   value: PaymentStudentsCache,
 ) {
-  // إبطال أي طلب سابق قبل تعيين الكاش الجديد.
   paymentsCacheVersion += 1
   paymentsLoadingPromise = null
   paymentsCache = value
@@ -65,7 +57,6 @@ export function setPaymentsCache(
 export function updatePaymentsCache(
   patch: Partial<PaymentStudentsCache>,
 ) {
-  // إبطال أي طلب سابق حتى لا يستبدل التحديث اليدوي.
   paymentsCacheVersion += 1
   paymentsLoadingPromise = null
 
@@ -90,7 +81,6 @@ export function updatePaymentsCache(
 }
 
 export function clearPaymentsCache() {
-  // منع الطلبات الجارية من إعادة تعبئة الكاش بعد مسحه.
   paymentsCacheVersion += 1
   paymentsCache = null
   paymentsLoadingPromise = null
@@ -120,10 +110,10 @@ export async function loadPaymentsCache(
     })
 
     if (!response.ok) {
-      const data = await response.json().catch(() => null)
+      const errorData = await response.json().catch(() => null)
 
       throw new Error(
-        data?.error ?? 'تعذر تحميل بيانات المدفوعات.',
+        errorData?.error ?? 'تعذر تحميل بيانات المدفوعات.',
       )
     }
 
@@ -140,7 +130,6 @@ export async function loadPaymentsCache(
         levels: [],
       }
 
-      // لا تسمح لطلب قديم باستبدال الكاش الأحدث.
       if (requestVersion === paymentsCacheVersion) {
         paymentsCache = emptyCache
       }
@@ -156,9 +145,9 @@ export async function loadPaymentsCache(
     const levels = data.levels ?? []
 
     /*
-     * المستويات:
-     * المصدر الرسمي للترتيب هو levels.sort_order
+     * المستويات الأكاديمية
      */
+
     const normalizedLevels: PaymentLevel[] = levels
       .map((level: any) => ({
         id: String(level.id),
@@ -192,9 +181,10 @@ export async function loadPaymentsCache(
     )
 
     /*
-     * نربط الطالب بالمستوى الحالي
-     * عن طريق enrollment.
+     * ربط كل طالب بتسجيله ومستواه.
+     * نحتفظ بأول تسجيل لكل طالب كما في النسخة السابقة.
      */
+
     const enrollmentMap = new Map<
       string,
       {
@@ -204,7 +194,11 @@ export async function loadPaymentsCache(
       }
     >()
 
-    enrollments.forEach((enrollment: any) => {
+    for (const enrollment of enrollments) {
+      if (enrollmentMap.has(enrollment.student_id)) {
+        continue
+      }
+
       const levelId = enrollment.level_id
         ? String(enrollment.level_id)
         : null
@@ -213,83 +207,82 @@ export async function loadPaymentsCache(
         ? levelMap.get(levelId)
         : undefined
 
-      /*
-       * إذا كان للطالب أكثر من enrollment
-       * نستخدم أول واحد كما كان النظام السابق.
-       */
-      if (!enrollmentMap.has(enrollment.student_id)) {
-        enrollmentMap.set(enrollment.student_id, {
-          levelId,
-          grade: level?.name ?? 'غير محدد',
-          levelSortOrder: level?.sortOrder ?? null,
-        })
-      }
-    })
+      enrollmentMap.set(enrollment.student_id, {
+        levelId,
+        grade: level?.name ?? 'غير محدد',
+        levelSortOrder: level?.sortOrder ?? null,
+      })
+    }
 
     /*
-     * إجمالي المدفوع لكل طالب.
+     * تجميع المدفوعات لكل طالب.
      */
+
     const paidByStudent = new Map<string, number>()
 
-    payments.forEach((payment: any) => {
-      const current =
-        paidByStudent.get(payment.student_id) ?? 0
+    for (const payment of payments) {
+      const studentId = payment.student_id
 
       paidByStudent.set(
-        payment.student_id,
-        current + Number(payment.amount ?? 0),
+        studentId,
+        (paidByStudent.get(studentId) ?? 0) +
+          Number(payment.amount ?? 0),
       )
-    })
+    }
 
     /*
      * بناء قائمة الطلاب.
+     * دمج filter و map في مرور واحد.
      */
-    const studentList: StudentRow[] = students
-      .filter((student: any) =>
-        enrollmentMap.has(student.id),
-      )
-      .map((student: any) => {
-        const enrollment = enrollmentMap.get(student.id)
 
-        const amountPaid =
-          paidByStudent.get(student.id) ?? 0
+    const studentList: StudentRow[] = []
 
-        const feeExempt = Boolean(student.fee_exempt)
+    for (const student of students) {
+      const enrollment = enrollmentMap.get(student.id)
 
-        let paymentStatus: PaymentStatus
+      // تجاهل الطالب إذا لم يكن لديه تسجيل في السنة الحالية.
+      if (!enrollment) {
+        continue
+      }
 
-        if (feeExempt) {
-          paymentStatus = 'معفي'
-        } else if (
-          annualFee > 0 &&
-          amountPaid >= annualFee
-        ) {
-          paymentStatus = 'مدفوع بالكامل'
-        } else if (amountPaid > 0) {
-          paymentStatus = 'مدفوع جزئياً'
-        } else {
-          paymentStatus = 'غير مدفوع'
-        }
+      const amountPaid =
+        paidByStudent.get(student.id) ?? 0
 
-        return {
-          id: student.id,
-          name: student.name,
-          personalId: student.personal_id ?? '',
-          levelId: enrollment?.levelId ?? null,
-          grade: enrollment?.grade ?? 'غير محدد',
-          levelSortOrder:
-            enrollment?.levelSortOrder ?? null,
-          amountDue: annualFee,
-          amountPaid,
-          feeExempt,
-          paymentStatus,
-        }
+      const feeExempt = Boolean(student.fee_exempt)
+
+      let paymentStatus: PaymentStatus
+
+      if (feeExempt) {
+        paymentStatus = 'معفي'
+      } else if (
+        annualFee > 0 &&
+        amountPaid >= annualFee
+      ) {
+        paymentStatus = 'مدفوع بالكامل'
+      } else if (amountPaid > 0) {
+        paymentStatus = 'مدفوع جزئياً'
+      } else {
+        paymentStatus = 'غير مدفوع'
+      }
+
+      studentList.push({
+        id: student.id,
+        name: student.name,
+        personalId: student.personal_id ?? '',
+        levelId: enrollment.levelId,
+        grade: enrollment.grade,
+        levelSortOrder: enrollment.levelSortOrder,
+        amountDue: annualFee,
+        amountPaid,
+        feeExempt,
+        paymentStatus,
       })
+    }
 
     /*
-     * ترتيب الطلاب حسب ترتيب المستويات
-     * الموجود في قاعدة البيانات.
+     * ترتيب الطلاب حسب ترتيب المستويات.
      */
+
     studentList.sort((a, b) => {
       const aOrder =
         a.levelSortOrder ?? Number.MAX_SAFE_INTEGER
