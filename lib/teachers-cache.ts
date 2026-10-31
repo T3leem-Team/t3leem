@@ -48,13 +48,7 @@ export type TeachersCache = {
 }
 
 let teachersCache: TeachersCache | null = null
-
 let teachersCacheLoading: Promise<TeachersCache> | null = null
-
-/**
- * يتغير الرقم عند بدء تحميل جديد أو تعديل/مسح الكاش.
- * يمنع أي تحميل قديم من الكتابة فوق بيانات أحدث.
- */
 let teachersCacheVersion = 0
 
 export function getTeachersCache() {
@@ -110,10 +104,10 @@ export async function loadTeachersCache(
     return teachersCacheLoading
   }
 
-  // كل تحميل جديد يحصل على نسخة خاصة به.
   const requestVersion = ++teachersCacheVersion
 
   const loadingPromise = (async (): Promise<TeachersCache> => {
+    // السنة الدراسية الحالية
     const {
       data: academicYear,
       error: academicYearError,
@@ -136,12 +130,7 @@ export async function loadTeachersCache(
       throw new Error('لا توجد سنة دراسية حالية مفعلة.')
     }
 
-    /*
-     * =====================================================
-     * الدورات
-     * =====================================================
-     */
-
+    // الدورات
     const {
       data: courseRows,
       error: coursesError,
@@ -201,27 +190,21 @@ export async function loadTeachersCache(
       closedAt: course.closed_at ?? null,
     }))
 
-    /*
-     * =====================================================
-     * ارتباط المعلمين بالدورات
-     * =====================================================
-     */
-
     const courseIds = mappedCourses.map(
       (course) => course.id,
     )
 
-    let courseTeacherRows: {
-      id: string
-      course_id: string
-      teacher_id: string
-    }[] = []
+    /*
+     * تحميل البيانات المستقلة بالتوازي.
+     * كل استعلام يحتفظ برسالة الخطأ الخاصة به.
+     */
 
-    if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+    const loadCourseTeachers = async () => {
+      if (courseIds.length === 0) {
+        return []
+      }
+
+      const { data, error } = await supabase
         .from('course_teachers')
         .select('id, course_id, teacher_id')
         .in('course_id', courseIds)
@@ -232,26 +215,15 @@ export async function loadTeachersCache(
         )
       }
 
-      courseTeacherRows = data ?? []
+      return data ?? []
     }
 
-    /*
-     * =====================================================
-     * مواد الدورات
-     * =====================================================
-     */
+    const loadCourseSubjects = async () => {
+      if (courseIds.length === 0) {
+        return []
+      }
 
-    let courseSubjectRows: {
-      id: string
-      course_id: string
-      subject_id: string
-    }[] = []
-
-    if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from('course_subjects')
         .select('id, course_id, subject_id')
         .in('course_id', courseIds)
@@ -262,8 +234,142 @@ export async function loadTeachersCache(
         )
       }
 
-      courseSubjectRows = data ?? []
+      return data ?? []
     }
+
+    const loadEnrollments = async () => {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          id,
+          student_id,
+          academic_year_id,
+          level_id,
+          status,
+          join_date,
+          levels (
+            id,
+            name,
+            sort_order
+          )
+        `)
+        .eq('academic_year_id', academicYear.id)
+        .eq('status', 'نشط')
+
+      if (error) {
+        throw new Error(
+          `خطأ في تحميل تسجيلات الطلاب: ${error.message}`,
+        )
+      }
+
+      return data ?? []
+    }
+
+    const loadAssignments = async () => {
+      if (courseIds.length === 0) {
+        return []
+      }
+
+      const { data, error } = await supabase
+        .from('teacher_student_assignments')
+        .select(
+          'id, course_id, teacher_id, student_id, subject_id',
+        )
+        .in('course_id', courseIds)
+
+      if (error) {
+        throw new Error(
+          `خطأ في تحميل توزيع الطلاب: ${error.message}`,
+        )
+      }
+
+      return data ?? []
+    }
+
+    const loadAttendanceStatuses = async () => {
+      const { data, error } = await supabase
+        .from('attendance_statuses')
+        .select('id, name, is_active, sort_order')
+        .order('sort_order', {
+          ascending: true,
+        })
+
+      if (error) {
+        throw new Error(
+          `خطأ في تحميل حالات الحضور: ${error.message}`,
+        )
+      }
+
+      return data ?? []
+    }
+
+    const loadAttendance = async () => {
+      const rows: {
+        id: string
+        student_id: string
+        enrollment_id: string | null
+        attendance_date: string
+        status_id: string
+        note: string | null
+        course_id: string
+      }[] = []
+
+      if (courseIds.length === 0) {
+        return rows
+      }
+
+      const pageSize = 1000
+      let from = 0
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('attendance')
+          .select(
+            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+          )
+          .in('course_id', courseIds)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1)
+
+        if (error) {
+          throw new Error(
+            `خطأ في تحميل الحضور: ${error.message}`,
+          )
+        }
+
+        const batch = data ?? []
+
+        rows.push(...batch)
+
+        if (batch.length < pageSize) {
+          break
+        }
+
+        from += pageSize
+      }
+
+      return rows
+    }
+
+    const [
+      courseTeacherRows,
+      courseSubjectRows,
+      enrollmentRows,
+      rawAssignmentRows,
+      statusRows,
+      attendanceRows,
+    ] = await Promise.all([
+      loadCourseTeachers(),
+      loadCourseSubjects(),
+      loadEnrollments(),
+      loadAssignments(),
+      loadAttendanceStatuses(),
+      loadAttendance(),
+    ])
+
+    /*
+     * مواد الدورات
+     */
 
     const subjectIds = Array.from(
       new Set(
@@ -298,9 +404,7 @@ export async function loadTeachersCache(
     }
 
     /*
-     * =====================================================
      * ارتباط المواد بالمعلمين
-     * =====================================================
      */
 
     let courseSubjectTeacherRows: {
@@ -379,9 +483,7 @@ export async function loadTeachersCache(
         )
 
     /*
-     * =====================================================
      * المعلمين
-     * =====================================================
      */
 
     const teacherIds = Array.from(
@@ -431,47 +533,12 @@ export async function loadTeachersCache(
       )
 
     /*
-     * =====================================================
-     * تسجيلات الطلاب
-     * =====================================================
-     */
-
-    const {
-      data: enrollmentRows,
-      error: enrollmentsError,
-    } = await supabase
-      .from('enrollments')
-      .select(`
-        id,
-        student_id,
-        academic_year_id,
-        level_id,
-        status,
-        join_date,
-        levels (
-          id,
-          name,
-          sort_order
-        )
-      `)
-      .eq('academic_year_id', academicYear.id)
-      .eq('status', 'نشط')
-
-    if (enrollmentsError) {
-      throw new Error(
-        `خطأ في تحميل تسجيلات الطلاب: ${enrollmentsError.message}`,
-      )
-    }
-
-    /*
-     * =====================================================
      * المستويات الأكاديمية
-     * =====================================================
      */
 
     const academicLevels: AcademicLevel[] = Array.from(
       new Map(
-        (enrollmentRows ?? [])
+        enrollmentRows
           .map((row) => {
             const levelData = Array.isArray(row.levels)
               ? row.levels[0]
@@ -507,27 +574,31 @@ export async function loadTeachersCache(
 
     const enrolledStudentIds = Array.from(
       new Set(
-        (enrollmentRows ?? []).map(
+        enrollmentRows.map(
           (row) => row.student_id,
         ),
       ),
     )
 
     /*
-     * =====================================================
      * الطلاب
-     * =====================================================
      */
 
-    let studentRows: {
-      id: string
-      student_id: string | null
-      name: string
-      personal_id: string | null
-      phone: string | null
-      whatsapp: string | null
-      status: string
-    }[] = []
+    const studentColumns =
+      'id, student_id, name, personal_id, phone, whatsapp, status'
+
+    const studentMap = new Map<
+      string,
+      {
+        id: string
+        student_id: string | null
+        name: string
+        personal_id: string | null
+        phone: string | null
+        whatsapp: string | null
+        status: string
+      }
+    >()
 
     if (enrolledStudentIds.length > 0) {
       const {
@@ -535,9 +606,7 @@ export async function loadTeachersCache(
         error,
       } = await supabase
         .from('students')
-        .select(
-          'id, student_id, name, personal_id, phone, whatsapp, status',
-        )
+        .select(studentColumns)
         .in('id', enrolledStudentIds)
 
       if (error) {
@@ -546,49 +615,15 @@ export async function loadTeachersCache(
         )
       }
 
-      studentRows = data ?? []
+      for (const student of data ?? []) {
+        studentMap.set(student.id, student)
+      }
     }
-
-    const studentMap = new Map(
-      studentRows.map((student) => [
-        student.id,
-        student,
-      ]),
-    )
 
     /*
-     * =====================================================
-     * توزيع الطلاب على المعلمين
-     * =====================================================
+     * الطلاب الموجودون في التوزيع
+     * حتى لو لم يعودوا ضمن التسجيل الحالي.
      */
-
-    let rawAssignmentRows: {
-      id: string
-      course_id: string
-      teacher_id: string
-      student_id: string
-      subject_id: string
-    }[] = []
-
-    if (courseIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from('teacher_student_assignments')
-        .select(
-          'id, course_id, teacher_id, student_id, subject_id',
-        )
-        .in('course_id', courseIds)
-
-      if (error) {
-        throw new Error(
-          `خطأ في تحميل توزيع الطلاب: ${error.message}`,
-        )
-      }
-
-      rawAssignmentRows = data ?? []
-    }
 
     const assignmentStudentIds = Array.from(
       new Set(
@@ -602,20 +637,13 @@ export async function loadTeachersCache(
       (studentId) => !studentMap.has(studentId),
     )
 
-    /*
-     * الطلاب الموجودون في التوزيع
-     * حتى لو لم يعودوا ضمن التسجيل الحالي.
-     */
-
     if (missingStudentIds.length > 0) {
       const {
         data,
         error,
       } = await supabase
         .from('students')
-        .select(
-          'id, student_id, name, personal_id, phone, whatsapp, status',
-        )
+        .select(studentColumns)
         .in('id', missingStudentIds)
 
       if (error) {
@@ -629,41 +657,36 @@ export async function loadTeachersCache(
       }
     }
 
-    const students: Student[] = (
-      enrollmentRows ?? []
-    )
-      .map((enrollment) => {
-        const student = studentMap.get(
-          enrollment.student_id,
-        )
+    const students: Student[] = []
 
-        if (!student) {
-          return null
-        }
-
-        const levelData = Array.isArray(
-          enrollment.levels,
-        )
-          ? enrollment.levels[0]
-          : enrollment.levels
-
-        return {
-          id: student.id,
-          studentId: student.student_id ?? '',
-          name: student.name,
-          personalId: student.personal_id ?? '',
-          phone: student.phone ?? '',
-          whatsapp: student.whatsapp ?? '',
-          levelId: enrollment.level_id,
-          levelName: levelData?.name ?? '—',
-          enrollmentId: enrollment.id,
-          joinDate: enrollment.join_date ?? null,
-        }
-      })
-      .filter(
-        (student): student is Student =>
-          student !== null,
+    for (const enrollment of enrollmentRows) {
+      const student = studentMap.get(
+        enrollment.student_id,
       )
+
+      if (!student) {
+        continue
+      }
+
+      const levelData = Array.isArray(
+        enrollment.levels,
+      )
+        ? enrollment.levels[0]
+        : enrollment.levels
+
+      students.push({
+        id: student.id,
+        studentId: student.student_id ?? '',
+        name: student.name,
+        personalId: student.personal_id ?? '',
+        phone: student.phone ?? '',
+        whatsapp: student.whatsapp ?? '',
+        levelId: enrollment.level_id,
+        levelName: levelData?.name ?? '—',
+        enrollmentId: enrollment.id,
+        joinDate: enrollment.join_date ?? null,
+      })
+    }
 
     const mappedStudentIds = new Set(
       students.map((student) => student.id),
@@ -693,6 +716,10 @@ export async function loadTeachersCache(
       })
     }
 
+    /*
+     * التوزيعات
+     */
+
     const assignments: Assignment[] =
       rawAssignmentRows.map((row) => ({
         id: row.id,
@@ -703,9 +730,7 @@ export async function loadTeachersCache(
       }))
 
     /*
-     * =====================================================
      * ربط المعلمين بالدورات
-     * =====================================================
      */
 
     const courseTeacherIds: Record<
@@ -722,101 +747,35 @@ export async function loadTeachersCache(
     }
 
     /*
-     * =====================================================
      * حالات الحضور
-     * =====================================================
      */
 
-    const {
-      data: statusRows,
-      error: statusError,
-    } = await supabase
-      .from('attendance_statuses')
-      .select('id, name, is_active, sort_order')
-      .order('sort_order', {
-        ascending: true,
-      })
+    const attendanceStatuses: AttendanceStatus[] =
+      statusRows
+        .filter((status) => {
+          const name = String(
+            status.name ?? '',
+          ).trim()
 
-    if (statusError) {
-      throw new Error(
-        `خطأ في تحميل حالات الحضور: ${statusError.message}`,
-      )
-    }
-
-    const attendanceStatuses: AttendanceStatus[] = (
-      statusRows ?? []
-    )
-      .filter((status) => {
-        const name = String(
-          status.name ?? '',
-        ).trim()
-
-        return (
-          name === 'حاضر' ||
-          name === 'غائب' ||
-          name === 'متأخر' ||
-          name === 'مستأذن'
-        )
-      })
-      .map((status) => ({
-        id: status.id,
-        name: String(
-          status.name,
-        ).trim() as AttendanceStatus['name'],
-        isActive: Boolean(status.is_active),
-        sortOrder: status.sort_order ?? 0,
-      }))
+          return (
+            name === 'حاضر' ||
+            name === 'غائب' ||
+            name === 'متأخر' ||
+            name === 'مستأذن'
+          )
+        })
+        .map((status) => ({
+          id: status.id,
+          name: String(
+            status.name,
+          ).trim() as AttendanceStatus['name'],
+          isActive: Boolean(status.is_active),
+          sortOrder: status.sort_order ?? 0,
+        }))
 
     /*
-     * =====================================================
-     * الحضور
-     * =====================================================
+     * سجلات الحضور
      */
-
-    let attendanceRows: {
-      id: string
-      student_id: string
-      enrollment_id: string | null
-      attendance_date: string
-      status_id: string
-      note: string | null
-      course_id: string
-    }[] = []
-
-    if (courseIds.length > 0) {
-      const pageSize = 1000
-      let from = 0
-
-      while (true) {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .in('course_id', courseIds)
-          .order('id', { ascending: true })
-          .range(from, from + pageSize - 1)
-
-        if (error) {
-          throw new Error(
-            `خطأ في تحميل الحضور: ${error.message}`,
-          )
-        }
-
-        const batch = data ?? []
-
-        attendanceRows.push(...batch)
-
-        if (batch.length < pageSize) {
-          break
-        }
-
-        from += pageSize
-      }
-    }
 
     const attendanceRecords: AttendanceRecord[] =
       attendanceRows.map((record) => ({
