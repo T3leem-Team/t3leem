@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js'
 
 import { validateCurrentAccess } from '@/lib/auth-guard'
@@ -25,28 +26,10 @@ export async function validateDashboardSection(
 ): Promise<DashboardSectionAccess> {
   const access = await validateCurrentAccess()
 
-  if (!access.allowed || !access.userId) {
+  if (!access.allowed || !access.userId || !access.profileId) {
     return {
       allowed: false,
       reason: access.reason ?? 'not_authenticated',
-    }
-  }
-
-  const { data: profile, error: profileError } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select('id, is_active')
-      .eq('auth_user_id', access.userId)
-      .maybeSingle()
-
-  if (
-    profileError ||
-    !profile ||
-    !profile.is_active
-  ) {
-    return {
-      allowed: false,
-      reason: 'user_inactive',
     }
   }
 
@@ -72,7 +55,7 @@ export async function validateDashboardSection(
     await supabaseAdmin
       .from('user_dashboard_sections')
       .select('id')
-      .eq('user_profile_id', profile.id)
+      .eq('user_profile_id', access.profileId)
       .eq('section_id', section.id)
       .maybeSingle()
 
@@ -98,6 +81,6 @@ export async function validateDashboardSection(
   return {
     allowed: true,
     userId: access.userId,
-    profileId: profile.id,
+    profileId: access.profileId,
   }
 }
