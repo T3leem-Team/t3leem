@@ -1,9 +1,10 @@
+
 import { redirect } from 'next/navigation'
-import { validateCurrentAccess } from '@/lib/auth-guard'
+import { getAuthContext } from '@/lib/auth/auth-context'
 import UsersClient from './users-client'
 
 export default async function Page() {
-  const access = await validateCurrentAccess()
+  const access = await getAuthContext()
 
   if (!access.allowed) {
     redirect('/login')
