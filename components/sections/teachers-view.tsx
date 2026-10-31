@@ -6,7 +6,13 @@ import {
   useState,
 } from 'react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  findTeacherStudentAssignments,
+  createTeacherStudentAssignments,
+  transferTeacherStudentAssignment,
+  deleteTeacherStudentAssignment,
+  deleteStudentCourseAttendance,
+} from '@/lib/features/teachers/repositories/teachers-mutations.repository'
 
 import {
   getTeachersCache,
@@ -419,21 +425,24 @@ export function TeachersView() {
         const {
           data,
           error,
-        } = await supabase
-          .from('levels')
-          .select(
-            'id, name, sort_order',
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+        } = await import('@/lib/supabase').then(
+          ({ supabase }) =>
+            supabase
+              .from('levels')
+              .select(
+                'id, name, sort_order',
+              )
+              .eq(
+                'is_active',
+                true,
+              )
+              .order(
+                'sort_order',
+                {
+                  ascending: true,
+                },
+              ),
+        )
 
         if (error) {
           console.error(
@@ -1075,21 +1084,10 @@ export function TeachersView() {
     const {
       data: existingRows,
       error: existingError,
-    } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
-      .select(
-        'id, course_id, teacher_id, student_id, subject_id',
-      )
-      .eq(
-        'course_id',
-        currentCourse.id,
-      )
-      .in(
-        'student_id',
-        selectedStudentIds,
-      )
+    } = await findTeacherStudentAssignments(
+      currentCourse.id,
+      selectedStudentIds,
+    )
 
     if (existingError) {
       setStatusMessage(
@@ -1200,14 +1198,9 @@ export function TeachersView() {
       )
 
     const { data, error } =
-      await supabase
-        .from(
-          'teacher_student_assignments',
-        )
-        .insert(rows)
-        .select(
-          'id, course_id, teacher_id, student_id, subject_id',
-        )
+      await createTeacherStudentAssignments(
+        rows,
+      )
 
     if (error) {
       setStatusMessage(
@@ -1451,26 +1444,11 @@ export function TeachersView() {
     const {
       data,
       error,
-    } = await supabase
-      .from(
-        'teacher_student_assignments',
-      )
-      .update({
-        teacher_id:
-          transferTeacherId,
-        subject_id:
-          targetSubject.subjectId,
-        updated_at:
-          new Date().toISOString(),
-      })
-      .eq(
-        'id',
-        assignment.id,
-      )
-      .select(
-        'id, course_id, teacher_id, student_id, subject_id',
-      )
-      .single()
+    } = await transferTeacherStudentAssignment(
+      assignment.id,
+      transferTeacherId,
+      targetSubject.subjectId,
+    )
 
     if (error) {
       setStatusMessage(
@@ -1591,15 +1569,9 @@ export function TeachersView() {
        */
       const {
         error: assignmentError,
-      } = await supabase
-        .from(
-          'teacher_student_assignments',
-        )
-        .delete()
-        .eq(
-          'id',
-          assignment.id,
-        )
+      } = await deleteTeacherStudentAssignment(
+        assignment.id,
+      )
 
       if (assignmentError) {
         setStatusMessage(
@@ -1626,17 +1598,10 @@ export function TeachersView() {
       ) {
         const {
           error: attendanceError,
-        } = await supabase
-          .from('attendance')
-          .delete()
-          .eq(
-            'student_id',
-            student.id,
-          )
-          .eq(
-            'course_id',
-            assignment.courseId,
-          )
+        } = await deleteStudentCourseAttendance(
+          student.id,
+          assignment.courseId,
+        )
 
         if (attendanceError) {
           /*
