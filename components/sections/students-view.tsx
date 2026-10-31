@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -9,7 +8,9 @@ import {
 
 import ExcelJS from 'exceljs'
 
-import { supabase } from '@/lib/supabase'
+import {
+  updateStudentFeeExemption,
+} from '@/lib/features/students/repositories/students-mutations.repository'
 
 import {
   getStudentsCache,
@@ -507,12 +508,10 @@ export function StudentsView() {
 
     const nextFeeExempt = !selected.feeExempt
 
-    const { error } = await supabase
-      .from('students')
-      .update({
-        fee_exempt: nextFeeExempt,
-      })
-      .eq('id', selectedStudentId)
+    const { error } = await updateStudentFeeExemption(
+      selectedStudentId,
+      nextFeeExempt
+    )
 
     if (error) {
       setSupabaseStatus(
