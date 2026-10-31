@@ -1,21 +1,20 @@
 
 'use client'
 
-export type TripsCacheData = {
-  trips: unknown[]
-  academicYears: unknown[]
-  courses: unknown[]
-  levels: unknown[]
-  tripLevels: unknown[]
-}
+import {
+  loadTripsRepositoryData,
+  loadTripDetailsRepositoryData,
+} from '@/lib/features/trips/repositories/trips.repository'
 
-export type TripDetailsCacheData = {
-  trip: unknown
-  course: unknown
-  levels: unknown[]
-  lesson_dates: string[]
-  students: unknown[]
-}
+import type {
+  TripsRepositoryData,
+  TripDetailsRepositoryData,
+} from '@/lib/features/trips/repositories/trips.repository'
+
+export type TripsCacheData = TripsRepositoryData
+
+export type TripDetailsCacheData =
+  TripDetailsRepositoryData
 
 let tripsCache: TripsCacheData | null = null
 
@@ -79,45 +78,7 @@ export async function loadTripsCache(
   const requestVersion = ++tripsCacheVersion
 
   const loadingPromise = (async (): Promise<TripsCacheData> => {
-    const response = await fetch('/api/trips', {
-      method: 'GET',
-      cache: 'no-store',
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(
-        result?.error ??
-          'تعذر تحميل بيانات الرحلات.',
-      )
-    }
-
-    const data: TripsCacheData = {
-      trips: Array.isArray(result?.trips)
-        ? result.trips
-        : [],
-
-      academicYears: Array.isArray(
-        result?.academicYears,
-      )
-        ? result.academicYears
-        : [],
-
-      courses: Array.isArray(result?.courses)
-        ? result.courses
-        : [],
-
-      levels: Array.isArray(result?.levels)
-        ? result.levels
-        : [],
-
-      tripLevels: Array.isArray(
-        result?.tripLevels,
-      )
-        ? result.tripLevels
-        : [],
-    }
+    const data = await loadTripsRepositoryData()
 
     // لا تحفظ نتيجة طلب قديم إذا بدأ تحميل أحدث
     // أو تم مسح الكاش أثناء التحميل.
@@ -242,48 +203,8 @@ export async function loadTripDetailsCache(
 
   const loadingPromise =
     (async (): Promise<TripDetailsCacheData> => {
-      const response = await fetch(
-        `/api/trips/${encodeURIComponent(
-          tripId,
-        )}/students`,
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ??
-            'تعذر تحميل بيانات الرحلة.',
-        )
-      }
-
-      const data: TripDetailsCacheData = {
-        trip: result?.trip ?? null,
-
-        course: result?.course ?? null,
-
-        levels: Array.isArray(
-          result?.levels,
-        )
-          ? result.levels
-          : [],
-
-        lesson_dates: Array.isArray(
-          result?.lesson_dates,
-        )
-          ? result.lesson_dates
-          : [],
-
-        students: Array.isArray(
-          result?.students,
-        )
-          ? result.students
-          : [],
-      }
+      const data =
+        await loadTripDetailsRepositoryData(tripId)
 
       // لا تحفظ إلا نتيجة أحدث طلب صالح لهذه الرحلة.
       if (
