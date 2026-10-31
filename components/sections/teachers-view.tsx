@@ -15,6 +15,10 @@ import {
 } from '@/lib/features/teachers/repositories/teachers-mutations.repository'
 
 import {
+  loadActiveAcademicLevels,
+} from '@/lib/features/teachers/repositories/teachers.repository'
+
+import {
   getTeachersCache,
   loadTeachersCache,
   updateTeachersCache,
@@ -420,53 +424,31 @@ export function TeachersView() {
   useEffect(() => {
     void loadAccessSettings()
 
-    const loadAcademicLevels =
-      async () => {
-        const {
-          data,
-          error,
-        } = await import('@/lib/supabase').then(
-          ({ supabase }) =>
-            supabase
-              .from('levels')
-              .select(
-                'id, name, sort_order',
-              )
-              .eq(
-                'is_active',
-                true,
-              )
-              .order(
-                'sort_order',
-                {
-                  ascending: true,
-                },
-              ),
-        )
+    const loadAcademicLevels = async () => {
+  const {
+    data,
+    error,
+  } = await loadActiveAcademicLevels()
 
-        if (error) {
-          console.error(
-            'Academic levels load error:',
-            error,
-          )
+  if (error) {
+    console.error(
+      'Academic levels load error:',
+      error,
+    )
 
-          return
-        }
+    return
+  }
 
-        setAcademicLevels(
-          (data ?? []).map(
-            (level) => ({
-              id: level.id,
-              name: level.name,
-              sort_order:
-                Number(
-                  level.sort_order ??
-                    0,
-                ),
-            }),
-          ),
-        )
-      }
+  setAcademicLevels(
+    (data ?? []).map((level) => ({
+      id: level.id,
+      name: level.name,
+      sort_order: Number(
+        level.sort_order ?? 0,
+      ),
+    })),
+  )
+}
 
     void loadAcademicLevels()
 
