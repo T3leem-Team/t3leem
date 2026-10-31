@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -77,6 +76,21 @@ export async function updateStudentRecord(
       'id, student_id, name, personal_id, guardian_relation, phone, whatsapp, notes, health_notes, status, fee_exempt, source'
     )
     .single()
+}
+
+/**
+ * تعديل حالة إعفاء الطالب من الرسوم.
+ */
+export async function updateStudentFeeExemption(
+  studentId: string,
+  feeExempt: boolean
+) {
+  return await supabase
+    .from('students')
+    .update({
+      fee_exempt: feeExempt,
+    })
+    .eq('id', studentId)
 }
 
 /**
