@@ -742,3 +742,12 @@ export async function loadTeachersRepositoryData(): Promise<TeachersRepositoryDa
     academicLevels,
   }
 }
+export async function loadActiveAcademicLevels() {
+  return await supabase
+    .from('levels')
+    .select('id, name, sort_order')
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+    })
+}
