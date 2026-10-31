@@ -1,4 +1,3 @@
-
 'use client'
 
 import { supabase } from '@/lib/supabase'
@@ -210,16 +209,34 @@ function getDateRange(
   return result
 }
 
+// مفتاح مركب لتحديد الطالب والدورة بدون تعارض بين القيم.
+function getAssignmentKey(
+  studentId: string,
+  courseId: string
+) {
+  return JSON.stringify([studentId, courseId])
+}
+
+// مفتاح مركب لتحديد الطالب والدورة وتاريخ الحضور.
+function getAttendanceKey(
+  studentId: string,
+  courseId: string,
+  date: string
+) {
+  return JSON.stringify([studentId, courseId, date])
+}
+
 function getCourseStatus(
   course: Course,
   studentId: string,
-  assignments: TeacherStudentAssignment[],
+  assignmentByStudentCourse: Map<
+    string,
+    TeacherStudentAssignment
+  >,
   today: string
 ): StudentCourseStatus['status'] {
-  const hasAssignment = assignments.some(
-    (assignment) =>
-      assignment.student_id === studentId &&
-      assignment.course_id === course.id
+  const hasAssignment = assignmentByStudentCourse.has(
+    getAssignmentKey(studentId, course.id)
   )
 
   if (course.start_date && today < course.start_date) {
@@ -244,16 +261,6 @@ function getCurrentCourse(
         today <= course.end_date
       )
     }) ?? null
-  )
-}
-
-function getStatusName(
-  statuses: AttendanceStatus[],
-  statusId: string
-) {
-  return (
-    statuses.find((status) => status.id === statusId)
-      ?.name ?? ''
   )
 }
 
@@ -292,8 +299,11 @@ function normalizeAttendanceStatus(
 function calculateAttendanceSummary(
   studentId: string,
   course: Course,
-  records: AttendanceRecord[],
-  statuses: AttendanceStatus[],
+  attendanceByStudentCourseDate: Map<
+    string,
+    AttendanceRecord
+  >,
+  statusNameById: Map<string, string>,
   teacherName: string,
   today: string
 ): StudentAttendanceSummary {
@@ -321,11 +331,8 @@ function calculateAttendanceSummary(
 
       studyDates.push(date)
 
-      const record = records.find(
-        (item) =>
-          item.studentId === studentId &&
-          item.courseId === course.id &&
-          item.attendanceDate === date
+      const record = attendanceByStudentCourseDate.get(
+        getAttendanceKey(studentId, course.id, date)
       )
 
       if (!record) {
@@ -334,7 +341,7 @@ function calculateAttendanceSummary(
       }
 
       const status = normalizeAttendanceStatus(
-        getStatusName(statuses, record.statusId)
+        statusNameById.get(record.statusId) ?? ''
       )
 
       if (status === 'حاضر') {
@@ -868,6 +875,60 @@ export async function loadStudentsCache(options?: {
     }
 
     /*
+     * فهارس داخل الذاكرة لتقليل البحث المتكرر أثناء بناء قائمة الطلاب.
+     * نحافظ على أول توزيع وأول سجل حضور مطابق، مثل سلوك find السابق.
+     */
+    const assignmentByStudentCourse = new Map<
+      string,
+      TeacherStudentAssignment
+    >()
+
+    assignments.forEach((assignment) => {
+      const key = getAssignmentKey(
+        assignment.student_id,
+        assignment.course_id
+      )
+
+      if (!assignmentByStudentCourse.has(key)) {
+        assignmentByStudentCourse.set(key, assignment)
+      }
+    })
+
+    const statusNameById = new Map<string, string>()
+
+    loadedAttendanceStatuses.forEach((status) => {
+      statusNameById.set(status.id, status.name)
+    })
+
+    const attendanceByStudent = new Map<
+      string,
+      AttendanceRecord[]
+    >()
+
+    const attendanceByStudentCourseDate = new Map<
+      string,
+      AttendanceRecord
+    >()
+
+    attendanceRows.forEach((record) => {
+      const studentRecords =
+        attendanceByStudent.get(record.studentId) ?? []
+
+      studentRecords.push(record)
+      attendanceByStudent.set(record.studentId, studentRecords)
+
+      const key = getAttendanceKey(
+        record.studentId,
+        record.courseId,
+        record.attendanceDate
+      )
+
+      if (!attendanceByStudentCourseDate.has(key)) {
+        attendanceByStudentCourseDate.set(key, record)
+      }
+    })
+
+    /*
      * المدفوع لكل طالب
      */
     const paidMap = new Map<string, number>()
@@ -910,7 +971,7 @@ export async function loadStudentsCache(options?: {
             status: getCourseStatus(
               course,
               student.id,
-              assignments,
+              assignmentByStudentCourse,
               today
             ),
           })
@@ -918,10 +979,8 @@ export async function loadStudentsCache(options?: {
 
         const attendanceSummaries = loadedCourses.map(
           (course) => {
-            const assignment = assignments.find(
-              (item) =>
-                item.student_id === student.id &&
-                item.course_id === course.id
+            const assignment = assignmentByStudentCourse.get(
+              getAssignmentKey(student.id, course.id)
             )
 
             const teacherName = assignment
@@ -931,8 +990,8 @@ export async function loadStudentsCache(options?: {
             return calculateAttendanceSummary(
               student.id,
               course,
-              attendanceRows,
-              loadedAttendanceStatuses,
+              attendanceByStudentCourseDate,
+              statusNameById,
               teacherName,
               today
             )
@@ -940,16 +999,10 @@ export async function loadStudentsCache(options?: {
         )
 
         const attendanceRecords: StudentAttendanceRecord[] =
-          attendanceRows
-            .filter(
-              (record) => record.studentId === student.id
-            )
+          (attendanceByStudent.get(student.id) ?? [])
             .map((record) => {
               const status = normalizeAttendanceStatus(
-                getStatusName(
-                  loadedAttendanceStatuses,
-                  record.statusId
-                )
+                statusNameById.get(record.statusId) ?? ''
               )
 
               if (!status) {
@@ -976,24 +1029,10 @@ export async function loadStudentsCache(options?: {
           ? getCourseStatus(
               currentCourse,
               student.id,
-              assignments,
+              assignmentByStudentCourse,
               today
             )
           : 'لم يحضر'
-
-        const currentTeacherAssignment = currentCourse
-          ? assignments.find(
-              (item) =>
-                item.student_id === student.id &&
-                item.course_id === currentCourse.id
-            )
-          : undefined
-
-        const currentTeacherName = currentTeacherAssignment
-          ? teacherNames.get(
-              currentTeacherAssignment.teacher_id
-            ) ?? ''
-          : ''
 
         return {
           id: student.id,
@@ -1026,8 +1065,6 @@ export async function loadStudentsCache(options?: {
 
           enrollmentCourseName:
             enrollment?.courseName ?? '',
-
-          currentTeacherName,
 
           status: student.status ?? '',
 
@@ -1069,7 +1106,7 @@ export async function loadStudentsCache(options?: {
     )
 
     const finalStatus = 'متصل بقاعدة البيانات ✅'
-    
+
     const data: StudentsCacheData = {
       academicLevels: loadedAcademicLevels,
 
