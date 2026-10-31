@@ -68,7 +68,7 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
 
   // Normalize academic levels.
   const normalizedLevels: PaymentLevel[] = levels
-    .map((level: any) => ({
+    .map((level: any): PaymentLevel => ({
       id: String(level.id),
       name: String(level.name ?? 'غير محدد'),
       sortOrder:
@@ -76,16 +76,21 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
           ? null
           : Number(level.sort_order),
     }))
-    .sort((a, b) => {
-      const aOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER
-      const bOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER
+    .sort(
+      (a: PaymentLevel, b: PaymentLevel) => {
+        const aOrder =
+          a.sortOrder ?? Number.MAX_SAFE_INTEGER
 
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder
-      }
+        const bOrder =
+          b.sortOrder ?? Number.MAX_SAFE_INTEGER
 
-      return a.name.localeCompare(b.name, 'ar')
-    })
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder
+        }
+
+        return a.name.localeCompare(b.name, 'ar')
+      },
+    )
 
   const levelMap = new Map<string, PaymentLevel>(
     normalizedLevels.map((level) => [
