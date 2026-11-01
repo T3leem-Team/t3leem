@@ -9,8 +9,6 @@ import {
   Settings2,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
-
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +17,18 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+
+import {
+  loadAttendanceAwardAcademicYears,
+  loadAttendanceAwardCourses,
+  loadAttendanceAwardEnrollments,
+  loadAttendanceAwardStudentsForCalculation,
+  loadSettingsLevelsByIds,
+  loadAttendanceAwardAssignments,
+  loadAttendanceAwardTeachers,
+  loadAttendanceAwardStatuses,
+  loadAttendanceAwardAttendance,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import AttendanceAwardsResults from './attendance-awards-results'
 
@@ -308,15 +318,7 @@ export default function AttendanceAwardsCalculator() {
       const {
         data,
         error: queryError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, start_date, end_date, annual_fee, is_current, is_active',
-        )
-        .eq('is_active', true)
-        .order('start_date', {
-          ascending: false,
-        })
+      } = await loadAttendanceAwardAcademicYears()
 
       if (cancelled) {
         return
@@ -386,21 +388,9 @@ export default function AttendanceAwardsCalculator() {
       const {
         data,
         error: queryError,
-      } = await supabase
-        .from('courses')
-        .select(
-          'id, academic_year_id, name, start_date, end_date, days',
-        )
-        .eq(
-          'academic_year_id',
-          selectedYearId,
-        )
-        .order('start_date', {
-          ascending: true,
-        })
-        .order('name', {
-          ascending: true,
-        })
+      } = await loadAttendanceAwardCourses(
+        selectedYearId,
+      )
 
       if (cancelled) {
         return
@@ -563,15 +553,9 @@ export default function AttendanceAwardsCalculator() {
         const {
           data: enrollmentData,
           error: enrollmentError,
-        } = await supabase
-          .from('enrollments')
-          .select(
-            'id, student_id, academic_year_id, level_id, class_id, status',
-          )
-          .eq(
-            'academic_year_id',
-            selectedYearId,
-          )
+        } = await loadAttendanceAwardEnrollments(
+          selectedYearId,
+        )
 
         if (enrollmentError) {
           throw new Error(
@@ -606,18 +590,9 @@ export default function AttendanceAwardsCalculator() {
         const {
           data: studentData,
           error: studentError,
-        } = await supabase
-          .from('students')
-          .select(
-            'id, student_id, name, personal_id, phone, whatsapp',
-          )
-          .in(
-            'id',
-            studentIds,
-          )
-          .order('name', {
-            ascending: true,
-          })
+        } = await loadAttendanceAwardStudentsForCalculation(
+          studentIds,
+        )
 
         if (studentError) {
           throw new Error(
@@ -658,13 +633,9 @@ export default function AttendanceAwardsCalculator() {
           const {
             data: levelData,
             error: levelError,
-          } = await supabase
-            .from('levels')
-            .select('id, name')
-            .in(
-              'id',
-              levelIds,
-            )
+          } = await loadSettingsLevelsByIds(
+            levelIds,
+          )
 
           if (levelError) {
             throw new Error(
@@ -693,21 +664,10 @@ export default function AttendanceAwardsCalculator() {
         const {
           data: assignmentData,
           error: assignmentError,
-        } = await supabase
-          .from(
-            'teacher_student_assignments',
-          )
-          .select(
-            'id, course_id, teacher_id, student_id',
-          )
-          .in(
-            'course_id',
-            selectedCourseIds,
-          )
-          .in(
-            'student_id',
-            studentIds,
-          )
+        } = await loadAttendanceAwardAssignments(
+          selectedCourseIds,
+          studentIds,
+        )
 
         if (assignmentError) {
           throw new Error(
@@ -741,16 +701,9 @@ export default function AttendanceAwardsCalculator() {
           const {
             data: teacherData,
             error: teacherError,
-          } = await supabase
-            .from('teachers')
-            .select('id, name')
-            .in(
-              'id',
-              teacherIds,
-            )
-            .order('name', {
-              ascending: true,
-            })
+          } = await loadAttendanceAwardTeachers(
+            teacherIds,
+          )
 
           if (teacherError) {
             throw new Error(
@@ -780,17 +733,7 @@ export default function AttendanceAwardsCalculator() {
         const {
           data: statusData,
           error: statusError,
-        } = await supabase
-          .from('attendance_statuses')
-          .select(
-            'id, name, is_active, sort_order',
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+        } = await loadAttendanceAwardStatuses()
 
         if (statusError) {
           throw new Error(
@@ -819,27 +762,12 @@ export default function AttendanceAwardsCalculator() {
         const {
           data: attendanceData,
           error: attendanceError,
-        } = await supabase
-          .from('attendance')
-          .select(
-            'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-          )
-          .in(
-            'course_id',
-            selectedCourseIds,
-          )
-          .in(
-            'student_id',
-            studentIds,
-          )
-          .gte(
-            'attendance_date',
-            fromDate,
-          )
-          .lte(
-            'attendance_date',
-            toDate,
-          )
+        } = await loadAttendanceAwardAttendance(
+          selectedCourseIds,
+          studentIds,
+          fromDate,
+          toDate,
+        )
 
         if (attendanceError) {
           throw new Error(
