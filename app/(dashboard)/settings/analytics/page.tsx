@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase'
+import { checkSettingsPermission } from '@/lib/features/settings/repositories/settings.repository'
 
 type AnalyticsOption = {
   title: string
@@ -68,24 +69,8 @@ export default function AnalyticsPage() {
           return
         }
 
-        /*
-         * صلاحية دخول صفحة التحليلات نفسها.
-         *
-         * التحكم بعرض بطاقة التحليلات في صفحة
-         * الإعدادات الرئيسية يتم بشكل منفصل من خلال:
-         *
-         * analytics.page.view
-         *
-         * لذلك لا نتحقق من صلاحيات عناصر النظام هنا.
-         */
         const { data, error } =
-          await supabase.rpc(
-            'has_permission',
-            {
-              required_permission:
-                'analytics.view',
-            },
-          )
+          await checkSettingsPermission('analytics.view')
 
         if (error) {
           console.error(
@@ -151,7 +136,6 @@ export default function AnalyticsPage() {
         description="عرض وتحليل مؤشرات النظام والبيانات المتوفرة."
       />
 
-      {/* العودة إلى الإدارة */}
       <div className="flex justify-start">
         <Button
           variant="outline"
@@ -165,7 +149,6 @@ export default function AnalyticsPage() {
         </Button>
       </div>
 
-      {/* مقدمة */}
       <Card>
         <CardHeader>
           <div className="flex items-start gap-4">
@@ -187,7 +170,6 @@ export default function AnalyticsPage() {
         </CardHeader>
       </Card>
 
-      {/* خيارات التحليلات */}
       {analyticsOptions.length > 0 && (
         <section className="space-y-3">
           <div>
@@ -201,55 +183,50 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {analyticsOptions.map(
-              (item) => {
-                const Icon = item.icon
+            {analyticsOptions.map((item) => {
+              const Icon = item.icon
 
-                return (
-                  <Card
-                    key={item.href}
-                    className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
-                    onClick={() =>
-                      router.push(
-                        item.href,
-                      )
-                    }
-                  >
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <Icon className="h-6 w-6" />
-                        </div>
-
-                        {item.badge && (
-                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                            {item.badge}
-                          </span>
-                        )}
+              return (
+                <Card
+                  key={item.href}
+                  className="cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
+                  onClick={() =>
+                    router.push(item.href)
+                  }
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-6 w-6" />
                       </div>
 
-                      <CardTitle className="pt-2 text-base">
-                        {item.title}
-                      </CardTitle>
+                      {item.badge && (
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
 
-                      <CardDescription className="leading-6">
-                        {item.description}
-                      </CardDescription>
+                    <CardTitle className="pt-2 text-base">
+                      {item.title}
+                    </CardTitle>
 
-                      <div className="flex items-center gap-1 pt-2 text-sm font-medium text-primary">
-                        عرض التحليل
-                        <ChevronLeft className="h-4 w-4" />
-                      </div>
-                    </CardHeader>
-                  </Card>
-                )
-              },
-            )}
+                    <CardDescription className="leading-6">
+                      {item.description}
+                    </CardDescription>
+
+                    <div className="flex items-center gap-1 pt-2 text-sm font-medium text-primary">
+                      عرض التحليل
+                      <ChevronLeft className="h-4 w-4" />
+                    </div>
+                  </CardHeader>
+                </Card>
+              )
+            })}
           </div>
         </section>
       )}
 
-      {/* التحليلات القادمة */}
       <section className="space-y-3">
         <div>
           <h2 className="text-lg font-semibold">
