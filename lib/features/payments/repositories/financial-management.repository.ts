@@ -10,9 +10,9 @@ import type {
   StudentRecord,
   Summary,
   Transaction,
-} from '@/components/payments/payment-financial.types'
+} from '@/app/(dashboard)/payments/financial/payment-financial.types'
 
-import { emptySummary } from '@/components/payments/payment-financial.utils'
+import { emptySummary } from '@/app/(dashboard)/payments/financial/payment-financial.utils'
 
 type FinancialData = {
   settings: FinancialSettings | null
