@@ -782,7 +782,65 @@ export async function updateStudentStatusSettings(
     .eq('id', id)
 }
 
+// حذف النتائج السابقة للسنة الدراسية
+export async function deleteAttendanceAwardResults(
+  academicYearId: string,
+) {
+  return await supabase
+    .from('attendance_award_results')
+    .delete()
+    .eq('academic_year_id', academicYearId)
+}
 
+// حفظ النتائج الجديدة
+export async function insertAttendanceAwardResults(
+  rows: {
+    academic_year_id: string
+    student_id: string
+    status: 'eligible' | 'not_eligible'
+    annual_percentage: number | null
+    course_count: number
+    minimum_percentage: number
+    require_all_courses: boolean
+    from_date: string
+    to_date: string
+    course_results: {
+      course_id: string
+      course_name: string
+      percentage: number | null
+      numerator: number
+      denominator: number
+      registered: boolean
+      status: string
+    }[]
+  }[],
+) {
+  return await supabase
+    .from('attendance_award_results')
+    .insert(rows)
+}
+
+// تحميل النتائج المحفوظة للسنة الدراسية
+export async function loadAttendanceAwardResults(
+  academicYearId: string,
+) {
+  return await supabase
+    .from('attendance_award_results')
+    .select(
+      'id, academic_year_id, student_id, status, annual_percentage, course_count, minimum_percentage, require_all_courses, from_date, to_date, course_results',
+    )
+    .eq('academic_year_id', academicYearId)
+}
+
+// تحميل بيانات الطلاب المرتبطين بالنتائج
+export async function loadAttendanceAwardStudents(
+  studentIds: string[],
+) {
+  return await supabase
+    .from('students')
+    .select('id, student_id, name, personal_id')
+    .in('id', studentIds)
+}
 
 
 
