@@ -1,4 +1,4 @@
-'use client'
+use client'
 
 import {
   Dispatch,
@@ -20,7 +20,21 @@ import {
 
 import * as XLSX from 'xlsx'
 
-import { supabase } from '@/lib/supabase'
+import {
+  closeSettingsAcademicYearCourse,
+  loadSettingsCourseSummaryAssignments,
+  loadSettingsCourseSummaryAttendance,
+  loadSettingsAttendanceStatusesByIds,
+  loadSettingsCourseExportAssignments,
+  loadSettingsCourseExportStudents,
+  loadSettingsCourseAcademicYear,
+  loadSettingsCourseEnrollments,
+  loadSettingsLevelsByIds,
+  loadSettingsClassesByIds,
+  loadSettingsTeachersByIds,
+  loadSettingsSubjectsByIds,
+  loadSettingsCourseExportAttendance,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -523,22 +537,10 @@ export default function AcademicYearCourseManagement({
     const {
       data,
       error,
-    } = await supabase
-      .from('courses')
-      .update({
-        is_closed: true,
-        closed_at:
-          new Date().toISOString(),
-      })
-      .eq('id', course.id)
-      .eq(
-        'is_closed',
-        false,
-      )
-      .select(
-        'id, is_closed, closed_at',
-      )
-      .single()
+    } = await closeSettingsAcademicYearCourse(
+      course.id,
+      new Date().toISOString(),
+    )
 
     if (error) {
       setSupabaseStatus(
@@ -618,15 +620,7 @@ export default function AcademicYearCourseManagement({
         data: assignments,
         error:
           assignmentsError,
-      } = await supabase
-        .from(
-          'teacher_student_assignments',
-        )
-        .select('student_id')
-        .eq(
-          'course_id',
-          course.id,
-        )
+      } = await loadSettingsCourseSummaryAssignments(course.id)
 
       if (assignmentsError) {
         throw assignmentsError
@@ -670,15 +664,7 @@ export default function AcademicYearCourseManagement({
         data: attendanceRows,
         error:
           attendanceError,
-      } = await supabase
-        .from('attendance')
-        .select(
-          'student_id, attendance_date, status_id',
-        )
-        .eq(
-          'course_id',
-          course.id,
-        )
+      } = await loadSettingsCourseSummaryAttendance(course.id)
 
       if (attendanceError) {
         throw attendanceError
@@ -710,15 +696,7 @@ export default function AcademicYearCourseManagement({
           data: statuses,
           error:
             statusesError,
-        } = await supabase
-          .from(
-            'attendance_statuses',
-          )
-          .select('id, name')
-          .in(
-            'id',
-            statusIds,
-          )
+        } = await loadSettingsAttendanceStatusesByIds(statusIds)
 
         if (statusesError) {
           throw statusesError
@@ -855,17 +833,7 @@ export default function AcademicYearCourseManagement({
         data: assignmentRows,
         error:
           assignmentError,
-      } = await supabase
-        .from(
-          'teacher_student_assignments',
-        )
-        .select(
-          'student_id, teacher_id, subject_id',
-        )
-        .eq(
-          'course_id',
-          course.id,
-        )
+      } = await loadSettingsCourseExportAssignments(course.id)
 
       if (assignmentError) {
         throw assignmentError
@@ -914,15 +882,7 @@ export default function AcademicYearCourseManagement({
           data: studentRows,
           error:
             studentsError,
-        } = await supabase
-          .from('students')
-          .select(
-            'id, name, personal_id, gender, age, phone, whatsapp, notes, health_notes',
-          )
-          .in(
-            'id',
-            studentIds,
-          )
+        } = await loadSettingsCourseExportStudents(studentIds)
 
         if (studentsError) {
           throw studentsError
@@ -932,16 +892,7 @@ export default function AcademicYearCourseManagement({
           data: courseYear,
           error:
             courseYearError,
-        } = await supabase
-          .from('courses')
-          .select(
-            'academic_year_id',
-          )
-          .eq(
-            'id',
-            course.id,
-          )
-          .single()
+        } = await loadSettingsCourseAcademicYear(course.id)
 
         if (courseYearError) {
           throw courseYearError
@@ -951,21 +902,10 @@ export default function AcademicYearCourseManagement({
           data: enrollmentRows,
           error:
             enrollmentsError,
-        } = await supabase
-          .from('enrollments')
-          .select(
-            'student_id, level_id, class_id',
-          )
-          .eq(
-            'academic_year_id',
-            courseYear
-              ?.academic_year_id ??
-              '',
-          )
-          .in(
-            'student_id',
-            studentIds,
-          )
+        } = await loadSettingsCourseEnrollments(
+          courseYear?.academic_year_id ?? '',
+          studentIds,
+        )
 
         if (enrollmentsError) {
           throw enrollmentsError
@@ -1020,15 +960,7 @@ export default function AcademicYearCourseManagement({
             data: levelRows,
             error:
               levelsError,
-          } = await supabase
-            .from('levels')
-            .select(
-              'id, name',
-            )
-            .in(
-              'id',
-              levelIds,
-            )
+          } = await loadSettingsLevelsByIds(levelIds)
 
           if (levelsError) {
             throw levelsError
@@ -1058,15 +990,7 @@ export default function AcademicYearCourseManagement({
             data: classRows,
             error:
               classesError,
-          } = await supabase
-            .from('classes')
-            .select(
-              'id, name',
-            )
-            .in(
-              'id',
-              classIds,
-            )
+          } = await loadSettingsClassesByIds(classIds)
 
           if (classesError) {
             throw classesError
@@ -1194,15 +1118,7 @@ export default function AcademicYearCourseManagement({
           data: teacherRows,
           error:
             teacherError,
-        } = await supabase
-          .from('teachers')
-          .select(
-            'id, name',
-          )
-          .in(
-            'id',
-            teacherIds,
-          )
+        } = await loadSettingsTeachersByIds(teacherIds)
 
         if (teacherError) {
           throw teacherError
@@ -1232,15 +1148,7 @@ export default function AcademicYearCourseManagement({
           data: subjectRows,
           error:
             subjectError,
-        } = await supabase
-          .from('subjects')
-          .select(
-            'id, name',
-          )
-          .in(
-            'id',
-            subjectIds,
-          )
+        } = await loadSettingsSubjectsByIds(subjectIds)
 
         if (subjectError) {
           throw subjectError
@@ -1292,15 +1200,7 @@ export default function AcademicYearCourseManagement({
         data: attendanceRows,
         error:
           attendanceError,
-      } = await supabase
-        .from('attendance')
-        .select(
-          'student_id, attendance_date, status_id, note',
-        )
-        .eq(
-          'course_id',
-          course.id,
-        )
+      } = await loadSettingsCourseExportAttendance(course.id)
 
       if (attendanceError) {
         throw attendanceError
@@ -1334,17 +1234,7 @@ export default function AcademicYearCourseManagement({
           data: statusRows,
           error:
             statusError,
-        } = await supabase
-          .from(
-            'attendance_statuses',
-          )
-          .select(
-            'id, name',
-          )
-          .in(
-            'id',
-            attendanceStatusIds,
-          )
+        } = await loadSettingsAttendanceStatusesByIds(attendanceStatusIds)
 
         if (statusError) {
           throw statusError
