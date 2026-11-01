@@ -20,7 +20,13 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  checkStudentStatusPageEnabled,
+  recordStudentTrackingAnalytics,
+  loadStudentStatusByPersonalId,
+  loadStudentTripsByPersonalId,
+  respondToStudentTrip,
+} from '@/lib/features/students/repositories/students.repository'
 
 type Student = {
   id: string
@@ -442,8 +448,8 @@ export default function StudentStatusPage() {
   const [respondingTripId, setRespondingTripId] =
     useState<string | null>(null)
 
- const [activePersonalId, setActivePersonalId] =
-  useState('')
+  const [activePersonalId, setActivePersonalId] =
+    useState('')
 
   /*
    * =====================================================
@@ -457,24 +463,24 @@ export default function StudentStatusPage() {
    */
   useEffect(() => {
     let mounted = true
-  
+
     const checkPageStatus = async () => {
       try {
         const {
           data: enabled,
           error: settingsError,
-        } = await supabase.rpc('is_student_status_enabled')
-  
+        } = await checkStudentStatusPageEnabled()
+
         if (!mounted) {
           return
         }
-  
+
         if (settingsError) {
           console.error(
             'Student status settings error:',
             settingsError,
           )
-  
+
           /*
            * Fail closed:
            * في حال تعذر التحقق من الإعدادات لا نفتح
@@ -486,11 +492,11 @@ export default function StudentStatusPage() {
           )
           return
         }
-  
+
         const pageIsEnabled = enabled === true
-  
+
         setPageEnabled(pageIsEnabled)
-  
+
         /*
          * نسجل الزيارة فقط إذا كانت الصفحة مفعلة.
          */
@@ -499,16 +505,11 @@ export default function StudentStatusPage() {
           !visitRecordedRef.current
         ) {
           visitRecordedRef.current = true
-  
+
           try {
             const { error: analyticsError } =
-              await supabase.rpc(
-                'record_student_tracking_analytics',
-                {
-                  p_type: 'visit',
-                },
-              )
-  
+              await recordStudentTrackingAnalytics('visit')
+
             if (analyticsError) {
               console.error(
                 'Student tracking visit analytics error:',
@@ -527,56 +528,51 @@ export default function StudentStatusPage() {
           'Student status access check exception:',
           err,
         )
-  
+
         if (!mounted) {
           return
         }
-  
+
         setPageEnabled(false)
         setPageAccessError(
           'تعذر التحقق من حالة صفحة متابعة الطالب حاليًا.',
         )
       }
     }
-  
+
     void checkPageStatus()
-  
+
     return () => {
       mounted = false
     }
   }, [])
-    
-    const recordRealTrackingOpen = () => {
-      if (realTrackingRecordedRef.current) {
-        return
-      }
-  
-      realTrackingRecordedRef.current = true
-  
-      void (async () => {
-        try {
-          const { error: analyticsError } =
-            await supabase.rpc(
-              'record_student_tracking_analytics',
-              {
-                p_type: 'real_tracking_open',
-              },
-            )
-  
-          if (analyticsError) {
-            console.error(
-              'Real tracking open analytics error:',
-              analyticsError,
-            )
-          }
-        } catch (analyticsException) {
+
+  const recordRealTrackingOpen = () => {
+    if (realTrackingRecordedRef.current) {
+      return
+    }
+
+    realTrackingRecordedRef.current = true
+
+    void (async () => {
+      try {
+        const { error: analyticsError } =
+          await recordStudentTrackingAnalytics('real_tracking_open')
+
+        if (analyticsError) {
           console.error(
-            'Real tracking open analytics exception:',
-            analyticsException,
+            'Real tracking open analytics error:',
+            analyticsError,
           )
         }
-      })()
-    }
+      } catch (analyticsException) {
+        console.error(
+          'Real tracking open analytics exception:',
+          analyticsException,
+        )
+      }
+    })()
+  }
 
   const handleSearch = async () => {
     /*
@@ -628,12 +624,7 @@ export default function StudentStatusPage() {
       const {
         data,
         error: rpcError,
-      } = await supabase.rpc(
-        'get_student_status_by_personal_id',
-        {
-          p_personal_id: personalId,
-        },
-      )
+      } = await loadStudentStatusByPersonalId(personalId)
 
       if (rpcError) {
         throw rpcError
@@ -832,12 +823,7 @@ export default function StudentStatusPage() {
         const {
           data: tripsData,
           error: tripsRpcError,
-        } = await supabase.rpc(
-          'get_student_trips_by_personal_id',
-          {
-            p_personal_id: personalId,
-          },
-        )
+        } = await loadStudentTripsByPersonalId(personalId)
 
         if (tripsRpcError) {
           throw tripsRpcError
@@ -896,14 +882,10 @@ export default function StudentStatusPage() {
     try {
       const {
         error: responseError,
-      } = await supabase.rpc(
-        'respond_to_trip',
-        {
-          p_personal_id: activePersonalId,
-          p_trip_id: tripId,
-          p_response: response,
-          p_response_note: null,
-        },
+      } = await respondToStudentTrip(
+        activePersonalId,
+        tripId,
+        response,
       )
 
       if (responseError) {
