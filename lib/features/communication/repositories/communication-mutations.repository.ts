@@ -114,3 +114,52 @@ export async function loadCommunicationRecords(
     attendanceAwardResult,
   }
 }
+
+
+
+// ==========================================
+// Communication WhatsApp Group
+// ==========================================
+
+export async function loadCommunicationGroup() {
+  return supabase
+    .from('communication_group')
+    .select('whatsapp_url')
+    .limit(1)
+    .maybeSingle()
+}
+
+export async function findCommunicationGroup() {
+  return supabase
+    .from('communication_group')
+    .select('id')
+    .limit(1)
+    .maybeSingle()
+}
+
+export async function updateCommunicationGroup(
+  id: string,
+  whatsappUrl: string | null,
+  updatedAt: string,
+) {
+  return supabase
+    .from('communication_group')
+    .update({
+      whatsapp_url: whatsappUrl,
+      updated_at: updatedAt,
+    })
+    .eq('id', id)
+}
+
+export async function insertCommunicationGroup(
+  whatsappUrl: string,
+  updatedAt: string,
+) {
+  return supabase
+    .from('communication_group')
+    .insert({
+      whatsapp_url: whatsappUrl,
+      updated_at: updatedAt,
+    })
+}
+
