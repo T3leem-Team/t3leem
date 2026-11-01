@@ -203,3 +203,13 @@ export async function deleteCurrentYearEnrollmentRequests(
     .delete()
     .eq('academic_year_id', academicYearId)
 }
+
+// استيراد طلبات التسجيل من ملف Excel
+export async function insertEnrollmentImportRequests(
+  payload: any[],
+) {
+  return supabase
+    .from('registration_requests')
+    .insert(payload)
+    .select('id')
+}
