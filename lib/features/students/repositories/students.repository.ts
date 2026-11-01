@@ -564,3 +564,53 @@ export async function loadStudentsRepositoryData(): Promise<StudentsRepositoryDa
     attendanceRows,
   }
 }
+
+export async function checkStudentStatusPageEnabled() {
+  return await supabase.rpc('is_student_status_enabled')
+}
+
+export async function recordStudentTrackingAnalytics(
+  type: 'visit' | 'real_tracking_open',
+) {
+  return await supabase.rpc(
+    'record_student_tracking_analytics',
+    {
+      p_type: type,
+    },
+  )
+}
+
+export async function loadStudentStatusByPersonalId(
+  personalId: string,
+) {
+  return await supabase.rpc(
+    'get_student_status_by_personal_id',
+    {
+      p_personal_id: personalId,
+    },
+  )
+}
+
+export async function loadStudentTripsByPersonalId(
+  personalId: string,
+) {
+  return await supabase.rpc(
+    'get_student_trips_by_personal_id',
+    {
+      p_personal_id: personalId,
+    },
+  )
+}
+
+export async function respondToStudentTrip(
+  personalId: string,
+  tripId: string,
+  response: 'pending' | 'accepted' | 'rejected',
+) {
+  return await supabase.rpc('respond_to_trip', {
+    p_personal_id: personalId,
+    p_trip_id: tripId,
+    p_response: response,
+    p_response_note: null,
+  })
+}
