@@ -3,7 +3,11 @@
 
 import { useRef, useState } from 'react'
 import { FileText, Pencil, Save, Trash2, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+
+import {
+  updateCommunicationMessageTemplate,
+  deleteCommunicationMessageTemplate,
+} from '@/lib/features/communication/repositories/communication-mutations.repository'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,6 +48,7 @@ export function CommunicationTemplates({
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+
   const contentRef = useRef<HTMLTextAreaElement>(null)
   const cursorPositionRef = useRef<number | null>(null)
 
@@ -73,9 +78,14 @@ export function CommunicationTemplates({
 
     const start = textarea.selectionStart
     const end = textarea.selectionEnd
+
     const nextContent =
-      content.substring(0, start) + variable + content.substring(end)
-    const nextCursorPosition = start + variable.length
+      content.substring(0, start) +
+      variable +
+      content.substring(end)
+
+    const nextCursorPosition =
+      start + variable.length
 
     setContent(nextContent)
     cursorPositionRef.current = nextCursorPosition
@@ -105,16 +115,14 @@ export function CommunicationTemplates({
     setMessage('')
 
     try {
-      const { data, error } = await supabase
-        .from('communication_message_templates')
-        .update({
-          name: name.trim(),
-          content: content.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingId)
-        .select('id, name, content, created_at, updated_at')
-        .single()
+      const { data, error } =
+        await updateCommunicationMessageTemplate(
+          editingId,
+          {
+            name: name.trim(),
+            content: content.trim(),
+          }
+        )
 
       if (error) throw error
 
@@ -128,14 +136,20 @@ export function CommunicationTemplates({
 
       onTemplatesChange(
         templates.map((template) =>
-          template.id === editingId ? updatedTemplate : template
+          template.id === editingId
+            ? updatedTemplate
+            : template
         )
       )
 
       cancelEditing()
       setMessage('تم حفظ التعديلات بنجاح.')
     } catch (error) {
-      console.error('Failed to update message template:', error)
+      console.error(
+        'Failed to update message template:',
+        error
+      )
+
       setMessage('تعذر حفظ التعديلات. حاول مرة أخرى.')
     } finally {
       setSaving(false)
@@ -153,15 +167,17 @@ export function CommunicationTemplates({
     setMessage('')
 
     try {
-      const { error } = await supabase
-        .from('communication_message_templates')
-        .delete()
-        .eq('id', template.id)
+      const { error } =
+        await deleteCommunicationMessageTemplate(
+          template.id
+        )
 
       if (error) throw error
 
       onTemplatesChange(
-        templates.filter((item) => item.id !== template.id)
+        templates.filter(
+          (item) => item.id !== template.id
+        )
       )
 
       if (editingId === template.id) {
@@ -170,7 +186,11 @@ export function CommunicationTemplates({
 
       setMessage('تم حذف الرسالة بنجاح.')
     } catch (error) {
-      console.error('Failed to delete message template:', error)
+      console.error(
+        'Failed to delete message template:',
+        error
+      )
+
       setMessage('تعذر حذف الرسالة. حاول مرة أخرى.')
     } finally {
       setDeletingId(null)
@@ -192,7 +212,10 @@ export function CommunicationTemplates({
         </div>
 
         {message && (
-          <p className="rounded-md border p-3 text-sm" role="status">
+          <p
+            className="rounded-md border p-3 text-sm"
+            role="status"
+          >
             {message}
           </p>
         )}
@@ -200,7 +223,11 @@ export function CommunicationTemplates({
         {templates.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center">
             <FileText className="mx-auto mb-3 size-8 text-muted-foreground" />
-            <p className="font-medium">ما فيه رسائل محفوظة حالياً</p>
+
+            <p className="font-medium">
+              ما فيه رسائل محفوظة حالياً
+            </p>
+
             <p className="mt-1 text-sm text-muted-foreground">
               تقدر تحفظ رسالة جديدة من نافذة التواصل المباشر.
             </p>
@@ -221,7 +248,9 @@ export function CommunicationTemplates({
 
                       <input
                         value={name}
-                        onChange={(event) => setName(event.target.value)}
+                        onChange={(event) =>
+                          setName(event.target.value)
+                        }
                         className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                         placeholder="اسم الرسالة"
                       />
@@ -235,7 +264,9 @@ export function CommunicationTemplates({
                       <textarea
                         ref={contentRef}
                         value={content}
-                        onChange={(event) => setContent(event.target.value)}
+                        onChange={(event) =>
+                          setContent(event.target.value)
+                        }
                         onSelect={(event) => {
                           cursorPositionRef.current =
                             event.currentTarget.selectionStart
@@ -265,7 +296,9 @@ export function CommunicationTemplates({
                               onMouseDown={(event) => {
                                 event.preventDefault()
                               }}
-                              onClick={() => insertVariable(variable.key)}
+                              onClick={() =>
+                                insertVariable(variable.key)
+                              }
                               title={variable.key}
                             >
                               {variable.label}
@@ -284,10 +317,15 @@ export function CommunicationTemplates({
                       <Button
                         type="button"
                         onClick={saveTemplate}
-                        disabled={saving || deletingId !== null}
+                        disabled={
+                          saving || deletingId !== null
+                        }
                       >
                         <Save className="me-2 size-4" />
-                        {saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+
+                        {saving
+                          ? 'جاري الحفظ...'
+                          : 'حفظ التعديلات'}
                       </Button>
 
                       <Button
@@ -304,7 +342,9 @@ export function CommunicationTemplates({
                 ) : (
                   <div>
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="font-semibold">{template.name}</h3>
+                      <h3 className="font-semibold">
+                        {template.name}
+                      </h3>
 
                       <div className="flex shrink-0 gap-1">
                         <Button
@@ -312,9 +352,12 @@ export function CommunicationTemplates({
                           variant="outline"
                           size="icon"
                           aria-label="تعديل الرسالة"
-                          onClick={() => startEditing(template)}
+                          onClick={() =>
+                            startEditing(template)
+                          }
                           disabled={
-                            deletingId !== null || editingId !== null
+                            deletingId !== null ||
+                            editingId !== null
                           }
                         >
                           <Pencil className="size-4" />
@@ -325,9 +368,12 @@ export function CommunicationTemplates({
                           variant="outline"
                           size="icon"
                           aria-label="حذف الرسالة"
-                          onClick={() => deleteTemplate(template)}
+                          onClick={() =>
+                            deleteTemplate(template)
+                          }
                           disabled={
-                            deletingId !== null || editingId !== null
+                            deletingId !== null ||
+                            editingId !== null
                           }
                         >
                           <Trash2 className="size-4 text-destructive" />
