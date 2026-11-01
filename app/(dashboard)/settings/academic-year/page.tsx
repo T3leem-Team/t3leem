@@ -7,7 +7,28 @@ import {
   Plus,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadSettingsAcademicYearTeachers,
+  loadSettingsAcademicYearSubjects,
+  loadSettingsAcademicYears,
+  loadSettingsCoursesByAcademicYearIds,
+  loadSettingsCourseTeachers,
+  loadSettingsCourseSubjects,
+  loadSettingsCourseSubjectTeachers,
+  loadSettingsExistingCourseSubjects,
+  deleteSettingsCourseSubjectTeachers,
+  deleteSettingsCourseSubjectsByIds,
+  insertSettingsCourseSubjects,
+  insertSettingsCourseSubjectTeachers,
+  deleteSettingsCourseTeachers,
+  insertSettingsCourseTeachers,
+  updateSettingsAcademicYear,
+  clearSettingsCurrentAcademicYear,
+  insertSettingsAcademicYear,
+  updateSettingsAcademicYearCourse,
+  insertSettingsAcademicYearCourse,
+  deleteSettingsAcademicYear,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -90,12 +111,8 @@ export default function Page() {
     const loadTeachers = async () => {
       setLoadingTeachers(true)
 
-      const { data, error } = await supabase
-        .from('teachers')
-        .select('id, name, is_active')
-        .order('name', {
-          ascending: true,
-        })
+      const { data, error } =
+        await loadSettingsAcademicYearTeachers()
 
       if (error) {
         setSupabaseStatus(
@@ -130,12 +147,8 @@ export default function Page() {
     const loadSubjects = async () => {
       setLoadingSubjects(true)
 
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('id, name, is_active')
-        .order('name', {
-          ascending: true,
-        })
+      const { data, error } =
+        await loadSettingsAcademicYearSubjects()
 
       if (error) {
         setSupabaseStatus(
@@ -169,14 +182,8 @@ export default function Page() {
   const loadYears = async () => {
     setLoadingYears(true)
 
-    const { data, error } = await supabase
-      .from('academic_years')
-      .select(
-        'id, name, start_date, end_date, annual_fee, created_at',
-      )
-      .order('created_at', {
-        ascending: false,
-      })
+    const { data, error } =
+      await loadSettingsAcademicYears()
 
     if (error) {
       setSupabaseStatus(
@@ -204,18 +211,9 @@ export default function Page() {
     const {
       data: courseData,
       error: courseError,
-    } = await supabase
-      .from('courses')
-      .select(
-        'id, academic_year_id, name, start_date, end_date, days, is_closed, closed_at, created_at',
-      )
-      .in(
-        'academic_year_id',
-        yearIds,
-      )
-      .order('created_at', {
-        ascending: true,
-      })
+    } = await loadSettingsCoursesByAcademicYearIds(
+      yearIds,
+    )
 
     if (courseError) {
       setSupabaseStatus(
@@ -249,15 +247,9 @@ export default function Page() {
       const {
         data: relationData,
         error: relationError,
-      } = await supabase
-        .from('course_teachers')
-        .select(
-          'course_id, teacher_id',
-        )
-        .in(
-          'course_id',
-          courseIds,
-        )
+      } = await loadSettingsCourseTeachers(
+        courseIds,
+      )
 
       if (relationError) {
         setSupabaseStatus(
@@ -273,15 +265,9 @@ export default function Page() {
       const {
         data: courseSubjects,
         error: courseSubjectsError,
-      } = await supabase
-        .from('course_subjects')
-        .select(
-          'id, course_id, subject_id',
-        )
-        .in(
-          'course_id',
-          courseIds,
-        )
+      } = await loadSettingsCourseSubjects(
+        courseIds,
+      )
 
       if (courseSubjectsError) {
         setSupabaseStatus(
@@ -305,17 +291,9 @@ export default function Page() {
         const {
           data: subjectTeacherData,
           error: subjectTeacherError,
-        } = await supabase
-          .from(
-            'course_subject_teachers',
-          )
-          .select(
-            'course_subject_id, teacher_id',
-          )
-          .in(
-            'course_subject_id',
-            courseSubjectIds,
-          )
+        } = await loadSettingsCourseSubjectTeachers(
+          courseSubjectIds,
+        )
 
         if (subjectTeacherError) {
           setSupabaseStatus(
@@ -621,15 +599,10 @@ export default function Page() {
 
     const {
       data: existingSubjects,
-      error:
-        existingSubjectsError,
-    } = await supabase
-      .from('course_subjects')
-      .select('id, subject_id')
-      .eq(
-        'course_id',
-        courseId,
-      )
+      error: existingSubjectsError,
+    } = await loadSettingsExistingCourseSubjects(
+      courseId,
+    )
 
     if (existingSubjectsError) {
       return existingSubjectsError
@@ -648,17 +621,10 @@ export default function Page() {
       0
     ) {
       const {
-        error:
-          deleteSubjectTeachersError,
-      } = await supabase
-        .from(
-          'course_subject_teachers',
-        )
-        .delete()
-        .in(
-          'course_subject_id',
-          existingCourseSubjectIds,
-        )
+        error: deleteSubjectTeachersError,
+      } = await deleteSettingsCourseSubjectTeachers(
+        existingCourseSubjectIds,
+      )
 
       if (
         deleteSubjectTeachersError
@@ -687,17 +653,12 @@ export default function Page() {
       subjectsToDelete.length > 0
     ) {
       const {
-        error:
-          deleteUnusedSubjectsError,
-      } = await supabase
-        .from('course_subjects')
-        .delete()
-        .in(
-          'id',
-          subjectsToDelete.map(
-            (item) => item.id,
-          ),
-        )
+        error: deleteUnusedSubjectsError,
+      } = await deleteSettingsCourseSubjectsByIds(
+        subjectsToDelete.map(
+          (item) => item.id,
+        ),
+      )
 
       if (
         deleteUnusedSubjectsError
@@ -720,20 +681,15 @@ export default function Page() {
       subjectsToInsert.length > 0
     ) {
       const {
-        error:
-          insertSubjectsError,
-      } = await supabase
-        .from('course_subjects')
-        .insert(
-          subjectsToInsert.map(
-            (subjectId) => ({
-              course_id:
-                courseId,
-              subject_id:
-                subjectId,
-            }),
-          ),
-        )
+        error: insertSubjectsError,
+      } = await insertSettingsCourseSubjects(
+        subjectsToInsert.map(
+          (subjectId) => ({
+            course_id: courseId,
+            subject_id: subjectId,
+          }),
+        ),
+      )
 
       if (insertSubjectsError) {
         return insertSubjectsError
@@ -742,25 +698,17 @@ export default function Page() {
 
     const {
       data: refreshedSubjects,
-      error:
-        refreshedSubjectsError,
-    } = await supabase
-      .from('course_subjects')
-      .select('id, subject_id')
-      .eq(
-        'course_id',
-        courseId,
-      )
+      error: refreshedSubjectsError,
+    } = await loadSettingsExistingCourseSubjects(
+      courseId,
+    )
 
     if (refreshedSubjectsError) {
       return refreshedSubjectsError
     }
 
     const subjectIdToCourseSubjectId =
-      new Map<
-        string,
-        string
-      >()
+      new Map<string, string>()
 
     ;(
       refreshedSubjects ?? []
@@ -815,15 +763,10 @@ export default function Page() {
       0
     ) {
       const {
-        error:
-          insertSubjectTeachersError,
-      } = await supabase
-        .from(
-          'course_subject_teachers',
-        )
-        .insert(
-          uniqueSubjectTeacherRows,
-        )
+        error: insertSubjectTeachersError,
+      } = await insertSettingsCourseSubjectTeachers(
+        uniqueSubjectTeacherRows,
+      )
 
       if (
         insertSubjectTeachersError
@@ -833,15 +776,10 @@ export default function Page() {
     }
 
     const {
-      error:
-        deleteCourseTeachersError,
-    } = await supabase
-      .from('course_teachers')
-      .delete()
-      .eq(
-        'course_id',
-        courseId,
-      )
+      error: deleteCourseTeachersError,
+    } = await deleteSettingsCourseTeachers(
+      courseId,
+    )
 
     if (deleteCourseTeachersError) {
       return deleteCourseTeachersError
@@ -849,20 +787,15 @@ export default function Page() {
 
     if (teacherIds.length > 0) {
       const {
-        error:
-          insertCourseTeachersError,
-      } = await supabase
-        .from('course_teachers')
-        .insert(
-          teacherIds.map(
-            (teacherId) => ({
-              course_id:
-                courseId,
-              teacher_id:
-                teacherId,
-            }),
-          ),
-        )
+        error: insertCourseTeachersError,
+      } = await insertSettingsCourseTeachers(
+        teacherIds.map(
+          (teacherId) => ({
+            course_id: courseId,
+            teacher_id: teacherId,
+          }),
+        ),
+      )
 
       if (
         insertCourseTeachersError
@@ -987,22 +920,15 @@ export default function Page() {
         const {
           data: updatedYear,
           error: yearError,
-        } = await supabase
-          .from('academic_years')
-          .update({
+        } = await updateSettingsAcademicYear(
+          editingId,
+          {
             name: trimmedName,
-            start_date:
-              startDate || null,
-            end_date:
-              endDate || null,
-            annual_fee:
-              parsedAnnualFee,
-          })
-          .eq('id', editingId)
-          .select(
-            'id, name, start_date, end_date, annual_fee',
-          )
-          .single()
+            start_date: startDate || null,
+            end_date: endDate || null,
+            annual_fee: parsedAnnualFee,
+          },
+        )
 
         if (yearError) {
           setSupabaseStatus(
@@ -1046,36 +972,17 @@ export default function Page() {
 
             const {
               data: updatedCourse,
-              error:
-                updateCourseError,
-            } = await supabase
-              .from('courses')
-              .update({
+              error: updateCourseError,
+            } = await updateSettingsAcademicYearCourse(
+              courseId,
+              editingId,
+              {
                 name: course.name.trim(),
-                start_date:
-                  course.startDate ||
-                  null,
-                end_date:
-                  course.endDate ||
-                  null,
+                start_date: course.startDate || null,
+                end_date: course.endDate || null,
                 days: course.days,
-              })
-              .eq(
-                'id',
-                courseId,
-              )
-              .eq(
-                'academic_year_id',
-                editingId,
-              )
-              .eq(
-                'is_closed',
-                false,
-              )
-              .select(
-                'id, name, start_date, end_date, days, is_closed, closed_at',
-              )
-              .single()
+              },
+            )
 
             if (
               updateCourseError
@@ -1091,26 +998,16 @@ export default function Page() {
           } else {
             const {
               data: insertedCourse,
-              error:
-                insertCourseError,
-            } = await supabase
-              .from('courses')
-              .insert({
-                academic_year_id:
-                  editingId,
+              error: insertCourseError,
+            } = await insertSettingsAcademicYearCourse(
+              editingId,
+              {
                 name: course.name.trim(),
-                start_date:
-                  course.startDate ||
-                  null,
-                end_date:
-                  course.endDate ||
-                  null,
+                start_date: course.startDate || null,
+                end_date: course.endDate || null,
                 days: course.days,
-              })
-              .select(
-                'id, name, start_date, end_date, days, is_closed, closed_at',
-              )
-              .single()
+              },
+            )
 
             if (
               insertCourseError
@@ -1219,17 +1116,8 @@ export default function Page() {
       }
 
       const {
-        error:
-          resetCurrentError,
-      } = await supabase
-        .from('academic_years')
-        .update({
-          is_current: false,
-        })
-        .eq(
-          'is_current',
-          true,
-        )
+        error: resetCurrentError,
+      } = await clearSettingsCurrentAcademicYear()
 
       if (resetCurrentError) {
         setSupabaseStatus(
@@ -1241,23 +1129,14 @@ export default function Page() {
       const {
         data: newYear,
         error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .insert({
-          name: trimmedName,
-          start_date:
-            startDate || null,
-          end_date:
-            endDate || null,
-          annual_fee:
-            parsedAnnualFee,
-          is_current: true,
-          is_active: true,
-        })
-        .select(
-          'id, name, start_date, end_date, annual_fee',
-        )
-        .single()
+      } = await insertSettingsAcademicYear({
+        name: trimmedName,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        annual_fee: parsedAnnualFee,
+        is_current: true,
+        is_active: true,
+      })
 
       if (yearError) {
         setSupabaseStatus(
@@ -1272,26 +1151,16 @@ export default function Page() {
       for (const course of courses) {
         const {
           data: insertedCourse,
-          error:
-            insertCourseError,
-        } = await supabase
-          .from('courses')
-          .insert({
-            academic_year_id:
-              newYear.id,
+          error: insertCourseError,
+        } = await insertSettingsAcademicYearCourse(
+          newYear.id,
+          {
             name: course.name.trim(),
-            start_date:
-              course.startDate ||
-              null,
-            end_date:
-              course.endDate ||
-              null,
+            start_date: course.startDate || null,
+            end_date: course.endDate || null,
             days: course.days,
-          })
-          .select(
-            'id, name, start_date, end_date, days, is_closed, closed_at',
-          )
-          .single()
+          },
+        )
 
         if (insertCourseError) {
           setSupabaseStatus(
@@ -1412,10 +1281,7 @@ export default function Page() {
     )
 
     const { error } =
-      await supabase
-        .from('academic_years')
-        .delete()
-        .eq('id', id)
+      await deleteSettingsAcademicYear(id)
 
     if (error) {
       setSupabaseStatus(
@@ -1427,8 +1293,7 @@ export default function Page() {
 
     setYears((current) =>
       current.filter(
-        (item) =>
-          item.id !== id,
+        (item) => item.id !== id,
       ),
     )
 
