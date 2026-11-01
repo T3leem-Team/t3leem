@@ -296,14 +296,13 @@ export async function closeTrip(
     .from('trips')
     .update({
       status: 'closed',
-      ...input,
+      ...data,
     })
     .eq('id', tripId)
     .eq('status', 'published')
     .select(tripSelect)
     .single()
 }
-
 /*
  * =========================================================
  * PUBLISH TRIP
