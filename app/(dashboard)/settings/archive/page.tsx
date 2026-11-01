@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import {
   Archive,
   ArrowRight,
-  BookOpen,
   CalendarDays,
   Eye,
   Loader2,
@@ -12,7 +11,7 @@ import {
 
 import { useRouter } from 'next/navigation'
 
-import { supabase } from '@/lib/supabase'
+import { loadArchiveAcademicYears } from '@/lib/features/settings/repositories/settings.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import {
@@ -44,14 +43,7 @@ export default function Page() {
     setLoading(true)
     setError('')
 
-    const { data, error } = await supabase
-      .from('academic_years')
-      .select(
-        'id, name, start_date, end_date, is_current, is_active'
-      )
-      .eq('is_active', false)
-      .eq('is_current', false)
-      .order('start_date', { ascending: false })
+    const { data, error } = await loadArchiveAcademicYears()
 
     if (error) {
       setError('تعذر تحميل الأرشيف.')
