@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -23,12 +24,35 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  PageHeader,
+} from '@/components/dashboard/page-header'
 
-import { PageHeader } from '@/components/dashboard/page-header'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+} from '@/components/ui/card'
+
+import {
+  Badge,
+} from '@/components/ui/badge'
+
+import {
+  Button,
+} from '@/components/ui/button'
+
+import {
+  loadAcademicYear,
+  loadCourses,
+  loadTeachers as fetchTeachers,
+  loadRecords as fetchRecords,
+  loadSupervisionSettings,
+  updateSupervisionSettings,
+  getCurrentUserProfile,
+  deleteDayAttendance,
+  createSupervisionRecord,
+  updateSupervisionNote,
+} from '@/lib/features/supervision/repositories/supervision.repository'
 
 import {
   type SupervisionType,
@@ -104,9 +128,7 @@ export function SupervisionView() {
     useState<string | null>(null)
 
   const [selectedType, setSelectedType] =
-    useState<SupervisionType>(
-      'day_cancelled',
-    )
+    useState<SupervisionType>('day_cancelled')
 
   const [selectedTeacher, setSelectedTeacher] =
     useState('')
@@ -134,91 +156,52 @@ export function SupervisionView() {
   const selectedCourse = useMemo(
     () =>
       courses.find(
-        (course) =>
-          course.id === selectedCourseId,
+        (course) => course.id === selectedCourseId,
       ) ?? null,
     [courses, selectedCourseId],
   )
+
+  // ==========================================
+  // Cache
+  // ==========================================
 
   const updateCache = (
     overrides: Partial<SupervisionCache> = {},
   ) => {
     supervisionCache = {
       academicYear:
-        overrides.academicYear ??
-        academicYear,
+        overrides.academicYear ?? academicYear,
 
       courses:
-        overrides.courses ??
-        courses,
+        overrides.courses ?? courses,
 
       selectedCourseId:
-        overrides.selectedCourseId ??
-        selectedCourseId,
+        overrides.selectedCourseId ?? selectedCourseId,
 
       teachers:
-        overrides.teachers ??
-        teachers,
+        overrides.teachers ?? teachers,
 
       records:
-        overrides.records ??
-        records,
+        overrides.records ?? records,
 
       supervisionSettings:
-        overrides.supervisionSettings ??
-        supervisionSettings,
+        overrides.supervisionSettings ?? supervisionSettings,
     }
   }
 
-  /*
-   * قراءة إعدادات الإشراف عن طريق API
-   * بدلاً من القراءة المباشرة من Supabase.
-   */
+  // ==========================================
+  // Settings
+  // ==========================================
+
   const loadSettings = async () => {
     try {
-      const response = await fetch(
-        '/api/auth/permissions',
-        {
-          method: 'GET',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control':
-              'no-cache',
-          },
-        },
-      )
+      const nextSettings =
+        await loadSupervisionSettings()
 
-      const data =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ??
-            'تعذر تحميل صلاحيات المعلمين.',
-        )
-      }
-
-      const nextSettings: SupervisionSettings = {
-        allowTeacherTransfer:
-          typeof data.allowTeacherTransfer ===
-          'boolean'
-            ? data.allowTeacherTransfer
-            : true,
-
-        allowTeacherRemove:
-          typeof data.allowTeacherRemove ===
-          'boolean'
-            ? data.allowTeacherRemove
-            : true,
-      }
-
-      setSupervisionSettings(
-        nextSettings,
-      )
+      setSupervisionSettings(nextSettings)
 
       updateCache({
-        supervisionSettings:
-          nextSettings,
+        supervisionSettings: nextSettings,
       })
 
       return nextSettings
@@ -238,9 +221,6 @@ export function SupervisionView() {
     }
   }
 
-  /*
-   * تحديث إعدادات الإشراف عن طريق API.
-   */
   const updateSetting = async (
     setting:
       | 'allowTeacherTransfer'
@@ -251,78 +231,25 @@ export function SupervisionView() {
     setSettingsMessage('')
     setError('')
 
-    const previousSettings =
-      supervisionSettings
+    const previousSettings = supervisionSettings
 
     const nextSettings: SupervisionSettings = {
       ...supervisionSettings,
       [setting]: value,
     }
 
-    setSupervisionSettings(
-      nextSettings,
-    )
+    setSupervisionSettings(nextSettings)
 
     try {
-      const payload =
-        setting ===
-        'allowTeacherTransfer'
-          ? {
-              allowTeacherTransfer:
-                value,
-            }
-          : {
-              allowTeacherRemove:
-                value,
-            }
+      const savedSettings =
+        await updateSupervisionSettings({
+          [setting]: value,
+        })
 
-      const response = await fetch(
-        '/api/auth/permissions',
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          cache: 'no-store',
-          body: JSON.stringify(
-            payload,
-          ),
-        },
-      )
-
-      const data =
-        await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ??
-            'تعذر حفظ صلاحية المعلمين.',
-        )
-      }
-
-      const savedSettings: SupervisionSettings =
-        {
-          allowTeacherTransfer:
-            typeof data.allowTeacherTransfer ===
-            'boolean'
-              ? data.allowTeacherTransfer
-              : nextSettings.allowTeacherTransfer,
-
-          allowTeacherRemove:
-            typeof data.allowTeacherRemove ===
-            'boolean'
-              ? data.allowTeacherRemove
-              : nextSettings.allowTeacherRemove,
-        }
-
-      setSupervisionSettings(
-        savedSettings,
-      )
+      setSupervisionSettings(savedSettings)
 
       updateCache({
-        supervisionSettings:
-          savedSettings,
+        supervisionSettings: savedSettings,
       })
 
       setSettingsMessage(
@@ -338,13 +265,10 @@ export function SupervisionView() {
         err,
       )
 
-      setSupervisionSettings(
-        previousSettings,
-      )
+      setSupervisionSettings(previousSettings)
 
       updateCache({
-        supervisionSettings:
-          previousSettings,
+        supervisionSettings: previousSettings,
       })
 
       setError(
@@ -357,6 +281,10 @@ export function SupervisionView() {
     }
   }
 
+  // ==========================================
+  // Initial Data
+  // ==========================================
+
   const loadInitialData = async (
     showLoading = true,
   ) => {
@@ -367,30 +295,9 @@ export function SupervisionView() {
     setError('')
 
     try {
-      const settingsPromise =
-        loadSettings()
+      const settingsPromise = loadSettings()
 
-      const {
-        data: year,
-        error: yearError,
-      } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, start_date, end_date',
-        )
-        .eq(
-          'is_current',
-          true,
-        )
-        .eq(
-          'is_active',
-          true,
-        )
-        .maybeSingle()
-
-      if (yearError) {
-        throw yearError
-      }
+      const year = await loadAcademicYear()
 
       await settingsPromise
 
@@ -412,79 +319,36 @@ export function SupervisionView() {
         return
       }
 
-      const {
-        data: courseRows,
-        error: coursesError,
-      } = await supabase
-        .from('courses')
-        .select(
-          'id, academic_year_id, name, start_date, end_date, days',
-        )
-        .eq(
-          'academic_year_id',
-          year.id,
-        )
-        .order(
-          'start_date',
-          {
-            ascending: true,
-            nullsFirst: false,
-          },
-        )
-        .order(
-          'name',
-          {
-            ascending: true,
-          },
-        )
-
-      if (coursesError) {
-        throw coursesError
-      }
-
       const loadedCourses =
-        (courseRows ?? []) as Course[]
+        await loadCourses(year.id)
 
       const currentCourse =
-        loadedCourses.find(
-          (course) => {
-            if (
-              !course.start_date ||
-              !course.end_date
-            ) {
-              return false
-            }
+        loadedCourses.find((course) => {
+          if (!course.start_date || !course.end_date) {
+            return false
+          }
 
-            return (
-              today >=
-                course.start_date &&
-              today <=
-                course.end_date
-            )
-          },
-        ) ??
-        loadedCourses[0]
+          return (
+            today >= course.start_date &&
+            today <= course.end_date
+          )
+        }) ?? loadedCourses[0]
 
       const currentSelectedCourseId =
         loadedCourses.some(
-          (course) =>
-            course.id ===
-            selectedCourseId,
+          (course) => course.id === selectedCourseId,
         )
           ? selectedCourseId
           : currentCourse?.id ?? ''
 
       setAcademicYear(year)
       setCourses(loadedCourses)
-      setSelectedCourseId(
-        currentSelectedCourseId,
-      )
+      setSelectedCourseId(currentSelectedCourseId)
 
       updateCache({
         academicYear: year,
         courses: loadedCourses,
-        selectedCourseId:
-          currentSelectedCourseId,
+        selectedCourseId: currentSelectedCourseId,
       })
     } catch (err) {
       console.error(err)
@@ -501,9 +365,11 @@ export function SupervisionView() {
     }
   }
 
-  const loadTeachers = async (
-    courseId: string,
-  ) => {
+  // ==========================================
+  // Teachers
+  // ==========================================
+
+  const loadTeachers = async (courseId: string) => {
     if (!courseId) {
       setTeachers([])
 
@@ -517,70 +383,20 @@ export function SupervisionView() {
     setIsLoadingTeachers(true)
 
     try {
-      const {
-        data,
-        error: teachersError,
-      } = await supabase
-        .from('course_teachers')
-        .select(
-          `
-            teacher_id,
-            teachers (
-              id,
-              name
-            )
-          `,
-        )
-        .eq(
-          'course_id',
-          courseId,
-        )
+      const loadedTeachers =
+        await fetchTeachers(courseId)
 
-      if (teachersError) {
-        throw teachersError
-      }
-
-      const loadedTeachers: Teacher[] = []
-
-      for (const row of data ?? []) {
-        const teacher =
-          Array.isArray(row.teachers)
-            ? row.teachers[0]
-            : row.teachers
-
-        if (teacher) {
-          loadedTeachers.push({
-            id: teacher.id,
-            name: teacher.name,
-          })
-        }
-      }
-
-      loadedTeachers.sort(
-        (a, b) =>
-          a.name.localeCompare(
-            b.name,
-            'ar',
-          ),
-      )
-
-      setTeachers(
-        loadedTeachers,
-      )
+      setTeachers(loadedTeachers)
 
       updateCache({
-        teachers:
-          loadedTeachers,
-        selectedCourseId:
-          courseId,
+        teachers: loadedTeachers,
+        selectedCourseId: courseId,
       })
 
       if (
         selectedTeacher &&
         !loadedTeachers.some(
-          (teacher) =>
-            teacher.id ===
-            selectedTeacher,
+          (teacher) => teacher.id === selectedTeacher,
         )
       ) {
         setSelectedTeacher('')
@@ -604,9 +420,11 @@ export function SupervisionView() {
     }
   }
 
-  const loadRecords = async (
-    courseId: string,
-  ) => {
+  // ==========================================
+  // Supervision Records
+  // ==========================================
+
+  const loadRecords = async (courseId: string) => {
     if (!courseId) {
       setRecords([])
 
@@ -618,117 +436,57 @@ export function SupervisionView() {
     }
 
     try {
-      const {
-        data,
-        error: recordsError,
-      } = await supabase
-        .from('supervision_records')
-        .select(
-          `
-            id,
-            teacher_id,
-            type,
-            record_date,
-            reason,
-            note,
-            created_at,
-            course:courses (
-              name
-            ),
-            teacher:teachers (
-              name
-            ),
-            created_by_profile:user_profiles (
-              full_name
-            )
-          `,
-        )
-        .eq(
-          'course_id',
-          courseId,
-        )
-        .order(
-          'record_date',
-          {
-            ascending: false,
-          },
-        )
-        .order(
-          'created_at',
-          {
-            ascending: false,
-          },
-        )
+      const data = await fetchRecords(courseId)
 
-      if (recordsError) {
-        throw recordsError
-      }
-
+      /*
+       * Repository يرجع بيانات السجلات من Supabase.
+       * نحولها هنا إلى الشكل الذي تستخدمه الواجهة.
+       */
       const mappedRecords: SupervisionRecord[] =
-        (data ?? []).map(
-          (row: any) => {
-            const course =
-              Array.isArray(
-                row.course,
-              )
-                ? row.course[0]
-                : row.course
+        (data as any[]).map((row) => {
+          const course = Array.isArray(row.course)
+            ? row.course[0]
+            : row.course
 
-            const teacher =
-              Array.isArray(
-                row.teacher,
-              )
-                ? row.teacher[0]
-                : row.teacher
+          const teacher = Array.isArray(row.teacher)
+            ? row.teacher[0]
+            : row.teacher
 
-            const createdByProfile =
-              Array.isArray(
-                row.created_by_profile,
-              )
-                ? row
-                    .created_by_profile[0]
-                : row.created_by_profile
+          const createdByProfile =
+            Array.isArray(row.created_by_profile)
+              ? row.created_by_profile[0]
+              : row.created_by_profile
 
-            return {
-              id: row.id,
-              teacherId: row.teacher_id ?? null,
-              type:
-                row.type as SupervisionType,
-              date:
-                row.record_date,
-              course:
-                course?.name ??
-                selectedCourse?.name ??
-                '',
-              teacher:
-                teacher?.name ??
-                (row.type === 'day_cancelled'
-                  ? 'جميع المعلمين'
-                  : row.type === 'note'
-                    ? 'ملاحظة عامة'
-                    : 'غير محدد'),
-              reason:
-                row.reason ?? '',
-              note:
-                row.note ?? '',
-              createdBy:
-                createdByProfile?.full_name ??
-                'غير معروف',
-              createdAt:
-                row.created_at,
-            }
-          },
-        )
+          return {
+            id: row.id,
+            teacherId: row.teacher_id ?? null,
+            type: row.type as SupervisionType,
+            date: row.record_date,
+            course:
+              course?.name ??
+              selectedCourse?.name ??
+              '',
+            teacher:
+              teacher?.name ??
+              (row.type === 'day_cancelled'
+                ? 'جميع المعلمين'
+                : row.type === 'note'
+                  ? 'ملاحظة عامة'
+                  : 'غير محدد'),
+            reason: row.reason ?? '',
+            note: row.note ?? '',
+            createdBy:
+              createdByProfile?.full_name ??
+              'غير معروف',
+            createdAt: row.created_at,
+          }
+        })
 
-      setRecords(
-        mappedRecords,
-      )
+      setRecords(mappedRecords)
 
       updateCache({
-        records:
-          mappedRecords,
-        selectedCourseId:
-          courseId,
+        records: mappedRecords,
+        selectedCourseId: courseId,
       })
     } catch (err) {
       console.error(err)
@@ -747,28 +505,17 @@ export function SupervisionView() {
     }
   }
 
+  // ==========================================
+  // Effects
+  // ==========================================
+
   useEffect(() => {
     if (supervisionCache) {
-      setAcademicYear(
-        supervisionCache.academicYear,
-      )
-
-      setCourses(
-        supervisionCache.courses,
-      )
-
-      setSelectedCourseId(
-        supervisionCache.selectedCourseId,
-      )
-
-      setTeachers(
-        supervisionCache.teachers,
-      )
-
-      setRecords(
-        supervisionCache.records,
-      )
-
+      setAcademicYear(supervisionCache.academicYear)
+      setCourses(supervisionCache.courses)
+      setSelectedCourseId(supervisionCache.selectedCourseId)
+      setTeachers(supervisionCache.teachers)
+      setRecords(supervisionCache.records)
       setSupervisionSettings(
         supervisionCache.supervisionSettings,
       )
@@ -784,9 +531,7 @@ export function SupervisionView() {
 
     supervisionLoading = true
 
-    void loadInitialData(
-      !supervisionCache,
-    ).finally(() => {
+    void loadInitialData(!supervisionCache).finally(() => {
       supervisionLoading = false
     })
   }, [])
@@ -809,18 +554,15 @@ export function SupervisionView() {
       selectedCourseId,
     })
 
-    void loadTeachers(
-      selectedCourseId,
-    )
-
-    void loadRecords(
-      selectedCourseId,
-    )
+    void loadTeachers(selectedCourseId)
+    void loadRecords(selectedCourseId)
   }, [selectedCourseId])
 
-  const openForm = (
-    type: SupervisionType,
-  ) => {
+  // ==========================================
+  // Form
+  // ==========================================
+
+  const openForm = (type: SupervisionType) => {
     setEditingRecordId(null)
     setSelectedType(type)
     setSelectedTeacher('')
@@ -833,14 +575,10 @@ export function SupervisionView() {
   }
 
   const openEditNote = (record: SupervisionRecord) => {
-    const recordWithTeacher = record as SupervisionRecord & {
-      teacherId?: string | null
-    }
-
     setEditingRecordId(record.id)
     setSelectedType('note')
-    setSelectedTeacher(recordWithTeacher.teacherId ?? '')
-    setNoteScope(recordWithTeacher.teacherId ? 'teacher' : 'general')
+    setSelectedTeacher(record.teacherId ?? '')
+    setNoteScope(record.teacherId ? 'teacher' : 'general')
     setSelectedDate(record.date)
     setReason(record.reason ?? '')
     setNote(record.note ?? '')
@@ -857,22 +595,22 @@ export function SupervisionView() {
     setEditingRecordId(null)
   }
 
+  // ==========================================
+  // Save Record
+  // ==========================================
+
   const saveRecord = async (
     event: FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault()
 
     if (!selectedCourseId) {
-      setError(
-        'يجب اختيار دورة أولًا.',
-      )
+      setError('يجب اختيار دورة أولًا.')
       return
     }
 
     if (!reason.trim()) {
-      setError(
-        'اكتب سبب الحالة.',
-      )
+      setError('اكتب سبب الحالة.')
       return
     }
 
@@ -886,9 +624,7 @@ export function SupervisionView() {
     }
 
     if (!academicYear?.id) {
-      setError(
-        'لم يتم تحديد السنة الدراسية.',
-      )
+      setError('لم يتم تحديد السنة الدراسية.')
       return
     }
 
@@ -896,132 +632,66 @@ export function SupervisionView() {
     setError('')
 
     try {
-      let createdBy: string | null =
-        null
-
-      const {
-        data: authData,
-      } =
-        await supabase.auth.getUser()
-
-      const authUserId =
-        authData.user?.id
-
-      if (authUserId) {
-        const {
-          data: profile,
-        } = await supabase
-          .from(
-            'user_profiles',
-          )
-          .select('id')
-          .eq(
-            'auth_user_id',
-            authUserId,
-          )
-          .maybeSingle()
-
-        createdBy =
-          profile?.id ?? null
-      }
+      const createdBy =
+        await getCurrentUserProfile()
 
       /*
-       * عند إلغاء يوم دراسي:
-       * نحذف فقط سجلات الحضور الخاصة
-       * بنفس الدورة ونفس التاريخ.
+       * إلغاء يوم دراسي:
+       * نحذف سجلات الحضور الخاصة بنفس الدورة
+       * ونفس التاريخ فقط.
        *
-       * لا يتم حذف الطلاب أو التسجيلات
-       * أو الإسنادات أو أي بيانات أخرى.
+       * لا نحذف الحضور عند إلغاء درس معلم محدد.
        */
-      if (
-        selectedType ===
-        'day_cancelled'
-      ) {
-        const {
-          error: attendanceDeleteError,
-        } = await supabase
-          .from('attendance')
-          .delete()
-          .eq(
-            'course_id',
+      if (selectedType === 'day_cancelled') {
+        try {
+          await deleteDayAttendance(
             selectedCourseId,
-          )
-          .eq(
-            'attendance_date',
             selectedDate,
           )
-
-        if (attendanceDeleteError) {
+        } catch (err) {
           throw new Error(
-            `تعذر حذف سجلات الحضور لليوم الملغي: ${attendanceDeleteError.message}`,
+            `تعذر حذف سجلات الحضور لليوم الملغي: ${
+              err instanceof Error
+                ? err.message
+                : 'خطأ غير معروف'
+            }`,
           )
         }
       }
 
-      /*
-       * إلغاء الدرس:
-       *
-       * يتم حفظ teacher_id للمعلم المحدد
-       * داخل supervision_records.
-       *
-       * لا نحذف حضور الدورة كاملًا هنا،
-       * لأن إلغاء درس معلم واحد لا يعني
-       * إلغاء دروس بقية المعلمين في نفس
-       * الدورة والتاريخ.
-       *
-       * الربط مع الحضور بشكل خاص بالمعلم
-       * يحتاج أن يكون لدينا ربط واضح بين
-       * سجل attendance والمعلم المسؤول عن الطالب.
-       */
       if (editingRecordId) {
-        // تعديل الملاحظة الصادرة نفسها بدل إنشاء سجل جديد.
-        const { data: updatedRows, error: updateError } = await supabase
-          .from('supervision_records')
-          .update({
-            teacher_id: noteScope === 'general' ? null : selectedTeacher || null,
-            record_date: selectedDate,
-            reason: reason.trim(),
-            note: note.trim() || null,
-          })
-          .eq('id', editingRecordId)
-          .eq('course_id', selectedCourseId)
-          .eq('type', 'note')
-          .select('id')
-
-        if (updateError) {
-          throw updateError
-        }
-        if (!updatedRows || updatedRows.length === 0) {
-          throw new Error('لم يتم تعديل الملاحظة. تحقق من صلاحية التعديل على سجلات الإشراف.')
-        }
-      } else {
-        const {
-          error: insertError,
-        } = await supabase
-          .from('supervision_records')
-          .insert({
-            academic_year_id: academicYear.id,
-            course_id: selectedCourseId,
+        // تعديل الملاحظة الحالية دون إنشاء سجل جديد.
+        await updateSupervisionNote(
+          editingRecordId,
+          selectedCourseId,
+          {
             teacher_id:
-              selectedType === 'day_cancelled' ||
-              (selectedType === 'note' && noteScope === 'general')
+              noteScope === 'general'
                 ? null
                 : selectedTeacher || null,
-            type: selectedType,
             record_date: selectedDate,
             reason: reason.trim(),
             note: note.trim() || null,
-            created_by: createdBy,
-          })
-
-        if (insertError) {
-          throw insertError
-        }
+          },
+        )
+      } else {
+        await createSupervisionRecord({
+          academic_year_id: academicYear.id,
+          course_id: selectedCourseId,
+          teacher_id:
+            selectedType === 'day_cancelled' ||
+            (selectedType === 'note' && noteScope === 'general')
+              ? null
+              : selectedTeacher || null,
+          type: selectedType,
+          record_date: selectedDate,
+          reason: reason.trim(),
+          note: note.trim() || null,
+          created_by: createdBy,
+        })
       }
 
-      await loadRecords(
-        selectedCourseId,
-      )
+      await loadRecords(selectedCourseId)
 
       setIsFormOpen(false)
       setEditingRecordId(null)
@@ -1042,6 +712,10 @@ export function SupervisionView() {
     }
   }
 
+  // ==========================================
+  // UI
+  // ==========================================
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1049,13 +723,8 @@ export function SupervisionView() {
         description="إدارة حالات الدوام والدروس وصلاحيات المعلمين"
         action={
           <Button
-            onClick={() =>
-              openForm('note')
-            }
-            disabled={
-              isLoading ||
-              !selectedCourseId
-            }
+            onClick={() => openForm('note')}
+            disabled={isLoading || !selectedCourseId}
           >
             <Plus className="size-4" />
             إضافة سجل إشرافي
@@ -1100,20 +769,14 @@ export function SupervisionView() {
                   </p>
 
                   <h2 className="mt-1 text-lg font-semibold">
-                    {academicYear?.name ??
-                      'لا توجد سنة دراسية حالية'}
+                    {academicYear?.name ?? 'لا توجد سنة دراسية حالية'}
                   </h2>
 
                   {academicYear?.start_date &&
                     academicYear?.end_date && (
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {formatDate(
-                          academicYear.start_date,
-                        )}{' '}
-                        →{' '}
-                        {formatDate(
-                          academicYear.end_date,
-                        )}
+                        {formatDate(academicYear.start_date)} →{' '}
+                        {formatDate(academicYear.end_date)}
                       </p>
                     )}
                 </div>
@@ -1132,22 +795,15 @@ export function SupervisionView() {
                   <select
                     value={selectedCourseId}
                     onChange={(event) =>
-                      setSelectedCourseId(
-                        event.target.value,
-                      )
+                      setSelectedCourseId(event.target.value)
                     }
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                   >
-                    {courses.map(
-                      (course) => (
-                        <option
-                          key={course.id}
-                          value={course.id}
-                        >
-                          {course.name}
-                        </option>
-                      ),
-                    )}
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                      </option>
+                    ))}
                   </select>
                 )}
               </div>
@@ -1169,37 +825,27 @@ export function SupervisionView() {
                   {selectedCourse.start_date &&
                     selectedCourse.end_date && (
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {formatDate(
-                          selectedCourse.start_date,
-                        )}{' '}
-                        →{' '}
-                        {formatDate(
-                          selectedCourse.end_date,
-                        )}
+                        {formatDate(selectedCourse.start_date)} →{' '}
+                        {formatDate(selectedCourse.end_date)}
                       </p>
                     )}
                 </div>
 
-                <div
-                  className="min-w-0 text-right"
-                  dir="rtl"
-                >
+                <div className="min-w-0 text-right" dir="rtl">
                   <p className="mb-2 text-sm font-medium">
                     أيام الدراسة
                   </p>
 
                   {selectedCourse.days?.length > 0 ? (
                     <div className="flex flex-wrap justify-start gap-2">
-                      {selectedCourse.days.map(
-                        (day, index) => (
-                          <Badge
-                            key={`${day}-${index}`}
-                            variant="neutral"
-                          >
-                            {getDayLabel(day)}
-                          </Badge>
-                        ),
-                      )}
+                      {selectedCourse.days.map((day, index) => (
+                        <Badge
+                          key={`${day}-${index}`}
+                          variant="neutral"
+                        >
+                          {getDayLabel(day)}
+                        </Badge>
+                      ))}
                     </div>
                   ) : (
                     <Badge variant="neutral">
@@ -1235,17 +881,10 @@ export function SupervisionView() {
               icon={UsersRound}
               title="السماح بنقل الطلاب"
               description="السماح للمعلم بنقل الطالب من معلم إلى معلم آخر."
-              enabled={
-                supervisionSettings.allowTeacherTransfer
-              }
-              disabled={
-                isSavingSettings
-              }
+              enabled={supervisionSettings.allowTeacherTransfer}
+              disabled={isSavingSettings}
               onChange={(value) =>
-                void updateSetting(
-                  'allowTeacherTransfer',
-                  value,
-                )
+                void updateSetting('allowTeacherTransfer', value)
               }
             />
 
@@ -1253,17 +892,10 @@ export function SupervisionView() {
               icon={UserX}
               title="السماح بمسح الطلاب"
               description="السماح للمعلم بإزالة الطالب من قائمته وإعادته إلى قائمة الطلاب القابلة للاختيار."
-              enabled={
-                supervisionSettings.allowTeacherRemove
-              }
-              disabled={
-                isSavingSettings
-              }
+              enabled={supervisionSettings.allowTeacherRemove}
+              disabled={isSavingSettings}
               onChange={(value) =>
-                void updateSetting(
-                  'allowTeacherRemove',
-                  value,
-                )
+                void updateSetting('allowTeacherRemove', value)
               }
             />
           </CardContent>
@@ -1293,55 +925,35 @@ export function SupervisionView() {
             icon={CalendarDays}
             title="إلغاء يوم دراسي"
             description="إلغاء يوم كامل من الدراسة مع ذكر السبب."
-            onClick={() =>
-              openForm(
-                'day_cancelled',
-              )
-            }
+            onClick={() => openForm('day_cancelled')}
           />
 
           <ActionCard
             icon={CalendarDays}
             title="إلغاء درس"
             description="إلغاء درس معلم محدد مع استمرار بقية المعلمين."
-            onClick={() =>
-              openForm(
-                'lesson_cancelled',
-              )
-            }
+            onClick={() => openForm('lesson_cancelled')}
           />
 
           <ActionCard
             icon={UserX}
             title="غياب معلم"
             description="تسجيل غياب معلم في يوم الدراسة."
-            onClick={() =>
-              openForm(
-                'teacher_absent',
-              )
-            }
+            onClick={() => openForm('teacher_absent')}
           />
 
           <ActionCard
             icon={Clock3}
             title="تأخر معلم"
             description="تسجيل حالة تأخر المعلم."
-            onClick={() =>
-              openForm(
-                'teacher_late',
-              )
-            }
+            onClick={() => openForm('teacher_late')}
           />
 
           <ActionCard
-            icon={
-              MessageSquareText
-            }
+            icon={MessageSquareText}
             title="ملاحظة إشرافية"
             description="إضافة ملاحظة أو متابعة إدارية."
-            onClick={() =>
-              openForm('note')
-            }
+            onClick={() => openForm('note')}
           />
         </div>
       </section>
@@ -1362,16 +974,12 @@ export function SupervisionView() {
 
             {isLoading ? (
               <div className="space-y-4 p-5">
-                {Array.from({
-                  length: 3,
-                }).map(
-                  (_, index) => (
-                    <div
-                      key={index}
-                      className="h-24 animate-pulse rounded-lg bg-muted"
-                    />
-                  ),
-                )}
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-24 animate-pulse rounded-lg bg-muted"
+                  />
+                ))}
               </div>
             ) : records.length === 0 ? (
               <div className="flex flex-col items-center justify-center px-5 py-14 text-center">
@@ -1389,99 +997,73 @@ export function SupervisionView() {
               </div>
             ) : (
               <div className="divide-y">
-                {records.map(
-                  (record) => {
-                    const Icon =
-                      getTypeIcon(
-                        record.type,
-                      )
+                {records.map((record) => {
+                  const Icon = getTypeIcon(record.type)
 
-                    return (
-                      <div
-                        key={
-                          record.id
-                        }
-                        className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between"
-                      >
-                        <div className="flex gap-3">
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                            <Icon className="size-5 text-muted-foreground" />
-                          </span>
+                  return (
+                    <div
+                      key={record.id}
+                      className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between"
+                    >
+                      <div className="flex gap-3">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                          <Icon className="size-5 text-muted-foreground" />
+                        </span>
 
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium">
-                                {getTypeLabel(
-                                  record.type,
-                                )}
-                              </p>
-
-                              <Badge
-                                variant={getTypeBadgeVariant(
-                                  record.type,
-                                )}
-                              >
-                                {formatDate(
-                                  record.date,
-                                )}
-                              </Badge>
-                            </div>
-
-                            <p className="mt-1 text-sm">
-                              {
-                                record.teacher
-                              }
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">
+                              {getTypeLabel(record.type)}
                             </p>
 
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {
-                                record.course
-                              }
-                            </p>
-
-                            <p className="mt-2 text-sm text-muted-foreground">
-                              {
-                                record.reason
-                              }
-                            </p>
-
-                            {record.note && (
-                              <p className="mt-2 rounded-md bg-muted/50 p-2 text-sm text-muted-foreground">
-                                {
-                                  record.note
-                                }
-                              </p>
-                            )}
-
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              بواسطة:{' '}
-                              {
-                                record.createdBy
-                              }
-                              {' • '}
-                              {formatDateTime(
-                                record.createdAt,
-                              )}
-                            </p>
+                            <Badge
+                              variant={getTypeBadgeVariant(record.type)}
+                            >
+                              {formatDate(record.date)}
+                            </Badge>
                           </div>
-                        </div>
 
-                        {record.type === 'note' && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="shrink-0"
-                            onClick={() => openEditNote(record)}
-                            disabled={isSaving}
-                          >
-                            <Pencil className="size-4" />
-                            تعديل الملاحظة
-                          </Button>
-                        )}
+                          <p className="mt-1 text-sm">
+                            {record.teacher}
+                          </p>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {record.course}
+                          </p>
+
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {record.reason}
+                          </p>
+
+                          {record.note && (
+                            <p className="mt-2 rounded-md bg-muted/50 p-2 text-sm text-muted-foreground">
+                              {record.note}
+                            </p>
+                          )}
+
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            بواسطة: {record.createdBy}
+                            {' • '}
+                            {formatDateTime(record.createdAt)}
+                          </p>
+                        </div>
                       </div>
-                    )
-                  },
-                )}
+
+                      {record.type === 'note' && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => openEditNote(record)}
+                          disabled={isSaving}
+                        >
+                          <Pencil className="size-4" />
+                          تعديل الملاحظة
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </CardContent>
@@ -1495,16 +1077,16 @@ export function SupervisionView() {
             type="button"
             aria-label="إغلاق"
             className="absolute inset-0 bg-black/40"
-            onClick={
-              closeForm
-            }
+            onClick={closeForm}
           />
 
           <aside className="absolute right-0 top-0 h-full w-full max-w-xl overflow-y-auto border-l bg-background shadow-xl">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div>
                 <h2 className="text-lg font-semibold">
-                  {editingRecordId ? 'تعديل الملاحظة' : getTypeLabel(selectedType)}
+                  {editingRecordId
+                    ? 'تعديل الملاحظة'
+                    : getTypeLabel(selectedType)}
                 </h2>
 
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1516,9 +1098,7 @@ export function SupervisionView() {
 
               <button
                 type="button"
-                onClick={
-                  closeForm
-                }
+                onClick={closeForm}
                 className="rounded-md p-2 hover:bg-muted"
                 aria-label="إغلاق"
               >
@@ -1526,11 +1106,7 @@ export function SupervisionView() {
               </button>
             </div>
 
-            <form
-              onSubmit={
-                saveRecord
-              }
-            >
+            <form onSubmit={saveRecord}>
               <div className="space-y-5 p-6">
                 <div>
                   <label className="mb-2 block text-sm font-medium">
@@ -1538,16 +1114,9 @@ export function SupervisionView() {
                   </label>
 
                   <select
-                    value={
-                      selectedCourseId
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setSelectedCourseId(
-                        event.target
-                          .value,
-                      )
+                    value={selectedCourseId}
+                    onChange={(event) =>
+                      setSelectedCourseId(event.target.value)
                     }
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
                     required
@@ -1556,22 +1125,11 @@ export function SupervisionView() {
                       اختر الدورة
                     </option>
 
-                    {courses.map(
-                      (course) => (
-                        <option
-                          key={
-                            course.id
-                          }
-                          value={
-                            course.id
-                          }
-                        >
-                          {
-                            course.name
-                          }
-                        </option>
-                      ),
-                    )}
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1582,16 +1140,9 @@ export function SupervisionView() {
 
                   <input
                     type="date"
-                    value={
-                      selectedDate
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setSelectedDate(
-                        event.target
-                          .value,
-                      )
+                    value={selectedDate}
+                    onChange={(event) =>
+                      setSelectedDate(event.target.value)
                     }
                     min={
                       selectedCourse?.start_date ??
@@ -1613,6 +1164,7 @@ export function SupervisionView() {
                     <label className="mb-2 block text-sm font-medium">
                       نوع الملاحظة
                     </label>
+
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
@@ -1630,6 +1182,7 @@ export function SupervisionView() {
                       >
                         ملاحظة عامة
                       </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -1646,6 +1199,7 @@ export function SupervisionView() {
                         ملاحظة على معلم
                       </button>
                     </div>
+
                     <p className="mt-2 text-xs text-muted-foreground">
                       {noteScope === 'general'
                         ? 'يمكنك حفظ الملاحظة دون اختيار معلم.'
@@ -1656,68 +1210,51 @@ export function SupervisionView() {
 
                 {selectedType !== 'day_cancelled' &&
                   (selectedType !== 'note' || noteScope === 'teacher') && (
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      المعلم
-                    </label>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium">
+                        المعلم
+                      </label>
 
-                    <select
-                      value={
-                        selectedTeacher
-                      }
-                      onChange={(
-                        event,
-                      ) =>
-                        setSelectedTeacher(
-                          event.target
-                            .value,
-                        )
-                      }
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      required={selectedType !== 'note' || noteScope === 'teacher'}
-                      disabled={
-                        isLoadingTeachers ||
-                        teachers.length ===
-                          0
-                      }
-                    >
-                      <option value="">
-                        {isLoadingTeachers
-                          ? 'جاري تحميل المعلمين...'
-                          : teachers.length ===
-                              0
-                            ? 'لا يوجد معلمون مرتبطون بالدورة'
-                            : 'اختر المعلم'}
-                      </option>
+                      <select
+                        value={selectedTeacher}
+                        onChange={(event) =>
+                          setSelectedTeacher(event.target.value)
+                        }
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                        required={
+                          selectedType !== 'note' ||
+                          noteScope === 'teacher'
+                        }
+                        disabled={
+                          isLoadingTeachers ||
+                          teachers.length === 0
+                        }
+                      >
+                        <option value="">
+                          {isLoadingTeachers
+                            ? 'جاري تحميل المعلمين...'
+                            : teachers.length === 0
+                              ? 'لا يوجد معلمون مرتبطون بالدورة'
+                              : 'اختر المعلم'}
+                        </option>
 
-                      {teachers.map(
-                        (
-                          teacher,
-                        ) => (
+                        {teachers.map((teacher) => (
                           <option
-                            key={
-                              teacher.id
-                            }
-                            value={
-                              teacher.id
-                            }
+                            key={teacher.id}
+                            value={teacher.id}
                           >
-                            {
-                              teacher.name
-                            }
+                            {teacher.name}
                           </option>
-                        ),
-                      )}
-                    </select>
+                        ))}
+                      </select>
 
-                    {selectedType ===
-                      'lesson_cancelled' && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        سيتم حفظ إلغاء درس هذا المعلم فقط في هذا التاريخ، ولن يتم حذف حضور بقية المعلمين.
-                      </p>
-                    )}
-                  </div>
-                )}
+                      {selectedType === 'lesson_cancelled' && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          سيتم حفظ إلغاء درس هذا المعلم فقط في هذا التاريخ، ولن يتم حذف حضور بقية المعلمين.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                 <div>
                   <label className="mb-2 block text-sm font-medium">
@@ -1726,29 +1263,18 @@ export function SupervisionView() {
 
                   <input
                     type="text"
-                    value={
-                      reason
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setReason(
-                        event.target
-                          .value,
-                      )
+                    value={reason}
+                    onChange={(event) =>
+                      setReason(event.target.value)
                     }
                     placeholder={
-                      selectedType ===
-                      'day_cancelled'
+                      selectedType === 'day_cancelled'
                         ? 'مثال: عطلة رسمية'
-                        : selectedType ===
-                            'teacher_absent'
+                        : selectedType === 'teacher_absent'
                           ? 'مثال: إجازة مرضية'
-                          : selectedType ===
-                              'teacher_late'
+                          : selectedType === 'teacher_late'
                             ? 'مثال: تأخر بسبب ظرف طارئ'
-                            : selectedType ===
-                                'lesson_cancelled'
+                            : selectedType === 'lesson_cancelled'
                               ? 'مثال: سفر المعلم'
                               : 'اكتب سبب الحالة'
                     }
@@ -1763,16 +1289,9 @@ export function SupervisionView() {
                   </label>
 
                   <textarea
-                    value={
-                      note
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setNote(
-                        event.target
-                          .value,
-                      )
+                    value={note}
+                    onChange={(event) =>
+                      setNote(event.target.value)
                     }
                     placeholder="أضف أي تفاصيل أو ملاحظات إضافية..."
                     rows={5}
@@ -1780,16 +1299,13 @@ export function SupervisionView() {
                   />
                 </div>
 
-                {(selectedType ===
-                  'day_cancelled' ||
-                  selectedType ===
-                    'lesson_cancelled') && (
+                {(selectedType === 'day_cancelled' ||
+                  selectedType === 'lesson_cancelled') && (
                   <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20">
                     <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
 
                     <p className="text-sm leading-6 text-muted-foreground">
-                      {selectedType ===
-                      'day_cancelled'
+                      {selectedType === 'day_cancelled'
                         ? 'عند تسجيل إلغاء اليوم، سيتم حذف سجلات الحضور المسجلة لهذا اليوم في هذه الدورة، ولن يدخل اليوم ضمن الأيام الفعلية المستخدمة لحساب نسبة الحضور.'
                         : 'عند تسجيل إلغاء الدرس، سيتم تسجيل إلغاء المعلم المحدد فقط، ولن يتم حذف حضور بقية المعلمين.'}
                     </p>
@@ -1801,10 +1317,7 @@ export function SupervisionView() {
                 <Button
                   type="submit"
                   className="flex-1"
-                  disabled={
-                    isSaving ||
-                    !selectedCourseId
-                  }
+                  disabled={isSaving || !selectedCourseId}
                 >
                   <CheckCircle2 className="size-4" />
 
@@ -1818,12 +1331,8 @@ export function SupervisionView() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={
-                    closeForm
-                  }
-                  disabled={
-                    isSaving
-                  }
+                  onClick={closeForm}
+                  disabled={isSaving}
                 >
                   إلغاء
                 </Button>
@@ -1835,6 +1344,10 @@ export function SupervisionView() {
     </div>
   )
 }
+
+// ==========================================
+// Action Card
+// ==========================================
 
 function ActionCard({
   icon: Icon,
@@ -1872,6 +1385,10 @@ function ActionCard({
   )
 }
 
+// ==========================================
+// Permission Row
+// ==========================================
+
 function PermissionRow({
   icon: Icon,
   title,
@@ -1885,9 +1402,7 @@ function PermissionRow({
   description: string
   enabled: boolean
   disabled: boolean
-  onChange: (
-    value: boolean,
-  ) => void
+  onChange: (value: boolean) => void
 }) {
   return (
     <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1912,9 +1427,7 @@ function PermissionRow({
         role="switch"
         aria-checked={enabled}
         disabled={disabled}
-        onClick={() =>
-          onChange(!enabled)
-        }
+        onClick={() => onChange(!enabled)}
         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
           enabled
             ? 'bg-primary'
@@ -1923,9 +1436,7 @@ function PermissionRow({
       >
         <span
           className={`absolute top-1 size-5 rounded-full bg-white shadow-sm transition-all ${
-            enabled
-              ? 'right-1'
-              : 'right-6'
+            enabled ? 'right-1' : 'right-6'
           }`}
         />
       </button>
