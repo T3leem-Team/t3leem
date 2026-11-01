@@ -475,3 +475,69 @@ export async function loadSidebarUserProfile(
     error,
   }
 }
+
+
+export type HeaderUserProfileRow = {
+  username: string | null
+  full_name: string | null
+  role: string | null
+}
+
+export type HeaderAuditLogRow = {
+  id: string
+  auth_user_id: string
+  event_type: string
+  success: boolean
+  created_at: string
+}
+
+export type HeaderNotificationProfileRow = {
+  auth_user_id: string
+  username: string | null
+  full_name: string | null
+}
+
+export async function loadHeaderUserProfile(
+  userId: string,
+) {
+  return await supabase
+    .from('user_profiles')
+    .select('username, full_name, role')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+}
+
+export async function loadHeaderLoginAuditLogs(
+  startOfDay: string,
+  endOfDay: string,
+) {
+  return await supabase
+    .from('auth_audit_logs')
+    .select(`
+      id,
+      auth_user_id,
+      event_type,
+      success,
+      created_at
+    `)
+    .eq('event_type', 'login_success')
+    .eq('success', true)
+    .gte('created_at', startOfDay)
+    .lte('created_at', endOfDay)
+    .order('created_at', {
+      ascending: false,
+    })
+}
+
+export async function loadHeaderNotificationProfiles(
+  userIds: string[],
+) {
+  return await supabase
+    .from('user_profiles')
+    .select(`
+      auth_user_id,
+      username,
+      full_name
+    `)
+    .in('auth_user_id', userIds)
+}
