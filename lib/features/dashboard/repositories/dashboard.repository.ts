@@ -417,3 +417,61 @@ export async function loadAttendanceExportAttendancePage(
     error,
   }
 }
+export type SidebarUserProfileRow = {
+  username: string | null
+  full_name: string | null
+  role: string | null
+}
+
+export async function loadSidebarPendingRegistrationCount() {
+  const {
+    data: academicYear,
+    error: academicYearError,
+  } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  // إذا ما فيه سنة حالية، ما نحتاج ننفذ استعلام الطلبات.
+  if (academicYearError || !academicYear) {
+    return {
+      academicYear,
+      academicYearError,
+      count: null,
+      error: null,
+    }
+  }
+
+  const { count, error } = await supabase
+    .from('registration_requests')
+    .select('id', {
+      count: 'exact',
+      head: true,
+    })
+    .eq('academic_year_id', academicYear.id)
+    .in('status', ['pending', 'under_review'])
+
+  return {
+    academicYear,
+    academicYearError: null,
+    count,
+    error,
+  }
+}
+
+export async function loadSidebarUserProfile(
+  userId: string,
+): Promise<RepositoryResult<SidebarUserProfileRow>> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('username, full_name, role')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  return {
+    data: data as SidebarUserProfileRow | null,
+    error,
+  }
+}
