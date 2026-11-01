@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -18,7 +19,10 @@ import {
 } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadStudentTrackingAnalytics,
+} from '@/lib/features/settings/repositories/settings.repository'
+
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Button } from '@/components/ui/button'
 import {
@@ -385,32 +389,10 @@ export default function StudentTrackingAnalyticsPage() {
         const {
           data,
           error: supabaseError,
-        } = await supabase
-          .from(
-            analyticsDefinition.source,
-          )
-          .select(
-            `${analyticsDefinition.dateColumn}, ${analyticsDefinition.metrics
-              .map(
-                (metric) =>
-                  metric.key,
-              )
-              .join(', ')}`,
-          )
-          .gte(
-            analyticsDefinition.dateColumn,
-            range.from,
-          )
-          .lte(
-            analyticsDefinition.dateColumn,
-            range.to,
-          )
-          .order(
-            analyticsDefinition.dateColumn,
-            {
-              ascending: true,
-            },
-          )
+        } = await loadStudentTrackingAnalytics(
+          range.from,
+          range.to,
+        )
 
         if (supabaseError) {
           console.error(
