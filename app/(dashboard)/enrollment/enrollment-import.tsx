@@ -18,7 +18,11 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadEnrollmentLevels,
+  loadCurrentEnrollmentAcademicYear,
+  insertEnrollmentImportRequests,
+} from '@/lib/features/enrollment/repositories/enrollment.repository'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -246,10 +250,7 @@ export function EnrollmentImport({
 
       try {
         const { data, error } =
-          await supabase
-            .from('levels')
-            .select('id, name')
-            .order('name')
+          await loadEnrollmentLevels()
 
         if (cancelled) return
 
@@ -706,12 +707,7 @@ export function EnrollmentImport({
       const {
         data: academicYear,
         error: academicYearError,
-      } = await supabase
-        .from('academic_years')
-        .select('id, name')
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+      } = await loadCurrentEnrollmentAcademicYear()
 
       if (academicYearError) {
         throw new Error(
@@ -817,10 +813,7 @@ export function EnrollmentImport({
       const {
         data,
         error,
-      } = await supabase
-        .from('registration_requests')
-        .insert(payload)
-        .select('id')
+      } = await insertEnrollmentImportRequests(payload)
 
       if (error) {
         throw error
