@@ -1,18 +1,31 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadCurrentPaymentsAcademicYear,
+  loadActivePaymentsAcademicYear,
+  loadPaymentsStudents,
+  loadPaymentsEnrollments,
+  loadPaymentsByAcademicYear,
+  loadActivePaymentLevels,
+  loadPaymentStudent,
+  loadActivePaymentEnrollment,
+  loadPaymentEnrollmentCourse,
+  loadPaymentCourses,
+  loadStudentPaymentsForYear,
+  loadOtherStudentPaymentsForYear,
+  loadPaymentForUpdate,
+  insertStudentPayment,
+  updateStudentPayment,
+} from '@/lib/features/payments/repositories/payments-admin.repository'
+
+import {
+  loadTransactionByPaymentId,
+  loadFinancialSettings,
+  insertStudentPaymentTransaction,
+  updateStudentPaymentTransaction,
+} from '@/lib/features/payments/repositories/financial-management-admin.repository'
 
 const ALLOWED_PAYMENT_METHODS = [
   'نقدي',
@@ -63,13 +76,10 @@ async function resolveCourseId(
   const {
     data: enrollment,
     error: enrollmentError,
-  } = await supabaseAdmin
-    .from('enrollments')
-    .select('course_id')
-    .eq('student_id', studentId)
-    .eq('academic_year_id', academicYearId)
-    .eq('status', 'نشط')
-    .maybeSingle()
+  } = await loadPaymentEnrollmentCourse(
+    studentId,
+    academicYearId,
+  )
 
   if (enrollmentError) {
     throw enrollmentError
@@ -82,11 +92,7 @@ async function resolveCourseId(
   const {
     data: courses,
     error: coursesError,
-  } = await supabaseAdmin
-    .from('courses')
-    .select('id')
-    .eq('academic_year_id', academicYearId)
-    .limit(2)
+  } = await loadPaymentCourses(academicYearId)
 
   if (coursesError) {
     throw coursesError
@@ -108,6 +114,7 @@ async function resolveCourseId(
  * - المعاملة الجديدة تبدأ بحالة pending.
  * - عند تحديث معاملة موجودة، لا نغيّر حالة التأكيد.
  * - نستخدم course_id المحفوظ في سجل الدفعة.
+ * - فشل المزامنة لا يلغي حفظ الدفعة.
  */
 async function syncPaymentToFinancialManagement(
   payment: {
@@ -140,11 +147,7 @@ async function syncPaymentToFinancialManagement(
     const {
       data: existingTransaction,
       error: transactionLookupError,
-    } = await supabaseAdmin
-      .from('financial_transactions')
-      .select('id')
-      .eq('payment_id', payment.id)
-      .maybeSingle()
+    } = await loadTransactionByPaymentId(payment.id)
 
     if (transactionLookupError) {
       // لا ننشئ معاملة جديدة إذا تعذر التأكد من وجود معاملة سابقة.
@@ -157,10 +160,7 @@ async function syncPaymentToFinancialManagement(
 
     const transactionData = {
       academic_year_id: payment.academic_year_id,
-      transaction_type: 'in',
       amount: Number(Number(payment.amount).toFixed(3)),
-      adjustment_direction: null,
-      source_type: 'student_payment',
       source: `دفعة طالب - ${student.name}`,
       payment_id: payment.id,
       student_id: student.id,
@@ -176,10 +176,10 @@ async function syncPaymentToFinancialManagement(
       // وحقول confirmed_by وconfirmed_at.
       const {
         error: updateError,
-      } = await supabaseAdmin
-        .from('financial_transactions')
-        .update(transactionData)
-        .eq('id', existingTransaction.id)
+      } = await updateStudentPaymentTransaction(
+        existingTransaction.id,
+        transactionData,
+      )
 
       if (updateError) {
         console.error(
@@ -195,11 +195,9 @@ async function syncPaymentToFinancialManagement(
     const {
       data: financialSettings,
       error: settingsError,
-    } = await supabaseAdmin
-      .from('financial_settings')
-      .select('financial_mode')
-      .eq('academic_year_id', payment.academic_year_id)
-      .maybeSingle()
+    } = await loadFinancialSettings(
+      payment.academic_year_id,
+    )
 
     if (settingsError) {
       console.error(
@@ -220,14 +218,9 @@ async function syncPaymentToFinancialManagement(
 
     const {
       error: insertError,
-    } = await supabaseAdmin
-      .from('financial_transactions')
-      .insert({
-        ...transactionData,
-        confirmation_status: 'pending',
-        confirmed_by: null,
-        confirmed_at: null,
-      })
+    } = await insertStudentPaymentTransaction(
+      transactionData,
+    )
 
     if (insertError) {
       // قد يمنع الفهرس الفريد تكرار المعاملة.
@@ -263,12 +256,7 @@ export async function GET() {
     const {
       data: currentYear,
       error: yearError,
-    } = await supabaseAdmin
-      .from('academic_years')
-      .select('id, name, annual_fee')
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
+    } = await loadCurrentPaymentsAcademicYear()
 
     if (yearError) {
       throw yearError
@@ -290,53 +278,10 @@ export async function GET() {
       paymentsResult,
       levelsResult,
     ] = await Promise.all([
-      supabaseAdmin
-        .from('students')
-        .select(
-          'id, name, personal_id, fee_exempt, created_at',
-        )
-        .order('created_at', {
-          ascending: false,
-        }),
-
-      supabaseAdmin
-        .from('enrollments')
-        .select('student_id, level_id, course_id')
-        .eq('academic_year_id', currentYear.id)
-        .eq('status', 'نشط'),
-
-      supabaseAdmin
-        .from('payments')
-        .select(
-          `
-          id,
-          student_id,
-          academic_year_id,
-          course_id,
-          amount,
-          payment_method,
-          payment_date,
-          reference_number,
-          notes,
-          created_at
-          `,
-        )
-        .eq('academic_year_id', currentYear.id)
-        .order('payment_date', {
-          ascending: false,
-        })
-        .order('created_at', {
-          ascending: false,
-        }),
-
-      supabaseAdmin
-        .from('levels')
-        .select('id, name, sort_order')
-        .eq('is_active', true)
-        .order('sort_order', {
-          ascending: true,
-          nullsFirst: false,
-        }),
+      loadPaymentsStudents(),
+      loadPaymentsEnrollments(currentYear.id),
+      loadPaymentsByAcademicYear(currentYear.id),
+      loadActivePaymentLevels(),
     ])
 
     if (studentsResult.error) {
@@ -452,13 +397,9 @@ export async function POST(request: Request) {
     const {
       data: currentYear,
       error: yearError,
-    } = await supabaseAdmin
-      .from('academic_years')
-      .select('id, name, annual_fee')
-      .eq('id', body.academic_year_id)
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
+    } = await loadActivePaymentsAcademicYear(
+      body.academic_year_id,
+    )
 
     if (yearError) {
       throw yearError
@@ -476,11 +417,7 @@ export async function POST(request: Request) {
     const {
       data: student,
       error: studentError,
-    } = await supabaseAdmin
-      .from('students')
-      .select('id, name, personal_id, fee_exempt')
-      .eq('id', body.student_id)
-      .maybeSingle()
+    } = await loadPaymentStudent(body.student_id)
 
     if (studentError) {
       throw studentError
@@ -508,13 +445,10 @@ export async function POST(request: Request) {
     const {
       data: enrollment,
       error: enrollmentError,
-    } = await supabaseAdmin
-      .from('enrollments')
-      .select('id, course_id')
-      .eq('student_id', body.student_id)
-      .eq('academic_year_id', currentYear.id)
-      .eq('status', 'نشط')
-      .maybeSingle()
+    } = await loadActivePaymentEnrollment(
+      student.id,
+      currentYear.id,
+    )
 
     if (enrollmentError) {
       throw enrollmentError
@@ -549,11 +483,10 @@ export async function POST(request: Request) {
     const {
       data: existingPayments,
       error: paymentsError,
-    } = await supabaseAdmin
-      .from('payments')
-      .select('amount')
-      .eq('student_id', student.id)
-      .eq('academic_year_id', currentYear.id)
+    } = await loadStudentPaymentsForYear(
+      student.id,
+      currentYear.id,
+    )
 
     if (paymentsError) {
       throw paymentsError
@@ -596,33 +529,16 @@ export async function POST(request: Request) {
     const {
       data: payment,
       error: insertError,
-    } = await supabaseAdmin
-      .from('payments')
-      .insert({
-        student_id: student.id,
-        academic_year_id: currentYear.id,
-        course_id: courseId,
-        amount: Number(amount.toFixed(3)),
-        payment_method: paymentMethod,
-        payment_date: body.payment_date,
-        reference_number: referenceNumber || null,
-        notes: notes || null,
-      })
-      .select(
-        `
-        id,
-        student_id,
-        academic_year_id,
-        course_id,
-        amount,
-        payment_method,
-        payment_date,
-        reference_number,
-        notes,
-        created_at
-        `,
-      )
-      .single()
+    } = await insertStudentPayment({
+      student_id: student.id,
+      academic_year_id: currentYear.id,
+      course_id: courseId,
+      amount: Number(amount.toFixed(3)),
+      payment_method: paymentMethod,
+      payment_date: body.payment_date,
+      reference_number: referenceNumber || null,
+      notes: notes || null,
+    })
 
     if (insertError) {
       throw insertError
@@ -718,19 +634,7 @@ export async function PATCH(request: Request) {
     const {
       data: existingPayment,
       error: existingPaymentError,
-    } = await supabaseAdmin
-      .from('payments')
-      .select(
-        `
-        id,
-        student_id,
-        academic_year_id,
-        course_id,
-        amount
-        `,
-      )
-      .eq('id', paymentId)
-      .maybeSingle()
+    } = await loadPaymentForUpdate(paymentId)
 
     if (existingPaymentError) {
       throw existingPaymentError
@@ -748,13 +652,9 @@ export async function PATCH(request: Request) {
     const {
       data: currentYear,
       error: yearError,
-    } = await supabaseAdmin
-      .from('academic_years')
-      .select('id, name, annual_fee')
-      .eq('id', existingPayment.academic_year_id)
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
+    } = await loadActivePaymentsAcademicYear(
+      existingPayment.academic_year_id,
+    )
 
     if (yearError) {
       throw yearError
@@ -773,11 +673,9 @@ export async function PATCH(request: Request) {
     const {
       data: student,
       error: studentError,
-    } = await supabaseAdmin
-      .from('students')
-      .select('id, name, personal_id, fee_exempt')
-      .eq('id', existingPayment.student_id)
-      .maybeSingle()
+    } = await loadPaymentStudent(
+      existingPayment.student_id,
+    )
 
     if (studentError) {
       throw studentError
@@ -805,12 +703,11 @@ export async function PATCH(request: Request) {
     const {
       data: otherPayments,
       error: otherPaymentsError,
-    } = await supabaseAdmin
-      .from('payments')
-      .select('amount')
-      .eq('student_id', existingPayment.student_id)
-      .eq('academic_year_id', currentYear.id)
-      .neq('id', paymentId)
+    } = await loadOtherStudentPaymentsForYear(
+      existingPayment.student_id,
+      currentYear.id,
+      paymentId,
+    )
 
     if (otherPaymentsError) {
       throw otherPaymentsError
@@ -877,32 +774,17 @@ export async function PATCH(request: Request) {
     const {
       data: updatedPayment,
       error: updateError,
-    } = await supabaseAdmin
-      .from('payments')
-      .update({
+    } = await updateStudentPayment(
+      paymentId,
+      {
         course_id: courseId,
         amount: Number(amount.toFixed(3)),
         payment_method: paymentMethod,
         payment_date: paymentDate,
         reference_number: referenceNumber || null,
         notes: notes || null,
-      })
-      .eq('id', paymentId)
-      .select(
-        `
-        id,
-        student_id,
-        academic_year_id,
-        course_id,
-        amount,
-        payment_method,
-        payment_date,
-        reference_number,
-        notes,
-        created_at
-        `,
-      )
-      .single()
+      },
+    )
 
     if (updateError) {
       throw updateError
