@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -18,7 +19,23 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadSettingsRegistrationConfig,
+  loadSettingsCurrentAcademicYearForRegistration,
+  loadSettingsRegistrationCourses,
+  updateSettingsRegistrationConfig,
+  insertSettingsRegistrationConfig,
+  loadSettingsRegistrationLevels,
+  updateSettingsRegistrationLevelName,
+  updateSettingsRegistrationLevelEnabled,
+  loadSettingsCustomFields,
+  loadSettingsCustomFieldVisibility,
+  insertSettingsCustomField,
+  insertSettingsCustomFieldOptions,
+  insertSettingsCustomFieldVisibility,
+  deleteSettingsCustomField,
+  upsertSettingsCustomFieldVisibility,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import {
@@ -53,7 +70,6 @@ function SettingRow({
     >
       <div className="min-w-0">
         <p className="font-medium">{title}</p>
-
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           {description}
         </p>
@@ -131,6 +147,7 @@ function FieldControl({
     </div>
   )
 }
+
 function ToggleButton({
   label,
   checked,
@@ -233,18 +250,9 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
 }
 
 const SECTIONS = [
-  {
-    key: 'registration' as const,
-    label: 'طلبات التسجيل',
-  },
-  {
-    key: 'students' as const,
-    label: 'سجل الطلبة',
-  },
-  {
-    key: 'payments' as const,
-    label: 'المدفوعات',
-  },
+  { key: 'registration' as const, label: 'طلبات التسجيل' },
+  { key: 'students' as const, label: 'سجل الطلبة' },
+  { key: 'payments' as const, label: 'المدفوعات' },
 ]
 
 export default function RegistrationSettingsPage() {
@@ -256,10 +264,6 @@ export default function RegistrationSettingsPage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   const [registrationOpen, setRegistrationOpen] = useState(true)
-
-  // ============================================================
-  // السنة الحالية + دورة التسجيل الحالية
-  // ============================================================
 
   const [currentAcademicYearId, setCurrentAcademicYearId] =
     useState<string | null>(null)
@@ -291,18 +295,14 @@ export default function RegistrationSettingsPage() {
   const [showPhone, setShowPhone] = useState(true)
   const [requiredPhone, setRequiredPhone] = useState(true)
 
-  const [showGuardianRelation, setShowGuardianRelation] =
-    useState(true)
-
+  const [showGuardianRelation, setShowGuardianRelation] = useState(true)
   const [requiredGuardianRelation, setRequiredGuardianRelation] =
     useState(false)
 
   const [showWhatsapp, setShowWhatsapp] = useState(true)
   const [requiredWhatsapp, setRequiredWhatsapp] = useState(false)
 
-  const [showStudentPhone, setShowStudentPhone] =
-    useState(true)
-
+  const [showStudentPhone, setShowStudentPhone] = useState(true)
   const [requiredStudentPhone, setRequiredStudentPhone] =
     useState(false)
 
@@ -313,41 +313,27 @@ export default function RegistrationSettingsPage() {
   const [requiredNotes, setRequiredNotes] = useState(false)
 
   const [showHealthNotes, setShowHealthNotes] = useState(false)
-  const [requiredHealthNotes, setRequiredHealthNotes] = useState(false)
-
-  // ============================================================
-  // دعوة مجموعة التعليم بعد التسجيل
-  // ============================================================
-
-  const [showEducationGroup, setShowEducationGroup] =
+  const [requiredHealthNotes, setRequiredHealthNotes] =
     useState(false)
 
-  const [educationGroupLink, setEducationGroupLink] =
-    useState('')
-
+  const [showEducationGroup, setShowEducationGroup] = useState(false)
+  const [educationGroupLink, setEducationGroupLink] = useState('')
   const [educationGroupDescription, setEducationGroupDescription] =
     useState('')
-
-  const [postRegistrationNotes, setPostRegistrationNotes] =
-    useState('')
-
-  // ============================================================
-  // الدفع
-  // ============================================================
+  const [postRegistrationNotes, setPostRegistrationNotes] = useState('')
 
   const [paymentEnabled, setPaymentEnabled] = useState(false)
-
   const [benefitEnabled, setBenefitEnabled] = useState(true)
   const [bankTransferEnabled, setBankTransferEnabled] = useState(true)
   const [cashEnabled, setCashEnabled] = useState(false)
   const [paymentLinkEnabled, setPaymentLinkEnabled] = useState(false)
 
   const [paymentProofEnabled, setPaymentProofEnabled] = useState(true)
-  const [paymentProofRequired, setPaymentProofRequired] = useState(false)
+  const [paymentProofRequired, setPaymentProofRequired] =
+    useState(false)
 
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentLink, setPaymentLink] = useState('')
-
   const [showPaymentQr, setShowPaymentQr] = useState(false)
 
   const [settingsId, setSettingsId] = useState<string | null>(null)
@@ -373,8 +359,7 @@ export default function RegistrationSettingsPage() {
 
   const [showAddField, setShowAddField] = useState(false)
   const [newFieldName, setNewFieldName] = useState('')
-  const [newFieldType, setNewFieldType] =
-    useState<FieldType>('text')
+  const [newFieldType, setNewFieldType] = useState<FieldType>('text')
 
   const [newFieldSections, setNewFieldSections] = useState({
     registration: false,
@@ -382,9 +367,7 @@ export default function RegistrationSettingsPage() {
     payments: false,
   })
 
-  const [newFieldOptions, setNewFieldOptions] = useState<string[]>([
-    '',
-  ])
+  const [newFieldOptions, setNewFieldOptions] = useState<string[]>([''])
 
   const activeCustomFields = useMemo(
     () => customFields.filter((field) => field.is_active),
@@ -405,13 +388,10 @@ export default function RegistrationSettingsPage() {
   async function loadRegistrationCourses() {
     setRegistrationCoursesLoading(true)
 
-    const { data: currentYear, error: yearError } =
-      await supabase
-        .from('academic_years')
-        .select('id, name')
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+    const {
+      data: currentYear,
+      error: yearError,
+    } = await loadSettingsCurrentAcademicYearForRegistration()
 
     if (yearError) {
       console.error(
@@ -443,22 +423,10 @@ export default function RegistrationSettingsPage() {
     setCurrentAcademicYearId(currentYear.id)
     setCurrentAcademicYearName(currentYear.name)
 
-    const { data: courses, error: coursesError } =
-      await supabase
-        .from('courses')
-        .select(
-          `
-          id,
-          name,
-          academic_year_id,
-          start_date,
-          end_date,
-          is_closed
-        `,
-        )
-        .eq('academic_year_id', currentYear.id)
-        .eq('is_closed', false)
-        .order('start_date', { ascending: true })
+    const {
+      data: courses,
+      error: coursesError,
+    } = await loadSettingsRegistrationCourses(currentYear.id)
 
     if (coursesError) {
       console.error(
@@ -483,16 +451,17 @@ export default function RegistrationSettingsPage() {
     setRegistrationCoursesLoading(false)
   }
 
+  // ============================================================
+  // تحميل إعدادات التسجيل
+  // ============================================================
+
   async function loadSettings() {
     setLoading(true)
     setErrorMessage('')
     setSuccessMessage('')
 
-    const { data, error } = await supabase
-      .from('registration_settings')
-      .select('*')
-      .limit(1)
-      .maybeSingle()
+    const { data, error } =
+      await loadSettingsRegistrationConfig()
 
     if (error) {
       console.error(
@@ -519,14 +488,7 @@ export default function RegistrationSettingsPage() {
 
     setSettingsId(data.id)
 
-    // ==========================================================
-    // دورة التسجيل المحددة من لوحة التحكم
-    // ==========================================================
-
-    setRegistrationCourseId(
-      data.course_id ?? null,
-    )
-
+    setRegistrationCourseId(data.course_id ?? null)
     setRegistrationOpen(data.registration_open ?? true)
 
     setShowName(data.show_name ?? true)
@@ -544,10 +506,7 @@ export default function RegistrationSettingsPage() {
     setShowPhone(data.show_phone ?? true)
     setRequiredPhone(data.required_phone ?? true)
 
-    setShowGuardianRelation(
-      data.show_guardian_relation ?? true,
-    )
-
+    setShowGuardianRelation(data.show_guardian_relation ?? true)
     setRequiredGuardianRelation(
       data.required_guardian_relation ?? false,
     )
@@ -556,10 +515,7 @@ export default function RegistrationSettingsPage() {
     setRequiredWhatsapp(data.required_whatsapp ?? false)
 
     setShowStudentPhone(data.show_student_phone ?? true)
-
-    setRequiredStudentPhone(
-      data.required_student_phone ?? false,
-    )
+    setRequiredStudentPhone(data.required_student_phone ?? false)
 
     setShowLevel(data.show_level ?? true)
     setRequiredLevel(data.required_level ?? true)
@@ -570,51 +526,21 @@ export default function RegistrationSettingsPage() {
     setShowHealthNotes(data.show_health_notes ?? false)
     setRequiredHealthNotes(data.required_health_notes ?? false)
 
-    // ==========================================================
-    // دعوة مجموعة التعليم
-    // ==========================================================
-
-    setShowEducationGroup(
-      data.show_education_group ?? false,
-    )
-
-    setEducationGroupLink(
-      data.education_group_link ?? '',
-    )
-
+    setShowEducationGroup(data.show_education_group ?? false)
+    setEducationGroupLink(data.education_group_link ?? '')
     setEducationGroupDescription(
       data.education_group_description ?? '',
     )
-
-    setPostRegistrationNotes(
-      data.post_registration_notes ?? '',
-    )
-
-    // ==========================================================
-    // الدفع
-    // ==========================================================
+    setPostRegistrationNotes(data.post_registration_notes ?? '')
 
     setPaymentEnabled(data.payment_enabled ?? false)
-
     setBenefitEnabled(data.benefit_enabled ?? false)
-
-    setBankTransferEnabled(
-      data.bank_transfer_enabled ?? false,
-    )
-
+    setBankTransferEnabled(data.bank_transfer_enabled ?? false)
     setCashEnabled(data.cash_enabled ?? false)
+    setPaymentLinkEnabled(data.payment_link_enabled ?? false)
 
-    setPaymentLinkEnabled(
-      data.payment_link_enabled ?? false,
-    )
-
-    setPaymentProofEnabled(
-      data.payment_proof_enabled ?? false,
-    )
-
-    setPaymentProofRequired(
-      data.payment_proof_required ?? false,
-    )
+    setPaymentProofEnabled(data.payment_proof_enabled ?? false)
+    setPaymentProofRequired(data.payment_proof_required ?? false)
 
     setPaymentAmount(
       data.payment_amount !== null &&
@@ -631,23 +557,14 @@ export default function RegistrationSettingsPage() {
 
   // ============================================================
   // المستويات
-  // الترتيب هنا يأتي مباشرة من Supabase بواسطة sort_order.
-  // لا يوجد أي ترتيب محلي حسب الاسم أو غيره.
+  // الترتيب يأتي مباشرة من Supabase عبر Repository.
   // ============================================================
 
   async function loadRegistrationLevels() {
     setRegistrationLevelsLoading(true)
 
-    const { data, error } = await supabase
-      .from('levels')
-      .select(
-        'id, name, is_active, registration_enabled, sort_order',
-      )
-      .eq('is_active', true)
-      .order('sort_order', {
-        ascending: true,
-        nullsFirst: false,
-      })
+    const { data, error } =
+      await loadSettingsRegistrationLevels()
 
     if (error) {
       console.error(
@@ -663,9 +580,6 @@ export default function RegistrationSettingsPage() {
       return
     }
 
-    // مهم:
-    // لا نستخدم filter أو sort هنا.
-    // Supabase هو المسؤول عن تحديد ترتيب النتائج.
     setRegistrationLevels(
       (data ?? []) as RegistrationLevel[],
     )
@@ -700,8 +614,7 @@ export default function RegistrationSettingsPage() {
     const exists = registrationLevels.some(
       (item) =>
         item.id !== level.id &&
-        item.name.trim().toLowerCase() ===
-          name.toLowerCase(),
+        item.name.trim().toLowerCase() === name.toLowerCase(),
     )
 
     if (exists) {
@@ -713,18 +626,13 @@ export default function RegistrationSettingsPage() {
     setErrorMessage('')
     setSuccessMessage('')
 
-    const { error } = await supabase
-      .from('levels')
-      .update({
-        name,
-      })
-      .eq('id', level.id)
+    const { error } = await updateSettingsRegistrationLevelName(
+      level.id,
+      name,
+    )
 
     if (error) {
-      console.error(
-        'Error updating level name:',
-        error,
-      )
+      console.error('Error updating level name:', error)
 
       setErrorMessage(
         `تعذر تعديل اسم المستوى: ${error.message}`,
@@ -736,21 +644,13 @@ export default function RegistrationSettingsPage() {
 
     setRegistrationLevels((current) =>
       current.map((item) =>
-        item.id === level.id
-          ? {
-              ...item,
-              name,
-            }
-          : item,
+        item.id === level.id ? { ...item, name } : item,
       ),
     )
 
     cancelEditingRegistrationLevel()
 
-    setSuccessMessage(
-      'تم تعديل اسم المستوى بنجاح.',
-    )
-
+    setSuccessMessage('تم تعديل اسم المستوى بنجاح.')
     setSavingRegistrationLevel(false)
   }
 
@@ -763,12 +663,11 @@ export default function RegistrationSettingsPage() {
 
     const nextValue = !level.registration_enabled
 
-    const { error } = await supabase
-      .from('levels')
-      .update({
-        registration_enabled: nextValue,
-      })
-      .eq('id', level.id)
+    const { error } =
+      await updateSettingsRegistrationLevelEnabled(
+        level.id,
+        nextValue,
+      )
 
     if (error) {
       console.error(
@@ -787,10 +686,7 @@ export default function RegistrationSettingsPage() {
     setRegistrationLevels((current) =>
       current.map((item) =>
         item.id === level.id
-          ? {
-              ...item,
-              registration_enabled: nextValue,
-            }
+          ? { ...item, registration_enabled: nextValue }
           : item,
       ),
     )
@@ -804,151 +700,128 @@ export default function RegistrationSettingsPage() {
     setSavingRegistrationLevel(false)
   }
 
- async function loadCustomFields() {
-  setCustomFieldsLoading(true)
+  // ============================================================
+  // الحقول الإضافية
+  // ============================================================
 
-  try {
-    const { data, error } = await supabase
-      .from('custom_fields')
-      .select(`
-        id,
-        name,
-        field_type,
-        available_in_registration,
-        available_in_students,
-        available_in_payments,
-        sort_order,
-        is_active
-      `)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true })
+  async function loadCustomFields() {
+    setCustomFieldsLoading(true)
 
-    if (error) {
+    try {
+      const { data, error } = await loadSettingsCustomFields()
+
+      if (error) {
+        console.error('Error loading custom fields:', error)
+
+        setErrorMessage(
+          `تعذر تحميل الحقول الإضافية: ${error.message}`,
+        )
+
+        return
+      }
+
+      if (!data || data.length === 0) {
+        setCustomFields([])
+        return
+      }
+
+      const fieldIds = data.map((field) => field.id)
+
+      const {
+        data: visibilityData,
+        error: visibilityError,
+      } = await loadSettingsCustomFieldVisibility(fieldIds)
+
+      if (visibilityError) {
+        console.error(
+          'Error loading custom field visibility:',
+          visibilityError,
+        )
+
+        setErrorMessage(
+          `تم تحميل الحقول ولكن تعذر تحميل إعدادات ظهورها: ${visibilityError.message}`,
+        )
+      }
+
+      type VisibilitySection =
+        | 'registration'
+        | 'students'
+        | 'payments'
+
+      type SectionVisibility = {
+        is_visible: boolean
+        is_required: boolean
+        sort_order: number
+      }
+
+      const fields: CustomField[] = data.map((field) => {
+        const defaultVisibility: SectionVisibility = {
+          is_visible: false,
+          is_required: false,
+          sort_order: field.sort_order,
+        }
+
+        const visibility: Record<
+          VisibilitySection,
+          SectionVisibility
+        > = {
+          registration: { ...defaultVisibility },
+          students: { ...defaultVisibility },
+          payments: { ...defaultVisibility },
+        }
+
+        for (const row of visibilityData ?? []) {
+          if (row.custom_field_id !== field.id) continue
+
+          const section = row.section as VisibilitySection
+
+          if (
+            section !== 'registration' &&
+            section !== 'students' &&
+            section !== 'payments'
+          ) {
+            continue
+          }
+
+          visibility[section] = {
+            is_visible: row.is_visible ?? false,
+            is_required: row.is_required ?? false,
+            sort_order: row.sort_order ?? field.sort_order,
+          }
+        }
+
+        return {
+          ...field,
+          visibility,
+        }
+      })
+
+      setCustomFields(fields)
+    } catch (error) {
       console.error('Error loading custom fields:', error)
 
       setErrorMessage(
-        `تعذر تحميل الحقول الإضافية: ${error.message}`,
+        'حدث خطأ غير متوقع أثناء تحميل الحقول الإضافية.',
       )
-
-      return
-    }
-
-    if (!data || data.length === 0) {
-      setCustomFields([])
-      return
-    }
-
-    const fieldIds = data.map((field) => field.id)
-
-const {
-  data: visibilityData,
-  error: visibilityError,
-} = await supabase
-  .from('custom_field_visibility')
-  .select(`
-    custom_field_id,
-    section,
-    is_visible,
-    is_required,
-    sort_order
-  `)
-  .in('custom_field_id', fieldIds)
-
-if (visibilityError) {
-  console.error(
-    'Error loading custom field visibility:',
-    visibilityError,
-  )
-
-  setErrorMessage(
-    `تم تحميل الحقول ولكن تعذر تحميل إعدادات ظهورها: ${visibilityError.message}`,
-  )
-}
-
-type VisibilitySection =
-  | 'registration'
-  | 'students'
-  | 'payments'
-
-type SectionVisibility = {
-  is_visible: boolean
-  is_required: boolean
-  sort_order: number
-}
-
-const fields: CustomField[] = data.map((field) => {
-  const defaultVisibility: SectionVisibility = {
-    is_visible: false,
-    is_required: false,
-    sort_order: field.sort_order,
-  }
-
-  const visibility: Record<
-    VisibilitySection,
-    SectionVisibility
-  > = {
-    registration: { ...defaultVisibility },
-    students: { ...defaultVisibility },
-    payments: { ...defaultVisibility },
-  }
-
-  for (const row of visibilityData ?? []) {
-    if (row.custom_field_id !== field.id) {
-      continue
-    }
-
-    const section = row.section as VisibilitySection
-
-    if (
-      section !== 'registration' &&
-      section !== 'students' &&
-      section !== 'payments'
-    ) {
-      continue
-    }
-
-    visibility[section] = {
-      is_visible: row.is_visible ?? false,
-      is_required: row.is_required ?? false,
-      sort_order:
-        row.sort_order ?? field.sort_order,
+    } finally {
+      setCustomFieldsLoading(false)
     }
   }
 
-  return {
-    ...field,
-    visibility,
-  }
-})
+  // ============================================================
+  // حفظ إعدادات التسجيل
+  // ============================================================
 
-setCustomFields(fields)
-} catch (error) {
-  console.error('Error loading custom fields:', error)
+  async function saveSettings() {
+    setSaving(true)
+    setErrorMessage('')
+    setSuccessMessage('')
 
-    setErrorMessage(
-      'حدث خطأ غير متوقع أثناء تحميل الحقول الإضافية.',
-    )
-  } finally {
-    setCustomFieldsLoading(false)
-  }
-}
-
-async function saveSettings() {
-  setSaving(true)
-  setErrorMessage('')
-  setSuccessMessage('')
-
-  const cleanEducationGroupLink =
-    educationGroupLink.trim()
-
-  const cleanEducationGroupDescription =
-    educationGroupDescription.trim()
-
-  const cleanPostRegistrationNotes =
-    postRegistrationNotes.trim()
-    // ==========================================================
-    // التحقق من دورة التسجيل
-    // ==========================================================
+    const cleanEducationGroupLink = educationGroupLink.trim()
+    const cleanEducationGroupDescription =
+      educationGroupDescription.trim()
+    const cleanPostRegistrationNotes =
+      postRegistrationNotes.trim()
 
     if (registrationOpen && !currentAcademicYearId) {
       setErrorMessage(
@@ -960,10 +833,7 @@ async function saveSettings() {
     }
 
     if (registrationOpen && !registrationCourseId) {
-      setErrorMessage(
-        'اختر دورة التسجيل الحالية أولاً.',
-      )
-
+      setErrorMessage('اختر دورة التسجيل الحالية أولاً.')
       setSaving(false)
       return
     }
@@ -982,10 +852,7 @@ async function saveSettings() {
       return
     }
 
-    if (
-      showEducationGroup &&
-      !cleanEducationGroupLink
-    ) {
+    if (showEducationGroup && !cleanEducationGroupLink) {
       setErrorMessage(
         'عند تفعيل دعوة مجموعة التعليم يجب إضافة رابط المجموعة.',
       )
@@ -994,10 +861,7 @@ async function saveSettings() {
       return
     }
 
-    if (
-      showEducationGroup &&
-      cleanEducationGroupLink
-    ) {
+    if (showEducationGroup && cleanEducationGroupLink) {
       try {
         const url = new URL(cleanEducationGroupLink)
 
@@ -1026,8 +890,7 @@ async function saveSettings() {
       required_name: showName && requiredName,
 
       show_personal_id: showPersonalId,
-      required_personal_id:
-        showPersonalId && requiredPersonalId,
+      required_personal_id: showPersonalId && requiredPersonalId,
 
       show_gender: showGender,
       required_gender: showGender && requiredGender,
@@ -1043,8 +906,7 @@ async function saveSettings() {
         showGuardianRelation && requiredGuardianRelation,
 
       show_whatsapp: showWhatsapp,
-      required_whatsapp:
-        showWhatsapp && requiredWhatsapp,
+      required_whatsapp: showWhatsapp && requiredWhatsapp,
 
       show_student_phone: showStudentPhone,
       required_student_phone:
@@ -1089,14 +951,10 @@ async function saveSettings() {
         paymentProofEnabled && paymentProofRequired,
 
       payment_amount:
-        paymentAmount.trim() === ''
-          ? 0
-          : Number(paymentAmount),
+        paymentAmount.trim() === '' ? 0 : Number(paymentAmount),
 
       payment_link:
-        paymentLink.trim() === ''
-          ? null
-          : paymentLink.trim(),
+        paymentLink.trim() === '' ? null : paymentLink.trim(),
 
       show_payment_qr: showPaymentQr,
     }
@@ -1113,18 +971,16 @@ async function saveSettings() {
     let error
 
     if (settingsId) {
-      const result = await supabase
-        .from('registration_settings')
-        .update(payload)
-        .eq('id', settingsId)
+      const result = await updateSettingsRegistrationConfig(
+        settingsId,
+        payload,
+      )
 
       error = result.error
     } else {
-      const result = await supabase
-        .from('registration_settings')
-        .insert(payload)
-        .select('id')
-        .single()
+      const result = await insertSettingsRegistrationConfig(
+        payload,
+      )
 
       error = result.error
 
@@ -1147,12 +1003,13 @@ async function saveSettings() {
       return
     }
 
-    setSuccessMessage(
-      'تم حفظ إعدادات التسجيل بنجاح.',
-    )
-
+    setSuccessMessage('تم حفظ إعدادات التسجيل بنجاح.')
     setSaving(false)
   }
+
+  // ============================================================
+  // أدوات إضافة الحقول
+  // ============================================================
 
   function resetNewFieldForm() {
     setNewFieldName('')
@@ -1193,6 +1050,10 @@ async function saveSettings() {
       ),
     )
   }
+
+  // ============================================================
+  // إضافة حقل إضافي
+  // ============================================================
 
   async function addCustomField() {
     const name = newFieldName.trim()
@@ -1237,33 +1098,16 @@ async function saveSettings() {
         : 0
 
     const { data: field, error: fieldError } =
-      await supabase
-        .from('custom_fields')
-        .insert({
-          name,
-          field_type: newFieldType,
-          available_in_registration:
-            newFieldSections.registration,
-          available_in_students:
-            newFieldSections.students,
-          available_in_payments:
-            newFieldSections.payments,
-          sort_order: maxSortOrder + 1,
-          is_active: true,
-        })
-        .select(
-          `
-          id,
-          name,
-          field_type,
-          available_in_registration,
-          available_in_students,
-          available_in_payments,
-          sort_order,
-          is_active
-        `,
-        )
-        .single()
+      await insertSettingsCustomField({
+        name,
+        field_type: newFieldType,
+        available_in_registration:
+          newFieldSections.registration,
+        available_in_students: newFieldSections.students,
+        available_in_payments: newFieldSections.payments,
+        sort_order: maxSortOrder + 1,
+        is_active: true,
+      })
 
     if (fieldError || !field) {
       console.error(
@@ -1287,9 +1131,8 @@ async function saveSettings() {
         .filter(Boolean)
 
       if (options.length > 0) {
-        const { error: optionsError } = await supabase
-          .from('custom_field_options')
-          .insert(
+        const { error: optionsError } =
+          await insertSettingsCustomFieldOptions(
             options.map((option, index) => ({
               custom_field_id: field.id,
               label: option,
@@ -1304,10 +1147,7 @@ async function saveSettings() {
             optionsError,
           )
 
-          await supabase
-            .from('custom_fields')
-            .delete()
-            .eq('id', field.id)
+          await deleteSettingsCustomField(field.id)
 
           setErrorMessage(
             `تعذر حفظ خيارات الحقل: ${optionsError.message}`,
@@ -1329,9 +1169,10 @@ async function saveSettings() {
       }),
     )
 
-    const { error: visibilityError } = await supabase
-      .from('custom_field_visibility')
-      .insert(visibilityRows)
+    const { error: visibilityError } =
+      await insertSettingsCustomFieldVisibility(
+        visibilityRows,
+      )
 
     if (visibilityError) {
       console.error(
@@ -1339,10 +1180,7 @@ async function saveSettings() {
         visibilityError,
       )
 
-      await supabase
-        .from('custom_fields')
-        .delete()
-        .eq('id', field.id)
+      await deleteSettingsCustomField(field.id)
 
       setErrorMessage(
         `تعذر حفظ أماكن ظهور الحقل: ${visibilityError.message}`,
@@ -1355,14 +1193,16 @@ async function saveSettings() {
     resetNewFieldForm()
     setShowAddField(false)
 
-    setSuccessMessage(
-      'تمت إضافة الحقل بنجاح.',
-    )
+    setSuccessMessage('تمت إضافة الحقل بنجاح.')
 
     await loadCustomFields()
 
     setSavingField(false)
   }
+
+  // ============================================================
+  // حذف حقل إضافي
+  // ============================================================
 
   async function deleteCustomField(fieldId: string) {
     const confirmed = window.confirm(
@@ -1374,10 +1214,7 @@ async function saveSettings() {
     setErrorMessage('')
     setSuccessMessage('')
 
-    const { error } = await supabase
-      .from('custom_fields')
-      .delete()
-      .eq('id', fieldId)
+    const { error } = await deleteSettingsCustomField(fieldId)
 
     if (error) {
       console.error('Error deleting custom field:', error)
@@ -1393,6 +1230,10 @@ async function saveSettings() {
     await loadCustomFields()
   }
 
+  // ============================================================
+  // تحديث ظهور الحقول الإضافية
+  // ============================================================
+
   async function updateCustomFieldVisibility(
     field: CustomField,
     section: 'registration' | 'students' | 'payments',
@@ -1401,35 +1242,27 @@ async function saveSettings() {
       is_required?: boolean
     },
   ) {
-    const current =
-      field.visibility?.[section] ?? {
-        is_visible: false,
-        is_required: false,
-        sort_order: field.sort_order,
-      }
+    const current = field.visibility?.[section] ?? {
+      is_visible: false,
+      is_required: false,
+      sort_order: field.sort_order,
+    }
 
     const nextVisible =
       changes.is_visible ?? current.is_visible
 
-    const nextRequired =
-      nextVisible
-        ? changes.is_required ?? current.is_required
-        : false
+    const nextRequired = nextVisible
+      ? changes.is_required ?? current.is_required
+      : false
 
-    const { error } = await supabase
-      .from('custom_field_visibility')
-      .upsert(
-        {
-          custom_field_id: field.id,
-          section,
-          is_visible: nextVisible,
-          is_required: nextRequired,
-          sort_order: current.sort_order,
-        },
-        {
-          onConflict: 'custom_field_id,section',
-        },
-      )
+    const { error } =
+      await upsertSettingsCustomFieldVisibility({
+        custom_field_id: field.id,
+        section,
+        is_visible: nextVisible,
+        is_required: nextRequired,
+        sort_order: current.sort_order,
+      })
 
     if (error) {
       console.error(
@@ -1450,12 +1283,30 @@ async function saveSettings() {
           return currentField
         }
 
+        const currentVisibility = currentField.visibility ?? {
+          registration: {
+            is_visible: false,
+            is_required: false,
+            sort_order: currentField.sort_order,
+          },
+          students: {
+            is_visible: false,
+            is_required: false,
+            sort_order: currentField.sort_order,
+          },
+          payments: {
+            is_visible: false,
+            is_required: false,
+            sort_order: currentField.sort_order,
+          },
+        }
+
         return {
           ...currentField,
           visibility: {
-            ...currentField.visibility!,
+            ...currentVisibility,
             [section]: {
-              ...currentField.visibility![section],
+              ...currentVisibility[section],
               is_visible: nextVisible,
               is_required: nextRequired,
             },
@@ -1467,10 +1318,7 @@ async function saveSettings() {
 
   function sectionIsAvailable(
     field: CustomField,
-    section:
-      | 'registration'
-      | 'students'
-      | 'payments',
+    section: 'registration' | 'students' | 'payments',
   ) {
     if (section === 'registration') {
       return field.available_in_registration
@@ -1482,6 +1330,10 @@ async function saveSettings() {
 
     return field.available_in_payments
   }
+
+  // ============================================================
+  // واجهة الصفحة
+  // ============================================================
 
   return (
     <div className="space-y-6">
@@ -1528,6 +1380,8 @@ async function saveSettings() {
         </Button>
       </div>
 
+      {/* التسجيل العام */}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -1555,9 +1409,7 @@ async function saveSettings() {
 
           <div className="mt-5 border-t pt-5">
             <div>
-              <p className="font-semibold">
-                دورة التسجيل الحالية
-              </p>
+              <p className="font-semibold">دورة التسجيل الحالية</p>
 
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 السنة الدراسية تؤخذ تلقائياً من السنة الحالية في النظام،
@@ -1611,15 +1463,10 @@ async function saveSettings() {
                     }
                     className="flex h-11 w-full appearance-none rounded-xl border bg-background px-3 py-2 pl-10 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <option value="">
-                      اختر الدورة
-                    </option>
+                    <option value="">اختر الدورة</option>
 
                     {registrationCourses.map((course) => (
-                      <option
-                        key={course.id}
-                        value={course.id}
-                      >
+                      <option key={course.id} value={course.id}>
                         {course.name}
                       </option>
                     ))}
@@ -1637,8 +1484,7 @@ async function saveSettings() {
 
                 {registrationCourseId &&
                   registrationCourses.some(
-                    (course) =>
-                      course.id === registrationCourseId,
+                    (course) => course.id === registrationCourseId,
                   ) && (
                     <p className="mt-2 text-xs text-muted-foreground">
                       هذه هي الدورة التي سيتم ربط طلبات التسجيل الجديدة بها.
@@ -1655,9 +1501,7 @@ async function saveSettings() {
                   </div>
 
                   <div>
-                    <p className="font-medium">
-                      طريقة الربط
-                    </p>
+                    <p className="font-medium">طريقة الربط</p>
 
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
                       عند إرسال طلب جديد، النظام سيحفظ السنة الدراسية الحالية
@@ -1673,9 +1517,7 @@ async function saveSettings() {
           {registrationOpen && (
             <div className="mt-5 border-t pt-5">
               <div>
-                <p className="font-semibold">
-                  المستويات
-                </p>
+                <p className="font-semibold">المستويات</p>
 
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
                   تحكم في أسماء المستويات وظهورها في التسجيل الخارجي.
@@ -1692,10 +1534,7 @@ async function saveSettings() {
                   </div>
                 ) : registrationLevels.length === 0 ? (
                   <div className="rounded-xl border border-dashed p-5 text-center">
-                    <p className="font-medium">
-                      لا توجد مستويات نشطة
-                    </p>
-
+                    <p className="font-medium">لا توجد مستويات نشطة</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       لا يوجد أي مستوى نشط في جدول المستويات.
                     </p>
@@ -1768,9 +1607,7 @@ async function saveSettings() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={
-                                cancelEditingRegistrationLevel
-                              }
+                              onClick={cancelEditingRegistrationLevel}
                               disabled={savingRegistrationLevel}
                             >
                               إلغاء
@@ -1780,9 +1617,7 @@ async function saveSettings() {
                           <button
                             type="button"
                             role="switch"
-                            aria-checked={
-                              level.registration_enabled
-                            }
+                            aria-checked={level.registration_enabled}
                             disabled={savingRegistrationLevel}
                             onClick={() =>
                               toggleRegistrationLevel(level)
@@ -1812,9 +1647,7 @@ async function saveSettings() {
         </CardContent>
       </Card>
 
-      {/* ==========================================================
-          دعوة مجموعة التعليم بعد التسجيل
-          ========================================================== */}
+      {/* مجموعة التعليم بعد التسجيل */}
 
       <Card>
         <CardHeader>
@@ -1843,7 +1676,6 @@ async function saveSettings() {
               <div>
                 <div className="flex items-center gap-2">
                   <Link2 className="size-4 text-primary" />
-
                   <label
                     htmlFor="educationGroupLink"
                     className="text-sm font-semibold"
@@ -1886,9 +1718,7 @@ async function saveSettings() {
                   id="educationGroupDescription"
                   value={educationGroupDescription}
                   onChange={(event) =>
-                    setEducationGroupDescription(
-                      event.target.value,
-                    )
+                    setEducationGroupDescription(event.target.value)
                   }
                   placeholder="مثال: يمكنكم الانضمام إلى مجموعة التعليم من خلال الرابط التالي:"
                   disabled={loading || saving}
@@ -1929,9 +1759,7 @@ async function saveSettings() {
 
                 <div className="mt-4 space-y-4">
                   <div className="rounded-xl border p-4">
-                    <p className="font-semibold">
-                      مجموعة التعليم
-                    </p>
+                    <p className="font-semibold">مجموعة التعليم</p>
 
                     {educationGroupDescription.trim() && (
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
@@ -1948,10 +1776,7 @@ async function saveSettings() {
 
                   {postRegistrationNotes.trim() && (
                     <div className="rounded-xl border p-4">
-                      <p className="font-semibold">
-                        ملاحظات عامة
-                      </p>
-
+                      <p className="font-semibold">ملاحظات عامة</p>
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
                         {postRegistrationNotes}
                       </p>
@@ -1969,6 +1794,8 @@ async function saveSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* الحقول الأساسية */}
 
       <Card>
         <CardHeader>
@@ -2129,12 +1956,13 @@ async function saveSettings() {
         </CardContent>
       </Card>
 
+      {/* الحقول الإضافية */}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>الحقول الإضافية</CardTitle>
-
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 أضف أي معلومة جديدة بدون الحاجة إلى تعديل قاعدة البيانات.
               </p>
@@ -2158,10 +1986,7 @@ async function saveSettings() {
             <div className="rounded-2xl border-2 border-dashed p-5">
               <div className="mb-5 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold">
-                    إضافة حقل جديد
-                  </h3>
-
+                  <h3 className="font-semibold">إضافة حقل جديد</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     الحقل سيكون متاحاً في الأقسام التي تختارها.
                   </p>
@@ -2234,8 +2059,7 @@ async function saveSettings() {
 
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
                   {SECTIONS.map((section) => {
-                    const selected =
-                      newFieldSections[section.key]
+                    const selected = newFieldSections[section.key]
 
                     return (
                       <button
@@ -2255,7 +2079,6 @@ async function saveSettings() {
                           <span className="block font-medium">
                             {section.label}
                           </span>
-
                           <span className="mt-1 block text-xs text-muted-foreground">
                             متاح للتخصيص
                           </span>
@@ -2268,9 +2091,7 @@ async function saveSettings() {
                               : 'border-muted-foreground/30'
                           }`}
                         >
-                          {selected && (
-                            <Check className="size-4" />
-                          )}
+                          {selected && <Check className="size-4" />}
                         </span>
                       </button>
                     )
@@ -2282,9 +2103,7 @@ async function saveSettings() {
                 <div className="mt-5 rounded-xl border bg-muted/20 p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">
-                        خيارات القائمة
-                      </p>
+                      <p className="font-medium">خيارات القائمة</p>
                     </div>
 
                     <Button
@@ -2299,89 +2118,86 @@ async function saveSettings() {
                     </Button>
                   </div>
 
-              <div className="mt-4 space-y-2">
-              {newFieldOptions.map((option, index) => (
-              <div
-          key={index}
-          className="flex gap-2"
-        >
-          <input
-            type="text"
-            value={option}
-            onChange={(event) =>
-              updateOption(index, event.target.value)
-            }
-            placeholder={`الخيار ${index + 1}`}
-            className="flex h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            disabled={savingField}
-          />
-    
-          {newFieldOptions.length > 1 && (
-            <button
-              type="button"
-              onClick={() => removeOption(index)}
-              disabled={savingField}
-              className="rounded-lg border p-2 text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          )}
-        </div>
-      ))}
-    </div>
-    </div>
-    )}
-    
-    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => {
-          setShowAddField(false)
-          resetNewFieldForm()
-        }}
-        disabled={savingField}
-      >
-        إلغاء
-      </Button>
-    
-      <Button
-        type="button"
-        onClick={addCustomField}
-        disabled={savingField}
-      >
-        {savingField ? (
-          <>
-            <Loader2 className="ml-2 size-4 animate-spin" />
-            جاري الإضافة...
-          </>
-        ) : (
-          <>
-            <Plus className="ml-2 size-4" />
-            إضافة الحقل
-          </>
-        )}
-      </Button>
-    </div>
-    </div>
-    )}
+                  <div className="mt-4 space-y-2">
+                    {newFieldOptions.map((option, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(event) =>
+                            updateOption(index, event.target.value)
+                          }
+                          placeholder={`الخيار ${index + 1}`}
+                          className="flex h-10 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          disabled={savingField}
+                        />
 
-    {customFieldsLoading ? (
-      <div className="flex items-center justify-center gap-2 rounded-xl border p-8 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        جاري تحميل الحقول الإضافية...
-      </div>
-    ) : activeCustomFields.length === 0 ? (
-      <div className="rounded-2xl border border-dashed p-8 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
-          <Plus className="size-5 text-muted-foreground" />
-        </div>
-    
-        <p className="mt-3 font-medium">
-          لا توجد حقول إضافية
-        </p>
-      </div>
-    ) : (
+                        {newFieldOptions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOption(index)}
+                            disabled={savingField}
+                            className="rounded-lg border p-2 text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowAddField(false)
+                    resetNewFieldForm()
+                  }}
+                  disabled={savingField}
+                >
+                  إلغاء
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={addCustomField}
+                  disabled={savingField}
+                >
+                  {savingField ? (
+                    <>
+                      <Loader2 className="ml-2 size-4 animate-spin" />
+                      جاري الإضافة...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="ml-2 size-4" />
+                      إضافة الحقل
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {customFieldsLoading ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl border p-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              جاري تحميل الحقول الإضافية...
+            </div>
+          ) : activeCustomFields.length === 0 ? (
+            <div className="rounded-2xl border border-dashed p-8 text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+                <Plus className="size-5 text-muted-foreground" />
+              </div>
+
+              <p className="mt-3 font-medium">
+                لا توجد حقول إضافية
+              </p>
+            </div>
+          ) : (
             <div className="space-y-4">
               {activeCustomFields.map((field, index) => (
                 <div
@@ -2414,9 +2230,7 @@ async function saveSettings() {
                       variant="outline"
                       size="sm"
                       className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() =>
-                        deleteCustomField(field.id)
-                      }
+                      onClick={() => deleteCustomField(field.id)}
                     >
                       <Trash2 className="ml-2 size-4" />
                       حذف الحقل
@@ -2425,11 +2239,10 @@ async function saveSettings() {
 
                   <div className="mt-5 grid gap-3 lg:grid-cols-3">
                     {SECTIONS.map((section) => {
-                      const available =
-                        sectionIsAvailable(
-                          field,
-                          section.key,
-                        )
+                      const available = sectionIsAvailable(
+                        field,
+                        section.key,
+                      )
 
                       const visibility =
                         field.visibility?.[section.key] ?? {
@@ -2459,35 +2272,25 @@ async function saveSettings() {
                             <div className="mt-4 space-y-2">
                               <ToggleButton
                                 label="عرض الحقل"
-                                checked={
-                                  visibility.is_visible
-                                }
+                                checked={visibility.is_visible}
                                 onChange={async (value) => {
                                   await updateCustomFieldVisibility(
                                     field,
                                     section.key,
-                                    {
-                                      is_visible: value,
-                                    },
+                                    { is_visible: value },
                                   )
                                 }}
                               />
 
                               <ToggleButton
                                 label="إلزامي"
-                                checked={
-                                  visibility.is_required
-                                }
-                                disabled={
-                                  !visibility.is_visible
-                                }
+                                checked={visibility.is_required}
+                                disabled={!visibility.is_visible}
                                 onChange={async (value) => {
                                   await updateCustomFieldVisibility(
                                     field,
                                     section.key,
-                                    {
-                                      is_required: value,
-                                    },
+                                    { is_required: value },
                                   )
                                 }}
                               />
@@ -2503,6 +2306,8 @@ async function saveSettings() {
           )}
         </CardContent>
       </Card>
+
+      {/* إعدادات الدفع */}
 
       <Card>
         <CardHeader>
@@ -2546,9 +2351,7 @@ async function saveSettings() {
               </div>
 
               <div className="space-y-3">
-                <p className="font-medium">
-                  طرق الدفع المتاحة
-                </p>
+                <p className="font-medium">طرق الدفع المتاحة</p>
 
                 <SettingRow
                   title="BenefitPay"
@@ -2587,7 +2390,6 @@ async function saveSettings() {
                 <div className="rounded-xl border p-4">
                   <div className="flex items-center gap-2">
                     <Link2 className="size-4" />
-
                     <label
                       htmlFor="paymentLink"
                       className="text-sm font-medium"
@@ -2658,6 +2460,8 @@ async function saveSettings() {
         </CardContent>
       </Card>
 
+      {/* ملخص الإعدادات */}
+
       <Card>
         <CardHeader>
           <CardTitle>ملخص الإعدادات</CardTitle>
@@ -2666,10 +2470,7 @@ async function saveSettings() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-xl bg-muted/50 p-4">
-              <p className="text-sm text-muted-foreground">
-                التسجيل
-              </p>
-
+              <p className="text-sm text-muted-foreground">التسجيل</p>
               <p className="mt-1 font-semibold">
                 {registrationOpen ? 'مفتوح' : 'مغلق'}
               </p>
@@ -2679,7 +2480,6 @@ async function saveSettings() {
               <p className="text-sm text-muted-foreground">
                 السنة الدراسية
               </p>
-
               <p className="mt-1 font-semibold">
                 {currentAcademicYearName || 'غير محددة'}
               </p>
@@ -2689,20 +2489,15 @@ async function saveSettings() {
               <p className="text-sm text-muted-foreground">
                 دورة التسجيل
               </p>
-
               <p className="mt-1 font-semibold">
                 {registrationCourses.find(
-                  (course) =>
-                    course.id === registrationCourseId,
+                  (course) => course.id === registrationCourseId,
                 )?.name ?? 'غير محددة'}
               </p>
             </div>
 
             <div className="rounded-xl bg-muted/50 p-4">
-              <p className="text-sm text-muted-foreground">
-                الدفع
-              </p>
-
+              <p className="text-sm text-muted-foreground">الدفع</p>
               <p className="mt-1 font-semibold">
                 {paymentEnabled ? 'مفعل' : 'غير مفعل'}
               </p>
@@ -2714,7 +2509,6 @@ async function saveSettings() {
               <p className="text-sm text-muted-foreground">
                 مجموعة التعليم
               </p>
-
               <p className="mt-1 font-semibold">
                 {showEducationGroup
                   ? educationGroupLink.trim()
@@ -2728,7 +2522,6 @@ async function saveSettings() {
               <p className="text-sm text-muted-foreground">
                 الحقول الإضافية
               </p>
-
               <p className="mt-1 font-semibold">
                 {activeCustomFields.length}
               </p>
@@ -2739,8 +2532,7 @@ async function saveSettings() {
             <div className="mt-4 rounded-xl bg-muted/50 p-4 text-sm leading-7">
               {paymentAmount && (
                 <p>
-                  مبلغ التسجيل:{' '}
-                  <strong>{paymentAmount}</strong>
+                  مبلغ التسجيل: <strong>{paymentAmount}</strong>
                 </p>
               )}
 
