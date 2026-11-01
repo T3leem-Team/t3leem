@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -27,6 +28,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
+import {
+  checkSettingsPermission,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 type ManagementOption = {
   title: string
@@ -274,12 +278,8 @@ export function SettingsView() {
          * صلاحية دخول صفحة التحليلات نفسها.
          * مستقلة عن صلاحية عنصر النظام.
          */
-        const { data, error } = await supabase.rpc(
-          'has_permission',
-          {
-            required_permission: 'analytics.view',
-          },
-        )
+        const { data, error } =
+          await checkSettingsPermission('analytics.view')
 
         if (mounted) {
           setCanViewAnalytics(!error && data === true)
