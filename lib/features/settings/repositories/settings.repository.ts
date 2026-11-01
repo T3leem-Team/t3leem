@@ -41,3 +41,12 @@ export async function loadStudentTrackingAnalytics(
       ascending: true,
     })
 }
+
+
+export async function checkSettingsPermission(
+  permission: string
+) {
+  return await supabase.rpc('has_permission', {
+    required_permission: permission,
+  })
+}
