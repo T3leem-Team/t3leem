@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -10,7 +11,6 @@ import {
   Wallet,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
 import type {
   AcademicYear,
   AdjustmentDirection,
@@ -18,13 +18,23 @@ import type {
   FinancialSettings,
   ModalType,
   PaymentFinancialCache,
-  PaymentRecord,
   StudentPaymentRow,
-  StudentRecord,
   Summary,
   Transaction,
   TransactionType,
 } from './payment-financial.types'
+
+import {
+  loadFinancialAcademicYear,
+  loadFinancialManagementData,
+  loadFinancialStudentPayments,
+  initializeFinancialManagement,
+  resetFinancialManagement as resetFinancialManagementRepository,
+  createFinancialTransaction,
+  confirmFinancialTransaction,
+  deleteFinancialTransaction,
+} from '@/lib/features/payments/repositories/financial-management.repository'
+
 import {
   emptySummary,
   formatDate,
@@ -33,6 +43,7 @@ import {
   getTransactionLabel,
   money,
 } from './payment-financial.utils'
+
 import { SummaryCard } from './payment-financial.components'
 import FinancialTables from './payment-financial.tables'
 import PaymentFinancialModals from './payment-financial.modals'
@@ -69,8 +80,7 @@ export function PaymentFinancial() {
 
   const [summary, setSummary] =
     useState<Summary>(
-      paymentFinancialCache?.summary ??
-        emptySummary
+      paymentFinancialCache?.summary ?? emptySummary
     )
 
   const [loading, setLoading] = useState(
@@ -80,8 +90,7 @@ export function PaymentFinancial() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const [modal, setModal] =
-    useState<ModalType>('none')
+  const [modal, setModal] = useState<ModalType>('none')
 
   const [
     selectedTransaction,
@@ -91,34 +100,21 @@ export function PaymentFinancial() {
   const [selectedDeleteId, setSelectedDeleteId] =
     useState<string | null>(null)
 
-  const [
-    initializeMode,
-    setInitializeMode,
-  ] = useState<FinancialMode>('manual')
+  const [initializeMode, setInitializeMode] =
+    useState<FinancialMode>('manual')
 
-  const [openingBalance, setOpeningBalance] =
+  const [openingBalance, setOpeningBalance] = useState('')
+  const [openingSource, setOpeningSource] = useState('')
+  const [openingNote, setOpeningNote] = useState('')
+
+  const [transactionType, setTransactionType] =
+    useState<TransactionType>('in')
+
+  const [transactionAmount, setTransactionAmount] =
     useState('')
 
-  const [openingSource, setOpeningSource] =
+  const [transactionSource, setTransactionSource] =
     useState('')
-
-  const [openingNote, setOpeningNote] =
-    useState('')
-
-  const [
-    transactionType,
-    setTransactionType,
-  ] = useState<TransactionType>('in')
-
-  const [
-    transactionAmount,
-    setTransactionAmount,
-  ] = useState('')
-
-  const [
-    transactionSource,
-    setTransactionSource,
-  ] = useState('')
 
   const [transactionNote, setTransactionNote] =
     useState('')
@@ -128,8 +124,7 @@ export function PaymentFinancial() {
     setAdjustmentDirection,
   ] = useState<AdjustmentDirection>('plus')
 
-  const [refreshing, setRefreshing] =
-    useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   /*
    * ---------------------------------------------------------
@@ -138,29 +133,11 @@ export function PaymentFinancial() {
    */
 
   const loadAcademicYear = async () => {
-    const { data, error: yearError } =
-      await supabase
-        .from('academic_years')
-        .select(
-          'id, name, start_date, end_date, is_current, is_active, annual_fee'
-        )
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
+    const year = await loadFinancialAcademicYear()
 
-    if (yearError) {
-      throw new Error(yearError.message)
-    }
+    setAcademicYear(year)
 
-    if (!data) {
-      throw new Error(
-        'لا توجد سنة دراسية حالية في النظام'
-      )
-    }
-
-    setAcademicYear(data)
-
-    return data
+    return year
   }
 
   /*
@@ -169,11 +146,8 @@ export function PaymentFinancial() {
    * ---------------------------------------------------------
    */
 
-  const loadFinancialData = async (
-    yearId?: string
-  ) => {
-    const id =
-      yearId || academicYear?.id
+  const loadFinancialData = async (yearId?: string) => {
+    const id = yearId || academicYear?.id
 
     if (!id) {
       return {
@@ -185,43 +159,13 @@ export function PaymentFinancial() {
 
     setError('')
 
-    const response = await fetch(
-      `/api/financial-management?academic_year_id=${encodeURIComponent(
-        id
-      )}`,
-      {
-        cache: 'no-store',
-      }
-    )
+    const result = await loadFinancialManagementData(id)
 
-    const result = await response.json()
+    setSettings(result.settings)
+    setTransactions(result.transactions)
+    setSummary(result.summary)
 
-    if (!response.ok) {
-      throw new Error(
-        result?.error ||
-          'تعذر تحميل الإدارة المالية'
-      )
-    }
-
-    const nextSettings =
-      result.settings || null
-
-    const nextTransactions =
-      (result.transactions || []) as Transaction[]
-
-    const nextSummary =
-      result.summary || emptySummary
-
-    setSettings(nextSettings)
-    setTransactions(nextTransactions)
-    setSummary(nextSummary)
-
-    return {
-      settings:
-        nextSettings as FinancialSettings | null,
-      transactions: nextTransactions,
-      summary: nextSummary as Summary,
-    }
+    return result
   }
 
   /*
@@ -232,10 +176,10 @@ export function PaymentFinancial() {
 
   const loadStudentPayments = async (
     yearId?: string,
-    transactionsOverride?: Transaction[]
+    transactionsOverride?: Transaction[],
+    annualFeeOverride?: number
   ) => {
-    const id =
-      yearId || academicYear?.id
+    const id = yearId || academicYear?.id
 
     if (!id) {
       return []
@@ -244,244 +188,19 @@ export function PaymentFinancial() {
     const currentTransactions =
       transactionsOverride ?? transactions
 
-    const studentPaymentTransactions =
-      currentTransactions.filter(
-        (transaction) =>
-          transaction.source_type ===
-            'student_payment' &&
-          Boolean(transaction.payment_id) &&
-          Boolean(transaction.student_id)
-      )
-
-    if (
-      studentPaymentTransactions.length ===
-      0
-    ) {
-      setStudentPayments([])
-      return []
-    }
-
-    const studentIds = Array.from(
-      new Set(
-        studentPaymentTransactions
-          .map(
-            (transaction) =>
-              transaction.student_id
-          )
-          .filter(Boolean) as string[]
-      )
+    const annualFee = Number(
+      annualFeeOverride ?? academicYear?.annual_fee ?? 0
     )
 
-    const paymentIds = Array.from(
-      new Set(
-        studentPaymentTransactions
-          .map(
-            (transaction) =>
-              transaction.payment_id
-          )
-          .filter(Boolean) as string[]
-      )
+    const rows = await loadFinancialStudentPayments(
+      id,
+      annualFee,
+      currentTransactions
     )
 
-    if (
-      studentIds.length === 0 ||
-      paymentIds.length === 0
-    ) {
-      setStudentPayments([])
-      return []
-    }
+    setStudentPayments(rows)
 
-    const [
-      { data: students, error: studentsError },
-      { data: payments, error: paymentsError },
-    ] = await Promise.all([
-      supabase
-        .from('students')
-        .select(
-          'id, name, personal_id, fee_exempt'
-        )
-        .in('id', studentIds),
-
-      supabase
-        .from('payments')
-        .select(
-          'id, student_id, amount, payment_method, payment_date, reference_number, notes'
-        )
-        .eq('academic_year_id', id)
-        .in('student_id', studentIds)
-        .order('payment_date', {
-          ascending: false,
-        }),
-    ])
-
-    if (studentsError) {
-      throw new Error(studentsError.message)
-    }
-
-    if (paymentsError) {
-      throw new Error(paymentsError.message)
-    }
-
-    const studentRecords =
-      (students || []) as StudentRecord[]
-
-    const paymentRecords =
-      (payments || []) as PaymentRecord[]
-
-    const paymentsByStudent = new Map<
-      string,
-      PaymentRecord[]
-    >()
-
-    for (const payment of paymentRecords) {
-      const current =
-        paymentsByStudent.get(
-          payment.student_id
-        ) || []
-
-      current.push(payment)
-
-      paymentsByStudent.set(
-        payment.student_id,
-        current
-      )
-    }
-
-    const transactionsByPaymentId =
-      new Map<string, Transaction>()
-
-    for (const transaction of currentTransactions) {
-      if (
-        transaction.source_type ===
-          'student_payment' &&
-        transaction.payment_id
-      ) {
-        transactionsByPaymentId.set(
-          transaction.payment_id,
-          transaction
-        )
-      }
-    }
-
-    const rows: StudentPaymentRow[] =
-      studentRecords
-        .map((student) => {
-          const studentPaymentRows =
-            paymentsByStudent.get(student.id) ||
-            []
-
-          const linkedPayments =
-            studentPaymentRows.filter(
-              (payment) =>
-                transactionsByPaymentId.has(
-                  payment.id
-                )
-            )
-
-          if (linkedPayments.length === 0) {
-            return null
-          }
-
-          const paidAmount =
-            studentPaymentRows.reduce(
-              (total, payment) =>
-                total +
-                Number(payment.amount || 0),
-              0
-            )
-
-          const feeExempt =
-            Boolean(student.fee_exempt)
-
-          const annualFee = Number(
-            academicYear?.annual_fee || 0
-          )
-
-          let status:
-            | 'paid'
-            | 'partial'
-            | 'exempt'
-            | 'unpaid'
-
-          if (feeExempt) {
-            status = 'exempt'
-          } else if (
-            annualFee > 0 &&
-            paidAmount >= annualFee
-          ) {
-            status = 'paid'
-          } else if (paidAmount > 0) {
-            status = 'partial'
-          } else {
-            status = 'unpaid'
-          }
-
-          const latestLinkedPayment =
-            linkedPayments[0] || null
-
-          const pendingCount =
-            linkedPayments.filter(
-              (payment) =>
-                transactionsByPaymentId.get(
-                  payment.id
-                )?.confirmation_status ===
-                'pending'
-            ).length
-
-          const latestTransaction =
-            latestLinkedPayment
-              ? transactionsByPaymentId.get(
-                  latestLinkedPayment.id
-                ) || null
-              : null
-
-          return {
-            studentId: student.id,
-            name:
-              student.name ||
-              'بدون اسم',
-            personalId:
-              student.personal_id || null,
-            feeExempt,
-            annualFee,
-            paidAmount,
-            remaining: feeExempt
-              ? 0
-              : Math.max(
-                  annualFee - paidAmount,
-                  0
-                ),
-            status,
-            latestPaymentMethod:
-              latestLinkedPayment?.payment_method ||
-              null,
-            latestPaymentDate:
-              latestLinkedPayment?.payment_date ||
-              null,
-            latestPaymentId:
-              latestLinkedPayment?.id || null,
-            latestTransaction,
-            pendingCount,
-          }
-        })
-        .filter(
-          (
-            row
-          ): row is StudentPaymentRow =>
-            row !== null
-        )
-
-    const filteredRows =
-      rows.filter(
-        (row) =>
-          row.status === 'partial' ||
-          row.status === 'paid' ||
-          row.status === 'exempt'
-      )
-
-    setStudentPayments(filteredRows)
-
-    return filteredRows
+    return rows
   }
 
   /*
@@ -490,7 +209,7 @@ export function PaymentFinancial() {
    * ---------------------------------------------------------
    */
 
-  const updateFinancialCache = ({
+  const saveFinancialCache = ({
     academicYear: nextAcademicYear,
     settings: nextSettings,
     transactions: nextTransactions,
@@ -503,8 +222,7 @@ export function PaymentFinancial() {
     studentPayments?: StudentPaymentRow[]
     summary?: Summary
   }) => {
-    const current =
-      paymentFinancialCache
+    const current = paymentFinancialCache
 
     paymentFinancialCache = {
       academicYear:
@@ -536,13 +254,40 @@ export function PaymentFinancial() {
 
   /*
    * ---------------------------------------------------------
+   * تحديث جميع البيانات
+   * ---------------------------------------------------------
+   */
+
+  const refreshFinancialData = async (
+    year: AcademicYear
+  ) => {
+    const financial = await loadFinancialData(year.id)
+
+    const loadedStudents = await loadStudentPayments(
+      year.id,
+      financial.transactions,
+      Number(year.annual_fee || 0)
+    )
+
+    saveFinancialCache({
+      academicYear: year,
+      settings: financial.settings,
+      transactions: financial.transactions,
+      studentPayments: loadedStudents,
+      summary: financial.summary,
+    })
+
+    return financial
+  }
+
+  /*
+   * ---------------------------------------------------------
    * التحميل الكامل
    * ---------------------------------------------------------
    */
 
   const loadAll = async () => {
-    const hasCache =
-      paymentFinancialCache !== null
+    const hasCache = paymentFinancialCache !== null
 
     try {
       if (!hasCache) {
@@ -551,31 +296,9 @@ export function PaymentFinancial() {
 
       setError('')
 
-      const year =
-        await loadAcademicYear()
+      const year = await loadAcademicYear()
 
-      const financial =
-        await loadFinancialData(
-          year.id
-        )
-
-      const loadedStudents =
-        await loadStudentPayments(
-          year.id,
-          financial.transactions
-        )
-
-      paymentFinancialCache = {
-        academicYear: year,
-        settings:
-          financial.settings,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+      await refreshFinancialData(year)
     } catch (err) {
       setError(
         err instanceof Error
@@ -612,31 +335,9 @@ export function PaymentFinancial() {
       setRefreshing(true)
       setError('')
 
-      const year =
-        await loadAcademicYear()
+      const year = await loadAcademicYear()
 
-      const financial =
-        await loadFinancialData(
-          year.id
-        )
-
-      const loadedStudents =
-        await loadStudentPayments(
-          year.id,
-          financial.transactions
-        )
-
-      paymentFinancialCache = {
-        academicYear: year,
-        settings:
-          financial.settings,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+      await refreshFinancialData(year)
     } catch (err) {
       setError(
         err instanceof Error
@@ -662,14 +363,9 @@ export function PaymentFinancial() {
       return
     }
 
-    const amount = Number(
-      openingBalance || 0
-    )
+    const amount = Number(openingBalance || 0)
 
-    if (
-      !Number.isFinite(amount) ||
-      amount < 0
-    ) {
+    if (!Number.isFinite(amount) || amount < 0) {
       setError(
         'الرصيد الافتتاحي لا يمكن أن يكون سالباً'
       )
@@ -680,66 +376,39 @@ export function PaymentFinancial() {
       setSaving(true)
       setError('')
 
-      const response = await fetch(
-        '/api/financial-management/transactions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'initialize',
-            academic_year_id:
-              academicYear.id,
-            financial_mode:
-              initializeMode,
-            opening_balance: amount,
-            opening_source:
-              openingSource.trim() || null,
-            opening_note:
-              openingNote.trim() || null,
-          }),
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            'تعذر تهيئة الإدارة المالية'
-        )
-      }
+      const result = await initializeFinancialManagement({
+        academic_year_id: academicYear.id,
+        financial_mode: initializeMode,
+        opening_balance: amount,
+        opening_source: openingSource.trim() || null,
+        opening_note: openingNote.trim() || null,
+      })
 
       setModal('none')
       setOpeningBalance('')
       setOpeningSource('')
       setOpeningNote('')
 
-      const financial =
-        await loadFinancialData(
-          academicYear.id
-        )
+      const financial = await loadFinancialData(
+        academicYear.id
+      )
 
-      const loadedStudents =
-        await loadStudentPayments(
-          academicYear.id,
-          financial.transactions
-        )
+      const loadedStudents = await loadStudentPayments(
+        academicYear.id,
+        financial.transactions,
+        Number(academicYear.annual_fee || 0)
+      )
 
-      paymentFinancialCache = {
+      saveFinancialCache({
         academicYear,
         settings:
           financial.settings ??
           result.settings ??
           null,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+        transactions: financial.transactions,
+        studentPayments: loadedStudents,
+        summary: financial.summary,
+      })
     } catch (err) {
       setError(
         err instanceof Error
@@ -764,29 +433,9 @@ export function PaymentFinancial() {
       setSaving(true)
       setError('')
 
-      const response = await fetch(
-        '/api/financial-management/transactions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'reset',
-            academic_year_id:
-              academicYear.id,
-          }),
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            'تعذر إعادة تهيئة الإدارة المالية'
-        )
-      }
+      await resetFinancialManagementRepository({
+        academic_year_id: academicYear.id,
+      })
 
       setModal('none')
       setSettings(null)
@@ -802,7 +451,7 @@ export function PaymentFinancial() {
       setOpeningSource('')
       setOpeningNote('')
 
-      paymentFinancialCache = {
+      saveFinancialCache({
         academicYear,
         settings: null,
         transactions: [],
@@ -810,7 +459,7 @@ export function PaymentFinancial() {
         summary: {
           ...emptySummary,
         },
-      }
+      })
     } catch (err) {
       setError(
         err instanceof Error
@@ -836,14 +485,9 @@ export function PaymentFinancial() {
       return
     }
 
-    const amount = Number(
-      transactionAmount
-    )
+    const amount = Number(transactionAmount)
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       setError('أدخل مبلغاً صحيحاً')
       return
     }
@@ -860,49 +504,21 @@ export function PaymentFinancial() {
       setSaving(true)
       setError('')
 
-      const response = await fetch(
-        '/api/financial-management/transactions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            action: 'create',
-            academic_year_id:
-              academicYear.id,
-            transaction_type:
-              transactionType,
-            amount,
-            adjustment_direction:
-              transactionType ===
-              'adjustment'
-                ? adjustmentDirection
-                : null,
-            source_type:
-              transactionType ===
-              'adjustment'
-                ? 'adjustment'
-                : 'manual',
-            source:
-              transactionSource.trim() ||
-              null,
-            note:
-              transactionNote.trim() ||
-              null,
-          }),
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            'تعذر إضافة العملية'
-        )
-      }
+      await createFinancialTransaction({
+        academic_year_id: academicYear.id,
+        transaction_type: transactionType,
+        amount,
+        adjustment_direction:
+          transactionType === 'adjustment'
+            ? adjustmentDirection
+            : null,
+        source_type:
+          transactionType === 'adjustment'
+            ? 'adjustment'
+            : 'manual',
+        source: transactionSource.trim() || null,
+        note: transactionNote.trim() || null,
+      })
 
       setModal('none')
       setTransactionAmount('')
@@ -911,28 +527,7 @@ export function PaymentFinancial() {
       setTransactionType('in')
       setAdjustmentDirection('plus')
 
-      const financial =
-        await loadFinancialData(
-          academicYear.id
-        )
-
-      const loadedStudents =
-        await loadStudentPayments(
-          academicYear.id,
-          financial.transactions
-        )
-
-      paymentFinancialCache = {
-        academicYear,
-        settings:
-          financial.settings,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+      await refreshFinancialData(academicYear)
     } catch (err) {
       setError(
         err instanceof Error
@@ -955,10 +550,7 @@ export function PaymentFinancial() {
   ) => {
     if (!academicYear) return
 
-    if (
-      transaction.confirmation_status !==
-      'pending'
-    ) {
+    if (transaction.confirmation_status !== 'pending') {
       return
     }
 
@@ -966,55 +558,12 @@ export function PaymentFinancial() {
       setSaving(true)
       setError('')
 
-      const response = await fetch(
-        '/api/financial-management/transactions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            action: 'confirm',
-            academic_year_id:
-              academicYear.id,
-            transaction_id:
-              transaction.id,
-          }),
-        }
-      )
+      await confirmFinancialTransaction({
+        academic_year_id: academicYear.id,
+        transaction_id: transaction.id,
+      })
 
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            'تعذر تأكيد العملية'
-        )
-      }
-
-      const financial =
-        await loadFinancialData(
-          academicYear.id
-        )
-
-      const loadedStudents =
-        await loadStudentPayments(
-          academicYear.id,
-          financial.transactions
-        )
-
-      paymentFinancialCache = {
-        academicYear,
-        settings:
-          financial.settings,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+      await refreshFinancialData(academicYear)
 
       if (modal === 'details') {
         setModal('none')
@@ -1038,7 +587,10 @@ export function PaymentFinancial() {
    */
 
   const confirmAllPendingTransactions = async () => {
-    if (!academicYear || pendingTransactions.length === 0) {
+    if (
+      !academicYear ||
+      pendingTransactions.length === 0
+    ) {
       return
     }
 
@@ -1047,44 +599,13 @@ export function PaymentFinancial() {
       setError('')
 
       for (const transaction of pendingTransactions) {
-        const response = await fetch(
-          '/api/financial-management/transactions',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              action: 'confirm',
-              academic_year_id: academicYear.id,
-              transaction_id: transaction.id,
-            }),
-          }
-        )
-
-        const result = await response.json()
-
-        if (!response.ok) {
-          throw new Error(
-            result?.error ||
-              `تعذر تأكيد المعاملة رقم ${transaction.id}`
-          )
-        }
+        await confirmFinancialTransaction({
+          academic_year_id: academicYear.id,
+          transaction_id: transaction.id,
+        })
       }
 
-      const financial = await loadFinancialData(academicYear.id)
-      const loadedStudents = await loadStudentPayments(
-        academicYear.id,
-        financial.transactions
-      )
-
-      paymentFinancialCache = {
-        academicYear,
-        settings: financial.settings,
-        transactions: financial.transactions,
-        studentPayments: loadedStudents,
-        summary: financial.summary,
-      }
+      await refreshFinancialData(academicYear)
     } catch (err) {
       setError(
         err instanceof Error
@@ -1094,19 +615,7 @@ export function PaymentFinancial() {
 
       // إعادة تحميل البيانات حتى لو تعذّر تأكيد إحدى المعاملات
       try {
-        const financial = await loadFinancialData(academicYear.id)
-        const loadedStudents = await loadStudentPayments(
-          academicYear.id,
-          financial.transactions
-        )
-
-        paymentFinancialCache = {
-          academicYear,
-          settings: financial.settings,
-          transactions: financial.transactions,
-          studentPayments: loadedStudents,
-          summary: financial.summary,
-        }
+        await refreshFinancialData(academicYear)
       } catch {
         // الاحتفاظ برسالة الخطأ الأصلية
       }
@@ -1122,10 +631,7 @@ export function PaymentFinancial() {
    */
 
   const deleteTransaction = async () => {
-    if (
-      !academicYear ||
-      !selectedDeleteId
-    ) {
+    if (!academicYear || !selectedDeleteId) {
       return
     }
 
@@ -1133,58 +639,15 @@ export function PaymentFinancial() {
       setSaving(true)
       setError('')
 
-      const response = await fetch(
-        '/api/financial-management/transactions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            action: 'delete',
-            academic_year_id:
-              academicYear.id,
-            transaction_id:
-              selectedDeleteId,
-          }),
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            'تعذر حذف العملية'
-        )
-      }
+      await deleteFinancialTransaction({
+        academic_year_id: academicYear.id,
+        transaction_id: selectedDeleteId,
+      })
 
       setModal('none')
       setSelectedDeleteId(null)
 
-      const financial =
-        await loadFinancialData(
-          academicYear.id
-        )
-
-      const loadedStudents =
-        await loadStudentPayments(
-          academicYear.id,
-          financial.transactions
-        )
-
-      paymentFinancialCache = {
-        academicYear,
-        settings:
-          financial.settings,
-        transactions:
-          financial.transactions,
-        studentPayments:
-          loadedStudents,
-        summary:
-          financial.summary,
-      }
+      await refreshFinancialData(academicYear)
     } catch (err) {
       setError(
         err instanceof Error
@@ -1206,10 +669,8 @@ export function PaymentFinancial() {
     () =>
       transactions.filter(
         (item) =>
-          item.source_type ===
-            'student_payment' &&
-          item.confirmation_status ===
-            'pending'
+          item.source_type === 'student_payment' &&
+          item.confirmation_status === 'pending'
       ),
     [transactions]
   )
@@ -1249,77 +710,51 @@ export function PaymentFinancial() {
       'الملاحظات',
     ]
 
-    const rows = transactions.map(
-      (transaction) => [
-        formatDate(
-          transaction.created_at
-        ),
-        getTransactionLabel(transaction),
-        transaction.amount,
-        transaction.balance_before ??
-          '',
-        transaction.balance_after ??
-          '',
-        transaction.source ?? '',
-        transaction.student_id
-          ? studentNameById.get(
-              transaction.student_id
-            ) || ''
-          : '',
-        transaction.student_id ?? '',
-        transaction.student_request_number ??
-          '',
-        transaction.payment_method ?? '',
-        transaction.reference_number ?? '',
-        getConfirmationLabel(
-          transaction.confirmation_status
-        ),
-        transaction.confirmed_by ?? '',
-        transaction.confirmed_at
-          ? formatDate(
-              transaction.confirmed_at
-            )
-          : '',
-        transaction.created_by ?? '',
-        transaction.note ?? '',
-      ]
-    )
+    const rows = transactions.map((transaction) => [
+      formatDate(transaction.created_at),
+      getTransactionLabel(transaction),
+      transaction.amount,
+      transaction.balance_before ?? '',
+      transaction.balance_after ?? '',
+      transaction.source ?? '',
+      transaction.student_id
+        ? studentNameById.get(transaction.student_id) || ''
+        : '',
+      transaction.student_id ?? '',
+      transaction.student_request_number ?? '',
+      transaction.payment_method ?? '',
+      transaction.reference_number ?? '',
+      getConfirmationLabel(
+        transaction.confirmation_status
+      ),
+      transaction.confirmed_by ?? '',
+      transaction.confirmed_at
+        ? formatDate(transaction.confirmed_at)
+        : '',
+      transaction.created_by ?? '',
+      transaction.note ?? '',
+    ])
 
-    const csv = [
-      headers,
-      ...rows,
-    ]
+    const csv = [headers, ...rows]
       .map((row) =>
         row
           .map((cell) => {
-            const value = String(
-              cell ?? ''
-            )
+            const value = String(cell ?? '')
 
-            return `"${value.replace(
-              /"/g,
-              '""'
-            )}"`
+            return `"${value.replace(/"/g, '""')}"`
           })
           .join(',')
       )
       .join('\n')
 
-    const blob = new Blob(
-      ['\ufeff' + csv],
-      {
-        type: 'text/csv;charset=utf-8;',
-      }
-    )
+    const blob = new Blob(['\ufeff' + csv], {
+      type: 'text/csv;charset=utf-8;',
+    })
 
-    const url =
-      URL.createObjectURL(blob)
-
-    const link =
-      document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
 
     link.href = url
-
     link.download = `financial-management-${academicYear.name}.csv`
 
     document.body.appendChild(link)
@@ -1381,9 +816,7 @@ export function PaymentFinancial() {
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                refreshing
-                  ? 'animate-spin'
-                  : ''
+                refreshing ? 'animate-spin' : ''
               }`}
             />
             تحديث
@@ -1425,17 +858,10 @@ export function PaymentFinancial() {
 
               <div className="mt-1 text-xs text-muted-foreground">
                 من{' '}
-                {formatDateOnly(
-                  academicYear.start_date
-                )}{' '}
-                إلى{' '}
-                {formatDateOnly(
-                  academicYear.end_date
-                )}
+                {formatDateOnly(academicYear.start_date)} إلى{' '}
+                {formatDateOnly(academicYear.end_date)}
               </div>
             </div>
-
-        
           </div>
         </div>
       )}
@@ -1452,18 +878,14 @@ export function PaymentFinancial() {
             </h3>
 
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              اختر طريقة تأسيس الرصيد لهذه
-              السنة الدراسية. يمكن إعادة
-              تهيئة هذا القسم أثناء التطوير
-              دون حذف مدفوعات الطلاب أو
-              بياناتهم.
+              اختر طريقة تأسيس الرصيد لهذه السنة الدراسية.
+              يمكن إعادة تهيئة هذا القسم أثناء التطوير دون حذف
+              مدفوعات الطلاب أو بياناتهم.
             </p>
 
             <button
               type="button"
-              onClick={() =>
-                setModal('initialize')
-              }
+              onClick={() => setModal('initialize')}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
@@ -1487,15 +909,13 @@ export function PaymentFinancial() {
                 </div>
 
                 <div className="mt-1 text-lg font-semibold">
-                  {settings.financial_mode ===
-                  'student_payments'
+                  {settings.financial_mode === 'student_payments'
                     ? 'مرتبط بمدفوعات الطلاب'
                     : 'إدخال يدوي'}
                 </div>
 
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {settings.financial_mode ===
-                  'student_payments'
+                  {settings.financial_mode === 'student_payments'
                     ? 'دفعات الطلاب تدخل الرصيد بعد تأكيد الاستلام.'
                     : 'الإيرادات والمصروفات والتسويات تدار يدويًا.'}
                 </div>
@@ -1505,17 +925,13 @@ export function PaymentFinancial() {
                 <div className="rounded-lg bg-muted px-4 py-3 text-sm">
                   الرصيد الافتتاحي:{' '}
                   <span className="font-bold">
-                    {money(
-                      settings.opening_balance
-                    )}
+                    {money(settings.opening_balance)}
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setModal('reset')
-                  }
+                  onClick={() => setModal('reset')}
                   className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/30"
                 >
                   <RotateCcw className="h-4 w-4" />
@@ -1531,9 +947,7 @@ export function PaymentFinancial() {
             <SummaryCard
               title="الرصيد الحالي"
               value={money(summary.balance)}
-              icon={
-                <Wallet className="h-5 w-5" />
-              }
+              icon={<Wallet className="h-5 w-5" />}
             />
 
             <SummaryCard
@@ -1559,9 +973,7 @@ export function PaymentFinancial() {
 
             <SummaryCard
               title="عدد العمليات"
-              value={String(
-                summary.operations
-              )}
+              value={String(summary.operations)}
               icon={<span>#</span>}
             />
           </div>
