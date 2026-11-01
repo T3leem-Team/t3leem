@@ -36,6 +36,7 @@ export type Teacher = {
 
 export type SupervisionRecord = {
   id: string
+  teacherId: string | null
   type: SupervisionType
   date: string
   course: string
