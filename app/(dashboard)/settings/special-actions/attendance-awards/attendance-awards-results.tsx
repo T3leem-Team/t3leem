@@ -13,7 +13,12 @@ import {
 
 import ExcelJS from 'exceljs'
 
-import { supabase } from '@/lib/supabase'
+import {
+  deleteAttendanceAwardResults,
+  insertAttendanceAwardResults,
+  loadAttendanceAwardResults,
+  loadAttendanceAwardStudents,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -550,191 +555,191 @@ export default function AttendanceAwardsResults({
     )
   }, [selectedCourses.length])
 
- const downloadExcel = async (
-  rows: Record<string, string | number>[],
-  fileName: string,
-) => {
-  if (rows.length === 0) return
+  const downloadExcel = async (
+    rows: Record<string, string | number>[],
+    fileName: string,
+  ) => {
+    if (rows.length === 0) return
 
-  const workbook = new ExcelJS.Workbook()
+    const workbook = new ExcelJS.Workbook()
 
-  workbook.creator = 'T3leem'
-  workbook.created = new Date()
+    workbook.creator = 'T3leem'
+    workbook.created = new Date()
 
-  const worksheet = workbook.addWorksheet(
-    'نتائج الحضور',
-    {
-      views: [
-        {
-          rightToLeft: true,
-          showGridLines: true,
-        },
-      ],
-    },
-  )
-
-  const headers = Object.keys(rows[0])
-
-  worksheet.columns = headers.map((header) => ({
-    header,
-    key: header,
-    width: Math.max(
-      14,
-      Math.min(header.length + 8, 30),
-    ),
-  }))
-
-  worksheet.addRows(rows)
-
-  // تنسيق صف العناوين
-  const headerRow = worksheet.getRow(1)
-  headerRow.height = 30
-
-  headerRow.eachCell((cell) => {
-    cell.font = {
-      bold: true,
-      size: 12,
-      color: { argb: 'FFFFFFFF' },
-    }
-
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF166534' },
-    }
-
-    cell.alignment = {
-      horizontal: 'right',
-      vertical: 'middle',
-      wrapText: true,
-    }
-  })
-
-  // تنسيق بيانات الطلاب
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber > 1) {
-      row.eachCell((cell) => {
-        cell.alignment = {
-          horizontal: 'right',
-          vertical: 'middle',
-          wrapText: true,
-        }
-      })
-    }
-  })
-
-  // ضمان اتجاه الورقة من اليمين إلى اليسار
-  worksheet.views = [
-    {
-      rightToLeft: true,
-      showGridLines: true,
-    },
-  ]
-
-  const buffer = await workbook.xlsx.writeBuffer()
-
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
-
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-
-  link.href = url
-  link.download = fileName
-
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  
-  setTimeout(() => {
-    URL.revokeObjectURL(url)
-  }, 1000)
- }
-
-  const exportCurrentToExcel = async () => {
-  if (sortedResults.length === 0) {
-    setError(
-      'لا توجد نتائج مطابقة للفلاتر لتصديرها إلى Excel.',
-    )
-    return
-  }
-
-  try {
-    const exportRows = sortedResults.map(
-      (student, index) => {
-        const row: Record<
-          string,
-          string | number
-        > = {
-          التسلسل: index + 1,
-          الطالب: student.name,
-          'رقم الطالب':
-            student.studentNumber || '',
-          'الرقم الشخصي':
-            student.personalId || '',
-          الصف: student.grade || '',
-          المعلم: student.teacher || '',
-          'عدد الدورات':
-            student.courseCount,
-        }
-
-        for (const course of selectedCourses) {
-          const courseResult =
-            student.courses[course.id]
-
-          row[course.name] =
-            courseResult?.percentage !== null &&
-            courseResult?.percentage !== undefined
-              ? Number(
-                  courseResult.percentage.toFixed(1),
-                )
-              : ''
-
-          row[`${course.name} - الحالة`] =
-            courseResult?.registered
-              ? courseResult.denominator > 0
-                ? 'لديه حضور'
-                : 'غير حاضر'
-              : 'غير مسجل'
-        }
-
-        row['النسبة الإجمالية'] =
-          student.annualPercentage !== null
-            ? Number(
-                student.annualPercentage.toFixed(1),
-              )
-            : ''
-
-        row['الحالة'] = student.eligible
-          ? 'مستحق'
-          : 'غير مستحق'
-
-        return row
+    const worksheet = workbook.addWorksheet(
+      'نتائج الحضور',
+      {
+        views: [
+          {
+            rightToLeft: true,
+            showGridLines: true,
+          },
+        ],
       },
     )
 
-    const yearName =
-      academicYears.find(
-        (year) => year.id === selectedYearId,
-      )?.name || selectedYearName
+    const headers = Object.keys(rows[0])
 
-    const fileName =
-      `نتائج-الحضور-فلترة-${safeFilePart(yearName)}-${fromDate || 'بدون-تاريخ'}-${toDate || 'بدون-تاريخ'}.xlsx`
+    worksheet.columns = headers.map((header) => ({
+      header,
+      key: header,
+      width: Math.max(
+        14,
+        Math.min(header.length + 8, 30),
+      ),
+    }))
 
-    await downloadExcel(exportRows, fileName)
+    worksheet.addRows(rows)
 
-    setError('')
-  } catch (exportError) {
-    const message =
-      exportError instanceof Error
-        ? exportError.message
-        : 'حدث خطأ أثناء إنشاء ملف Excel.'
+    // تنسيق صف العناوين
+    const headerRow = worksheet.getRow(1)
+    headerRow.height = 30
 
-    setError(`تعذر تصدير ملف Excel: ${message}`)
+    headerRow.eachCell((cell) => {
+      cell.font = {
+        bold: true,
+        size: 12,
+        color: { argb: 'FFFFFFFF' },
+      }
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF166534' },
+      }
+
+      cell.alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+        wrapText: true,
+      }
+    })
+
+    // تنسيق بيانات الطلاب
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell((cell) => {
+          cell.alignment = {
+            horizontal: 'right',
+            vertical: 'middle',
+            wrapText: true,
+          }
+        })
+      }
+    })
+
+    // ضمان اتجاه الورقة من اليمين إلى اليسار
+    worksheet.views = [
+      {
+        rightToLeft: true,
+        showGridLines: true,
+      },
+    ]
+
+    const buffer = await workbook.xlsx.writeBuffer()
+
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = fileName
+
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 1000)
   }
-}
-  
+
+  const exportCurrentToExcel = async () => {
+    if (sortedResults.length === 0) {
+      setError(
+        'لا توجد نتائج مطابقة للفلاتر لتصديرها إلى Excel.',
+      )
+      return
+    }
+
+    try {
+      const exportRows = sortedResults.map(
+        (student, index) => {
+          const row: Record<
+            string,
+            string | number
+          > = {
+            التسلسل: index + 1,
+            الطالب: student.name,
+            'رقم الطالب':
+              student.studentNumber || '',
+            'الرقم الشخصي':
+              student.personalId || '',
+            الصف: student.grade || '',
+            المعلم: student.teacher || '',
+            'عدد الدورات':
+              student.courseCount,
+          }
+
+          for (const course of selectedCourses) {
+            const courseResult =
+              student.courses[course.id]
+
+            row[course.name] =
+              courseResult?.percentage !== null &&
+              courseResult?.percentage !== undefined
+                ? Number(
+                    courseResult.percentage.toFixed(1),
+                  )
+                : ''
+
+            row[`${course.name} - الحالة`] =
+              courseResult?.registered
+                ? courseResult.denominator > 0
+                  ? 'لديه حضور'
+                  : 'غير حاضر'
+                : 'غير مسجل'
+          }
+
+          row['النسبة الإجمالية'] =
+            student.annualPercentage !== null
+              ? Number(
+                  student.annualPercentage.toFixed(1),
+                )
+              : ''
+
+          row['الحالة'] = student.eligible
+            ? 'مستحق'
+            : 'غير مستحق'
+
+          return row
+        },
+      )
+
+      const yearName =
+        academicYears.find(
+          (year) => year.id === selectedYearId,
+        )?.name || selectedYearName
+
+      const fileName =
+        `نتائج-الحضور-فلترة-${safeFilePart(yearName)}-${fromDate || 'بدون-تاريخ'}-${toDate || 'بدون-تاريخ'}.xlsx`
+
+      await downloadExcel(exportRows, fileName)
+
+      setError('')
+    } catch (exportError) {
+      const message =
+        exportError instanceof Error
+          ? exportError.message
+          : 'حدث خطأ أثناء إنشاء ملف Excel.'
+
+      setError(`تعذر تصدير ملف Excel: ${message}`)
+    }
+  }
+
   const saveFinalResult = async () => {
     if (!selectedYearId) {
       setError('لا توجد سنة دراسية محددة.')
@@ -767,13 +772,9 @@ export default function AttendanceAwardsResults({
     try {
       const {
         error: deleteError,
-      } = await supabase
-        .from('attendance_award_results')
-        .delete()
-        .eq(
-          'academic_year_id',
-          selectedYearId,
-        )
+      } = await deleteAttendanceAwardResults(
+        selectedYearId,
+      )
 
       if (deleteError) {
         throw new Error(
@@ -836,9 +837,7 @@ export default function AttendanceAwardsResults({
 
       const {
         error: insertError,
-      } = await supabase
-        .from('attendance_award_results')
-        .insert(rows)
+      } = await insertAttendanceAwardResults(rows)
 
       if (insertError) {
         throw new Error(
@@ -876,15 +875,9 @@ export default function AttendanceAwardsResults({
       const {
         data,
         error: queryError,
-      } = await supabase
-        .from('attendance_award_results')
-        .select(
-          'id, academic_year_id, student_id, status, annual_percentage, course_count, minimum_percentage, require_all_courses, from_date, to_date, course_results',
-        )
-        .eq(
-          'academic_year_id',
-          selectedYearId,
-        )
+      } = await loadAttendanceAwardResults(
+        selectedYearId,
+      )
 
       if (queryError) {
         throw new Error(
@@ -913,12 +906,9 @@ export default function AttendanceAwardsResults({
       const {
         data: studentData,
         error: studentError,
-      } = await supabase
-        .from('students')
-        .select(
-          'id, student_id, name, personal_id',
-        )
-        .in('id', studentIds)
+      } = await loadAttendanceAwardStudents(
+        studentIds,
+      )
 
       if (studentError) {
         throw new Error(
