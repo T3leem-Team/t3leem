@@ -817,9 +817,11 @@ export default function AttendanceAwardsResults({
             selectedYearId,
           student_id:
             student.id,
-          status: student.eligible
+                  status: (
+          student.eligible
             ? 'eligible'
-            : 'not_eligible',
+            : 'not_eligible'
+) as 'eligible' | 'not_eligible',
           annual_percentage:
             student.annualPercentage,
           course_count:
