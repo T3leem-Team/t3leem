@@ -15,7 +15,13 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadSettingsTeachers,
+  insertSettingsTeacher,
+  updateSettingsTeacher,
+  updateSettingsTeacherStatus,
+  deleteSettingsTeacher,
+} from '@/lib/features/settings/repositories/teacher-settings.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -76,12 +82,7 @@ export default function Page() {
   const loadTeachers = async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from('teachers')
-      .select(
-        'id, name, personal_id, phone, age, status, is_active'
-      )
-      .order('name', { ascending: true })
+    const { data, error } = await loadSettingsTeachers()
 
     if (error) {
       setStatusMessage(
@@ -193,21 +194,17 @@ export default function Page() {
     setStatusMessage('جاري الحفظ...')
 
     if (editingTeacher) {
-      const { data, error } = await supabase
-        .from('teachers')
-        .update({
+      const { data, error } = await updateSettingsTeacher(
+        editingTeacher.id,
+        {
           name,
           personal_id: personalId || null,
           phone: phone || null,
           age,
           status: form.status,
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingTeacher.id)
-        .select(
-          'id, name, personal_id, phone, age, status, is_active'
-        )
-        .single()
+        }
+      )
 
       if (error) {
         setStatusMessage(
@@ -245,21 +242,15 @@ export default function Page() {
 
       setStatusMessage('تم تعديل بيانات المعلم ✅')
     } else {
-      const { data, error } = await supabase
-        .from('teachers')
-        .insert({
-          id,
-          name,
-          personal_id: personalId || null,
-          phone: phone || null,
-          age,
-          status: form.status,
-          is_active: true,
-        })
-        .select(
-          'id, name, personal_id, phone, age, status, is_active'
-        )
-        .single()
+      const { data, error } = await insertSettingsTeacher({
+        id,
+        name,
+        personal_id: personalId || null,
+        phone: phone || null,
+        age,
+        status: form.status,
+        is_active: true,
+      })
 
       if (error) {
         setStatusMessage(
@@ -304,13 +295,10 @@ export default function Page() {
     setSaving(true)
     setStatusMessage('جاري تحديث حالة المعلم...')
 
-    const { error } = await supabase
-      .from('teachers')
-      .update({
-        is_active: nextValue,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', teacher.id)
+    const { error } = await updateSettingsTeacherStatus(
+      teacher.id,
+      nextValue
+    )
 
     if (error) {
       setStatusMessage(
@@ -360,10 +348,9 @@ export default function Page() {
     setSaving(true)
     setStatusMessage('جاري حذف المعلم...')
 
-    const { error } = await supabase
-      .from('teachers')
-      .delete()
-      .eq('id', teacher.id)
+    const { error } = await deleteSettingsTeacher(
+      teacher.id
+    )
 
     if (error) {
       setStatusMessage(
