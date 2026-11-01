@@ -25,3 +25,19 @@ export async function checkSettingsPermission(
     required_permission: permission,
   })
 }
+
+export async function loadStudentTrackingAnalytics(
+  from: string,
+  to: string,
+) {
+  return await supabase
+    .from('student_tracking_analytics')
+    .select(
+      'tracking_date, visits, real_tracking_opens',
+    )
+    .gte('tracking_date', from)
+    .lte('tracking_date', to)
+    .order('tracking_date', {
+      ascending: true,
+    })
+}
