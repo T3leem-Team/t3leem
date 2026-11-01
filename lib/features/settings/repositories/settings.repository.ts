@@ -498,3 +498,29 @@ export async function deleteSettingsAcademicYear(
     .delete()
     .eq('id', id)
 }
+
+export async function loadSettingsSystemKeys() {
+  return await supabase
+    .from('system_keys')
+    .select('key_name, enabled')
+    .in('key_name', [
+      'allow_add_to_current_year',
+      'allow_add_to_archive',
+    ])
+}
+
+export async function updateSettingsSystemKey(
+  keyName:
+    | 'allow_add_to_current_year'
+    | 'allow_add_to_archive',
+  value: boolean,
+) {
+  return await supabase
+    .from('system_keys')
+    .update({
+      enabled: value,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('key_name', keyName)
+    .select('key_name, enabled, updated_at')
+}
