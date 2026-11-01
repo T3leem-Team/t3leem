@@ -263,4 +263,238 @@ export async function loadSettingsCourseExportAttendance(
     .eq('course_id', courseId)
 }
 
+// ==========================================
+// Academic Years Management
+// ==========================================
 
+export async function loadSettingsAcademicYearTeachers() {
+  return await supabase
+    .from('teachers')
+    .select('id, name, is_active')
+    .order('name', { ascending: true })
+}
+
+export async function loadSettingsAcademicYearSubjects() {
+  return await supabase
+    .from('subjects')
+    .select('id, name, is_active')
+    .order('name', { ascending: true })
+}
+
+export async function loadSettingsAcademicYears() {
+  return await supabase
+    .from('academic_years')
+    .select(
+      'id, name, start_date, end_date, annual_fee, created_at',
+    )
+    .order('created_at', { ascending: false })
+}
+
+export async function loadSettingsCoursesByAcademicYearIds(
+  yearIds: string[],
+) {
+  return await supabase
+    .from('courses')
+    .select(
+      'id, academic_year_id, name, start_date, end_date, days, is_closed, closed_at, created_at',
+    )
+    .in('academic_year_id', yearIds)
+    .order('created_at', { ascending: true })
+}
+
+export async function loadSettingsCourseTeachers(
+  courseIds: string[],
+) {
+  return await supabase
+    .from('course_teachers')
+    .select('course_id, teacher_id')
+    .in('course_id', courseIds)
+}
+
+export async function loadSettingsCourseSubjects(
+  courseIds: string[],
+) {
+  return await supabase
+    .from('course_subjects')
+    .select('id, course_id, subject_id')
+    .in('course_id', courseIds)
+}
+
+export async function loadSettingsCourseSubjectTeachers(
+  courseSubjectIds: string[],
+) {
+  return await supabase
+    .from('course_subject_teachers')
+    .select('course_subject_id, teacher_id')
+    .in('course_subject_id', courseSubjectIds)
+}
+
+// ==========================================
+// Academic Year Course Relations
+// ==========================================
+
+export async function loadSettingsExistingCourseSubjects(
+  courseId: string,
+) {
+  return await supabase
+    .from('course_subjects')
+    .select('id, subject_id')
+    .eq('course_id', courseId)
+}
+
+export async function deleteSettingsCourseSubjectTeachers(
+  courseSubjectIds: string[],
+) {
+  return await supabase
+    .from('course_subject_teachers')
+    .delete()
+    .in('course_subject_id', courseSubjectIds)
+}
+
+export async function deleteSettingsCourseSubjectsByIds(
+  courseSubjectIds: string[],
+) {
+  return await supabase
+    .from('course_subjects')
+    .delete()
+    .in('id', courseSubjectIds)
+}
+
+export async function insertSettingsCourseSubjects(
+  rows: {
+    course_id: string
+    subject_id: string
+  }[],
+) {
+  return await supabase
+    .from('course_subjects')
+    .insert(rows)
+}
+
+export async function insertSettingsCourseSubjectTeachers(
+  rows: {
+    course_subject_id: string
+    teacher_id: string
+  }[],
+) {
+  return await supabase
+    .from('course_subject_teachers')
+    .insert(rows)
+}
+
+export async function deleteSettingsCourseTeachers(
+  courseId: string,
+) {
+  return await supabase
+    .from('course_teachers')
+    .delete()
+    .eq('course_id', courseId)
+}
+
+export async function insertSettingsCourseTeachers(
+  rows: {
+    course_id: string
+    teacher_id: string
+  }[],
+) {
+  return await supabase
+    .from('course_teachers')
+    .insert(rows)
+}
+
+// ==========================================
+// Academic Year Save / Update / Delete
+// ==========================================
+
+export async function updateSettingsAcademicYear(
+  id: string,
+  data: {
+    name: string
+    start_date: string | null
+    end_date: string | null
+    annual_fee: number
+  },
+) {
+  return await supabase
+    .from('academic_years')
+    .update(data)
+    .eq('id', id)
+    .select('id, name, start_date, end_date, annual_fee')
+    .single()
+}
+
+export async function clearSettingsCurrentAcademicYear() {
+  return await supabase
+    .from('academic_years')
+    .update({ is_current: false })
+    .eq('is_current', true)
+}
+
+export async function insertSettingsAcademicYear(
+  data: {
+    name: string
+    start_date: string | null
+    end_date: string | null
+    annual_fee: number
+    is_current: true
+    is_active: true
+  },
+) {
+  return await supabase
+    .from('academic_years')
+    .insert(data)
+    .select('id, name, start_date, end_date, annual_fee')
+    .single()
+}
+
+export async function updateSettingsAcademicYearCourse(
+  courseId: string,
+  academicYearId: string,
+  data: {
+    name: string
+    start_date: string | null
+    end_date: string | null
+    days: string[]
+  },
+) {
+  return await supabase
+    .from('courses')
+    .update(data)
+    .eq('id', courseId)
+    .eq('academic_year_id', academicYearId)
+    .eq('is_closed', false)
+    .select(
+      'id, name, start_date, end_date, days, is_closed, closed_at',
+    )
+    .single()
+}
+
+export async function insertSettingsAcademicYearCourse(
+  academicYearId: string,
+  data: {
+    name: string
+    start_date: string | null
+    end_date: string | null
+    days: string[]
+  },
+) {
+  return await supabase
+    .from('courses')
+    .insert({
+      academic_year_id: academicYearId,
+      ...data,
+    })
+    .select(
+      'id, name, start_date, end_date, days, is_closed, closed_at',
+    )
+    .single()
+}
+
+export async function deleteSettingsAcademicYear(
+  id: string,
+) {
+  return await supabase
+    .from('academic_years')
+    .delete()
+    .eq('id', id)
+}
