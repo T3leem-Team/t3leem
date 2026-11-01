@@ -541,3 +541,16 @@ export async function loadHeaderNotificationProfiles(
     `)
     .in('auth_user_id', userIds)
 }
+
+
+
+
+export async function loadDashboardStudentSearchLevels() {
+  return supabase
+    .from('levels')
+    .select('id, name')
+    .order('name', {
+      ascending: true,
+    })
+}
+
