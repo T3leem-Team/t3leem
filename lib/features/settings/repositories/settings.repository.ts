@@ -1,4 +1,3 @@
-
 import { supabase } from '@/lib/supabase'
 
 export type AcademicYear = {
@@ -41,16 +40,6 @@ export async function loadStudentTrackingAnalytics(
       ascending: true,
     })
 }
-
-
-export async function checkSettingsPermission(
-  permission: string
-) {
-  return await supabase.rpc('has_permission', {
-    required_permission: permission,
-  })
-}
-
 
 export type SubjectRepositoryRow = {
   id: string
