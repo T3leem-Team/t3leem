@@ -17,7 +17,15 @@ import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadSettingsSubjects,
+  insertSettingsSubject,
+  updateSettingsSubject,
+  countSettingsSubjectCourses,
+  countSettingsSubjectAssignments,
+  deactivateSettingsSubject,
+  deleteSettingsSubject,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 type Subject = {
   id: string
@@ -43,11 +51,7 @@ export default function Page() {
   const loadSubjects = async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from('subjects')
-      .select('id, name, is_active, created_at, updated_at')
-      .eq('is_active', true)
-      .order('name', { ascending: true })
+    const { data, error } = await loadSettingsSubjects()
 
     if (error) {
       console.error('Error loading subjects:', error)
@@ -84,14 +88,7 @@ export default function Page() {
 
     setSaving(true)
 
-    const { data, error } = await supabase
-      .from('subjects')
-      .insert({
-        name,
-        is_active: true,
-      })
-      .select('id, name, is_active, created_at, updated_at')
-      .single()
+    const { data, error } = await insertSettingsSubject(name)
 
     if (error) {
       console.error('Error adding subject:', error)
@@ -146,15 +143,10 @@ export default function Page() {
 
     setSaving(true)
 
-    const { data, error } = await supabase
-      .from('subjects')
-      .update({
-        name,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', editingId)
-      .select('id, name, is_active, created_at, updated_at')
-      .single()
+    const { data, error } = await updateSettingsSubject(
+      editingId,
+      name,
+    )
 
     if (error) {
       console.error('Error updating subject:', error)
@@ -203,14 +195,10 @@ export default function Page() {
     /*
      * أولاً نتحقق هل المادة مستخدمة في دورة.
      */
-    const { count: courseSubjectsCount, error: courseSubjectsError } =
-      await supabase
-        .from('course_subjects')
-        .select('id', {
-          count: 'exact',
-          head: true,
-        })
-        .eq('subject_id', subject.id)
+    const {
+      count: courseSubjectsCount,
+      error: courseSubjectsError,
+    } = await countSettingsSubjectCourses(subject.id)
 
     if (courseSubjectsError) {
       console.error(
@@ -232,13 +220,7 @@ export default function Page() {
     const {
       count: assignmentsCount,
       error: assignmentsError,
-    } = await supabase
-      .from('teacher_student_assignments')
-      .select('id', {
-        count: 'exact',
-        head: true,
-      })
-      .eq('subject_id', subject.id)
+    } = await countSettingsSubjectAssignments(subject.id)
 
     if (assignmentsError) {
       console.error(
@@ -265,13 +247,7 @@ export default function Page() {
      * هذا يحافظ على التاريخ والروابط القديمة.
      */
     if (isUsed) {
-      const { error } = await supabase
-        .from('subjects')
-        .update({
-          is_active: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', subject.id)
+      const { error } = await deactivateSettingsSubject(subject.id)
 
       if (error) {
         console.error('Error deactivating subject:', error)
@@ -300,10 +276,7 @@ export default function Page() {
      * إذا لم تكن مستخدمة نهائياً:
      * نحذفها فعلياً.
      */
-    const { error } = await supabase
-      .from('subjects')
-      .delete()
-      .eq('id', subject.id)
+    const { error } = await deleteSettingsSubject(subject.id)
 
     if (error) {
       console.error('Error deleting subject:', error)
