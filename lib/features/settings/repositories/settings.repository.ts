@@ -50,3 +50,91 @@ export async function checkSettingsPermission(
     required_permission: permission,
   })
 }
+
+
+export type SubjectRepositoryRow = {
+  id: string
+  name: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function loadSettingsSubjects() {
+  return await supabase
+    .from('subjects')
+    .select('id, name, is_active, created_at, updated_at')
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+}
+
+export async function insertSettingsSubject(name: string) {
+  return await supabase
+    .from('subjects')
+    .insert({
+      name,
+      is_active: true,
+    })
+    .select('id, name, is_active, created_at, updated_at')
+    .single()
+}
+
+export async function updateSettingsSubject(
+  id: string,
+  name: string,
+) {
+  return await supabase
+    .from('subjects')
+    .update({
+      name,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('id, name, is_active, created_at, updated_at')
+    .single()
+}
+
+export async function countSettingsSubjectCourses(
+  subjectId: string,
+) {
+  return await supabase
+    .from('course_subjects')
+    .select('id', {
+      count: 'exact',
+      head: true,
+    })
+    .eq('subject_id', subjectId)
+}
+
+export async function countSettingsSubjectAssignments(
+  subjectId: string,
+) {
+  return await supabase
+    .from('teacher_student_assignments')
+    .select('id', {
+      count: 'exact',
+      head: true,
+    })
+    .eq('subject_id', subjectId)
+}
+
+export async function deactivateSettingsSubject(
+  subjectId: string,
+) {
+  return await supabase
+    .from('subjects')
+    .update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', subjectId)
+}
+
+export async function deleteSettingsSubject(
+  subjectId: string,
+) {
+  return await supabase
+    .from('subjects')
+    .delete()
+    .eq('id', subjectId)
+}
