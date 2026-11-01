@@ -17,9 +17,20 @@ async function requireAdmin() {
     }
   }
 
+  if (!access?.userId) {
+    return {
+      error: NextResponse.json(
+        {
+          error: 'غير مصرح بالوصول.',
+        },
+        { status: 401 },
+      ),
+    }
+  }
+
   const { data: profile, error } =
     await loadAdminPermissionProfile(
-      access!.userId,
+      access.userId,
     )
 
   if (error) {
@@ -94,8 +105,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      permissions:
-        permissions ?? [],
+      permissions: permissions ?? [],
     })
   } catch (error) {
     console.error(
