@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { checkSupabaseConnection } from '@/lib/features/system/repositories/system-health-admin.repository'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,34 +24,22 @@ export async function GET(request: Request) {
       )
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        { ok: false, error: 'Supabase server environment variables are missing' },
-        { status: 500 }
-      )
-    }
-
-    const supabase = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
-
-    const { data, error } = await supabase
-      .from('system_health_check')
-      .select('id')
-      .eq('id', 1)
-      .maybeSingle()
+    const { data, error } = await checkSupabaseConnection()
 
     if (error) {
+      if (
+        error.message ===
+        'Supabase server environment variables are missing'
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'Supabase server environment variables are missing',
+          },
+          { status: 500 }
+        )
+      }
+
       console.error('Supabase health check failed:', error)
 
       return NextResponse.json(
