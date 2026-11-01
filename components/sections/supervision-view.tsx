@@ -443,7 +443,7 @@ export function SupervisionView() {
        * نحولها هنا إلى الشكل الذي تستخدمه الواجهة.
        */
       const mappedRecords: SupervisionRecord[] =
-        (data as any[]).map((row) => {
+        data.map((row) => {
           const course = Array.isArray(row.course)
             ? row.course[0]
             : row.course
