@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -9,7 +8,10 @@ import {
   useState,
 } from 'react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadTripPublishSetting,
+} from '@/lib/features/trips/repositories/trips.repository'
+
 import {
   loadTripDetailsCache,
   setTripDetailsCache,
@@ -17,7 +19,6 @@ import {
 
 import type {
   ApiResponse,
-  Student,
 } from './trip-types'
 
 export function useTripDetails(tripId: string) {
@@ -158,26 +159,15 @@ export function useTripDetails(tripId: string) {
     setSettingsLoading(true)
 
     try {
-      const {
-        data: settings,
-        error: settingsError,
-      } = await supabase
-        .from('student_status_settings')
-        .select('allow_direct_trip_publish')
-        .limit(1)
-        .maybeSingle()
+      const allowed = await loadTripPublishSetting()
+      setDirectPublishAllowed(allowed)
+    } catch (error) {
+      console.error(
+        'Load trip publish setting error:',
+        error,
+      )
 
-      if (settingsError) {
-        console.error(
-          'Load trip publish setting error:',
-          settingsError,
-        )
-        setDirectPublishAllowed(false)
-      } else {
-        setDirectPublishAllowed(
-          settings?.allow_direct_trip_publish === true,
-        )
-      }
+      setDirectPublishAllowed(false)
     } finally {
       setSettingsLoading(false)
     }
@@ -378,7 +368,7 @@ export function useTripDetails(tripId: string) {
     loading,
     refreshing,
     saving,
-    setSaving, 
+    setSaving,
     publishing,
     setPublishing,
     closing,
