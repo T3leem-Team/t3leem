@@ -261,7 +261,9 @@ export async function PATCH(request: Request) {
       data: closedTrip,
       error: closeError,
     } = await closeTrip(tripId, {
-      closed_by: access.userId,
+      ...(access.userId
+        ? { closed_by: access.userId }
+        : {}),
       closed_at: now,
       close_note: closeNote || null,
       updated_at: now,
@@ -526,10 +528,10 @@ export async function PATCH(request: Request) {
       ? body.notes_requirement
       : 'any'
 
-  const levelIds =
+  const levelIds: string[] =
     Array.isArray(body.level_ids)
       ? [
-          ...new Set(
+          ...new Set<string>(
             body.level_ids.filter(
               (id: unknown): id is string =>
                 typeof id === 'string' &&
@@ -538,7 +540,6 @@ export async function PATCH(request: Request) {
           ),
         ]
       : []
-
   /*
    * =======================================================
    * التحقق الأساسي
@@ -976,10 +977,10 @@ async function createTrip(
       ? body.notes_requirement
       : 'any'
 
-  const levelIds =
+  const levelIds: string[] =
     Array.isArray(body.level_ids)
       ? [
-          ...new Set(
+          ...new Set<string>(
             body.level_ids.filter(
               (id: unknown): id is string =>
                 typeof id === 'string' &&
