@@ -1,3 +1,6 @@
+'use client'
+
+import { supabase } from '@/lib/supabase'
 
 export type TripsRepositoryData = {
   trips: unknown[]
@@ -114,4 +117,24 @@ export async function loadTripDetailsRepositoryData(
       ? result.students
       : [],
   }
+}
+
+/*
+ * ================================
+ * تحميل إعداد النشر المباشر للرحلات
+ * ================================
+ */
+
+export async function loadTripPublishSetting(): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('student_status_settings')
+    .select('allow_direct_trip_publish')
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data?.allow_direct_trip_publish === true
 }
