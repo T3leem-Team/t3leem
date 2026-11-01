@@ -437,3 +437,43 @@ export async function deleteFinancialTransactionAdmin(
     .eq('id', transactionId)
     .eq('academic_year_id', academicYearId)
 }
+
+/**
+ * تحديث بيانات المعاملة المرتبطة بدفعة طالب.
+ *
+ * لا نغيّر حالة التأكيد أو بيانات الشخص الذي أكد المعاملة.
+ */
+export async function updateStudentPaymentTransaction(
+  transactionId: string,
+  input: {
+    academic_year_id: string
+    amount: number
+    source: string
+    payment_id: string
+    student_id: string
+    course_id: string
+    student_request_number: string | null
+    payment_method: string | null
+    reference_number: string | null
+    note: string | null
+  },
+) {
+  return await supabaseAdmin
+    .from('financial_transactions')
+    .update({
+      academic_year_id: input.academic_year_id,
+      transaction_type: 'in',
+      amount: input.amount,
+      adjustment_direction: null,
+      source_type: 'student_payment',
+      source: input.source,
+      payment_id: input.payment_id,
+      student_id: input.student_id,
+      course_id: input.course_id,
+      student_request_number: input.student_request_number,
+      payment_method: input.payment_method,
+      reference_number: input.reference_number,
+      note: input.note,
+    })
+    .eq('id', transactionId)
+}
