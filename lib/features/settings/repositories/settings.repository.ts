@@ -756,6 +756,32 @@ export async function upsertSettingsCustomFieldVisibility(
 }
 
 
+export async function loadStudentStatusSettings() {
+  return await supabase
+    .from('student_status_settings')
+    .select(
+      'id, is_enabled, show_attendance_award_result, allow_trip_creation, allow_direct_trip_publish',
+    )
+    .limit(1)
+    .maybeSingle()
+}
+
+export async function updateStudentStatusSettings(
+  id: string,
+  payload: {
+    is_enabled: boolean
+    show_attendance_award_result: boolean
+    allow_trip_creation: boolean
+    allow_direct_trip_publish: boolean
+    updated_at: string
+  },
+) {
+  return await supabase
+    .from('student_status_settings')
+    .update(payload)
+    .eq('id', id)
+}
+
 
 
 
