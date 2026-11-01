@@ -1,6 +1,8 @@
-
 import { supabase } from '@/lib/supabase'
-import type { PostgrestError } from '@supabase/supabase-js'
+import type {
+  PostgrestError,
+  SupabaseClient,
+} from '@supabase/supabase-js'
 
 export type AcademicYearRow = {
   id: string
@@ -315,7 +317,6 @@ export async function loadAttendancePage(
   }
 }
 
-
 export async function loadAttendanceExportEnrollments(
   academicYearId: string,
   studentIds: string[],
@@ -417,6 +418,7 @@ export async function loadAttendanceExportAttendancePage(
     error,
   }
 }
+
 export type SidebarUserProfileRow = {
   username: string | null
   full_name: string | null
@@ -475,7 +477,6 @@ export async function loadSidebarUserProfile(
     error,
   }
 }
-
 
 export type HeaderUserProfileRow = {
   username: string | null
@@ -542,9 +543,6 @@ export async function loadHeaderNotificationProfiles(
     .in('auth_user_id', userIds)
 }
 
-
-
-
 export async function loadDashboardStudentSearchLevels() {
   return supabase
     .from('levels')
@@ -554,3 +552,30 @@ export async function loadDashboardStudentSearchLevels() {
     })
 }
 
+// Dashboard Sections API Repository Functions
+
+export async function loadDashboardSectionMappingsForUser(
+  client: SupabaseClient,
+  profileId: string,
+) {
+  return await client
+    .from('user_dashboard_sections')
+    .select('section_id')
+    .eq('user_profile_id', profileId)
+}
+
+export async function loadDashboardSectionsByIds(
+  client: SupabaseClient,
+  sectionIds: string[],
+) {
+  return await client
+    .from('dashboard_sections')
+    .select(
+      'id, section_key, section_name, description, icon, href, sort_order, is_active',
+    )
+    .in('id', sectionIds)
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+    })
+}
