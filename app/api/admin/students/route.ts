@@ -1,33 +1,41 @@
 
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { requirePermission } from '@/lib/auth/authorization';
+import { NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/auth/authorization'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-);
+import {
+  type StudentDateChangeLog,
+  insertStudentDateChangeLog,
+  loadCourseForDateValidation,
+  loadAcademicYearForDateValidation,
+  loadEnrollmentForDateValidation,
+  loadStudentAssignmentDates,
+  processUnjoinedAttendance as processUnjoinedAttendanceRepository,
 
-const DELETE_SETTING_PERMISSION = 'students.delete_setting.manage';
-const STUDENT_DATES_PERMISSION = 'students.dates.manage';
+  // GET
+  loadAdminStudent,
+  loadAdminStudentEnrollments,
+  loadAdminStudentAssignments,
+  searchAdminStudents,
+  loadStudentDeletionSetting,
 
-type DateChangeLog = {
-  student_id: string;
-  entity_type: 'enrollment' | 'teacher_assignment';
-  entity_id: string;
-  date_field: 'join_date' | 'created_at';
-  old_date: string;
-  new_date: string;
-};
+  // PATCH
+  updateStudentDeletionSetting,
+  updateEnrollmentJoinDate,
+  rollbackEnrollmentJoinDate,
+  loadAssignmentForDateUpdate,
+  loadStudentEnrollmentsForAssignmentDate,
+  updateAssignmentCreatedAt,
+  rollbackAssignmentCreatedAt,
+
+  // POST
+  loadStudentDeletionEnabledSetting,
+  deleteStudentCompletely,
+} from '@/lib/features/students/repositories/students-admin.repository'
+const DELETE_SETTING_PERMISSION = 'students.delete_setting.manage'
+const STUDENT_DATES_PERMISSION = 'students.dates.manage'
 
 async function authorize(permissionKey: string, message: string) {
-  const result = await requirePermission(permissionKey);
+  const result = await requirePermission(permissionKey)
 
   if (result.error || !result.access) {
     return {
@@ -35,10 +43,10 @@ async function authorize(permissionKey: string, message: string) {
       response:
         result.error ??
         NextResponse.json({ error: message }, { status: 403 }),
-    };
+    }
   }
 
-  return { allowed: true as const };
+  return { allowed: true as const }
 }
 
 function isValidUuid(value: unknown): value is string {
@@ -47,7 +55,7 @@ function isValidUuid(value: unknown): value is string {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value,
     )
-  );
+  )
 }
 
 function isValidDate(value: unknown): value is string {
@@ -55,15 +63,15 @@ function isValidDate(value: unknown): value is string {
     typeof value !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(value)
   ) {
-    return false;
+    return false
   }
 
-  const date = new Date(`${value}T00:00:00.000Z`);
+  const date = new Date(`${value}T00:00:00.000Z`)
 
   return (
     !Number.isNaN(date.getTime()) &&
     date.toISOString().slice(0, 10) === value
-  );
+  )
 }
 
 function getTodayDate() {
@@ -72,13 +80,13 @@ function getTodayDate() {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(new Date())
 
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-  const day = parts.find((part) => part.type === 'day')?.value;
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
 
-  return `${year}-${month}-${day}`;
+  return `${year}-${month}-${day}`
 }
 
 /**
@@ -86,13 +94,13 @@ function getTodayDate() {
  */
 function getBahrainDate(value: string | null | undefined) {
   if (!value) {
-    return null;
+    return null
   }
 
-  const date = new Date(value);
+  const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
-    return null;
+    return null
   }
 
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -100,21 +108,21 @@ function getBahrainDate(value: string | null | undefined) {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(date);
+  }).formatToParts(date)
 
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-  const day = parts.find((part) => part.type === 'day')?.value;
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const day = parts.find((part) => part.type === 'day')?.value
 
   if (!year || !month || !day) {
-    return null;
+    return null
   }
 
-  return `${year}-${month}-${day}`;
+  return `${year}-${month}-${day}`
 }
 
 function cleanSearch(value: string) {
-  return value.replace(/[%_,()]/g, '').trim().slice(0, 100);
+  return value.replace(/[%_,()]/g, '').trim().slice(0, 100)
 }
 
 /**
@@ -123,7 +131,7 @@ function cleanSearch(value: string) {
  * ويغيّر التاريخ وفق اليوم المطلوب في البحرين.
  */
 function getBahrainMidnightTimestamp(date: string) {
-  return new Date(`${date}T00:00:00+03:00`).toISOString();
+  return new Date(`${date}T00:00:00+03:00`).toISOString()
 }
 
 /**
@@ -132,17 +140,15 @@ function getBahrainMidnightTimestamp(date: string) {
  * changed_by غير محدد هنا لأن authorize لا يعيد هوية المستخدم.
  * يظل الحقل NULL إلى أن تتوفر هوية المستخدم من نظام المصادقة.
  */
-async function insertDateChangeLog(log: DateChangeLog) {
-  const { error } = await supabaseAdmin
-    .from('student_date_change_logs')
-    .insert(log);
+async function insertDateChangeLog(log: StudentDateChangeLog) {
+  const { error } = await insertStudentDateChangeLog(log)
 
   if (error) {
-    console.error('Insert student date change log:', error);
-    return false;
+    console.error('Insert student date change log:', error)
+    return false
   }
 
-  return true;
+  return true
 }
 
 /**
@@ -157,30 +163,26 @@ async function validateDateWithinCourseAndYear(
     return NextResponse.json(
       { error: 'لا يمكن اختيار تاريخ في المستقبل.' },
       { status: 400 },
-    );
+    )
   }
 
   const { data: course, error: courseError } =
-    await supabaseAdmin
-      .from('courses')
-      .select('id, start_date, end_date, academic_year_id')
-      .eq('id', courseId)
-      .maybeSingle();
+    await loadCourseForDateValidation(courseId)
 
   if (courseError) {
-    console.error('Read course for date validation:', courseError);
+    console.error('Read course for date validation:', courseError)
 
     return NextResponse.json(
       { error: 'تعذر التحقق من تواريخ الدورة.' },
       { status: 500 },
-    );
+    )
   }
 
   if (!course) {
     return NextResponse.json(
       { error: 'الدورة المرتبطة غير موجودة.' },
       { status: 400 },
-    );
+    )
   }
 
   if (
@@ -195,14 +197,14 @@ async function validateDateWithinCourseAndYear(
           'تواريخ بداية الدورة ونهايتها غير مكتملة أو غير صالحة.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (course.start_date > course.end_date) {
     return NextResponse.json(
       { error: 'تاريخ بداية الدورة يتجاوز تاريخ نهايتها.' },
       { status: 400 },
-    );
+    )
   }
 
   if (
@@ -215,7 +217,7 @@ async function validateDateWithinCourseAndYear(
           'السنة الدراسية للتسجيل لا تطابق السنة الدراسية المرتبطة بالدورة.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (joinDate < course.start_date) {
@@ -225,7 +227,7 @@ async function validateDateWithinCourseAndYear(
           'تاريخ الانضمام لا يمكن أن يكون قبل تاريخ بداية الدورة.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (joinDate > course.end_date) {
@@ -235,40 +237,38 @@ async function validateDateWithinCourseAndYear(
           'تاريخ الانضمام لا يمكن أن يكون بعد تاريخ نهاية الدورة.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (!course.academic_year_id) {
     return NextResponse.json(
       { error: 'الدورة غير مرتبطة بسنة دراسية.' },
       { status: 400 },
-    );
+    )
   }
 
   const { data: academicYear, error: academicYearError } =
-    await supabaseAdmin
-      .from('academic_years')
-      .select('id, start_date, end_date')
-      .eq('id', course.academic_year_id)
-      .maybeSingle();
+    await loadAcademicYearForDateValidation(
+      course.academic_year_id,
+    )
 
   if (academicYearError) {
     console.error(
       'Read academic year for date validation:',
       academicYearError,
-    );
+    )
 
     return NextResponse.json(
       { error: 'تعذر التحقق من تواريخ السنة الدراسية.' },
       { status: 500 },
-    );
+    )
   }
 
   if (!academicYear) {
     return NextResponse.json(
       { error: 'السنة الدراسية المرتبطة بالدورة غير موجودة.' },
       { status: 400 },
-    );
+    )
   }
 
   if (
@@ -283,7 +283,7 @@ async function validateDateWithinCourseAndYear(
           'تواريخ بداية السنة الدراسية ونهايتها غير مكتملة أو غير صالحة.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (academicYear.start_date > academicYear.end_date) {
@@ -293,7 +293,7 @@ async function validateDateWithinCourseAndYear(
           'تاريخ بداية السنة الدراسية يتجاوز تاريخ نهايتها.',
       },
       { status: 400 },
-    );
+    )
   }
 
   if (
@@ -306,10 +306,10 @@ async function validateDateWithinCourseAndYear(
           'تاريخ الانضمام يجب أن يقع ضمن السنة الدراسية المرتبطة بالدورة.',
       },
       { status: 400 },
-    );
+    )
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -321,26 +321,20 @@ async function validateEnrollmentJoinDate(
   newJoinDate: string,
 ) {
   const { data: enrollment, error: enrollmentError } =
-    await supabaseAdmin
-      .from('enrollments')
-      .select(
-        'id, student_id, course_id, academic_year_id, join_date',
-      )
-      .eq('id', enrollmentId)
-      .maybeSingle();
+    await loadEnrollmentForDateValidation(enrollmentId)
 
   if (enrollmentError) {
     console.error(
       'Read enrollment before date validation:',
       enrollmentError,
-    );
+    )
 
     return {
       error: NextResponse.json(
         { error: 'تعذر التحقق من تسجيل الطالب.' },
         { status: 500 },
       ),
-    };
+    }
   }
 
   if (!enrollment) {
@@ -349,46 +343,44 @@ async function validateEnrollmentJoinDate(
         { error: 'التسجيل المطلوب غير موجود.' },
         { status: 404 },
       ),
-    };
+    }
   }
 
   const dateError = await validateDateWithinCourseAndYear(
     enrollment.course_id,
     newJoinDate,
     enrollment.academic_year_id,
-  );
+  )
 
   if (dateError) {
-    return { error: dateError };
+    return { error: dateError }
   }
 
   const {
     data: assignments,
     error: assignmentsError,
-  } = await supabaseAdmin
-    .from('teacher_student_assignments')
-    .select('created_at')
-    .eq('student_id', enrollment.student_id)
-    .eq('course_id', enrollment.course_id)
-    .not('created_at', 'is', null);
+  } = await loadStudentAssignmentDates(
+    enrollment.student_id,
+    enrollment.course_id,
+  )
 
   if (assignmentsError) {
-    console.error('Read assignment dates:', assignmentsError);
+    console.error('Read assignment dates:', assignmentsError)
 
     return {
       error: NextResponse.json(
         { error: 'تعذر التحقق من تواريخ تعيين المعلمين.' },
         { status: 500 },
       ),
-    };
+    }
   }
 
   const assignmentDates = (assignments ?? [])
     .map((assignment) => getBahrainDate(assignment.created_at))
     .filter((date): date is string => Boolean(date))
-    .sort();
+    .sort()
 
-  const earliestAssignmentDate = assignmentDates[0];
+  const earliestAssignmentDate = assignmentDates[0]
 
   if (
     earliestAssignmentDate &&
@@ -402,115 +394,96 @@ async function validateEnrollmentJoinDate(
         },
         { status: 400 },
       ),
-    };
+    }
   }
 
   return {
     enrollment,
     error: null,
-  };
+  }
 }
 
 /**
  * تشغيل معالجة سجلات «غير منضم» للتسجيل.
  */
 async function processUnjoinedAttendance(enrollmentId: string) {
-  const { error } = await supabaseAdmin.rpc(
-    'create_unjoined_attendance_for_enrollment',
-    { p_enrollment_id: enrollmentId },
-  );
+  const { error } =
+    await processUnjoinedAttendanceRepository(enrollmentId)
 
   if (error) {
     console.error(
       'Process unjoined attendance:',
       enrollmentId,
       error,
-    );
+    )
 
-    return false;
+    return false
   }
 
-  return true;
+  return true
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const operation = url.searchParams.get('operation');
+  const url = new URL(request.url)
+  const operation = url.searchParams.get('operation')
 
   if (operation === 'dates') {
     const authorization = await authorize(
       STUDENT_DATES_PERMISSION,
       'ليس لديك صلاحية إدارة تواريخ الطلاب.',
-    );
+    )
 
     if (!authorization.allowed) {
-      return authorization.response;
+      return authorization.response
     }
 
-    const studentId = url.searchParams.get('studentId');
+    const studentId = url.searchParams.get('studentId')
 
     if (studentId) {
       if (!isValidUuid(studentId)) {
         return NextResponse.json(
           { error: 'معرّف الطالب غير صالح.' },
           { status: 400 },
-        );
+        )
       }
 
       const { data: student, error: studentError } =
-        await supabaseAdmin
-          .from('students')
-          .select('id, student_id, name, personal_id')
-          .eq('id', studentId)
-          .maybeSingle();
+        await loadAdminStudent(studentId)
 
       if (studentError) {
-        console.error('Read student:', studentError);
+        console.error('Read student:', studentError)
 
         return NextResponse.json(
           { error: 'تعذر تحميل بيانات الطالب.' },
           { status: 500 },
-        );
+        )
       }
 
       if (!student) {
         return NextResponse.json(
           { error: 'الطالب غير موجود.' },
           { status: 404 },
-        );
+        )
       }
 
       const [
         { data: enrollments, error: enrollmentError },
         { data: assignmentRows, error: assignmentError },
       ] = await Promise.all([
-        supabaseAdmin
-          .from('enrollments')
-          .select(
-            'id, join_date, course_id, academic_year_id, level_id, status',
-          )
-          .eq('student_id', studentId)
-          .order('created_at', { ascending: false }),
-
-        supabaseAdmin
-          .from('teacher_student_assignments')
-          .select(
-            'id, created_at, course_id, teacher_id, subject_id',
-          )
-          .eq('student_id', studentId)
-          .order('created_at', { ascending: false }),
-      ]);
+        loadAdminStudentEnrollments(studentId),
+        loadAdminStudentAssignments(studentId),
+      ])
 
       if (enrollmentError || assignmentError) {
         console.error(
           'Read student dates:',
           enrollmentError ?? assignmentError,
-        );
+        )
 
         return NextResponse.json(
           { error: 'تعذر تحميل تسجيلات الطالب وتوزيعاته.' },
           { status: 500 },
-        );
+        )
       }
 
       // اسم join_date هنا خاص باستجابة API فقط.
@@ -520,138 +493,119 @@ export async function GET(request: Request) {
           ...assignment,
           join_date: getBahrainDate(assignment.created_at),
         }),
-      );
+      )
 
       return NextResponse.json({
         student,
         enrollments: enrollments ?? [],
         assignments,
-      });
+      })
     }
 
     const search = cleanSearch(
       url.searchParams.get('search') ?? '',
-    );
+    )
 
     if (search.length < 2) {
-      return NextResponse.json({ students: [] });
+      return NextResponse.json({ students: [] })
     }
 
-    const [byName, byPersonalId, byStudentId] =
-      await Promise.all([
-        supabaseAdmin
-          .from('students')
-          .select('id, student_id, name, personal_id')
-          .ilike('name', `%${search}%`)
-          .limit(20),
-
-        supabaseAdmin
-          .from('students')
-          .select('id, student_id, name, personal_id')
-          .ilike('personal_id', `%${search}%`)
-          .limit(20),
-
-        supabaseAdmin
-          .from('students')
-          .select('id, student_id, name, personal_id')
-          .ilike('student_id', `%${search}%`)
-          .limit(20),
-      ]);
+    const {
+      byName,
+      byPersonalId,
+      byStudentId,
+    } = await searchAdminStudents(search)
 
     const searchError =
       byName.error ??
       byPersonalId.error ??
-      byStudentId.error;
+      byStudentId.error
 
     if (searchError) {
-      console.error('Search students:', searchError);
+      console.error('Search students:', searchError)
 
       return NextResponse.json(
         { error: 'تعذر البحث عن الطلاب.' },
         { status: 500 },
-      );
+      )
     }
 
     const uniqueStudents = new Map<
       string,
       {
-        id: string;
-        student_id: string | null;
-        name: string;
-        personal_id: string | null;
+        id: string
+        student_id: string | null
+        name: string
+        personal_id: string | null
       }
-    >();
+    >()
 
     for (const student of [
       ...(byName.data ?? []),
       ...(byPersonalId.data ?? []),
       ...(byStudentId.data ?? []),
     ]) {
-      uniqueStudents.set(student.id, student);
+      uniqueStudents.set(student.id, student)
     }
 
     return NextResponse.json({
       students: Array.from(uniqueStudents.values()).slice(0, 30),
-    });
+    })
   }
 
   const authorization = await authorize(
     DELETE_SETTING_PERMISSION,
     'ليس لديك صلاحية لإدارة إعداد حذف الطلاب.',
-  );
+  )
 
   if (!authorization.allowed) {
-    return authorization.response;
+    return authorization.response
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('student_deletion_settings')
-    .select('deletion_enabled, updated_at')
-    .eq('id', 1)
-    .maybeSingle();
+  const { data, error } = await loadStudentDeletionSetting()
 
   if (error) {
-    console.error('Read student deletion settings:', error);
+    console.error('Read student deletion settings:', error)
 
     return NextResponse.json(
       { error: 'تعذر قراءة إعداد حذف الطلاب.' },
       { status: 500 },
-    );
+    )
   }
 
   if (!data) {
     return NextResponse.json(
       { error: 'إعداد حذف الطلاب غير موجود.' },
       { status: 500 },
-    );
+    )
   }
 
   return NextResponse.json({
     deletionEnabled: data.deletion_enabled,
     updatedAt: data.updated_at,
-  });
+  })
 }
 
 export async function PATCH(request: Request) {
-  let body: unknown;
+  let body: unknown
 
   try {
-    body = await request.json();
+    body = await request.json()
   } catch {
     return NextResponse.json(
       { error: 'البيانات المرسلة غير صالحة.' },
       { status: 400 },
-    );
+    )
   }
 
   if (typeof body !== 'object' || body === null) {
     return NextResponse.json(
       { error: 'البيانات المرسلة غير صالحة.' },
       { status: 400 },
-    );
+    )
   }
 
-  const payload = body as Record<string, unknown>;
+  const payload = body as Record<string, unknown>
 
   /*
    * تعديل تاريخ انضمام الطالب للدورة مع تسجيل التعديل.
@@ -660,10 +614,10 @@ export async function PATCH(request: Request) {
     const authorization = await authorize(
       STUDENT_DATES_PERMISSION,
       'ليس لديك صلاحية تعديل تواريخ الطلاب.',
-    );
+    )
 
     if (!authorization.allowed) {
-      return authorization.response;
+      return authorization.response
     }
 
     if (
@@ -676,25 +630,25 @@ export async function PATCH(request: Request) {
             'معرّف التسجيل أو تاريخ الانضمام غير صالح.',
         },
         { status: 400 },
-      );
+      )
     }
 
-    const enrollmentId = payload.enrollmentId;
-    const joinDate = payload.joinDate;
+    const enrollmentId = payload.enrollmentId
+    const joinDate = payload.joinDate
 
     const validation = await validateEnrollmentJoinDate(
       enrollmentId,
       joinDate,
-    );
+    )
 
     if (validation.error) {
-      return validation.error;
+      return validation.error
     }
 
-    const oldDate = validation.enrollment.join_date;
+    const oldDate = validation.enrollment.join_date
 
     if (oldDate === joinDate) {
-      const processed = await processUnjoinedAttendance(enrollmentId);
+      const processed = await processUnjoinedAttendance(enrollmentId)
 
       return NextResponse.json({
         success: true,
@@ -705,34 +659,29 @@ export async function PATCH(request: Request) {
               warning:
                 'لم يتغير التاريخ، لكن تعذرت معالجة سجلات «غير منضم».',
             }),
-      });
+      })
     }
 
     const { data: enrollment, error: updateError } =
-      await supabaseAdmin
-        .from('enrollments')
-        .update({ join_date: joinDate })
-        .eq('id', enrollmentId)
-        .select('id, student_id, course_id, join_date')
-        .maybeSingle();
+      await updateEnrollmentJoinDate(enrollmentId, joinDate)
 
     if (updateError) {
       console.error(
         'Update enrollment join date:',
         updateError,
-      );
+      )
 
       return NextResponse.json(
         { error: 'تعذر حفظ تاريخ انضمام الطالب للدورة.' },
         { status: 500 },
-      );
+      )
     }
 
     if (!enrollment) {
       return NextResponse.json(
         { error: 'التسجيل المطلوب غير موجود.' },
         { status: 404 },
-      );
+      )
     }
 
     const logged = await insertDateChangeLog({
@@ -742,20 +691,21 @@ export async function PATCH(request: Request) {
       date_field: 'join_date',
       old_date: oldDate,
       new_date: joinDate,
-    });
+    })
 
     if (!logged) {
       // محاولة إعادة التاريخ السابق إذا تعذّر تسجيل التدقيق.
-      const { error: rollbackError } = await supabaseAdmin
-        .from('enrollments')
-        .update({ join_date: oldDate })
-        .eq('id', enrollment.id);
+      const { error: rollbackError } =
+        await rollbackEnrollmentJoinDate(
+          enrollment.id,
+          oldDate,
+        )
 
       if (rollbackError) {
         console.error(
           'Rollback enrollment date after audit failure:',
           rollbackError,
-        );
+        )
       }
 
       return NextResponse.json(
@@ -764,12 +714,12 @@ export async function PATCH(request: Request) {
             'تعذر تسجيل تعديل التاريخ في سجل التدقيق. تمت محاولة إعادة التاريخ السابق.',
         },
         { status: 500 },
-      );
+      )
     }
 
     const processed = await processUnjoinedAttendance(
       enrollment.id,
-    );
+    )
 
     if (!processed) {
       return NextResponse.json({
@@ -777,7 +727,7 @@ export async function PATCH(request: Request) {
         enrollment,
         warning:
           'تم حفظ التاريخ وتسجيل التعديل، لكن تعذرت معالجة سجلات «غير منضم». لم تُحذف سجلات الحضور الموجودة.',
-      });
+      })
     }
 
     return NextResponse.json({
@@ -785,7 +735,7 @@ export async function PATCH(request: Request) {
       enrollment,
       message:
         'تم حفظ تاريخ انضمام الطالب للدورة وتسجيل التعديل وتشغيل معالجة «غير منضم».',
-    });
+    })
   }
 
   /*
@@ -798,10 +748,10 @@ export async function PATCH(request: Request) {
     const authorization = await authorize(
       STUDENT_DATES_PERMISSION,
       'ليس لديك صلاحية تعديل تواريخ الطلاب.',
-    );
+    )
 
     if (!authorization.allowed) {
-      return authorization.response;
+      return authorization.response
     }
 
     if (
@@ -814,53 +764,52 @@ export async function PATCH(request: Request) {
             'معرّف التعيين أو تاريخ التعيين غير صالح.',
         },
         { status: 400 },
-      );
+      )
     }
 
-    const assignmentId = payload.assignmentId;
-    const joinDate = payload.joinDate;
+    const assignmentId = payload.assignmentId
+    const joinDate = payload.joinDate
 
     const {
       data: assignment,
       error: assignmentError,
-    } = await supabaseAdmin
-      .from('teacher_student_assignments')
-      .select('id, student_id, course_id, created_at')
-      .eq('id', assignmentId)
-      .maybeSingle();
+    } = await loadAssignmentForDateUpdate(assignmentId)
 
     if (assignmentError) {
-      console.error('Read assignment before update:', assignmentError);
+      console.error(
+        'Read assignment before update:',
+        assignmentError,
+      )
 
       return NextResponse.json(
         { error: 'تعذر قراءة سجل تعيين الطالب.' },
         { status: 500 },
-      );
+      )
     }
 
     if (!assignment) {
       return NextResponse.json(
         { error: 'سجل تعيين الطالب غير موجود.' },
         { status: 404 },
-      );
+      )
     }
 
-    const oldDate = getBahrainDate(assignment.created_at);
+    const oldDate = getBahrainDate(assignment.created_at)
 
     if (!oldDate) {
       return NextResponse.json(
         { error: 'تاريخ التعيين الحالي غير صالح.' },
         { status: 400 },
-      );
+      )
     }
 
     const dateError = await validateDateWithinCourseAndYear(
       assignment.course_id,
       joinDate,
-    );
+    )
 
     if (dateError) {
-      return dateError;
+      return dateError
     }
 
     /*
@@ -869,22 +818,21 @@ export async function PATCH(request: Request) {
     const {
       data: enrollments,
       error: enrollmentsError,
-    } = await supabaseAdmin
-      .from('enrollments')
-      .select('id, join_date')
-      .eq('student_id', assignment.student_id)
-      .eq('course_id', assignment.course_id);
+    } = await loadStudentEnrollmentsForAssignmentDate(
+      assignment.student_id,
+      assignment.course_id,
+    )
 
     if (enrollmentsError) {
       console.error(
         'Read enrollments for assignment date validation:',
         enrollmentsError,
-      );
+      )
 
       return NextResponse.json(
         { error: 'تعذر التحقق من تاريخ انضمام الطالب للدورة.' },
         { status: 500 },
-      );
+      )
     }
 
     const conflictingEnrollment = (enrollments ?? []).find(
@@ -892,7 +840,7 @@ export async function PATCH(request: Request) {
         enrollment.join_date &&
         isValidDate(enrollment.join_date) &&
         joinDate < enrollment.join_date,
-    );
+    )
 
     if (conflictingEnrollment) {
       return NextResponse.json(
@@ -901,7 +849,7 @@ export async function PATCH(request: Request) {
             'تاريخ تعيين الطالب للمعلم لا يمكن أن يكون قبل تاريخ انضمام الطالب للدورة.',
         },
         { status: 400 },
-      );
+      )
     }
 
     if (oldDate === joinDate) {
@@ -912,39 +860,37 @@ export async function PATCH(request: Request) {
           join_date: oldDate,
         },
         message: 'التاريخ المحدد هو تاريخ التعيين الحالي.',
-      });
+      })
     }
 
-    const previousCreatedAt = assignment.created_at;
-    const newCreatedAt = getBahrainMidnightTimestamp(joinDate);
+    const previousCreatedAt = assignment.created_at
+    const newCreatedAt = getBahrainMidnightTimestamp(joinDate)
 
     const {
       data: updatedAssignment,
       error: updateError,
-    } = await supabaseAdmin
-      .from('teacher_student_assignments')
-      .update({ created_at: newCreatedAt })
-      .eq('id', assignmentId)
-      .select('id, student_id, course_id, created_at')
-      .maybeSingle();
+    } = await updateAssignmentCreatedAt(
+      assignmentId,
+      newCreatedAt,
+    )
 
     if (updateError) {
       console.error(
         'Update assignment created_at:',
         updateError,
-      );
+      )
 
       return NextResponse.json(
         { error: 'تعذر حفظ تاريخ تعيين الطالب عند المعلم.' },
         { status: 500 },
-      );
+      )
     }
 
     if (!updatedAssignment) {
       return NextResponse.json(
         { error: 'سجل تعيين الطالب غير موجود.' },
         { status: 404 },
-      );
+      )
     }
 
     const logged = await insertDateChangeLog({
@@ -954,20 +900,21 @@ export async function PATCH(request: Request) {
       date_field: 'created_at',
       old_date: oldDate,
       new_date: joinDate,
-    });
+    })
 
     if (!logged) {
       // محاولة استرجاع timestamp الأصلي كاملًا، لا التاريخ فقط.
-      const { error: rollbackError } = await supabaseAdmin
-        .from('teacher_student_assignments')
-        .update({ created_at: previousCreatedAt })
-        .eq('id', assignment.id);
+      const { error: rollbackError } =
+        await rollbackAssignmentCreatedAt(
+          assignment.id,
+          previousCreatedAt,
+        )
 
       if (rollbackError) {
         console.error(
           'Rollback assignment date after audit failure:',
           rollbackError,
-        );
+        )
       }
 
       return NextResponse.json(
@@ -976,7 +923,7 @@ export async function PATCH(request: Request) {
             'تعذر تسجيل تعديل التاريخ في سجل التدقيق. تمت محاولة إعادة تاريخ التعيين السابق.',
         },
         { status: 500 },
-      );
+      )
     }
 
     return NextResponse.json({
@@ -987,7 +934,7 @@ export async function PATCH(request: Request) {
       },
       message:
         'تم تعديل تاريخ تعيين الطالب عند المعلم وتسجيل التعديل.',
-    });
+    })
   }
 
   /*
@@ -996,10 +943,10 @@ export async function PATCH(request: Request) {
   const authorization = await authorize(
     DELETE_SETTING_PERMISSION,
     'ليس لديك صلاحية لإدارة إعداد حذف الطلاب.',
-  );
+  )
 
   if (!authorization.allowed) {
-    return authorization.response;
+    return authorization.response
   }
 
   if (typeof payload.deletionEnabled !== 'boolean') {
@@ -1009,44 +956,38 @@ export async function PATCH(request: Request) {
           'يجب تحديد قيمة صحيحة للسماح بحذف الطلاب.',
       },
       { status: 400 },
-    );
+    )
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('student_deletion_settings')
-    .update({
-      deletion_enabled: payload.deletionEnabled,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', 1)
-    .select('deletion_enabled, updated_at')
-    .maybeSingle();
+  const { data, error } = await updateStudentDeletionSetting(
+    payload.deletionEnabled,
+    new Date().toISOString(),
+  )
 
   if (error) {
     console.error(
       'Update student deletion settings:',
       error,
-    );
+    )
 
     return NextResponse.json(
       { error: 'تعذر حفظ إعداد حذف الطلاب.' },
       { status: 500 },
-    );
+    )
   }
 
   if (!data) {
     return NextResponse.json(
       { error: 'إعداد حذف الطلاب غير موجود.' },
       { status: 500 },
-    );
+    )
   }
 
   return NextResponse.json({
     deletionEnabled: data.deletion_enabled,
     updatedAt: data.updated_at,
-  });
+  })
 }
-
 
 export async function POST(request: Request) {
   // التحقق من صلاحية حذف الطلاب
@@ -1097,15 +1038,16 @@ export async function POST(request: Request) {
   const studentIds = [...new Set(rawIds)]
 
   // التحقق من إعداد الحذف داخل الخادم
-  const { data: setting, error: settingError } =
-    await supabaseAdmin
-      .from('student_deletion_settings')
-      .select('deletion_enabled')
-      .eq('id', 1)
-      .maybeSingle()
+  const {
+    data: setting,
+    error: settingError,
+  } = await loadStudentDeletionEnabledSetting()
 
   if (settingError) {
-    console.error('Read student deletion setting:', settingError)
+    console.error(
+      'Read student deletion setting:',
+      settingError,
+    )
 
     return NextResponse.json(
       { error: 'تعذر التحقق من إعداد حذف الطلاب.' },
@@ -1123,10 +1065,7 @@ export async function POST(request: Request) {
   const deletedIds: string[] = []
 
   for (const studentId of studentIds) {
-    const { error } = await supabaseAdmin.rpc(
-      'delete_student_completely',
-      { p_student_id: studentId },
-    )
+    const { error } = await deleteStudentCompletely(studentId)
 
     if (error) {
       console.error('Delete student RPC failed:', {
@@ -1152,4 +1091,3 @@ export async function POST(request: Request) {
     deletedIds,
   })
 }
-
