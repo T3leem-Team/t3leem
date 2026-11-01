@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+
 import { requireAuth } from '@/lib/require-auth'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadAdminPermissionProfile,
+  loadAllPermissions,
+} from '@/lib/features/permissions/repositories/permissions-admin.repository'
 
 async function requireAdmin() {
   const { access, response } =
@@ -24,16 +18,9 @@ async function requireAdmin() {
   }
 
   const { data: profile, error } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select(
-        'id, auth_user_id, role, is_active',
-      )
-      .eq(
-        'auth_user_id',
-        access!.userId,
-      )
-      .maybeSingle()
+    await loadAdminPermissionProfile(
+      access!.userId,
+    )
 
   if (error) {
     console.error(
@@ -89,24 +76,7 @@ export async function GET() {
     const {
       data: permissions,
       error: permissionsError,
-    } =
-      await supabaseAdmin
-        .from('permissions')
-        .select(
-          `
-          id,
-          permission_key,
-          permission_name,
-          description,
-          created_at
-          `,
-        )
-        .order(
-          'permission_name',
-          {
-            ascending: true,
-          },
-        )
+    } = await loadAllPermissions()
 
     if (permissionsError) {
       console.error(
