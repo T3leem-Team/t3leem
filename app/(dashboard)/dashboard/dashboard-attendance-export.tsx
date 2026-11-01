@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useCallback, useState } from 'react'
@@ -10,7 +11,11 @@ import {
 import ExcelJS from 'exceljs'
 
 import { Button } from '@/components/ui/button'
-import { supabase } from '@/lib/supabase'
+import {
+  loadAttendanceExportEnrollments,
+  loadAttendanceExportAssignments,
+  loadAttendanceExportAttendancePage,
+} from '@/lib/features/dashboard/repositories/dashboard.repository'
 
 type AcademicYear = {
   id: string
@@ -524,23 +529,10 @@ export function DashboardAttendanceExport({
           const {
             data: enrollmentData,
             error: enrollmentError,
-          } = await supabase
-            .from('enrollments')
-            .select(
-              `
-                id,
-                student_id,
-                academic_year_id,
-                level_id,
-                status,
-                join_date
-              `,
-            )
-            .eq('academic_year_id', academicYear.id)
-            .in('student_id', studentIds)
-            .order('join_date', {
-              ascending: true,
-            })
+          } = await loadAttendanceExportEnrollments(
+            academicYear.id,
+            studentIds,
+          )
 
           if (enrollmentError) {
             console.error(
@@ -621,18 +613,10 @@ export function DashboardAttendanceExport({
           const {
             data: assignmentData,
             error: assignmentError,
-          } = await supabase
-            .from('teacher_student_assignments')
-            .select(
-              `
-                id,
-                student_id,
-                course_id,
-                created_at
-              `,
-            )
-            .in('id', assignmentIds)
-            .eq('course_id', course.id)
+          } = await loadAttendanceExportAssignments(
+            assignmentIds,
+            course.id,
+          )
 
           if (assignmentError) {
             console.error(
@@ -695,7 +679,7 @@ export function DashboardAttendanceExport({
         }
 
         /*
-         * 3. سحب سجلات الحضور مباشرة من Supabase.
+         * 3. سحب سجلات الحضور من خلال Repository.
          * يتم جلبها على دفعات لتجنب حدود الاستعلام.
          */
         const exportedAttendanceRecords:
@@ -712,27 +696,14 @@ export function DashboardAttendanceExport({
             const {
               data: attendanceData,
               error: attendanceError,
-            } = await supabase
-              .from('attendance')
-              .select(
-                `
-                  id,
-                  student_id,
-                  enrollment_id,
-                  attendance_date,
-                  status_id,
-                  note,
-                  course_id
-                `,
-              )
-              .eq('course_id', course.id)
-              .in('student_id', studentIds)
-              .gte('attendance_date', safeFromDate)
-              .lte('attendance_date', safeToDate)
-              .range(from, to)
-              .order('attendance_date', {
-                ascending: true,
-              })
+            } = await loadAttendanceExportAttendancePage(
+              course.id,
+              studentIds,
+              safeFromDate,
+              safeToDate,
+              from,
+              to,
+            )
 
             if (attendanceError) {
               console.error(
