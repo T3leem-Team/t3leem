@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server'
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 
@@ -360,6 +359,16 @@ export async function POST(request: Request) {
           )
         }
 
+        if (!payment.student_id) {
+          return NextResponse.json(
+            {
+              error:
+                'الدفعة لا تحتوي على طالب مرتبط بها',
+            },
+            { status: 400 },
+          )
+        }
+
         const {
           data: duplicate,
           error: duplicateError,
@@ -415,9 +424,9 @@ export async function POST(request: Request) {
             Number(payment.amount).toFixed(3),
           ),
           source: finalSource,
-          payment_id: finalPaymentId,
-          student_id: finalStudentId,
-          course_id: finalCourseId,
+          payment_id: payment.id,
+          student_id: payment.student_id,
+          course_id: payment.course_id,
           student_request_number:
             finalStudentRequestNumber,
           payment_method: finalPaymentMethod,
