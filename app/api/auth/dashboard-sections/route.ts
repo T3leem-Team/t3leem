@@ -33,7 +33,7 @@ export async function GET() {
     return response
   }
 
-  if (!access) {
+  if (!access || !access.profileId) {
     return NextResponse.json(
       {
         error: 'غير مصرح بالوصول',
