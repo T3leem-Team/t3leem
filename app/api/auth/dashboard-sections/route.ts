@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
+import {
+  loadDashboardSectionMappingsForUser,
+  loadDashboardSectionsByIds,
+} from '@/lib/features/dashboard/repositories/dashboard.repository'
+
 export async function GET() {
   const startedAt = performance.now()
   let lastTimingAt = startedAt
@@ -46,10 +51,10 @@ export async function GET() {
   const {
     data: userSections,
     error: userSectionsError,
-  } = await supabase
-    .from('user_dashboard_sections')
-    .select('section_id')
-    .eq('user_profile_id', access.profileId)
+  } = await loadDashboardSectionMappingsForUser(
+    supabase,
+    access.profileId,
+  )
 
   markTiming('query user_dashboard_sections')
 
@@ -95,16 +100,10 @@ export async function GET() {
   const {
     data: sections,
     error: sectionsError,
-  } = await supabase
-    .from('dashboard_sections')
-    .select(
-      'id, section_key, section_name, description, icon, href, sort_order, is_active',
-    )
-    .in('id', sectionIds)
-    .eq('is_active', true)
-    .order('sort_order', {
-      ascending: true,
-    })
+  } = await loadDashboardSectionsByIds(
+    supabase,
+    sectionIds,
+  )
 
   markTiming('query dashboard_sections')
 
