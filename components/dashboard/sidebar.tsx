@@ -1,3 +1,4 @@
+
 'use client'
 
 import Link from 'next/link'
@@ -23,6 +24,10 @@ import {
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { clearAllCaches } from '@/lib/clear-all-caches'
+import {
+  loadSidebarPendingRegistrationCount,
+  loadSidebarUserProfile,
+} from '@/lib/features/dashboard/repositories/dashboard.repository'
 
 type DashboardSection = {
   id: string
@@ -115,183 +120,172 @@ export function Sidebar({
 
   const [loading, setLoading] = useState(true)
 
-// عدد طلبات التسجيل التي تنتظر المراجعة
-const [pendingRegistrationCount, setPendingRegistrationCount] =
-  useState(0)
+  // عدد طلبات التسجيل التي تنتظر المراجعة
+  const [pendingRegistrationCount, setPendingRegistrationCount] =
+    useState(0)
 
-const [currentUser, setCurrentUser] =
-  useState<CurrentUser | null>(null)
+  const [currentUser, setCurrentUser] =
+    useState<CurrentUser | null>(null)
 
-const [userLoading, setUserLoading] =
-  useState(true)
+  const [userLoading, setUserLoading] =
+    useState(true)
 
-const [userMenuOpen, setUserMenuOpen] =
-  useState(false)
+  const [userMenuOpen, setUserMenuOpen] =
+    useState(false)
 
-const [loggingOut, setLoggingOut] =
-  useState(false)
+  const [loggingOut, setLoggingOut] =
+    useState(false)
 
-const [schoolSettings, setSchoolSettings] =
-  useState<SchoolSettings>(
-    schoolSettingsCache ?? {
-      id: 1,
-      school_name: DEFAULT_SCHOOL_NAME,
-      school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
-    },
-  )
+  const [schoolSettings, setSchoolSettings] =
+    useState<SchoolSettings>(
+      schoolSettingsCache ?? {
+        id: 1,
+        school_name: DEFAULT_SCHOOL_NAME,
+        school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
+      },
+    )
 
-const [schoolDialogOpen, setSchoolDialogOpen] =
-  useState(false)
+  const [schoolDialogOpen, setSchoolDialogOpen] =
+    useState(false)
 
-const [schoolName, setSchoolName] =
-  useState(
-    schoolSettingsCache?.school_name ??
-      DEFAULT_SCHOOL_NAME,
-  )
+  const [schoolName, setSchoolName] =
+    useState(
+      schoolSettingsCache?.school_name ??
+        DEFAULT_SCHOOL_NAME,
+    )
 
-const [schoolSubtitle, setSchoolSubtitle] =
-  useState(
-    schoolSettingsCache?.school_subtitle ??
-      DEFAULT_SCHOOL_SUBTITLE,
-  )
+  const [schoolSubtitle, setSchoolSubtitle] =
+    useState(
+      schoolSettingsCache?.school_subtitle ??
+        DEFAULT_SCHOOL_SUBTITLE,
+    )
 
-const [savingSchoolSettings, setSavingSchoolSettings] =
-  useState(false)
+  const [savingSchoolSettings, setSavingSchoolSettings] =
+    useState(false)
 
-const [schoolSettingsError, setSchoolSettingsError] =
-  useState('')
+  const [schoolSettingsError, setSchoolSettingsError] =
+    useState('')
 
-/*
- * -------------------------------------------------------
- * عدد طلبات التسجيل المنتظرة
- * السنة الدراسية الحالية فقط
- * الحالات: pending و under_review
- * تحديث كل دقيقتين، وإيقاف التحديث في الخلفية
- * -------------------------------------------------------
- */
-useEffect(() => {
-  let cancelled = false
-  let intervalId: number | undefined
-  let requestInProgress = false
+  /*
+   * -------------------------------------------------------
+   * عدد طلبات التسجيل المنتظرة
+   * السنة الدراسية الحالية فقط
+   * الحالات: pending و under_review
+   * تحديث كل دقيقتين، وإيقاف التحديث في الخلفية
+   * -------------------------------------------------------
+   */
+  useEffect(() => {
+    let cancelled = false
+    let intervalId: number | undefined
+    let requestInProgress = false
 
-  async function loadPendingRegistrationCount() {
-    // منع تداخل الاستعلامات إذا تأخر رد Supabase
-    if (
-      cancelled ||
-      requestInProgress ||
-      document.visibilityState !== 'visible'
-    ) {
-      return
-    }
+    async function loadPendingRegistrationCount() {
+      // منع تداخل الاستعلامات إذا تأخر رد Supabase
+      if (
+        cancelled ||
+        requestInProgress ||
+        document.visibilityState !== 'visible'
+      ) {
+        return
+      }
 
-    requestInProgress = true
+      requestInProgress = true
 
-    try {
-      const {
-        data: academicYear,
-        error: academicYearError,
-      } = await supabase
-        .from('academic_years')
-        .select('id')
-        .eq('is_current', true)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      if (academicYearError) {
-        console.error(
-          'Load current academic year error:',
+      try {
+        const {
+          academicYear,
           academicYearError,
-        )
-        return
-      }
+          count,
+          error,
+        } = await loadSidebarPendingRegistrationCount()
 
-      if (!academicYear) {
-        if (!cancelled) {
-          setPendingRegistrationCount(0)
+        if (academicYearError) {
+          console.error(
+            'Load current academic year error:',
+            academicYearError,
+          )
+          return
         }
-        return
-      }
 
-      const { count, error } = await supabase
-        .from('registration_requests')
-        .select('id', {
-          count: 'exact',
-          head: true,
-        })
-        .eq('academic_year_id', academicYear.id)
-        .in('status', ['pending', 'under_review'])
+        if (!academicYear) {
+          if (!cancelled) {
+            setPendingRegistrationCount(0)
+          }
+          return
+        }
 
-      if (error) {
+        if (error) {
+          console.error(
+            'Load pending registration count error:',
+            error,
+          )
+          return
+        }
+
+        if (!cancelled) {
+          setPendingRegistrationCount(count ?? 0)
+        }
+      } catch (error) {
         console.error(
           'Load pending registration count error:',
           error,
         )
+      } finally {
+        requestInProgress = false
+      }
+    }
+
+    function startPolling() {
+      if (
+        cancelled ||
+        intervalId !== undefined ||
+        document.visibilityState !== 'visible'
+      ) {
         return
       }
 
-      if (!cancelled) {
-        setPendingRegistrationCount(count ?? 0)
-      }
-    } catch (error) {
-      console.error(
-        'Load pending registration count error:',
-        error,
-      )
-    } finally {
-      requestInProgress = false
-    }
-  }
-
-  function startPolling() {
-    if (
-      cancelled ||
-      intervalId !== undefined ||
-      document.visibilityState !== 'visible'
-    ) {
-      return
-    }
-
-    // جلب العدد عند فتح الصفحة أو الرجوع إليها
-    void loadPendingRegistrationCount()
-
-    // ثم التحديث كل دقيقتين
-    intervalId = window.setInterval(() => {
+      // جلب العدد عند فتح الصفحة أو الرجوع إليها
       void loadPendingRegistrationCount()
-    }, 120000)
-  }
 
-  function stopPolling() {
-    if (intervalId !== undefined) {
-      window.clearInterval(intervalId)
-      intervalId = undefined
+      // ثم التحديث كل دقيقتين
+      intervalId = window.setInterval(() => {
+        void loadPendingRegistrationCount()
+      }, 120000)
     }
-  }
 
-  function handleVisibilityChange() {
-    if (document.visibilityState === 'visible') {
-      startPolling()
-    } else {
-      stopPolling()
+    function stopPolling() {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId)
+        intervalId = undefined
+      }
     }
-  }
 
-  document.addEventListener(
-    'visibilitychange',
-    handleVisibilityChange,
-  )
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        startPolling()
+      } else {
+        stopPolling()
+      }
+    }
 
-  startPolling()
-
-  return () => {
-    cancelled = true
-    stopPolling()
-
-    document.removeEventListener(
+    document.addEventListener(
       'visibilitychange',
       handleVisibilityChange,
     )
-  }
-}, [])
+
+    startPolling()
+
+    return () => {
+      cancelled = true
+      stopPolling()
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange,
+      )
+    }
+  }, [])
+
   /*
    * -------------------------------------------------------
    * المستخدم الحالي
@@ -336,11 +330,7 @@ useEffect(() => {
         const {
           data,
           error: profileError,
-        } = await supabase
-          .from('user_profiles')
-          .select('username, full_name, role')
-          .eq('auth_user_id', user.id)
-          .maybeSingle()
+        } = await loadSidebarUserProfile(user.id)
 
         if (profileError) {
           console.error(
