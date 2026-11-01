@@ -314,3 +314,106 @@ export async function loadAttendancePage(
     error,
   }
 }
+
+
+export async function loadAttendanceExportEnrollments(
+  academicYearId: string,
+  studentIds: string[],
+) {
+  if (studentIds.length === 0) {
+    return {
+      data: [],
+      error: EMPTY_RESULT_ERROR,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('enrollments')
+    .select(`
+      id,
+      student_id,
+      academic_year_id,
+      level_id,
+      status,
+      join_date
+    `)
+    .eq('academic_year_id', academicYearId)
+    .in('student_id', studentIds)
+    .order('join_date', {
+      ascending: true,
+    })
+
+  return {
+    data,
+    error,
+  }
+}
+
+export async function loadAttendanceExportAssignments(
+  assignmentIds: string[],
+  courseId: string,
+) {
+  if (assignmentIds.length === 0) {
+    return {
+      data: [],
+      error: EMPTY_RESULT_ERROR,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('teacher_student_assignments')
+    .select(`
+      id,
+      student_id,
+      course_id,
+      created_at
+    `)
+    .in('id', assignmentIds)
+    .eq('course_id', courseId)
+
+  return {
+    data,
+    error,
+  }
+}
+
+export async function loadAttendanceExportAttendancePage(
+  courseId: string,
+  studentIds: string[],
+  fromDate: string,
+  toDate: string,
+  from: number,
+  to: number,
+) {
+  if (studentIds.length === 0) {
+    return {
+      data: [],
+      error: EMPTY_RESULT_ERROR,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .select(`
+      id,
+      student_id,
+      enrollment_id,
+      attendance_date,
+      status_id,
+      note,
+      course_id
+    `)
+    .eq('course_id', courseId)
+    .in('student_id', studentIds)
+    .gte('attendance_date', fromDate)
+    .lte('attendance_date', toDate)
+    .range(from, to)
+    .order('attendance_date', {
+      ascending: true,
+    })
+
+  return {
+    data,
+    error,
+  }
+}
