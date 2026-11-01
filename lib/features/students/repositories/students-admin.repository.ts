@@ -298,3 +298,11 @@ export async function deleteStudentCompletely(
     },
   )
 }
+
+export async function loadStudentDeletionEnabledSetting() {
+  return await supabaseAdmin
+    .from('student_deletion_settings')
+    .select('deletion_enabled')
+    .eq('id', 1)
+    .maybeSingle()
+}
