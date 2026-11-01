@@ -1,4 +1,9 @@
+
 import { supabase } from '@/lib/supabase'
+
+// ==========================================
+// Create Communication Message Template
+// ==========================================
 
 export async function createCommunicationMessageTemplate(input: {
   name: string
@@ -9,4 +14,103 @@ export async function createCommunicationMessageTemplate(input: {
     .insert(input)
     .select('id, name, content, created_at, updated_at')
     .single()
+}
+
+// ==========================================
+// Load Current Academic Year
+// ==========================================
+
+export async function loadCurrentCommunicationAcademicYear() {
+  return supabase
+    .from('academic_years')
+    .select('id, annual_fee')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+}
+
+// ==========================================
+// Load Communication Data
+// ==========================================
+
+export async function loadCommunicationRecords(
+  academicYearId: string,
+  today: string,
+) {
+  const [
+    studentsResult,
+    teachersResult,
+    coursesResult,
+    assignmentsResult,
+    attendanceResult,
+    statusesResult,
+    paymentsResult,
+    templatesResult,
+    attendanceAwardResult,
+  ] = await Promise.all([
+    supabase
+      .from('students')
+      .select(
+        'id, name, phone, whatsapp, personal_id, academic_year_id, fee_exempt',
+      )
+      .eq('academic_year_id', academicYearId)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('teachers')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('courses')
+      .select('id, name, academic_year_id')
+      .eq('academic_year_id', academicYearId)
+      .order('name', { ascending: true }),
+
+    supabase
+      .from('teacher_student_assignments')
+      .select('teacher_id, course_id, student_id'),
+
+    supabase
+      .from('attendance')
+      .select(
+        'student_id, course_id, enrollment_id, attendance_date, status_id',
+      )
+      .eq('attendance_date', today),
+
+    supabase
+      .from('attendance_statuses')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
+
+    supabase
+      .from('payments')
+      .select('student_id, amount')
+      .eq('academic_year_id', academicYearId),
+
+    supabase
+      .from('communication_message_templates')
+      .select('id, name, content, created_at, updated_at')
+      .order('created_at', { ascending: false }),
+
+    supabase
+      .from('attendance_award_results')
+      .select('student_id')
+      .eq('academic_year_id', academicYearId)
+      .eq('status', 'eligible'),
+  ])
+
+  return {
+    studentsResult,
+    teachersResult,
+    coursesResult,
+    assignmentsResult,
+    attendanceResult,
+    statusesResult,
+    paymentsResult,
+    templatesResult,
+    attendanceAwardResult,
+  }
 }
