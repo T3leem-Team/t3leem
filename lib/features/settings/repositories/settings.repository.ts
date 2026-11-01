@@ -843,4 +843,101 @@ export async function loadAttendanceAwardStudents(
 }
 
 
+// ==========================================
+// Attendance Awards
+// ==========================================
+
+// تحميل السنوات الدراسية
+export async function loadAttendanceAwardAcademicYears() {
+  return await supabase
+    .from('academic_years')
+    .select(
+      'id, name, start_date, end_date, annual_fee, is_current, is_active',
+    )
+    .eq('is_active', true)
+    .order('start_date', { ascending: false })
+}
+
+// تحميل دورات السنة الدراسية
+export async function loadAttendanceAwardCourses(
+  academicYearId: string,
+) {
+  return await supabase
+    .from('courses')
+    .select('id, academic_year_id, name, start_date, end_date, days')
+    .eq('academic_year_id', academicYearId)
+    .order('start_date', { ascending: true })
+    .order('name', { ascending: true })
+}
+
+// تحميل تسجيلات الطلاب للسنة الدراسية
+export async function loadAttendanceAwardEnrollments(
+  academicYearId: string,
+) {
+  return await supabase
+    .from('enrollments')
+    .select('id, student_id, academic_year_id, level_id, class_id, status')
+    .eq('academic_year_id', academicYearId)
+}
+
+// تحميل بيانات الطلاب المستخدمة في حساب التكريم
+export async function loadAttendanceAwardStudentsForCalculation(
+  studentIds: string[],
+) {
+  return await supabase
+    .from('students')
+    .select('id, student_id, name, personal_id, phone, whatsapp')
+    .in('id', studentIds)
+    .order('name', { ascending: true })
+}
+
+// تحميل تعيينات المعلمين والطلاب للدورات
+export async function loadAttendanceAwardAssignments(
+  courseIds: string[],
+  studentIds: string[],
+) {
+  return await supabase
+    .from('teacher_student_assignments')
+    .select('id, course_id, teacher_id, student_id')
+    .in('course_id', courseIds)
+    .in('student_id', studentIds)
+}
+
+// تحميل المعلمين مع الترتيب بالاسم
+export async function loadAttendanceAwardTeachers(
+  teacherIds: string[],
+) {
+  return await supabase
+    .from('teachers')
+    .select('id, name')
+    .in('id', teacherIds)
+    .order('name', { ascending: true })
+}
+
+// تحميل جميع حالات الحضور
+export async function loadAttendanceAwardStatuses() {
+  return await supabase
+    .from('attendance_statuses')
+    .select('id, name, is_active, sort_order')
+    .order('sort_order', { ascending: true })
+}
+
+// تحميل سجلات الحضور ضمن الدورات والطلاب والفترة المحددة
+export async function loadAttendanceAwardAttendance(
+  courseIds: string[],
+  studentIds: string[],
+  fromDate: string,
+  toDate: string,
+) {
+  return await supabase
+    .from('attendance')
+    .select(
+      'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+    )
+    .in('course_id', courseIds)
+    .in('student_id', studentIds)
+    .gte('attendance_date', fromDate)
+    .lte('attendance_date', toDate)
+}
+
 
