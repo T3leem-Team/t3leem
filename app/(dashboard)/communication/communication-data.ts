@@ -1,5 +1,8 @@
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadCurrentCommunicationAcademicYear,
+  loadCommunicationRecords,
+} from '@/lib/features/communication/repositories/communication-mutations.repository'
 
 export type Student = {
   id: string
@@ -114,12 +117,8 @@ function emptyCommunicationCache(): CommunicationCache {
 }
 
 export async function loadCommunicationData(): Promise<CommunicationCache> {
-  const { data: yearData, error: yearError } = await supabase
-    .from('academic_years')
-    .select('id, annual_fee')
-    .eq('is_current', true)
-    .eq('is_active', true)
-    .maybeSingle()
+  const { data: yearData, error: yearError } =
+    await loadCurrentCommunicationAcademicYear()
 
   if (yearError) {
     throw yearError
@@ -134,7 +133,7 @@ export async function loadCommunicationData(): Promise<CommunicationCache> {
     annualFee: Number(yearData.annual_fee) || 0,
   }
 
-  const [
+  const {
     studentsResult,
     teachersResult,
     coursesResult,
@@ -144,60 +143,7 @@ export async function loadCommunicationData(): Promise<CommunicationCache> {
     paymentsResult,
     templatesResult,
     attendanceAwardResult,
-  ] = await Promise.all([
-    supabase
-      .from('students')
-      .select(
-        'id, name, phone, whatsapp, personal_id, academic_year_id, fee_exempt',
-      )
-      .eq('academic_year_id', yearData.id)
-      .order('name', { ascending: true }),
-
-    supabase
-      .from('teachers')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('name', { ascending: true }),
-
-    supabase
-      .from('courses')
-      .select('id, name, academic_year_id')
-      .eq('academic_year_id', yearData.id)
-      .order('name', { ascending: true }),
-
-    supabase
-      .from('teacher_student_assignments')
-      .select('teacher_id, course_id, student_id'),
-
-    supabase
-      .from('attendance')
-      .select(
-        'student_id, course_id, enrollment_id, attendance_date, status_id',
-      )
-      .eq('attendance_date', TODAY),
-
-    supabase
-      .from('attendance_statuses')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true }),
-
-    supabase
-      .from('payments')
-      .select('student_id, amount')
-      .eq('academic_year_id', yearData.id),
-
-    supabase
-      .from('communication_message_templates')
-      .select('id, name, content, created_at, updated_at')
-      .order('created_at', { ascending: false }),
-
-    supabase
-      .from('attendance_award_results')
-      .select('student_id')
-      .eq('academic_year_id', yearData.id)
-      .eq('status', 'eligible'),
-  ])
+  } = await loadCommunicationRecords(yearData.id, TODAY)
 
   if (templatesResult.error) {
     console.error(
