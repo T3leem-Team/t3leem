@@ -11,7 +11,9 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadDashboardStudentSearchLevels,
+} from '@/lib/features/dashboard/repositories/dashboard.repository'
 
 import {
   Card,
@@ -196,12 +198,7 @@ export function DashboardStudentSearch({
       const {
         data,
         error,
-      } = await supabase
-        .from('levels')
-        .select('id, name')
-        .order('name', {
-          ascending: true,
-        })
+      } = await loadDashboardStudentSearchLevels()
 
       if (error) {
         console.error(
@@ -449,7 +446,7 @@ export function DashboardStudentSearch({
                       record.statusId,
                     ),
                   ) ?? ''
-              
+
                 attendanceStatus =
                   getAttendanceStatusLabel(
                     rawStatus,
