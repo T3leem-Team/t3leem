@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -17,7 +18,12 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadCommunicationGroup,
+  findCommunicationGroup,
+  updateCommunicationGroup,
+  insertCommunicationGroup,
+} from '@/lib/features/communication/repositories/communication-mutations.repository'
 
 import {
   Card,
@@ -82,9 +88,7 @@ const createVCard = (
   const cards = students
     .map((student) => {
       const number =
-        normalizeWhatsAppNumber(
-          student
-        )
+        normalizeWhatsAppNumber(student)
 
       if (!number) {
         return ''
@@ -96,9 +100,7 @@ const createVCard = (
           : student.name.trim()
 
       const name =
-        escapeVCardValue(
-          fullName
-        )
+        escapeVCardValue(fullName)
 
       const uid =
         `t3leem-${student.id}`
@@ -191,11 +193,7 @@ export function CommunicationViewGroups({
       const {
         data,
         error,
-      } = await supabase
-        .from('communication_group')
-        .select('whatsapp_url')
-        .limit(1)
-        .maybeSingle()
+      } = await loadCommunicationGroup()
 
       if (cancelled) {
         return
@@ -252,9 +250,7 @@ export function CommunicationViewGroups({
       return selectedStudents.filter(
         (student) =>
           Boolean(
-            normalizeWhatsAppNumber(
-              student
-            )
+            normalizeWhatsAppNumber(student)
           )
       )
     }, [selectedStudents])
@@ -263,20 +259,15 @@ export function CommunicationViewGroups({
     useMemo(() => {
       return selectedStudents.filter(
         (student) =>
-          !normalizeWhatsAppNumber(
-            student
-          )
+          !normalizeWhatsAppNumber(student)
       )
     }, [selectedStudents])
 
   const hasSavedGroup =
-    Boolean(
-      savedGroupUrl.trim()
-    )
+    Boolean(savedGroupUrl.trim())
 
   const groupChanged =
-    groupUrl.trim() !==
-    savedGroupUrl.trim()
+    groupUrl.trim() !== savedGroupUrl.trim()
 
   /*
    * =========================================================
@@ -291,8 +282,7 @@ export function CommunicationViewGroups({
       (current) =>
         current.includes(studentId)
           ? current.filter(
-              (id) =>
-                id !== studentId
+              (id) => id !== studentId
             )
           : [
               ...current,
@@ -307,9 +297,7 @@ export function CommunicationViewGroups({
 
   const selectAllStudents = () => {
     setSelectedGroupStudentIds(
-      students.map(
-        (student) => student.id
-      )
+      students.map((student) => student.id)
     )
   }
 
@@ -320,8 +308,7 @@ export function CommunicationViewGroups({
    */
 
   const saveGroupUrl = async () => {
-    const url =
-      groupUrl.trim()
+    const url = groupUrl.trim()
 
     if (!url) {
       setGroupMessage(
@@ -348,11 +335,7 @@ export function CommunicationViewGroups({
       const {
         data: existing,
         error: findError,
-      } = await supabase
-        .from('communication_group')
-        .select('id')
-        .limit(1)
-        .maybeSingle()
+      } = await findCommunicationGroup()
 
       if (findError) {
         console.error(
@@ -366,36 +349,26 @@ export function CommunicationViewGroups({
         return
       }
 
+      const updatedAt =
+        new Date().toISOString()
+
       let error = null
 
       if (existing?.id) {
         const result =
-          await supabase
-            .from(
-              'communication_group'
-            )
-            .update({
-              whatsapp_url: url,
-              updated_at:
-                new Date().toISOString(),
-            })
-            .eq(
-              'id',
-              existing.id
-            )
+          await updateCommunicationGroup(
+            existing.id,
+            url,
+            updatedAt
+          )
 
         error = result.error
       } else {
         const result =
-          await supabase
-            .from(
-              'communication_group'
-            )
-            .insert({
-              whatsapp_url: url,
-              updated_at:
-                new Date().toISOString(),
-            })
+          await insertCommunicationGroup(
+            url,
+            updatedAt
+          )
 
         error = result.error
       }
@@ -431,11 +404,7 @@ export function CommunicationViewGroups({
       const {
         data: existing,
         error: findError,
-      } = await supabase
-        .from('communication_group')
-        .select('id')
-        .limit(1)
-        .maybeSingle()
+      } = await findCommunicationGroup()
 
       if (findError) {
         console.error(
@@ -461,17 +430,11 @@ export function CommunicationViewGroups({
 
       const {
         error,
-      } = await supabase
-        .from('communication_group')
-        .update({
-          whatsapp_url: null,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'id',
-          existing.id
-        )
+      } = await updateCommunicationGroup(
+        existing.id,
+        null,
+        new Date().toISOString()
+      )
 
       if (error) {
         console.error(
@@ -513,8 +476,7 @@ export function CommunicationViewGroups({
       [vCard],
       'T3LEEM-contacts.vcf',
       {
-        type:
-          'text/vcard',
+        type: 'text/vcard',
       }
     )
   }
@@ -527,8 +489,7 @@ export function CommunicationViewGroups({
 
   const shareContacts = async () => {
     if (
-      studentsWithNumbers.length ===
-      0
+      studentsWithNumbers.length === 0
     ) {
       setGroupMessage(
         'اختر طلاباً لديهم أرقام WhatsApp أولاً.'
@@ -567,28 +528,22 @@ export function CommunicationViewGroups({
           [finalVCard],
           filename,
           {
-            type:
-              'text/vcard',
+            type: 'text/vcard',
           }
         )
 
       const canShareFiles =
-        typeof navigator !==
-          'undefined' &&
-        typeof navigator.share ===
-          'function' &&
-        typeof navigator.canShare ===
-          'function' &&
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function' &&
+        typeof navigator.canShare === 'function' &&
         navigator.canShare({
           files: [finalFile],
         })
 
       if (canShareFiles) {
         await navigator.share({
-          title:
-            'جهات اتصال T3LEEM',
-          text:
-            `جهات اتصال ${studentsWithNumbers.length} طالب`,
+          title: 'جهات اتصال T3LEEM',
+          text: `جهات اتصال ${studentsWithNumbers.length} طالب`,
           files: [finalFile],
         })
 
@@ -608,8 +563,7 @@ export function CommunicationViewGroups({
         new Blob(
           [finalVCard],
           {
-            type:
-              'text/vcard;charset=utf-8',
+            type: 'text/vcard;charset=utf-8',
           }
         )
 
@@ -617,23 +571,16 @@ export function CommunicationViewGroups({
         URL.createObjectURL(blob)
 
       const link =
-        document.createElement(
-          'a'
-        )
+        document.createElement('a')
 
       link.href = url
-      link.download =
-        filename
+      link.download = filename
 
-      document.body.appendChild(
-        link
-      )
+      document.body.appendChild(link)
 
       link.click()
 
-      document.body.removeChild(
-        link
-      )
+      document.body.removeChild(link)
 
       setTimeout(() => {
         URL.revokeObjectURL(url)
@@ -650,8 +597,7 @@ export function CommunicationViewGroups({
 
       if (
         error instanceof Error &&
-        error.name ===
-          'AbortError'
+        error.name === 'AbortError'
       ) {
         setGroupMessage('')
         return
@@ -717,9 +663,7 @@ export function CommunicationViewGroups({
               <input
                 value={groupName}
                 onChange={(event) => {
-                  setGroupName(
-                    event.target.value
-                  )
+                  setGroupName(event.target.value)
                   setGroupMessage('')
                 }}
                 placeholder="مثلاً: الصف الأول - مجموعة الطلاب"
@@ -740,14 +684,9 @@ export function CommunicationViewGroups({
                   </div>
 
                   <div className="mt-1 text-xs text-muted-foreground">
-                    المحدد:{' '}
-                    {
-                      selectedGroupStudentIds.length
-                    }{' '}
-                    | لديهم رقم:{' '}
-                    {
-                      studentsWithNumbers.length
-                    }
+                    المحدد: {selectedGroupStudentIds.length}
+                    {' | '}
+                    لديهم رقم: {studentsWithNumbers.length}
                   </div>
                 </div>
 
@@ -756,13 +695,8 @@ export function CommunicationViewGroups({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={
-                      selectAllStudents
-                    }
-                    disabled={
-                      students.length ===
-                      0
-                    }
+                    onClick={selectAllStudents}
+                    disabled={students.length === 0}
                   >
                     <Check className="size-4" />
                     تحديد الكل
@@ -772,13 +706,8 @@ export function CommunicationViewGroups({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={
-                      clearGroupStudents
-                    }
-                    disabled={
-                      selectedGroupStudentIds.length ===
-                      0
-                    }
+                    onClick={clearGroupStudents}
+                    disabled={selectedGroupStudentIds.length === 0}
                   >
                     <X className="size-4" />
                     إلغاء الكل
@@ -787,89 +716,69 @@ export function CommunicationViewGroups({
               </div>
 
               <div className="max-h-80 space-y-2 overflow-y-auto p-3">
-                {students.length ===
-                0 ? (
+                {students.length === 0 ? (
                   <div className="p-6 text-center text-sm text-muted-foreground">
                     لا يوجد طلاب.
                   </div>
                 ) : (
-                  students.map(
-                    (student) => {
-                      const selected =
-                        selectedGroupStudentIds.includes(
-                          student.id
-                        )
+                  students.map((student) => {
+                    const selected =
+                      selectedGroupStudentIds.includes(student.id)
 
-                      const number =
-                        normalizeWhatsAppNumber(
-                          student
-                        )
+                    const number =
+                      normalizeWhatsAppNumber(student)
 
-                      return (
-                        <button
-                          key={
-                            student.id
-                          }
-                          type="button"
-                          onClick={() =>
-                            toggleGroupStudent(
-                              student.id
-                            )
-                          }
-                          className={`flex w-full items-center justify-between gap-3 rounded-md border p-3 text-right transition ${
-                            selected
-                              ? 'border-primary bg-primary/5'
-                              : 'hover:bg-muted'
-                          }`}
-                        >
-                          <span className="flex min-w-0 items-center gap-3">
-                            <span
-                              className={`flex size-5 shrink-0 items-center justify-center rounded border ${
-                                selected
-                                  ? 'bg-primary text-primary-foreground'
-                                  : ''
-                              }`}
-                            >
-                              {selected && (
-                                <Check className="size-3" />
-                              )}
-                            </span>
-
-                            <span className="min-w-0">
-                              <span className="block truncate text-sm font-medium">
-                                {
-                                  student.name
-                                }
-                              </span>
-
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {number ||
-                                  'لا يوجد رقم'}
-                              </span>
-                            </span>
+                    return (
+                      <button
+                        key={student.id}
+                        type="button"
+                        onClick={() =>
+                          toggleGroupStudent(student.id)
+                        }
+                        className={`flex w-full items-center justify-between gap-3 rounded-md border p-3 text-right transition ${
+                          selected
+                            ? 'border-primary bg-primary/5'
+                            : 'hover:bg-muted'
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+                              selected
+                                ? 'bg-primary text-primary-foreground'
+                                : ''
+                            }`}
+                          >
+                            {selected && (
+                              <Check className="size-3" />
+                            )}
                           </span>
 
-                          {selected && (
-                            <UserPlus className="size-4 shrink-0 text-primary" />
-                          )}
-                        </button>
-                      )
-                    }
-                  )
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">
+                              {student.name}
+                            </span>
+
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {number || 'لا يوجد رقم'}
+                            </span>
+                          </span>
+                        </span>
+
+                        {selected && (
+                          <UserPlus className="size-4 shrink-0 text-primary" />
+                        )}
+                      </button>
+                    )
+                  })
                 )}
               </div>
             </div>
 
-            {studentsWithoutNumbers.length >
-              0 &&
-              selectedStudents.length >
-                0 && (
+            {studentsWithoutNumbers.length > 0 &&
+              selectedStudents.length > 0 && (
                 <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                  يوجد{' '}
-                  {
-                    studentsWithoutNumbers.length
-                  }{' '}
-                  طالب محدد بدون رقم WhatsApp، ولن تتم إضافتهم إلى ملف جهات الاتصال.
+                  يوجد {studentsWithoutNumbers.length} طالب محدد بدون رقم WhatsApp، ولن تتم إضافتهم إلى ملف جهات الاتصال.
                 </div>
               )}
 
@@ -890,13 +799,9 @@ export function CommunicationViewGroups({
                 </label>
 
                 <input
-                  value={
-                    contactNamePrefix
-                  }
+                  value={contactNamePrefix}
                   onChange={(event) =>
-                    setContactNamePrefix(
-                      event.target.value
-                    )
+                    setContactNamePrefix(event.target.value)
                   }
                   placeholder="مثلاً: تعليم"
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none"
@@ -919,13 +824,10 @@ export function CommunicationViewGroups({
 
               <Button
                 type="button"
-                onClick={
-                  shareContacts
-                }
+                onClick={shareContacts}
                 disabled={
                   sharingContacts ||
-                  studentsWithNumbers.length ===
-                    0
+                  studentsWithNumbers.length === 0
                 }
               >
                 {sharingContacts ? (
@@ -952,33 +854,13 @@ export function CommunicationViewGroups({
               </div>
 
               <ol className="space-y-1 text-sm text-muted-foreground">
-                <li>
-                  1. اختر الطلاب المطلوبين.
-                </li>
-
-                <li>
-                  2. اختر الكلمة التي تريد ظهورها قبل أسماء الطلاب.
-                </li>
-
-                <li>
-                  3. اضغط «مشاركة جهات الاتصال».
-                </li>
-
-                <li>
-                  4. من نافذة المشاركة اختر حفظ الملف في «الملفات» أو التطبيق المناسب.
-                </li>
-
-                <li>
-                  5. افتح ملف VCF من المكان الذي حفظته فيه واستورد جهات الاتصال.
-                </li>
-
-                <li>
-                  6. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال.
-                </li>
-
-                <li>
-                  7. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.
-                </li>
+                <li>1. اختر الطلاب المطلوبين.</li>
+                <li>2. اختر الكلمة التي تريد ظهورها قبل أسماء الطلاب.</li>
+                <li>3. اضغط «مشاركة جهات الاتصال».</li>
+                <li>4. من نافذة المشاركة اختر حفظ الملف في «الملفات» أو التطبيق المناسب.</li>
+                <li>5. افتح ملف VCF من المكان الذي حفظته فيه واستورد جهات الاتصال.</li>
+                <li>6. افتح WhatsApp وأنشئ المجموعة واختر جهات الاتصال.</li>
+                <li>7. انسخ رابط المجموعة وضعه أدناه لحفظه في T3LEEM.</li>
               </ol>
             </div>
 
@@ -986,9 +868,7 @@ export function CommunicationViewGroups({
               <Button
                 type="button"
                 variant="outline"
-                onClick={
-                  openWhatsApp
-                }
+                onClick={openWhatsApp}
               >
                 <ExternalLink className="size-4" />
                 فتح WhatsApp
@@ -1003,9 +883,7 @@ export function CommunicationViewGroups({
               <input
                 value={groupUrl}
                 onChange={(event) => {
-                  setGroupUrl(
-                    event.target.value
-                  )
+                  setGroupUrl(event.target.value)
                   setGroupMessage('')
                 }}
                 placeholder="https://chat.whatsapp.com/..."
@@ -1016,9 +894,7 @@ export function CommunicationViewGroups({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  onClick={
-                    saveGroupUrl
-                  }
+                  onClick={saveGroupUrl}
                   disabled={
                     groupSaving ||
                     !groupUrl.trim() ||
@@ -1038,12 +914,8 @@ export function CommunicationViewGroups({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={
-                      deleteGroupUrl
-                    }
-                    disabled={
-                      groupSaving
-                    }
+                    onClick={deleteGroupUrl}
+                    disabled={groupSaving}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="size-4" />
@@ -1091,9 +963,7 @@ export function CommunicationViewGroups({
                     type="button"
                     variant="outline"
                     onClick={() =>
-                      setGroupUrl(
-                        savedGroupUrl
-                      )
+                      setGroupUrl(savedGroupUrl)
                     }
                   >
                     تعديل الرابط
