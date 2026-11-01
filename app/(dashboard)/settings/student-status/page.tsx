@@ -15,7 +15,10 @@ import {
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadStudentStatusSettings,
+  updateStudentStatusSettings,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 type Settings = {
   id: string
@@ -47,13 +50,7 @@ export default function StudentStatusSettingsPage() {
     setLoading(true)
     setError('')
 
-    const { data, error } = await supabase
-      .from('student_status_settings')
-      .select(
-        'id, is_enabled, show_attendance_award_result, allow_trip_creation, allow_direct_trip_publish',
-      )
-      .limit(1)
-      .maybeSingle()
+    const { data, error } = await loadStudentStatusSettings()
 
     if (error) {
       console.error(error)
@@ -96,9 +93,9 @@ export default function StudentStatusSettingsPage() {
     setMessage('')
     setError('')
 
-    const { error } = await supabase
-      .from('student_status_settings')
-      .update({
+    const { error } = await updateStudentStatusSettings(
+      settings.id,
+      {
         is_enabled: settings.is_enabled,
         show_attendance_award_result:
           settings.show_attendance_award_result,
@@ -106,8 +103,8 @@ export default function StudentStatusSettingsPage() {
         allow_direct_trip_publish:
           settings.allow_direct_trip_publish,
         updated_at: new Date().toISOString(),
-      })
-      .eq('id', settings.id)
+      },
+    )
 
     if (error) {
       console.error(error)
