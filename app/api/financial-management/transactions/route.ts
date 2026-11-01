@@ -1,191 +1,28 @@
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  checkFinancialAcademicYear,
+  loadFinancialTransaction,
+  syncExistingFinancialPayments,
+  deleteFinancialTransactionsByYear,
+  deleteFinancialSettingsByYear,
+  loadFinancialSettingsId,
+  insertFinancialSettings,
+  deleteFinancialSettingsById,
+  loadFinancialSettings,
+  loadOriginalStudentPayment,
+  loadTransactionByPaymentId,
+  loadFinancialStudentIdentity,
+  insertStudentPaymentTransaction,
+  insertManualFinancialTransaction,
+  confirmFinancialTransactionAdmin,
+  deleteFinancialTransactionAdmin,
+} from '@/lib/features/payments/repositories/financial-management-admin.repository'
 
 async function checkAccess() {
   return validateDashboardSection('payments')
-}
-
-async function checkAcademicYear(academicYearId: string) {
-  const { data, error } = await supabaseAdmin
-    .from('academic_years')
-    .select('id, name, is_current, is_active')
-    .eq('id', academicYearId)
-    .maybeSingle()
-
-  if (error) throw error
-
-  return data
-}
-
-async function getTransaction(
-  transactionId: string,
-  academicYearId: string,
-) {
-  const { data, error } = await supabaseAdmin
-    .from('financial_transactions')
-    .select('*')
-    .eq('id', transactionId)
-    .eq('academic_year_id', academicYearId)
-    .maybeSingle()
-
-  if (error) throw error
-
-  return data
-}
-
-/**
- * مزامنة الدفعات المسجلة مسبقًا.
- *
- * تستخدم بيانات payments نفسها، بما فيها course_id،
- * ولا تنشئ معاملة ثانية للدفعة المرتبطة مسبقًا.
- */
-async function syncExistingPayments(
-  academicYearId: string,
-) {
-  const {
-    data: payments,
-    error: paymentsError,
-  } = await supabaseAdmin
-    .from('payments')
-    .select(`
-      id,
-      student_id,
-      academic_year_id,
-      course_id,
-      amount,
-      payment_method,
-      payment_date,
-      reference_number,
-      notes
-    `)
-    .eq('academic_year_id', academicYearId)
-
-  if (paymentsError) throw paymentsError
-
-  if (!payments?.length) {
-    return { synced: 0 }
-  }
-
-  // لا نبدأ المزامنة إذا كانت أي دفعة تفتقد الكورس.
-  const paymentsWithoutCourse = payments.filter(
-    (payment) => !payment.course_id,
-  )
-
-  if (paymentsWithoutCourse.length > 0) {
-    throw new Error(
-      `توجد ${paymentsWithoutCourse.length} دفعة بدون course_id. تعذرت المزامنة.`,
-    )
-  }
-
-  const paymentIds = payments.map(
-    (payment) => payment.id,
-  )
-
-  const {
-    data: existingTransactions,
-    error: existingTransactionsError,
-  } = await supabaseAdmin
-    .from('financial_transactions')
-    .select('payment_id')
-    .in('payment_id', paymentIds)
-
-  if (existingTransactionsError) {
-    throw existingTransactionsError
-  }
-
-  const existingPaymentIds = new Set(
-    (existingTransactions ?? [])
-      .map((transaction) => transaction.payment_id)
-      .filter(Boolean),
-  )
-
-  const paymentsToSync = payments.filter(
-    (payment) => !existingPaymentIds.has(payment.id),
-  )
-
-  if (!paymentsToSync.length) {
-    return { synced: 0 }
-  }
-
-  const studentIds = Array.from(
-    new Set(
-      paymentsToSync
-        .map((payment) => payment.student_id)
-        .filter(Boolean),
-    ),
-  )
-
-  const studentsMap = new Map<
-    string,
-    {
-      name: string | null
-      personal_id: string | null
-    }
-  >()
-
-  if (studentIds.length > 0) {
-    const {
-      data: students,
-      error: studentsError,
-    } = await supabaseAdmin
-      .from('students')
-      .select('id, name, personal_id')
-      .in('id', studentIds)
-
-    if (studentsError) throw studentsError
-
-    for (const student of students ?? []) {
-      studentsMap.set(student.id, {
-        name: student.name ?? null,
-        personal_id: student.personal_id ?? null,
-      })
-    }
-  }
-
-  const financialRows = paymentsToSync.map((payment) => {
-    const student = studentsMap.get(payment.student_id)
-
-    return {
-      academic_year_id: payment.academic_year_id,
-      transaction_type: 'in',
-      amount: Number(Number(payment.amount).toFixed(3)),
-      adjustment_direction: null,
-      source_type: 'student_payment',
-      source: student?.name
-        ? `دفعة طالب - ${student.name}`
-        : 'دفعة طالب',
-      payment_id: payment.id,
-      student_id: payment.student_id,
-      course_id: payment.course_id,
-      student_request_number: student?.personal_id ?? null,
-      payment_method: payment.payment_method ?? null,
-      reference_number: payment.reference_number ?? null,
-      confirmation_status: 'pending',
-      confirmed_by: null,
-      confirmed_at: null,
-      note: payment.notes ?? null,
-    }
-  })
-
-  const { error: insertError } = await supabaseAdmin
-    .from('financial_transactions')
-    .insert(financialRows)
-
-  if (insertError) throw insertError
-
-  return { synced: financialRows.length }
 }
 
 /**
@@ -231,7 +68,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const academicYear = await checkAcademicYear(
+    const academicYear = await checkFinancialAcademicYear(
       academic_year_id,
     )
 
@@ -245,17 +82,15 @@ export async function POST(request: Request) {
     /*
      * RESET
      *
-     * نحافظ على السلوك الحالي:
      * حذف معاملات الإدارة المالية وإعداداتها للسنة فقط.
      * لا نحذف سجلات payments أو students أو enrollments.
      */
     if (action === 'reset') {
       const {
         error: transactionsDeleteError,
-      } = await supabaseAdmin
-        .from('financial_transactions')
-        .delete()
-        .eq('academic_year_id', academic_year_id)
+      } = await deleteFinancialTransactionsByYear(
+        academic_year_id,
+      )
 
       if (transactionsDeleteError) {
         throw transactionsDeleteError
@@ -263,10 +98,9 @@ export async function POST(request: Request) {
 
       const {
         error: settingsDeleteError,
-      } = await supabaseAdmin
-        .from('financial_settings')
-        .delete()
-        .eq('academic_year_id', academic_year_id)
+      } = await deleteFinancialSettingsByYear(
+        academic_year_id,
+      )
 
       if (settingsDeleteError) {
         throw settingsDeleteError
@@ -305,11 +139,7 @@ export async function POST(request: Request) {
       const {
         data: existing,
         error: existingSettingsError,
-      } = await supabaseAdmin
-        .from('financial_settings')
-        .select('id')
-        .eq('academic_year_id', academic_year_id)
-        .maybeSingle()
+      } = await loadFinancialSettingsId(academic_year_id)
 
       if (existingSettingsError) {
         throw existingSettingsError
@@ -328,17 +158,13 @@ export async function POST(request: Request) {
       const {
         data: settings,
         error: settingsError,
-      } = await supabaseAdmin
-        .from('financial_settings')
-        .insert({
-          academic_year_id,
-          financial_mode,
-          opening_balance: balance,
-          opening_source: opening_source || null,
-          opening_note: opening_note || null,
-        })
-        .select()
-        .single()
+      } = await insertFinancialSettings({
+        academic_year_id,
+        financial_mode,
+        opening_balance: balance,
+        opening_source: opening_source || null,
+        opening_note: opening_note || null,
+      })
 
       if (settingsError) {
         throw settingsError
@@ -346,7 +172,7 @@ export async function POST(request: Request) {
 
       if (financial_mode === 'student_payments') {
         try {
-          const result = await syncExistingPayments(
+          const result = await syncExistingFinancialPayments(
             academic_year_id,
           )
 
@@ -364,10 +190,7 @@ export async function POST(request: Request) {
            */
           const {
             error: rollbackError,
-          } = await supabaseAdmin
-            .from('financial_settings')
-            .delete()
-            .eq('id', settings.id)
+          } = await deleteFinancialSettingsById(settings.id)
 
           if (rollbackError) {
             console.error(
@@ -428,11 +251,7 @@ export async function POST(request: Request) {
       const {
         data: settings,
         error: settingsError,
-      } = await supabaseAdmin
-        .from('financial_settings')
-        .select('*')
-        .eq('academic_year_id', academic_year_id)
-        .maybeSingle()
+      } = await loadFinancialSettings(academic_year_id)
 
       if (settingsError) {
         throw settingsError
@@ -460,13 +279,17 @@ export async function POST(request: Request) {
       let finalPaymentId: string | null = null
       let finalStudentId: string | null = student_id || null
       let finalCourseId: string | null = null
+
       let finalStudentRequestNumber:
         | string
         | null = student_request_number || null
+
       let finalPaymentMethod: string | null =
         payment_method || null
+
       let finalReferenceNumber: string | null =
         reference_number || null
+
       let finalNote: string | null = note || null
       let finalSource: string | null = source || null
 
@@ -508,21 +331,10 @@ export async function POST(request: Request) {
         const {
           data: payment,
           error: paymentError,
-        } = await supabaseAdmin
-          .from('payments')
-          .select(`
-            id,
-            student_id,
-            academic_year_id,
-            course_id,
-            amount,
-            payment_method,
-            reference_number,
-            notes
-          `)
-          .eq('id', payment_id)
-          .eq('academic_year_id', academic_year_id)
-          .maybeSingle()
+        } = await loadOriginalStudentPayment(
+          payment_id,
+          academic_year_id,
+        )
 
         if (paymentError) {
           throw paymentError
@@ -551,11 +363,7 @@ export async function POST(request: Request) {
         const {
           data: duplicate,
           error: duplicateError,
-        } = await supabaseAdmin
-          .from('financial_transactions')
-          .select('id')
-          .eq('payment_id', payment.id)
-          .maybeSingle()
+        } = await loadTransactionByPaymentId(payment.id)
 
         if (duplicateError) {
           throw duplicateError
@@ -581,11 +389,9 @@ export async function POST(request: Request) {
         const {
           data: student,
           error: studentError,
-        } = await supabaseAdmin
-          .from('students')
-          .select('name, personal_id')
-          .eq('id', payment.student_id)
-          .maybeSingle()
+        } = await loadFinancialStudentIdentity(
+          payment.student_id,
+        )
 
         if (studentError) {
           throw studentError
@@ -603,31 +409,21 @@ export async function POST(request: Request) {
         const {
           data: transaction,
           error: insertError,
-        } = await supabaseAdmin
-          .from('financial_transactions')
-          .insert({
-            academic_year_id,
-            transaction_type: 'in',
-            amount: Number(
-              Number(payment.amount).toFixed(3),
-            ),
-            adjustment_direction: null,
-            source_type: 'student_payment',
-            source: finalSource,
-            payment_id: finalPaymentId,
-            student_id: finalStudentId,
-            course_id: finalCourseId,
-            student_request_number:
-              finalStudentRequestNumber,
-            payment_method: finalPaymentMethod,
-            reference_number: finalReferenceNumber,
-            confirmation_status: 'pending',
-            confirmed_by: null,
-            confirmed_at: null,
-            note: finalNote,
-          })
-          .select()
-          .single()
+        } = await insertStudentPaymentTransaction({
+          academic_year_id,
+          amount: Number(
+            Number(payment.amount).toFixed(3),
+          ),
+          source: finalSource,
+          payment_id: finalPaymentId,
+          student_id: finalStudentId,
+          course_id: finalCourseId,
+          student_request_number:
+            finalStudentRequestNumber,
+          payment_method: finalPaymentMethod,
+          reference_number: finalReferenceNumber,
+          note: finalNote,
+        })
 
         if (insertError) {
           // يتولى الفهرس الفريد منع التكرار أيضًا.
@@ -662,32 +458,26 @@ export async function POST(request: Request) {
       const {
         data: transaction,
         error: insertError,
-      } = await supabaseAdmin
-        .from('financial_transactions')
-        .insert({
-          academic_year_id,
-          transaction_type,
-          amount: Number(numericAmount.toFixed(3)),
-          adjustment_direction:
-            transaction_type === 'adjustment'
-              ? adjustment_direction
-              : null,
-          source_type: finalSourceType,
-          source: finalSource,
-          payment_id: finalPaymentId,
-          student_id: finalStudentId,
-          course_id: finalCourseId,
-          student_request_number:
-            finalStudentRequestNumber,
-          payment_method: finalPaymentMethod,
-          reference_number: finalReferenceNumber,
-          confirmation_status: confirmationStatus,
-          confirmed_by: null,
-          confirmed_at: null,
-          note: finalNote,
-        })
-        .select()
-        .single()
+      } = await insertManualFinancialTransaction({
+        academic_year_id,
+        transaction_type,
+        amount: Number(numericAmount.toFixed(3)),
+        adjustment_direction:
+          transaction_type === 'adjustment'
+            ? adjustment_direction
+            : null,
+        source_type: finalSourceType,
+        source: finalSource,
+        payment_id: finalPaymentId,
+        student_id: finalStudentId,
+        course_id: finalCourseId,
+        student_request_number:
+          finalStudentRequestNumber,
+        payment_method: finalPaymentMethod,
+        reference_number: finalReferenceNumber,
+        confirmation_status: confirmationStatus,
+        note: finalNote,
+      })
 
       if (insertError) {
         throw insertError
@@ -712,7 +502,7 @@ export async function POST(request: Request) {
         )
       }
 
-      const transaction = await getTransaction(
+      const transaction = await loadFinancialTransaction(
         transactionId,
         academic_year_id,
       )
@@ -745,16 +535,11 @@ export async function POST(request: Request) {
       const {
         data: updated,
         error: updateError,
-      } = await supabaseAdmin
-        .from('financial_transactions')
-        .update({
-          confirmation_status: 'confirmed',
-          confirmed_at: new Date().toISOString(),
-        })
-        .eq('id', transactionId)
-        .eq('academic_year_id', academic_year_id)
-        .select()
-        .single()
+      } = await confirmFinancialTransactionAdmin(
+        transactionId,
+        academic_year_id,
+        new Date().toISOString(),
+      )
 
       if (updateError) {
         throw updateError
@@ -781,7 +566,7 @@ export async function POST(request: Request) {
         )
       }
 
-      const transaction = await getTransaction(
+      const transaction = await loadFinancialTransaction(
         transactionId,
         academic_year_id,
       )
@@ -803,11 +588,11 @@ export async function POST(request: Request) {
         )
       }
 
-      const { error: deleteError } = await supabaseAdmin
-        .from('financial_transactions')
-        .delete()
-        .eq('id', transactionId)
-        .eq('academic_year_id', academic_year_id)
+      const { error: deleteError } =
+        await deleteFinancialTransactionAdmin(
+          transactionId,
+          academic_year_id,
+        )
 
       if (deleteError) {
         throw deleteError
