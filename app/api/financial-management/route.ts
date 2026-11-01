@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadFinancialSettings,
+  loadFinancialTransactions,
+} from '@/lib/features/payments/repositories/financial-management-admin.repository'
 
 async function checkAccess() {
   return validateDashboardSection('payments')
@@ -121,11 +115,7 @@ export async function GET(request: Request) {
     const {
       data: settings,
       error: settingsError,
-    } = await supabaseAdmin
-      .from('financial_settings')
-      .select('*')
-      .eq('academic_year_id', academicYearId)
-      .maybeSingle()
+    } = await loadFinancialSettings(academicYearId)
 
     if (settingsError) {
       throw settingsError
@@ -140,16 +130,7 @@ export async function GET(request: Request) {
     const {
       data: transactions,
       error: transactionsError,
-    } = await supabaseAdmin
-      .from('financial_transactions')
-      .select('*')
-      .eq('academic_year_id', academicYearId)
-      .order('created_at', {
-        ascending: true,
-      })
-      .order('id', {
-        ascending: true,
-      })
+    } = await loadFinancialTransactions(academicYearId)
 
     if (transactionsError) {
       throw transactionsError
@@ -194,14 +175,6 @@ export async function GET(request: Request) {
     /*
      * -------------------------------------------------------
      * إجمالي الإيرادات
-     *
-     * يشمل:
-     * - الإيرادات
-     * - التسويات +
-     *
-     * ولا يشمل:
-     * - الدفعات المعلقة
-     * - opening
      * -------------------------------------------------------
      */
 
@@ -210,10 +183,8 @@ export async function GET(request: Request) {
         (item) =>
           item.transaction_type === 'in' ||
           (
-            item.transaction_type ===
-              'adjustment' &&
-            item.adjustment_direction ===
-              'plus'
+            item.transaction_type === 'adjustment' &&
+            item.adjustment_direction === 'plus'
           ),
       )
       .reduce(
@@ -225,10 +196,6 @@ export async function GET(request: Request) {
     /*
      * -------------------------------------------------------
      * إجمالي المصروفات
-     *
-     * يشمل:
-     * - المصروفات
-     * - التسويات -
      * -------------------------------------------------------
      */
 
@@ -237,10 +204,8 @@ export async function GET(request: Request) {
         (item) =>
           item.transaction_type === 'out' ||
           (
-            item.transaction_type ===
-              'adjustment' &&
-            item.adjustment_direction ===
-              'minus'
+            item.transaction_type === 'adjustment' &&
+            item.adjustment_direction === 'minus'
           ),
       )
       .reduce(
@@ -259,10 +224,8 @@ export async function GET(request: Request) {
       effectiveTransactions
         .filter(
           (item) =>
-            item.transaction_type ===
-              'adjustment' &&
-            item.adjustment_direction ===
-              'plus',
+            item.transaction_type === 'adjustment' &&
+            item.adjustment_direction === 'plus',
         )
         .reduce(
           (sum, item) =>
@@ -274,10 +237,8 @@ export async function GET(request: Request) {
       effectiveTransactions
         .filter(
           (item) =>
-            item.transaction_type ===
-              'adjustment' &&
-            item.adjustment_direction ===
-              'minus',
+            item.transaction_type === 'adjustment' &&
+            item.adjustment_direction === 'minus',
         )
         .reduce(
           (sum, item) =>
@@ -307,9 +268,7 @@ export async function GET(request: Request) {
 
       summary: {
         openingBalance:
-          Number(
-            settings?.opening_balance ?? 0,
-          ),
+          Number(settings?.opening_balance ?? 0),
 
         balance,
 
