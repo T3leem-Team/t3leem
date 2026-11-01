@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -10,7 +11,10 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadArchiveAcademicYears,
+  type AcademicYear,
+} from '@/lib/features/settings/repositories/settings.repository'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -20,15 +24,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-
-type AcademicYear = {
-  id: string
-  name: string
-  start_date: string | null
-  end_date: string | null
-  is_current: boolean
-  is_active: boolean
-}
 
 export default function ArchiveManager() {
   const router = useRouter()
@@ -45,13 +40,7 @@ export default function ArchiveManager() {
     setError('')
 
     try {
-      const { data, error } = await supabase
-        .from('academic_years')
-        .select(
-          'id, name, start_date, end_date, is_current, is_active'
-        )
-        .eq('is_active', true)
-        .order('start_date', { ascending: false })
+      const { data, error } = await loadArchiveAcademicYears()
 
       if (error) {
         setError('تعذر تحميل السنوات الدراسية.')
