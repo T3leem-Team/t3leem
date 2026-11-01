@@ -10,6 +10,20 @@ import { AlertCircle, Loader2 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 
+import {
+  loadPublicRegistrationSettings,
+  loadPublicRegistrationAcademicYear,
+  loadPublicRegistrationCourse,
+  loadPublicRegistrationLevels,
+  loadPublicRegistrationCustomFields,
+  loadPublicRegistrationCustomFieldVisibility,
+  loadPublicRegistrationCustomFieldOptions,
+  savePublicRegistrationCustomFieldValues,
+  checkPublicRegistrationPersonalId,
+  createPublicRegistrationRequest,
+  setPublicRegistrationPaymentProof,
+} from '@/lib/features/enrollment/repositories/public-registration.repository'
+
 import RegistrationForm from './registration-form'
 
 type RegistrationSettings = {
@@ -216,11 +230,7 @@ export default function RegisterPage() {
 
     try {
       const settingsResult =
-        await supabase
-          .from('registration_settings')
-          .select('*')
-          .limit(1)
-          .maybeSingle()
+        await loadPublicRegistrationSettings()
 
       if (settingsResult.error) {
         console.error(
@@ -271,13 +281,7 @@ export default function RegisterPage() {
       }
 
       const academicYearResult =
-        await supabase
-          .from('academic_years')
-          .select('id, name')
-          .eq('is_current', true)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle()
+        await loadPublicRegistrationAcademicYear()
 
       if (academicYearResult.error) {
         console.error(
@@ -318,20 +322,10 @@ export default function RegisterPage() {
       }
 
       const courseResult =
-        await supabase
-          .from('courses')
-          .select(
-            'id, name, academic_year_id, start_date, end_date, is_closed',
-          )
-          .eq(
-            'id',
-            loadedSettings.course_id,
-          )
-          .eq(
-            'academic_year_id',
-            loadedAcademicYear.id,
-          )
-          .maybeSingle()
+        await loadPublicRegistrationCourse(
+          loadedSettings.course_id,
+          loadedAcademicYear.id,
+        )
 
       if (courseResult.error) {
         console.error(
@@ -370,25 +364,7 @@ export default function RegisterPage() {
       )
 
       const levelsResult =
-        await supabase
-          .from('levels')
-          .select(
-            'id, name, sort_order',
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .eq(
-            'registration_enabled',
-            true,
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+        await loadPublicRegistrationLevels()
 
       if (levelsResult.error) {
         console.error(
@@ -407,25 +383,7 @@ export default function RegisterPage() {
       )
 
       const customFieldsResult =
-        await supabase
-          .from('custom_fields')
-          .select(
-            'id, name, field_type, sort_order, is_active',
-          )
-          .eq(
-            'available_in_registration',
-            true,
-          )
-          .eq(
-            'is_active',
-            true,
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+        await loadPublicRegistrationCustomFields()
 
       if (customFieldsResult.error) {
         console.error(
@@ -458,21 +416,9 @@ export default function RegisterPage() {
         )
 
       const visibilityResult =
-        await supabase
-          .from(
-            'custom_field_visibility',
-          )
-          .select(
-            'custom_field_id, section, is_visible, is_required, sort_order',
-          )
-          .eq(
-            'section',
-            'registration',
-          )
-          .in(
-            'custom_field_id',
-            customFieldIds,
-          )
+        await loadPublicRegistrationCustomFieldVisibility(
+          customFieldIds,
+        )
 
       if (visibilityResult.error) {
         console.error(
@@ -488,23 +434,9 @@ export default function RegisterPage() {
       }
 
       const optionsResult =
-        await supabase
-          .from(
-            'custom_field_options',
-          )
-          .select(
-            'id, custom_field_id, label, value, sort_order',
-          )
-          .in(
-            'custom_field_id',
-            customFieldIds,
-          )
-          .order(
-            'sort_order',
-            {
-              ascending: true,
-            },
-          )
+        await loadPublicRegistrationCustomFieldOptions(
+          customFieldIds,
+        )
 
       if (optionsResult.error) {
         console.error(
@@ -931,18 +863,10 @@ export default function RegisterPage() {
     }
 
     const result =
-      await supabase.rpc(
-        'save_registration_custom_fields',
-        {
-          p_request_id:
-            requestId,
-
-          p_tracking_token:
-            trackingToken,
-
-          p_fields:
-            rows,
-        },
+      await savePublicRegistrationCustomFieldValues(
+        requestId,
+        trackingToken,
+        rows,
       )
 
     if (result.error) {
@@ -991,12 +915,8 @@ export default function RegisterPage() {
 
         try {
           const personalIdCheck =
-            await supabase.rpc(
-              'check_registration_personal_id',
-              {
-                p_personal_id:
-                  personalId.trim(),
-              },
+            await checkPublicRegistrationPersonalId(
+              personalId.trim(),
             )
 
           if (
@@ -1063,95 +983,92 @@ export default function RegisterPage() {
           : null
 
       const rpcResult =
-        await supabase.rpc(
-          'create_registration_request',
-          {
-            p_request_number:
-              internalRequestNumber,
+        await createPublicRegistrationRequest({
+          p_request_number:
+            internalRequestNumber,
 
-            p_tracking_token:
-              trackingToken,
+          p_tracking_token:
+            trackingToken,
 
-            p_name:
-              settings.show_name
-                ? name.trim()
-                : '',
+          p_name:
+            settings.show_name
+              ? name.trim()
+              : '',
 
-            p_personal_id:
-              settings.show_personal_id
-                ? submittedId ||
-                  null
-                : null,
+          p_personal_id:
+            settings.show_personal_id
+              ? submittedId ||
+                null
+              : null,
 
-            p_gender:
-              settings.show_gender
-                ? gender || null
-                : null,
+          p_gender:
+            settings.show_gender
+              ? gender || null
+              : null,
 
-            p_age:
-              settings.show_age &&
-              age.trim()
-                ? Number(age)
-                : null,
+          p_age:
+            settings.show_age &&
+            age.trim()
+              ? Number(age)
+              : null,
 
-            p_phone:
-              settings.show_phone
-                ? phone.trim() ||
-                  null
-                : null,
+          p_phone:
+            settings.show_phone
+              ? phone.trim() ||
+                null
+              : null,
 
-            p_guardian_relation:
-              guardianRelationValue,
+          p_guardian_relation:
+            guardianRelationValue,
 
-            p_whatsapp:
-              settings.show_whatsapp
-                ? whatsapp.trim() ||
-                  null
-                : null,
+          p_whatsapp:
+            settings.show_whatsapp
+              ? whatsapp.trim() ||
+                null
+              : null,
 
-            p_student_phone:
-              settings.show_student_phone
-                ? studentPhone.trim() ||
-                  null
-                : null,
+          p_student_phone:
+            settings.show_student_phone
+              ? studentPhone.trim() ||
+                null
+              : null,
 
-            p_level_id:
-              levelId || null,
+          p_level_id:
+            levelId || null,
 
-            p_notes:
-              settings.show_notes
-                ? notes.trim() ||
-                  null
-                : null,
+          p_notes:
+            settings.show_notes
+              ? notes.trim() ||
+                null
+              : null,
 
-            p_health_notes:
-              settings.show_health_notes
-                ? healthNotes.trim() ||
-                  null
-                : null,
+          p_health_notes:
+            settings.show_health_notes
+              ? healthNotes.trim() ||
+                null
+              : null,
 
-            p_payment_method:
-              settings.payment_enabled
-                ? paymentMethod
-                : null,
+          p_payment_method:
+            settings.payment_enabled
+              ? paymentMethod
+              : null,
 
-            p_payment_amount:
-              settings.payment_enabled
-                ? settings.payment_amount
-                : null,
+          p_payment_amount:
+            settings.payment_enabled
+              ? settings.payment_amount
+              : null,
 
-            p_payment_reference:
-              settings.payment_enabled
-                ? paymentReference.trim() ||
-                  null
-                : null,
+          p_payment_reference:
+            settings.payment_enabled
+              ? paymentReference.trim() ||
+                null
+              : null,
 
-            p_payment_status:
-              settings.payment_enabled
-                ? 'pending'
-                : 'not_required',
-          },
-        )
+          p_payment_status:
+            settings.payment_enabled
+              ? 'pending'
+              : 'not_required',
+        })
 
       if (rpcResult.error) {
         console.error(
@@ -1197,15 +1114,9 @@ export default function RegisterPage() {
           )
 
         const proofResult =
-          await supabase.rpc(
-            'set_registration_payment_proof',
-            {
-              p_request_id:
-                createdRequest.id,
-
-              p_payment_proof_url:
-                proofUrl,
-            },
+          await setPublicRegistrationPaymentProof(
+            createdRequest.id,
+            proofUrl,
           )
 
         if (
