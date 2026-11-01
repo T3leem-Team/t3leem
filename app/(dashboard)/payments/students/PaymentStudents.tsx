@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { StatCard } from '@/components/dashboard/stat-card'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
 import { students as fallbackStudents } from '@/lib/data'
@@ -16,6 +15,12 @@ import {
   type StudentRow,
   type PaymentLevel,
 } from '@/lib/payments-cache'
+
+import {
+  getPaymentHistory,
+  createPayment,
+  updatePayment,
+} from '@/lib/features/payments/repositories/payments.repository'
 
 import PaymentStudentsTable from './payment-students.table'
 import PaymentDetailsModal from './payment-students.details-modal'
@@ -305,6 +310,7 @@ export function PaymentStudents() {
     void openDetailsDialog(student)
   }
 
+  // تحميل سجل الدفعات من Repository.
   const openDetailsDialog = async (student: StudentRow) => {
     if (!currentAcademicYearId) {
       alert('لا توجد سنة دراسية حالية مفعلة.')
@@ -318,20 +324,12 @@ export function PaymentStudents() {
     setEditingPayment(null)
 
     try {
-      const response = await fetch(
-        `/api/payments/history?studentId=${encodeURIComponent(
-          student.id,
-        )}&academicYearId=${encodeURIComponent(currentAcademicYearId)}`,
-        { method: 'GET', cache: 'no-store' },
+      const data = await getPaymentHistory(
+        student.id,
+        currentAcademicYearId,
       )
 
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || 'تعذر تحميل سجل الدفعات.')
-      }
-
-      setPaymentHistory((data?.payments ?? []) as PaymentRecord[])
+      setPaymentHistory((data.payments ?? []) as PaymentRecord[])
     } catch (error) {
       console.error('Failed to load payment history:', error)
       alert(getErrorMessage(error, 'تعذر تحميل سجل الدفعات.'))
@@ -351,28 +349,21 @@ export function PaymentStudents() {
     if (returnPath) router.push(returnPath)
   }
 
+  // تحديث سجل الدفعات من Repository.
   const refreshPaymentHistory = async (
     studentId: string,
     academicYearId: string,
   ) => {
     try {
-      const historyResponse = await fetch(
-        `/api/payments/history?studentId=${encodeURIComponent(
-          studentId,
-        )}&academicYearId=${encodeURIComponent(academicYearId)}`,
-        { method: 'GET', cache: 'no-store' },
-      )
+      const data = await getPaymentHistory(studentId, academicYearId)
 
-      const historyData = await historyResponse.json().catch(() => null)
-
-      if (historyResponse.ok) {
-        setPaymentHistory((historyData?.payments ?? []) as PaymentRecord[])
-      }
+      setPaymentHistory((data.payments ?? []) as PaymentRecord[])
     } catch (historyError) {
       console.error('Failed to refresh payment history:', historyError)
     }
   }
 
+  // إضافة دفعة جديدة.
   const handleAddPayment = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
@@ -432,19 +423,9 @@ export function PaymentStudents() {
         notes: notes || null,
       }
 
-      const response = await fetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentPayload),
-      })
+      const data = await createPayment(paymentPayload)
 
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(data?.error || 'تعذر حفظ الدفعة.')
-      }
-
-      if (!data?.payment) {
+      if (!data.payment) {
         throw new Error('تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة.')
       }
 
@@ -474,10 +455,7 @@ export function PaymentStudents() {
     }
   }
 
-  /*
-   * تعديل الدفعة الحالية باستخدام PATCH.
-   * لا ينشئ دفعة جديدة، حتى لو كان الطالب مسدداً بالكامل.
-   */
+  // تعديل دفعة موجودة باستخدام PATCH من خلال Repository.
   const handleEditPayment = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
@@ -519,36 +497,16 @@ export function PaymentStudents() {
     setSavingEdit(true)
 
     try {
-      const response = await fetch('/api/payments', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payment_id: editingPayment.id,
-          amount: Number(amount.toFixed(3)),
-          payment_method: paymentMethod,
-          payment_date: paymentDate,
-          reference_number: referenceNumber || null,
-          notes: notes || null,
-        }),
+      const data = await updatePayment({
+        payment_id: editingPayment.id,
+        amount: Number(amount.toFixed(3)),
+        payment_method: paymentMethod,
+        payment_date: paymentDate,
+        reference_number: referenceNumber || null,
+        notes: notes || null,
       })
 
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        const error = new Error(
-          data?.error || 'تعذر تعديل الدفعة.',
-        ) as Error & { maxAmount?: number }
-
-        if (data?.maxAmount != null) {
-          error.message = `${data.error} الحد الأقصى المسموح: ${formatCurrency(
-            Number(data.maxAmount),
-          )}`
-        }
-
-        throw error
-      }
-
-      if (!data?.payment) {
+      if (!data.payment) {
         throw new Error('تم تعديل الدفعة ولكن لم يتم إرجاع السجل المحدث.')
       }
 
@@ -565,7 +523,18 @@ export function PaymentStudents() {
       alert('تم تعديل الدفعة بنجاح.')
     } catch (error) {
       console.error('Failed to edit payment:', error)
-      alert(getErrorMessage(error, 'تعذر تعديل الدفعة.'))
+
+      const paymentError = error as Error & { maxAmount?: number }
+
+      if (paymentError.maxAmount != null) {
+        alert(
+          `${paymentError.message} الحد الأقصى المسموح: ${formatCurrency(
+            Number(paymentError.maxAmount),
+          )}`,
+        )
+      } else {
+        alert(getErrorMessage(error, 'تعذر تعديل الدفعة.'))
+      }
     } finally {
       setSavingEdit(false)
     }
