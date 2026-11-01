@@ -21,6 +21,11 @@ import {
 import { navItems } from '@/lib/nav'
 import { supabase } from '@/lib/supabase'
 import { clearAllCaches } from '@/lib/clear-all-caches'
+import {
+  loadHeaderUserProfile,
+  loadHeaderLoginAuditLogs,
+  loadHeaderNotificationProfiles,
+} from '@/lib/features/dashboard/repositories/dashboard.repository'
 
 function currentTitle(pathname: string) {
   const match = navItems.find((item) =>
@@ -224,11 +229,8 @@ export function Header({
           return
         }
 
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('username, full_name, role')
-          .eq('auth_user_id', user.id)
-          .maybeSingle()
+        const { data, error } =
+          await loadHeaderUserProfile(user.id)
 
         if (error) {
           console.error('Profile load error:', error)
@@ -273,22 +275,10 @@ export function Header({
       )
 
       const { data: logs, error: logsError } =
-        await supabase
-          .from('auth_audit_logs')
-          .select(`
-            id,
-            auth_user_id,
-            event_type,
-            success,
-            created_at
-          `)
-          .eq('event_type', 'login_success')
-          .eq('success', true)
-          .gte('created_at', startOfDay.toISOString())
-          .lte('created_at', endOfDay.toISOString())
-          .order('created_at', {
-            ascending: false,
-          })
+        await loadHeaderLoginAuditLogs(
+          startOfDay.toISOString(),
+          endOfDay.toISOString(),
+        )
 
       if (logsError) {
         console.error(
@@ -312,14 +302,7 @@ export function Header({
       ]
 
       const { data: profiles, error: profilesError } =
-        await supabase
-          .from('user_profiles')
-          .select(`
-            auth_user_id,
-            username,
-            full_name
-          `)
-          .in('auth_user_id', userIds)
+        await loadHeaderNotificationProfiles(userIds)
 
       if (profilesError) {
         console.error(
