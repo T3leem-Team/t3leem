@@ -524,3 +524,239 @@ export async function updateSettingsSystemKey(
     .eq('key_name', keyName)
     .select('key_name, enabled, updated_at')
 }
+
+
+
+
+// ============================================================
+// Registration Settings
+// إعدادات التسجيل داخل لوحة التحكم
+// ============================================================
+
+// تحميل إعدادات التسجيل
+export async function loadSettingsRegistrationConfig() {
+  return supabase
+    .from('registration_settings')
+    .select('*')
+    .limit(1)
+    .maybeSingle()
+}
+
+// تحميل السنة الدراسية الحالية
+export async function loadSettingsCurrentAcademicYearForRegistration() {
+  return supabase
+    .from('academic_years')
+    .select('id, name')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+}
+
+// تحميل الدورات المفتوحة للسنة الحالية
+export async function loadSettingsRegistrationCourses(
+  academicYearId: string,
+) {
+  return supabase
+    .from('courses')
+    .select(`
+      id,
+      name,
+      academic_year_id,
+      start_date,
+      end_date,
+      is_closed
+    `)
+    .eq('academic_year_id', academicYearId)
+    .eq('is_closed', false)
+    .order('start_date', { ascending: true })
+}
+
+// تحديث إعدادات التسجيل
+export async function updateSettingsRegistrationConfig(
+  settingsId: string,
+  payload: any,
+) {
+  return supabase
+    .from('registration_settings')
+    .update(payload)
+    .eq('id', settingsId)
+}
+
+// إنشاء إعدادات التسجيل
+export async function insertSettingsRegistrationConfig(
+  payload: any,
+) {
+  return supabase
+    .from('registration_settings')
+    .insert(payload)
+    .select('id')
+    .single()
+}
+
+// ============================================================
+// Registration Levels
+// إدارة مستويات التسجيل
+// ============================================================
+
+// تحميل المستويات النشطة
+export async function loadSettingsRegistrationLevels() {
+  return supabase
+    .from('levels')
+    .select(
+      'id, name, is_active, registration_enabled, sort_order',
+    )
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+      nullsFirst: false,
+    })
+}
+
+// تعديل اسم المستوى
+export async function updateSettingsRegistrationLevelName(
+  levelId: string,
+  name: string,
+) {
+  return supabase
+    .from('levels')
+    .update({ name })
+    .eq('id', levelId)
+}
+
+// تفعيل أو إخفاء المستوى في التسجيل الخارجي
+export async function updateSettingsRegistrationLevelEnabled(
+  levelId: string,
+  enabled: boolean,
+) {
+  return supabase
+    .from('levels')
+    .update({
+      registration_enabled: enabled,
+    })
+    .eq('id', levelId)
+}
+
+// ============================================================
+// Custom Fields
+// إدارة الحقول الإضافية
+// ============================================================
+
+// تحميل الحقول الإضافية
+export async function loadSettingsCustomFields() {
+  return supabase
+    .from('custom_fields')
+    .select(`
+      id,
+      name,
+      field_type,
+      available_in_registration,
+      available_in_students,
+      available_in_payments,
+      sort_order,
+      is_active
+    `)
+    .order('sort_order', {
+      ascending: true,
+    })
+    .order('created_at', {
+      ascending: true,
+    })
+}
+
+// تحميل إعدادات ظهور الحقول في جميع الأقسام
+export async function loadSettingsCustomFieldVisibility(
+  customFieldIds: string[],
+) {
+  return supabase
+    .from('custom_field_visibility')
+    .select(`
+      custom_field_id,
+      section,
+      is_visible,
+      is_required,
+      sort_order
+    `)
+    .in('custom_field_id', customFieldIds)
+}
+
+// إضافة حقل إضافي
+export async function insertSettingsCustomField(
+  payload: any,
+) {
+  return supabase
+    .from('custom_fields')
+    .insert(payload)
+    .select(`
+      id,
+      name,
+      field_type,
+      available_in_registration,
+      available_in_students,
+      available_in_payments,
+      sort_order,
+      is_active
+    `)
+    .single()
+}
+
+// إضافة خيارات الحقل
+export async function insertSettingsCustomFieldOptions(
+  rows: {
+    custom_field_id: string
+    label: string
+    value: string
+    sort_order: number
+  }[],
+) {
+  return supabase
+    .from('custom_field_options')
+    .insert(rows)
+}
+
+// إضافة إعدادات ظهور الحقل
+export async function insertSettingsCustomFieldVisibility(
+  rows: {
+    custom_field_id: string
+    section: string
+    is_visible: boolean
+    is_required: boolean
+    sort_order: number
+  }[],
+) {
+  return supabase
+    .from('custom_field_visibility')
+    .insert(rows)
+}
+
+// حذف الحقل الإضافي
+export async function deleteSettingsCustomField(
+  fieldId: string,
+) {
+  return supabase
+    .from('custom_fields')
+    .delete()
+    .eq('id', fieldId)
+}
+
+// تحديث إعدادات ظهور الحقل أو إنشاؤها
+export async function upsertSettingsCustomFieldVisibility(
+  payload: {
+    custom_field_id: string
+    section: string
+    is_visible: boolean
+    is_required: boolean
+    sort_order: number
+  },
+) {
+  return supabase
+    .from('custom_field_visibility')
+    .upsert(payload, {
+      onConflict: 'custom_field_id,section',
+    })
+}
+
+
+
+
+
+
