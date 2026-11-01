@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -18,7 +17,9 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  createCommunicationMessageTemplate,
+} from '@/lib/features/communication/repositories/communication-mutations.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Button } from '@/components/ui/button'
@@ -577,16 +578,11 @@ export function CommunicationView() {
     setTemplateMessage('')
 
     try {
-      const { data, error } = await supabase
-        .from('communication_message_templates')
-        .insert({
+      const { data, error } =
+        await createCommunicationMessageTemplate({
           name,
           content,
         })
-        .select(
-          'id, name, content, created_at, updated_at'
-        )
-        .single()
 
       if (error) {
         console.error(
