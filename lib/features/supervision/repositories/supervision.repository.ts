@@ -4,16 +4,14 @@ import { supabase } from '@/lib/supabase'
 import type {
   AcademicYear,
   Course,
-  SupervisionRecord,
   SupervisionSettings,
   Teacher,
+  SupervisionType,
 } from '@/app/(dashboard)/supervision/supervision-helpers'
 
 // ==========================================
 // Types
 // ==========================================
-
-type SupervisionRecordPayload = Record<string, unknown>
 
 type SupervisionSettingsPayload = Partial<
   Pick<
@@ -21,6 +19,24 @@ type SupervisionSettingsPayload = Partial<
     'allowTeacherTransfer' | 'allowTeacherRemove'
   >
 >
+
+type SupervisionRecordInsertPayload = {
+  academic_year_id: string
+  course_id: string
+  teacher_id: string | null
+  type: SupervisionType
+  record_date: string
+  reason: string
+  note: string | null
+  created_by: string | null
+}
+
+type SupervisionRecordUpdatePayload = {
+  teacher_id: string | null
+  record_date: string
+  reason: string
+  note: string | null
+}
 
 type TeacherRelation = {
   id: string
@@ -30,6 +46,36 @@ type TeacherRelation = {
 type CourseTeacherRow = {
   teacher_id: string
   teachers: TeacherRelation | TeacherRelation[] | null
+}
+
+type SupervisionRecordRelation = {
+  name: string
+}
+
+type CreatedByRelation = {
+  full_name: string
+}
+
+export type SupervisionRecordRow = {
+  id: string
+  teacher_id: string | null
+  type: SupervisionType
+  record_date: string
+  reason: string | null
+  note: string | null
+  created_at: string
+  course:
+    | SupervisionRecordRelation
+    | SupervisionRecordRelation[]
+    | null
+  teacher:
+    | SupervisionRecordRelation
+    | SupervisionRecordRelation[]
+    | null
+  created_by_profile:
+    | CreatedByRelation
+    | CreatedByRelation[]
+    | null
 }
 
 // ==========================================
@@ -49,7 +95,7 @@ function throwIfError(error: { message: string } | null) {
 export async function loadAcademicYear(): Promise<AcademicYear | null> {
   const { data, error } = await supabase
     .from('academic_years')
-    .select('*')
+    .select('id, name, start_date, end_date')
     .eq('is_current', true)
     .eq('is_active', true)
     .maybeSingle()
@@ -68,7 +114,9 @@ export async function loadCourses(
 ): Promise<Course[]> {
   const { data, error } = await supabase
     .from('courses')
-    .select('*')
+    .select(
+      'id, academic_year_id, name, start_date, end_date, days',
+    )
     .eq('academic_year_id', academicYearId)
     .order('start_date', {
       ascending: true,
@@ -124,11 +172,17 @@ export async function loadTeachers(
 
 export async function loadRecords(
   courseId: string,
-): Promise<SupervisionRecord[]> {
+): Promise<SupervisionRecordRow[]> {
   const { data, error } = await supabase
     .from('supervision_records')
     .select(`
-      *,
+      id,
+      teacher_id,
+      type,
+      record_date,
+      reason,
+      note,
+      created_at,
       course:courses (
         name
       ),
@@ -149,7 +203,7 @@ export async function loadRecords(
 
   throwIfError(error)
 
-  return (data ?? []) as unknown as SupervisionRecord[]
+  return (data ?? []) as unknown as SupervisionRecordRow[]
 }
 
 // ==========================================
@@ -162,20 +216,22 @@ export async function loadSupervisionSettings(): Promise<SupervisionSettings> {
     cache: 'no-store',
   })
 
-  if (!response.ok) {
-    throw new Error('Failed to load supervision settings')
-  }
+  const result = await response.json().catch(() => null)
 
-  const result = await response.json()
+  if (!response.ok) {
+    throw new Error(
+      result?.error || 'Failed to load supervision settings',
+    )
+  }
 
   return {
     allowTeacherTransfer:
-      typeof result.allowTeacherTransfer === 'boolean'
+      typeof result?.allowTeacherTransfer === 'boolean'
         ? result.allowTeacherTransfer
         : true,
 
     allowTeacherRemove:
-      typeof result.allowTeacherRemove === 'boolean'
+      typeof result?.allowTeacherRemove === 'boolean'
         ? result.allowTeacherRemove
         : true,
   }
@@ -202,12 +258,12 @@ export async function updateSupervisionSettings(
 
   return {
     allowTeacherTransfer:
-      typeof result.allowTeacherTransfer === 'boolean'
+      typeof result?.allowTeacherTransfer === 'boolean'
         ? result.allowTeacherTransfer
         : true,
 
     allowTeacherRemove:
-      typeof result.allowTeacherRemove === 'boolean'
+      typeof result?.allowTeacherRemove === 'boolean'
         ? result.allowTeacherRemove
         : true,
   }
@@ -225,7 +281,9 @@ export async function getCurrentUserProfile(): Promise<string | null> {
 
   throwIfError(authError)
 
-  if (!user) return null
+  if (!user) {
+    return null
+  }
 
   const { data, error } = await supabase
     .from('user_profiles')
@@ -260,7 +318,7 @@ export async function deleteDayAttendance(
 // ==========================================
 
 export async function createSupervisionRecord(
-  payload: SupervisionRecordPayload,
+  payload: SupervisionRecordInsertPayload,
 ): Promise<void> {
   const { error } = await supabase
     .from('supervision_records')
@@ -276,7 +334,7 @@ export async function createSupervisionRecord(
 export async function updateSupervisionNote(
   id: string,
   courseId: string,
-  payload: SupervisionRecordPayload,
+  payload: SupervisionRecordUpdatePayload,
 ): Promise<void> {
   const { data, error } = await supabase
     .from('supervision_records')
@@ -289,6 +347,8 @@ export async function updateSupervisionNote(
   throwIfError(error)
 
   if (!data || data.length === 0) {
-    throw new Error('Supervision note was not found or could not be updated')
+    throw new Error(
+      'Supervision note was not found or could not be updated',
+    )
   }
 }
