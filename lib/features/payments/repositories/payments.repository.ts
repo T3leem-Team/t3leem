@@ -32,6 +32,42 @@ export type PaymentStudentsRepositoryData = {
   levels: PaymentLevel[]
 }
 
+export type PaymentApiResponse<T = unknown> = {
+  payment?: T
+  payments?: T[]
+  error?: string
+  maxAmount?: number
+}
+
+async function paymentRequest<T>(
+  url: string,
+  options: RequestInit,
+  fallbackError: string,
+): Promise<T> {
+  const response = await fetch(url, options)
+
+  const data = (await response.json().catch(() => null)) as
+    | (T & { error?: string; maxAmount?: number })
+    | null
+
+  if (!response.ok) {
+    const error = new Error(
+      data?.error || fallbackError,
+    ) as Error & { maxAmount?: number }
+
+    if (data?.maxAmount != null) {
+      error.maxAmount = Number(data.maxAmount)
+    }
+
+    throw error
+  }
+
+  return (data ?? {}) as T
+}
+
+/**
+ * تحميل بيانات المدفوعات والطلاب والسنة الدراسية.
+ */
 export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepositoryData> {
   const response = await fetch('/api/payments', {
     method: 'GET',
@@ -208,4 +244,71 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
     currentAnnualFee: annualFee,
     levels: normalizedLevels,
   }
+}
+
+/**
+ * تحميل سجل دفعات طالب في سنة دراسية محددة.
+ */
+export async function getPaymentHistory(
+  studentId: string,
+  academicYearId: string,
+): Promise<PaymentApiResponse> {
+  const params = new URLSearchParams({
+    studentId,
+    academicYearId,
+  })
+
+  return paymentRequest<PaymentApiResponse>(
+    `/api/payments/history?${params.toString()}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    'تعذر تحميل سجل الدفعات.',
+  )
+}
+
+/**
+ * إضافة دفعة جديدة.
+ */
+export async function createPayment(payload: {
+  student_id: string
+  academic_year_id: string
+  amount: number
+  payment_method: string
+  payment_date: string
+  reference_number: string | null
+  notes: string | null
+}): Promise<PaymentApiResponse> {
+  return paymentRequest<PaymentApiResponse>(
+    '/api/payments',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'تعذر حفظ الدفعة.',
+  )
+}
+
+/**
+ * تعديل دفعة موجودة.
+ */
+export async function updatePayment(payload: {
+  payment_id: string
+  amount: number
+  payment_method: string
+  payment_date: string
+  reference_number: string | null
+  notes: string | null
+}): Promise<PaymentApiResponse> {
+  return paymentRequest<PaymentApiResponse>(
+    '/api/payments',
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    'تعذر تعديل الدفعة.',
+  )
 }
