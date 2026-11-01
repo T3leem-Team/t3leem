@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation'
 import { ArrowRight } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
+import {
+  loadSettingsSystemKeys,
+  updateSettingsSystemKey,
+} from '@/lib/features/settings/repositories/settings.repository'
+
 import { PageHeader } from '@/components/dashboard/page-header'
 
 const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
@@ -93,14 +98,10 @@ export default function KeysPage() {
         )
       }
 
-      const { data, error: settingsError } =
-        await supabase
-          .from('system_keys')
-          .select('key_name, enabled')
-          .in('key_name', [
-            CURRENT_YEAR_KEY,
-            ARCHIVE_KEY,
-          ])
+      const {
+        data,
+        error: settingsError,
+      } = await loadSettingsSystemKeys()
 
       if (settingsError) {
         throw settingsError
@@ -192,16 +193,13 @@ export default function KeysPage() {
         )
       }
 
-      const { data, error: updateError } =
-        await supabase
-          .from('system_keys')
-          .update({
-            enabled: value,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq('key_name', keyName)
-          .select('key_name, enabled, updated_at')
+      const {
+        data,
+        error: updateError,
+      } = await updateSettingsSystemKey(
+        keyName,
+        value,
+      )
 
       console.log(
         'UPDATE RESULT:',
@@ -212,8 +210,7 @@ export default function KeysPage() {
         throw updateError
       }
 
-      // إذا لم يرجع Supabase أي صف،
-      // نعرف أن التحديث لم يحصل فعليًا.
+      // التأكد من أن التحديث حصل فعلياً
       if (!data || data.length === 0) {
         throw new Error(
           `لم يتم تحديث المفتاح "${keyName}". تأكد من وجود المفتاح وصلاحيات UPDATE في system_keys.`,
