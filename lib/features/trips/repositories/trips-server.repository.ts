@@ -283,8 +283,8 @@ export async function updateTrip(
 
 export async function closeTrip(
   tripId: string,
-  input: {
-    closed_by: string
+  data: {
+    closed_by?: string
     closed_at: string
     close_note: string | null
     updated_at: string
