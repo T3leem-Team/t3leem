@@ -477,3 +477,19 @@ export async function updateStudentPaymentTransaction(
     })
     .eq('id', transactionId)
 }
+
+
+export async function loadFinancialTransactions(
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('financial_transactions')
+    .select('*')
+    .eq('academic_year_id', academicYearId)
+    .order('created_at', {
+      ascending: true,
+    })
+    .order('id', {
+      ascending: true,
+    })
+}
