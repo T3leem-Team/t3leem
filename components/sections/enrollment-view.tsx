@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
-
 import {
   AlertTriangle,
   Check,
@@ -16,7 +15,23 @@ import {
   X,
 } from 'lucide-react'
 
-import { supabase } from '@/lib/supabase'
+import {
+  loadEnrollmentImportPermissions,
+  loadEnrollmentCustomFields,
+  loadEnrollmentLevels,
+  loadEnrollmentCourses,
+  loadCurrentEnrollmentAcademicYear,
+  loadCurrentEnrollmentAcademicYearId,
+  loadEnrollmentRequests,
+  loadEnrollmentCustomFieldValues,
+  approveEnrollmentRequest,
+  updateEnrollmentStudentSource,
+  deleteApprovedEnrollmentRequest,
+  rejectEnrollmentRequest,
+  loadCurrentYearEnrollmentRequestIds,
+  deleteEnrollmentCustomFieldValues,
+  deleteCurrentYearEnrollmentRequests,
+} from '@/lib/features/enrollment/repositories/enrollment.repository'
 
 import { PageHeader } from '@/components/dashboard/page-header'
 import {
@@ -38,11 +53,9 @@ import {
   type Level,
   type RegistrationRequest,
 } from '@/app/(dashboard)/enrollment/enrollment-view-two'
-const CURRENT_YEAR_KEY =
-  'allow_add_to_current_year'
 
-const ARCHIVE_KEY =
-  'allow_add_to_archive'
+const CURRENT_YEAR_KEY = 'allow_add_to_current_year'
+const ARCHIVE_KEY = 'allow_add_to_archive'
 
 const COLUMNS_STORAGE_KEY =
   't3leem_registration_requests_columns_v1'
@@ -73,15 +86,13 @@ const EMPTY_ENROLLMENT_CACHE: EnrollmentCache = {
   allowArchiveImport: false,
 }
 
-let enrollmentCache: EnrollmentCache | null =
-  null
+let enrollmentCache: EnrollmentCache | null = null
 
 function updateEnrollmentCache(
   patch: Partial<EnrollmentCache>,
 ) {
   enrollmentCache = {
-    ...(enrollmentCache ??
-      EMPTY_ENROLLMENT_CACHE),
+    ...(enrollmentCache ?? EMPTY_ENROLLMENT_CACHE),
     ...patch,
   }
 }
@@ -91,18 +102,13 @@ type Course = {
   name: string
 }
 
-function mapRequest(
-  row: any,
-): RegistrationRequest {
+function mapRequest(row: any): RegistrationRequest {
   return {
     id: row.id ?? '',
-    requestNumber:
-      row.request_number ?? '',
-    trackingToken:
-      row.tracking_token ?? '',
+    requestNumber: row.request_number ?? '',
+    trackingToken: row.tracking_token ?? '',
     name: row.name ?? '',
-    personalId:
-      row.personal_id ?? '',
+    personalId: row.personal_id ?? '',
     gender: row.gender ?? '',
     age:
       typeof row.age === 'number'
@@ -114,88 +120,48 @@ function mapRequest(
           : null,
     phone: row.phone ?? '',
     whatsapp: row.whatsapp ?? '',
-
-    guardianRelation:
-      row.guardian_relation ?? '',
-    studentPhone:
-      row.student_phone ?? '',
-    courseId:
-      row.course_id ?? null,
-
-    levelId:
-      row.level_id ?? null,
-    classId:
-      row.class_id ?? null,
+    guardianRelation: row.guardian_relation ?? '',
+    studentPhone: row.student_phone ?? '',
+    courseId: row.course_id ?? null,
+    levelId: row.level_id ?? null,
+    classId: row.class_id ?? null,
     notes: row.notes ?? '',
-    healthNotes:
-      row.health_notes ?? '',
-    status:
-      row.status ?? 'pending',
-    processingMode:
-      row.processing_mode ??
-      'review',
-    studentId:
-      row.student_id ?? null,
-    rejectionReason:
-      row.rejection_reason ?? '',
-    paymentMethod:
-      row.payment_method ?? '',
+    healthNotes: row.health_notes ?? '',
+    status: row.status ?? 'pending',
+    processingMode: row.processing_mode ?? 'review',
+    studentId: row.student_id ?? null,
+    rejectionReason: row.rejection_reason ?? '',
+    paymentMethod: row.payment_method ?? '',
     paymentAmount:
       row.payment_amount !== null &&
       row.payment_amount !== undefined
-        ? Number(
-            row.payment_amount,
-          )
+        ? Number(row.payment_amount)
         : null,
-    paymentReference:
-      row.payment_reference ?? '',
-    paymentProofUrl:
-      row.payment_proof_url ?? '',
-    paymentStatus:
-      row.payment_status ??
-      'not_required',
+    paymentReference: row.payment_reference ?? '',
+    paymentProofUrl: row.payment_proof_url ?? '',
+    paymentStatus: row.payment_status ?? 'not_required',
     verifiedPaymentAmount:
-      row.verified_payment_amount !==
-        null &&
-      row.verified_payment_amount !==
-        undefined
-        ? Number(
-            row.verified_payment_amount,
-          )
+      row.verified_payment_amount !== null &&
+      row.verified_payment_amount !== undefined
+        ? Number(row.verified_payment_amount)
         : null,
     paymentRejectionReason:
-      row.payment_rejection_reason ??
-      '',
-    createdAt:
-      row.created_at ?? '',
-    source:
-      row.source === 'import'
-        ? 'import'
-        : 'external',
+      row.payment_rejection_reason ?? '',
+    createdAt: row.created_at ?? '',
+    source: row.source === 'import' ? 'import' : 'external',
   }
 }
 
-function hasHealthNotes(
-  request: RegistrationRequest,
-) {
-  return (
-    request.healthNotes.trim() !== ''
-  )
+function hasHealthNotes(request: RegistrationRequest) {
+  return request.healthNotes.trim() !== ''
 }
 
-function hasNotes(
-  request: RegistrationRequest,
-) {
+function hasNotes(request: RegistrationRequest) {
   return request.notes.trim() !== ''
 }
 
-function hasSpecialInformation(
-  request: RegistrationRequest,
-) {
-  return (
-    hasHealthNotes(request) ||
-    hasNotes(request)
-  )
+function hasSpecialInformation(request: RegistrationRequest) {
+  return hasHealthNotes(request) || hasNotes(request)
 }
 
 function getStatusLabel(
@@ -204,19 +170,14 @@ function getStatusLabel(
   switch (status) {
     case 'pending':
       return 'قيد المراجعة'
-
     case 'under_review':
       return 'تحت المراجعة'
-
     case 'approved':
       return 'مقبول'
-
     case 'rejected':
       return 'مرفوض'
-
     case 'cancelled':
       return 'ملغي'
-
     default:
       return status
   }
@@ -231,25 +192,17 @@ function formatDate(value: string) {
     return value
   }
 
-  return new Intl.DateTimeFormat(
-    'ar-BH',
-    {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    },
-  ).format(date)
+  return new Intl.DateTimeFormat('ar-BH', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
 }
 
-function formatAmount(
-  value: number | null,
-) {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+function formatAmount(value: number | null) {
+  if (value === null || value === undefined) {
     return '—'
   }
 
@@ -285,111 +238,66 @@ type KeyRow = {
 }
 
 export function EnrollmentView() {
-  
-
   const [requests, setRequests] =
     useState<RegistrationRequest[]>(
       enrollmentCache?.requests ?? [],
     )
 
-  const [
-    selectedRequest,
-    setSelectedRequest,
-  ] =
-    useState<RegistrationRequest | null>(
-      null,
-    )
+  const [selectedRequest, setSelectedRequest] =
+    useState<RegistrationRequest | null>(null)
 
-  const [
-    selectedRequestIds,
-    setSelectedRequestIds,
-  ] = useState<string[]>([])
+  const [selectedRequestIds, setSelectedRequestIds] =
+    useState<string[]>([])
 
-  const [
-    bulkApproving,
-    setBulkApproving,
-  ] = useState(false)
-
-  const [showReview, setShowReview] =
+  const [bulkApproving, setBulkApproving] =
     useState(false)
 
-  const [showImport, setShowImport] =
-    useState(false)
+  const [showReview, setShowReview] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [showArchive, setShowArchive] = useState(false)
 
-  const [showArchive, setShowArchive] =
+  const [showColumnSettings, setShowColumnSettings] =
     useState(false)
-
-  const [
-    showColumnSettings,
-    setShowColumnSettings,
-  ] = useState(false)
 
   const [filters, setFilters] =
     useState<Filters>(emptyFilters)
 
   const [loading, setLoading] =
+    useState(enrollmentCache === null)
+
+  const [saving, setSaving] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
+
+  const [permissionsLoading, setPermissionsLoading] =
+    useState(enrollmentCache === null)
+
+  const [allowCurrentYearImport, setAllowCurrentYearImport] =
     useState(
-      enrollmentCache === null,
+      enrollmentCache?.allowCurrentYearImport ?? false,
     )
 
-  const [saving, setSaving] =
-    useState(false)
-
-  const [statusMessage, setStatusMessage] =
-    useState('')
-
-  const [
-    permissionsLoading,
-    setPermissionsLoading,
-  ] = useState(
-    enrollmentCache === null,
-  )
-
-  const [
-    allowCurrentYearImport,
-    setAllowCurrentYearImport,
-  ] = useState(
-    enrollmentCache
-      ?.allowCurrentYearImport ??
-      false,
-  )
-
-  const [
-    allowArchiveImport,
-    setAllowArchiveImport,
-  ] = useState(
-    enrollmentCache
-      ?.allowArchiveImport ??
-      false,
-  )
+  const [allowArchiveImport, setAllowArchiveImport] =
+    useState(
+      enrollmentCache?.allowArchiveImport ?? false,
+    )
 
   const [customFields, setCustomFields] =
     useState<CustomField[]>(
-      enrollmentCache?.customFields ??
-        [],
+      enrollmentCache?.customFields ?? [],
     )
 
-  const [
-    customFieldValues,
-    setCustomFieldValues,
-  ] =
+  const [customFieldValues, setCustomFieldValues] =
     useState<CustomFieldValue[]>(
-      enrollmentCache?.customFieldValues ??
-        [],
+      enrollmentCache?.customFieldValues ?? [],
     )
 
   const [levels, setLevels] =
-    useState<Level[]>(
-      enrollmentCache?.levels ?? [],
-    )
+    useState<Level[]>(enrollmentCache?.levels ?? [])
 
-  const [courses, setCourses] =
-    useState<Course[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
 
   const [visibleColumns, setVisibleColumns] =
-    useState<Record<string, boolean>>(
-      DEFAULT_COLUMNS,
-    )
+    useState<Record<string, boolean>>(DEFAULT_COLUMNS)
 
   /*
    * =========================================================
@@ -399,25 +307,18 @@ export function EnrollmentView() {
 
   useEffect(() => {
     try {
-      const saved =
-        window.localStorage.getItem(
-          COLUMNS_STORAGE_KEY,
-        )
+      const saved = window.localStorage.getItem(
+        COLUMNS_STORAGE_KEY,
+      )
 
       if (!saved) {
-        setVisibleColumns(
-          DEFAULT_COLUMNS,
-        )
+        setVisibleColumns(DEFAULT_COLUMNS)
         return
       }
 
-      const parsed =
-        JSON.parse(saved)
+      const parsed = JSON.parse(saved)
 
-      if (
-        parsed &&
-        typeof parsed === 'object'
-      ) {
+      if (parsed && typeof parsed === 'object') {
         setVisibleColumns({
           ...DEFAULT_COLUMNS,
           ...parsed,
@@ -429,9 +330,7 @@ export function EnrollmentView() {
         error,
       )
 
-      setVisibleColumns(
-        DEFAULT_COLUMNS,
-      )
+      setVisibleColumns(DEFAULT_COLUMNS)
     }
   }, [])
 
@@ -439,9 +338,7 @@ export function EnrollmentView() {
     try {
       window.localStorage.setItem(
         COLUMNS_STORAGE_KEY,
-        JSON.stringify(
-          visibleColumns,
-        ),
+        JSON.stringify(visibleColumns),
       )
     } catch (error) {
       console.warn(
@@ -457,99 +354,65 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const loadImportPermissions =
-    async (
-      options?: {
-        silent?: boolean
-      },
-    ) => {
-      const silent =
-        options?.silent === true
+  const loadImportPermissions = async (
+    options?: {
+      silent?: boolean
+    },
+  ) => {
+    const silent = options?.silent === true
 
-      if (!silent) {
-        setPermissionsLoading(
-          true,
-        )
-      }
+    if (!silent) {
+      setPermissionsLoading(true)
+    }
 
-      const {
-        data,
+    const { data, error } =
+      await loadEnrollmentImportPermissions()
+
+    if (error) {
+      console.error(
+        'Could not load import permissions:',
         error,
-      } = await supabase
-        .from('system_keys')
-        .select(
-          'key_name, enabled',
-        )
-        .in('key_name', [
-          CURRENT_YEAR_KEY,
-          ARCHIVE_KEY,
-        ])
+      )
 
-      if (error) {
-        console.error(
-          'Could not load import permissions:',
-          error,
-        )
-
-        if (
-          enrollmentCache === null
-        ) {
-          setAllowCurrentYearImport(
-            false,
-          )
-
-          setAllowArchiveImport(
-            false,
-          )
-        }
-
-        setPermissionsLoading(false)
-
-        return
+      if (enrollmentCache === null) {
+        setAllowCurrentYearImport(false)
+        setAllowArchiveImport(false)
       }
-
-      const rows =
-        (data ?? []) as KeyRow[]
-
-      const currentYearRow =
-        rows.find(
-          (row) =>
-            row.key_name ===
-            CURRENT_YEAR_KEY,
-        )
-
-      const archiveRow =
-        rows.find(
-          (row) =>
-            row.key_name ===
-            ARCHIVE_KEY,
-        )
-
-      const nextAllowCurrentYearImport =
-        currentYearRow?.enabled ===
-        true
-
-      const nextAllowArchiveImport =
-        archiveRow?.enabled ===
-        true
-
-      setAllowCurrentYearImport(
-        nextAllowCurrentYearImport,
-      )
-
-      setAllowArchiveImport(
-        nextAllowArchiveImport,
-      )
-
-      updateEnrollmentCache({
-        allowCurrentYearImport:
-          nextAllowCurrentYearImport,
-        allowArchiveImport:
-          nextAllowArchiveImport,
-      })
 
       setPermissionsLoading(false)
+      return
     }
+
+    const rows = (data ?? []) as KeyRow[]
+
+    const currentYearRow = rows.find(
+      (row) => row.key_name === CURRENT_YEAR_KEY,
+    )
+
+    const archiveRow = rows.find(
+      (row) => row.key_name === ARCHIVE_KEY,
+    )
+
+    const nextAllowCurrentYearImport =
+      currentYearRow?.enabled === true
+
+    const nextAllowArchiveImport =
+      archiveRow?.enabled === true
+
+    setAllowCurrentYearImport(
+      nextAllowCurrentYearImport,
+    )
+
+    setAllowArchiveImport(nextAllowArchiveImport)
+
+    updateEnrollmentCache({
+      allowCurrentYearImport:
+        nextAllowCurrentYearImport,
+      allowArchiveImport: nextAllowArchiveImport,
+    })
+
+    setPermissionsLoading(false)
+  }
 
   /*
    * =========================================================
@@ -557,71 +420,32 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const loadCustomFields =
-    async () => {
-      const {
-        data,
+  const loadCustomFields = async () => {
+    const { data, error } =
+      await loadEnrollmentCustomFields()
+
+    if (error) {
+      console.error(
+        'Could not load custom fields:',
         error,
-      } = await supabase
-        .from('custom_fields')
-        .select(`
-          id,
-          name,
-          field_type,
-          available_in_registration,
-          available_in_students,
-          available_in_payments,
-          sort_order,
-          is_active
-        `)
-        .eq(
-          'available_in_registration',
-          true,
-        )
-        .eq(
-          'is_active',
-          true,
-        )
-        .order(
-          'sort_order',
-          {
-            ascending: true,
-          },
-        )
-        .order(
-          'created_at',
-          {
-            ascending: true,
-          },
-        )
-
-      if (error) {
-        console.error(
-          'Could not load custom fields:',
-          error,
-        )
-
-        if (
-          enrollmentCache === null
-        ) {
-          setCustomFields([])
-        }
-
-        return
-      }
-
-      const nextCustomFields =
-        (data ?? []) as CustomField[]
-
-      setCustomFields(
-        nextCustomFields,
       )
 
-      updateEnrollmentCache({
-        customFields:
-          nextCustomFields,
-      })
+      if (enrollmentCache === null) {
+        setCustomFields([])
+      }
+
+      return
     }
+
+    const nextCustomFields =
+      (data ?? []) as CustomField[]
+
+    setCustomFields(nextCustomFields)
+
+    updateEnrollmentCache({
+      customFields: nextCustomFields,
+    })
+  }
 
   /*
    * =========================================================
@@ -630,18 +454,8 @@ export function EnrollmentView() {
    */
 
   const loadLevels = async () => {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('levels')
-      .select('id, name')
-      .order(
-        'name',
-        {
-          ascending: true,
-        },
-      )
+    const { data, error } =
+      await loadEnrollmentLevels()
 
     if (error) {
       console.warn(
@@ -649,17 +463,14 @@ export function EnrollmentView() {
         error,
       )
 
-      if (
-        enrollmentCache === null
-      ) {
+      if (enrollmentCache === null) {
         setLevels([])
       }
 
       return
     }
 
-    const nextLevels =
-      (data ?? []) as Level[]
+    const nextLevels = (data ?? []) as Level[]
 
     setLevels(nextLevels)
 
@@ -675,15 +486,8 @@ export function EnrollmentView() {
    */
 
   const loadCourses = async () => {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from('courses')
-      .select('id, name')
-      .order('name', {
-        ascending: true,
-      })
+    const { data, error } =
+      await loadEnrollmentCourses()
 
     if (error) {
       console.warn(
@@ -692,13 +496,10 @@ export function EnrollmentView() {
       )
 
       setCourses([])
-
       return
     }
 
-    setCourses(
-      (data ?? []) as Course[],
-    )
+    setCourses((data ?? []) as Course[])
   }
 
   /*
@@ -707,71 +508,46 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const loadCustomFieldValues =
-    async (
-      requestIds: string[],
-    ) => {
-      if (
-        requestIds.length === 0
-      ) {
-        setCustomFieldValues([])
-
-        updateEnrollmentCache({
-          customFieldValues: [],
-        })
-
-        return
-      }
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from(
-          'custom_field_values',
-        )
-        .select(`
-          custom_field_id,
-          record_type,
-          record_id,
-          value
-        `)
-        .eq(
-          'record_type',
-          'registration_request',
-        )
-        .in(
-          'record_id',
-          requestIds,
-        )
-
-      if (error) {
-        console.warn(
-          'Could not load custom field values:',
-          error,
-        )
-
-        if (
-          enrollmentCache === null
-        ) {
-          setCustomFieldValues([])
-        }
-
-        return
-      }
-
-      const nextValues =
-        (data ?? []) as CustomFieldValue[]
-
-      setCustomFieldValues(
-        nextValues,
-      )
+  const loadCustomFieldValues = async (
+    requestIds: string[],
+  ) => {
+    if (requestIds.length === 0) {
+      setCustomFieldValues([])
 
       updateEnrollmentCache({
-        customFieldValues:
-          nextValues,
+        customFieldValues: [],
       })
+
+      return
     }
+
+    const { data, error } =
+      await loadEnrollmentCustomFieldValues(
+        requestIds,
+      )
+
+    if (error) {
+      console.warn(
+        'Could not load custom field values:',
+        error,
+      )
+
+      if (enrollmentCache === null) {
+        setCustomFieldValues([])
+      }
+
+      return
+    }
+
+    const nextValues =
+      (data ?? []) as CustomFieldValue[]
+
+    setCustomFieldValues(nextValues)
+
+    updateEnrollmentCache({
+      customFieldValues: nextValues,
+    })
+  }
 
   /*
    * =========================================================
@@ -784,8 +560,7 @@ export function EnrollmentView() {
       silent?: boolean
     },
   ) => {
-    const hasCache =
-      enrollmentCache !== null
+    const hasCache = enrollmentCache !== null
 
     if (!hasCache) {
       setLoading(true)
@@ -794,12 +569,7 @@ export function EnrollmentView() {
     const {
       data: academicYear,
       error: academicYearError,
-    } = await supabase
-      .from('academic_years')
-      .select('id, name')
-      .eq('is_current', true)
-      .eq('is_active', true)
-      .maybeSingle()
+    } = await loadCurrentEnrollmentAcademicYear()
 
     if (academicYearError) {
       console.error(
@@ -817,7 +587,6 @@ export function EnrollmentView() {
       }
 
       setLoading(false)
-
       return
     }
 
@@ -832,59 +601,11 @@ export function EnrollmentView() {
       }
 
       setLoading(false)
-
       return
     }
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        'registration_requests',
-      )
-      .select(`
-        id,
-        request_number,
-        tracking_token,
-        name,
-        personal_id,
-        gender,
-        age,
-        phone,
-        whatsapp,
-        guardian_relation,
-        student_phone,
-        course_id,
-        level_id,
-        class_id,
-        notes,
-        health_notes,
-        status,
-        processing_mode,
-        student_id,
-        rejection_reason,
-        payment_method,
-        payment_amount,
-        payment_reference,
-        payment_proof_url,
-        payment_status,
-        verified_payment_amount,
-        payment_rejection_reason,
-        created_at,
-        source,
-        academic_year_id
-      `)
-      .eq(
-        'academic_year_id',
-        academicYear.id,
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false,
-        },
-      )
+    const { data, error } =
+      await loadEnrollmentRequests(academicYear.id)
 
     if (error) {
       setStatusMessage(
@@ -897,29 +618,20 @@ export function EnrollmentView() {
       }
 
       setLoading(false)
-
       return
     }
 
     const mappedRequests =
-      (data ?? []).map(
-        mapRequest,
-      )
+      (data ?? []).map(mapRequest)
 
-    setRequests(
-      mappedRequests,
-    )
+    setRequests(mappedRequests)
 
     updateEnrollmentCache({
-      requests:
-        mappedRequests,
+      requests: mappedRequests,
     })
 
     await loadCustomFieldValues(
-      mappedRequests.map(
-        (request) =>
-          request.id,
-      ),
+      mappedRequests.map((request) => request.id),
     )
 
     setLoading(false)
@@ -935,12 +647,10 @@ export function EnrollmentView() {
     const loadPage = async () => {
       await Promise.all([
         loadRequests({
-          silent:
-            enrollmentCache !== null,
+          silent: enrollmentCache !== null,
         }),
         loadImportPermissions({
-          silent:
-            enrollmentCache !== null,
+          silent: enrollmentCache !== null,
         }),
         loadCustomFields(),
         loadLevels(),
@@ -963,112 +673,77 @@ export function EnrollmentView() {
     key: keyof Filters,
     value: string,
   ) => {
-    setFilters(
-      (current) => ({
-        ...current,
-        [key]: value,
-      }),
-    )
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }))
   }
 
   const clearFilters = () => {
-    setFilters(
-      emptyFilters,
-    )
+    setFilters(emptyFilters)
   }
 
-  const filteredRequests =
-    useMemo(() => {
-      return requests.filter(
-        (request) => {
-          const matchesId =
-            !filters.id ||
-            request.requestNumber
-              .toLowerCase()
-              .includes(
-                filters.id.toLowerCase(),
-              ) ||
-            request.id
-              .toLowerCase()
-              .includes(
-                filters.id.toLowerCase(),
-              )
+  const filteredRequests = useMemo(() => {
+    return requests.filter((request) => {
+      const matchesId =
+        !filters.id ||
+        request.requestNumber
+          .toLowerCase()
+          .includes(filters.id.toLowerCase()) ||
+        request.id
+          .toLowerCase()
+          .includes(filters.id.toLowerCase())
 
-          const matchesName =
-            !filters.name ||
-            request.name
-              .toLowerCase()
-              .includes(
-                filters.name.toLowerCase(),
-              )
+      const matchesName =
+        !filters.name ||
+        request.name
+          .toLowerCase()
+          .includes(filters.name.toLowerCase())
 
-          const matchesPhone =
-            !filters.phone ||
-            request.phone.includes(
-              filters.phone,
-            )
+      const matchesPhone =
+        !filters.phone ||
+        request.phone.includes(filters.phone)
 
-          const matchesDate =
-            !filters.submittedAt ||
-            formatDate(
-              request.createdAt,
-            ).includes(
-              filters.submittedAt,
-            )
+      const matchesDate =
+        !filters.submittedAt ||
+        formatDate(request.createdAt).includes(
+          filters.submittedAt,
+        )
 
-          const matchesStatus =
-            !filters.status ||
-            request.status ===
-              filters.status
+      const matchesStatus =
+        !filters.status ||
+        request.status === filters.status
 
-          return (
-            matchesId &&
-            matchesName &&
-            matchesPhone &&
-            matchesDate &&
-            matchesStatus
-          )
-        },
+      return (
+        matchesId &&
+        matchesName &&
+        matchesPhone &&
+        matchesDate &&
+        matchesStatus
       )
-    }, [
-      requests,
-      filters,
-    ])
+    })
+  }, [requests, filters])
 
-  const externalRequests =
-    filteredRequests.filter(
-      (request) =>
-        request.source ===
-        'external',
-    )
+  const externalRequests = filteredRequests.filter(
+    (request) => request.source === 'external',
+  )
 
-  const importedRequests =
-    filteredRequests.filter(
-      (request) =>
-        request.source ===
-        'import',
-    )
+  const importedRequests = filteredRequests.filter(
+    (request) => request.source === 'import',
+  )
 
-  const pendingCount =
-    requests.filter(
-      (request) =>
-        request.status ===
-          'pending' ||
-        request.status ===
-          'under_review',
-    ).length
+  const pendingCount = requests.filter(
+    (request) =>
+      request.status === 'pending' ||
+      request.status === 'under_review',
+  ).length
 
-  const specialCount =
-    requests.filter(
-      (request) =>
-        request.status !==
-          'rejected' &&
-        request.status !==
-          'cancelled' &&
-        hasSpecialInformation(
-          request,
-        ),
-    ).length
+  const specialCount = requests.filter(
+    (request) =>
+      request.status !== 'rejected' &&
+      request.status !== 'cancelled' &&
+      hasSpecialInformation(request),
+  ).length
 
   /*
    * =========================================================
@@ -1076,48 +751,32 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const selectableRequests =
-    filteredRequests.filter(
-      (request) =>
-        request.status ===
-          'pending' ||
-        request.status ===
-          'under_review',
-    )
+  const selectableRequests = filteredRequests.filter(
+    (request) =>
+      request.status === 'pending' ||
+      request.status === 'under_review',
+  )
 
   const toggleRequestSelection = (
     requestId: string,
   ) => {
-    setSelectedRequestIds(
-      (current) =>
-        current.includes(requestId)
-          ? current.filter(
-              (id) =>
-                id !== requestId,
-            )
-          : [
-              ...current,
-              requestId,
-            ],
+    setSelectedRequestIds((current) =>
+      current.includes(requestId)
+        ? current.filter((id) => id !== requestId)
+        : [...current, requestId],
     )
   }
 
   const selectAllRequests = (
     selectedRequests: RegistrationRequest[],
   ) => {
-    const ids =
-      selectedRequests
-        .filter(
-          (request) =>
-            request.status ===
-              'pending' ||
-            request.status ===
-              'under_review',
-        )
-        .map(
-          (request) =>
-            request.id,
-        )
+    const ids = selectedRequests
+      .filter(
+        (request) =>
+          request.status === 'pending' ||
+          request.status === 'under_review',
+      )
+      .map((request) => request.id)
 
     setSelectedRequestIds(ids)
   }
@@ -1132,13 +791,8 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const openReview = (
-    request: RegistrationRequest,
-  ) => {
-    setSelectedRequest(
-      request,
-    )
-
+  const openReview = (request: RegistrationRequest) => {
+    setSelectedRequest(request)
     setShowReview(true)
   }
 
@@ -1155,193 +809,150 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const approveRequestInternal =
-    async (
-      request: RegistrationRequest,
-    ): Promise<{
-      success: boolean
-      alreadyProcessed: boolean
-      errorMessage?: string
-    }> => {
-      if (
-        request.status !==
-          'pending' &&
-        request.status !==
-          'under_review'
-      ) {
-        return {
-          success: false,
-          alreadyProcessed: false,
-          errorMessage:
-            'الطلب لم يعد قابلاً للقبول.',
-        }
-      }
-
-      if (!request.levelId) {
-        return {
-          success: false,
-          alreadyProcessed: false,
-          errorMessage:
-            'المستوى الدراسي غير محدد.',
-        }
-      }
-
-      try {
-        const {
-          data,
-          error,
-        } = await supabase.rpc(
-          'approve_registration_request',
-          {
-            p_request_id:
-              request.id,
-          },
-        )
-
-        if (error) {
-          console.error(
-            'approve_registration_request error:',
-            error,
-          )
-
-          return {
-            success: false,
-            alreadyProcessed: false,
-            errorMessage:
-              error.message,
-          }
-        }
-
-        console.log(
-          'approve_registration_request result:',
-          data,
-        )
-
-        const studentId =
-          data?.student_id ??
-          null
-
-        const alreadyProcessed =
-          data?.already_processed ===
-          true
-
-        if (!studentId) {
-          return {
-            success: false,
-            alreadyProcessed,
-            errorMessage:
-              'تم تنفيذ عملية الموافقة، لكن لم يتم إرجاع رقم الطالب.',
-          }
-        }
-
-        const {
-          error:
-            studentUpdateError,
-        } = await supabase
-          .from('students')
-          .update({
-            source:
-              'registration',
-          })
-          .eq(
-            'id',
-            studentId,
-          )
-
-        if (
-          studentUpdateError
-        ) {
-          console.warn(
-            'Could not update student source:',
-            studentUpdateError,
-          )
-        }
-
-        const {
-          data: deletedRows,
-          error: deleteError,
-        } = await supabase
-          .from(
-            'registration_requests',
-          )
-          .delete()
-          .eq(
-            'id',
-            request.id,
-          )
-          .select('id')
-
-        if (deleteError) {
-          console.error(
-            'Could not delete approved request:',
-            deleteError,
-          )
-
-          return {
-            success: false,
-            alreadyProcessed,
-            errorMessage:
-              `تم إنشاء الطالب، لكن تعذر حذف طلب التسجيل: ${deleteError.message}`,
-          }
-        }
-
-        if (
-          !deletedRows ||
-          deletedRows.length === 0
-        ) {
-          console.error(
-            'Registration request was NOT deleted:',
-            {
-              requestId:
-                request.id,
-              requestNumber:
-                request.requestNumber,
-              studentId,
-              deletedRows,
-              alreadyProcessed,
-            },
-          )
-
-          return {
-            success: false,
-            alreadyProcessed,
-            errorMessage:
-              'تم إنشاء الطالب، لكن سجل طلب التسجيل لم يُحذف. تحقق من صلاحية DELETE أو RLS.',
-          }
-        }
-
-        console.log(
-          'Registration request deleted successfully:',
-          {
-            requestId:
-              request.id,
-            requestNumber:
-              request.requestNumber,
-            studentId,
-            deletedRows,
-          },
-        )
-
-        return {
-          success: true,
-          alreadyProcessed,
-        }
-      } catch (error) {
-        console.error(
-          'Unexpected approval error:',
-          error,
-        )
-
-        return {
-          success: false,
-          alreadyProcessed: false,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : 'خطأ غير معروف',
-        }
+  const approveRequestInternal = async (
+    request: RegistrationRequest,
+  ): Promise<{
+    success: boolean
+    alreadyProcessed: boolean
+    errorMessage?: string
+  }> => {
+    if (
+      request.status !== 'pending' &&
+      request.status !== 'under_review'
+    ) {
+      return {
+        success: false,
+        alreadyProcessed: false,
+        errorMessage: 'الطلب لم يعد قابلاً للقبول.',
       }
     }
+
+    if (!request.levelId) {
+      return {
+        success: false,
+        alreadyProcessed: false,
+        errorMessage: 'المستوى الدراسي غير محدد.',
+      }
+    }
+
+    try {
+      const { data, error } =
+        await approveEnrollmentRequest(request.id)
+
+      if (error) {
+        console.error(
+          'approve_registration_request error:',
+          error,
+        )
+
+        return {
+          success: false,
+          alreadyProcessed: false,
+          errorMessage: error.message,
+        }
+      }
+
+      console.log(
+        'approve_registration_request result:',
+        data,
+      )
+
+      const studentId = data?.student_id ?? null
+
+      const alreadyProcessed =
+        data?.already_processed === true
+
+      if (!studentId) {
+        return {
+          success: false,
+          alreadyProcessed,
+          errorMessage:
+            'تم تنفيذ عملية الموافقة، لكن لم يتم إرجاع رقم الطالب.',
+        }
+      }
+
+      const {
+        error: studentUpdateError,
+      } = await updateEnrollmentStudentSource(studentId)
+
+      if (studentUpdateError) {
+        console.warn(
+          'Could not update student source:',
+          studentUpdateError,
+        )
+      }
+
+      const {
+        data: deletedRows,
+        error: deleteError,
+      } = await deleteApprovedEnrollmentRequest(
+        request.id,
+      )
+
+      if (deleteError) {
+        console.error(
+          'Could not delete approved request:',
+          deleteError,
+        )
+
+        return {
+          success: false,
+          alreadyProcessed,
+          errorMessage:
+            `تم إنشاء الطالب، لكن تعذر حذف طلب التسجيل: ${deleteError.message}`,
+        }
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        console.error(
+          'Registration request was NOT deleted:',
+          {
+            requestId: request.id,
+            requestNumber: request.requestNumber,
+            studentId,
+            deletedRows,
+            alreadyProcessed,
+          },
+        )
+
+        return {
+          success: false,
+          alreadyProcessed,
+          errorMessage:
+            'تم إنشاء الطالب، لكن سجل طلب التسجيل لم يُحذف. تحقق من صلاحية DELETE أو RLS.',
+        }
+      }
+
+      console.log(
+        'Registration request deleted successfully:',
+        {
+          requestId: request.id,
+          requestNumber: request.requestNumber,
+          studentId,
+          deletedRows,
+        },
+      )
+
+      return {
+        success: true,
+        alreadyProcessed,
+      }
+    } catch (error) {
+      console.error(
+        'Unexpected approval error:',
+        error,
+      )
+
+      return {
+        success: false,
+        alreadyProcessed: false,
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : 'خطأ غير معروف',
+      }
+    }
+  }
 
   /*
    * =========================================================
@@ -1349,114 +960,95 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const approveRequest =
-    async (
-      request: RegistrationRequest,
-    ) => {
-      if (
-        request.status !==
-          'pending' &&
-        request.status !==
-          'under_review'
-      ) {
-        return
-      }
+  const approveRequest = async (
+    request: RegistrationRequest,
+  ) => {
+    if (
+      request.status !== 'pending' &&
+      request.status !== 'under_review'
+    ) {
+      return
+    }
 
-      if (!request.levelId) {
-        setStatusMessage(
-          'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
-        )
-
-        return
-      }
-
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من قبول طلب ${
-            request.requestNumber ||
-            request.name
-          }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
-        )
-
-      if (!confirmed) return
-
-      setSaving(true)
-
+    if (!request.levelId) {
       setStatusMessage(
-        'جاري قبول الطلب وترحيله إلى الطلاب...',
+        'تعذر قبول الطلب: المستوى الدراسي غير محدد.',
       )
 
-      try {
-        const result =
-          await approveRequestInternal(
-            request,
-          )
+      return
+    }
 
-        if (!result.success) {
-          setStatusMessage(
-            `تعذر ترحيل الطلب: ${
-              result.errorMessage ??
-              'خطأ غير معروف'
-            }`,
-          )
+    const confirmed = window.confirm(
+      `هل أنت متأكد من قبول طلب ${
+        request.requestNumber || request.name
+      }؟\n\nسيتم إنشاء الطالب ونقله إلى قسم الطلاب.`,
+    )
 
-          return
-        }
+    if (!confirmed) return
 
-        setRequests(
-          (current) => {
-            const next =
-              current.filter(
-                (item) =>
-                  item.id !==
-                  request.id,
-              )
+    setSaving(true)
 
-            updateEnrollmentCache({
-              requests: next,
-            })
+    setStatusMessage(
+      'جاري قبول الطلب وترحيله إلى الطلاب...',
+    )
 
-            return next
-          },
-        )
+    try {
+      const result =
+        await approveRequestInternal(request)
 
-        setSelectedRequestIds(
-          (current) =>
-            current.filter(
-              (id) =>
-                id !== request.id,
-            ),
-        )
-
-        setShowReview(false)
-        setSelectedRequest(
-          null,
-        )
-
+      if (!result.success) {
         setStatusMessage(
-          result.alreadyProcessed
-            ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
-            : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
-        )
-
-        await loadRequests()
-      } catch (error) {
-        console.error(
-          'Unexpected approval error:',
-          error,
-        )
-
-        setStatusMessage(
-          `حدث خطأ غير متوقع أثناء الترحيل: ${
-            error instanceof Error
-              ? error.message
-              : 'خطأ غير معروف'
+          `تعذر ترحيل الطلب: ${
+            result.errorMessage ?? 'خطأ غير معروف'
           }`,
         )
-      } finally {
-        setSaving(false)
+
+        return
       }
+
+      setRequests((current) => {
+        const next = current.filter(
+          (item) => item.id !== request.id,
+        )
+
+        updateEnrollmentCache({
+          requests: next,
+        })
+
+        return next
+      })
+
+      setSelectedRequestIds((current) =>
+        current.filter((id) => id !== request.id),
+      )
+
+      setShowReview(false)
+      setSelectedRequest(null)
+
+      setStatusMessage(
+        result.alreadyProcessed
+          ? 'الطلب كان مرحّل مسبقاً إلى الطلاب وتم تنظيف طلب التسجيل بنجاح ✅'
+          : 'تم قبول الطلب وإنشاء الطالب ونقله إلى قسم الطلاب بنجاح ✅',
+      )
+
+      await loadRequests()
+    } catch (error) {
+      console.error(
+        'Unexpected approval error:',
+        error,
+      )
+
+      setStatusMessage(
+        `حدث خطأ غير متوقع أثناء الترحيل: ${
+          error instanceof Error
+            ? error.message
+            : 'خطأ غير معروف'
+        }`,
+      )
+    } finally {
+      setSaving(false)
     }
+  }
 
   /*
    * =========================================================
@@ -1464,144 +1056,118 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const approveSelectedRequests =
-    async () => {
-      const selectedRequests =
-        requests.filter(
-          (request) =>
-            selectedRequestIds.includes(
-              request.id,
-            ) &&
-            (request.status ===
-              'pending' ||
-              request.status ===
-                'under_review'),
-        )
+  const approveSelectedRequests = async () => {
+    const selectedRequests = requests.filter(
+      (request) =>
+        selectedRequestIds.includes(request.id) &&
+        (request.status === 'pending' ||
+          request.status === 'under_review'),
+    )
 
-      if (
-        selectedRequests.length ===
-        0
-      ) {
-        setStatusMessage(
-          'لم يتم تحديد أي طلب قابل للقبول.',
-        )
-
-        return
-      }
-
-      const requestsWithoutLevel =
-        selectedRequests.filter(
-          (request) =>
-            !request.levelId,
-        )
-
-      if (
-        requestsWithoutLevel.length >
-        0
-      ) {
-        setStatusMessage(
-          `لا يمكن تنفيذ القبول الجماعي. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
-        )
-
-        return
-      }
-
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من قبول ${selectedRequests.length} طلب؟\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
-        )
-
-      if (!confirmed) {
-        return
-      }
-
-      setBulkApproving(true)
-      setSaving(true)
-
+    if (selectedRequests.length === 0) {
       setStatusMessage(
-        `جاري قبول ${selectedRequests.length} طلب...`,
+        'لم يتم تحديد أي طلب قابل للقبول.',
       )
 
-      let successCount = 0
-      let failedCount = 0
-      let alreadyProcessedCount =
-        0
+      return
+    }
 
-      const failedRequests: string[] =
-        []
+    const requestsWithoutLevel =
+      selectedRequests.filter(
+        (request) => !request.levelId,
+      )
 
-      try {
-        for (
-          const request of selectedRequests
-        ) {
-          const result =
-            await approveRequestInternal(
-              request,
-            )
+    if (requestsWithoutLevel.length > 0) {
+      setStatusMessage(
+        `لا يمكن تنفيذ القبول الجماعي. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
+      )
 
-          if (result.success) {
-            successCount += 1
+      return
+    }
 
-            if (
-              result.alreadyProcessed
-            ) {
-              alreadyProcessedCount +=
-                1
-            }
-          } else {
-            failedCount += 1
+    const confirmed = window.confirm(
+      `هل أنت متأكد من قبول ${selectedRequests.length} طلب؟\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
+    )
 
-            failedRequests.push(
-              request.requestNumber ||
-                request.name ||
-                request.id,
-            )
-          }
-        }
+    if (!confirmed) {
+      return
+    }
 
-        setSelectedRequestIds([])
+    setBulkApproving(true)
+    setSaving(true)
 
-        await loadRequests()
+    setStatusMessage(
+      `جاري قبول ${selectedRequests.length} طلب...`,
+    )
 
-        if (failedCount === 0) {
-          if (
-            alreadyProcessedCount >
-            0
-          ) {
-            setStatusMessage(
-              `تم قبول ${successCount} طلب بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
-            )
-          } else {
-            setStatusMessage(
-              `تم قبول وترحيل ${successCount} طلب بنجاح إلى قسم الطلاب ✅`,
-            )
+    let successCount = 0
+    let failedCount = 0
+    let alreadyProcessedCount = 0
+
+    const failedRequests: string[] = []
+
+    try {
+      for (const request of selectedRequests) {
+        const result =
+          await approveRequestInternal(request)
+
+        if (result.success) {
+          successCount += 1
+
+          if (result.alreadyProcessed) {
+            alreadyProcessedCount += 1
           }
         } else {
-          setStatusMessage(
-            `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
-          )
+          failedCount += 1
 
-          console.warn(
-            'Bulk approval failed requests:',
-            failedRequests,
+          failedRequests.push(
+            request.requestNumber ||
+              request.name ||
+              request.id,
           )
         }
-      } catch (error) {
-        console.error(
-          'Unexpected bulk approval error:',
-          error,
-        )
-
-        await loadRequests()
-
-        setStatusMessage(
-          `حدث خطأ أثناء القبول الجماعي. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
-        )
-      } finally {
-        setBulkApproving(false)
-        setSaving(false)
       }
+
+      setSelectedRequestIds([])
+
+      await loadRequests()
+
+      if (failedCount === 0) {
+        if (alreadyProcessedCount > 0) {
+          setStatusMessage(
+            `تم قبول ${successCount} طلب بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
+          )
+        } else {
+          setStatusMessage(
+            `تم قبول وترحيل ${successCount} طلب بنجاح إلى قسم الطلاب ✅`,
+          )
+        }
+      } else {
+        setStatusMessage(
+          `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
+        )
+
+        console.warn(
+          'Bulk approval failed requests:',
+          failedRequests,
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Unexpected bulk approval error:',
+        error,
+      )
+
+      await loadRequests()
+
+      setStatusMessage(
+        `حدث خطأ أثناء القبول الجماعي. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
+      )
+    } finally {
+      setBulkApproving(false)
+      setSaving(false)
     }
+  }
 
   /*
    * =========================================================
@@ -1609,141 +1175,117 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const approveAllRequests =
-    async () => {
-      const allPendingRequests =
-        requests.filter(
-          (request) =>
-            request.status ===
-              'pending' ||
-            request.status ===
-              'under_review',
-        )
+  const approveAllRequests = async () => {
+    const allPendingRequests = requests.filter(
+      (request) =>
+        request.status === 'pending' ||
+        request.status === 'under_review',
+    )
 
-      if (
-        allPendingRequests.length ===
-        0
-      ) {
-        setStatusMessage(
-          'لا توجد طلبات قابلة للقبول.',
-        )
-
-        return
-      }
-
-      const requestsWithoutLevel =
-        allPendingRequests.filter(
-          (request) =>
-            !request.levelId,
-        )
-
-      if (
-        requestsWithoutLevel.length >
-        0
-      ) {
-        setStatusMessage(
-          `لا يمكن تنفيذ قبول الكل. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
-        )
-
-        return
-      }
-
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من قبول جميع الطلبات القابلة للقبول؟\n\nعدد الطلبات: ${allPendingRequests.length}\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
-        )
-
-      if (!confirmed) {
-        return
-      }
-
-      setBulkApproving(true)
-      setSaving(true)
-
+    if (allPendingRequests.length === 0) {
       setStatusMessage(
-        `جاري قبول جميع الطلبات (${allPendingRequests.length})...`,
+        'لا توجد طلبات قابلة للقبول.',
       )
 
-      let successCount = 0
-      let failedCount = 0
-      let alreadyProcessedCount =
-        0
+      return
+    }
 
-      const failedRequests: string[] =
-        []
+    const requestsWithoutLevel =
+      allPendingRequests.filter(
+        (request) => !request.levelId,
+      )
 
-      try {
-        for (
-          const request of allPendingRequests
-        ) {
-          const result =
-            await approveRequestInternal(
-              request,
-            )
+    if (requestsWithoutLevel.length > 0) {
+      setStatusMessage(
+        `لا يمكن تنفيذ قبول الكل. يوجد ${requestsWithoutLevel.length} طلب بدون مستوى دراسي محدد.`,
+      )
 
-          if (result.success) {
-            successCount += 1
+      return
+    }
 
-            if (
-              result.alreadyProcessed
-            ) {
-              alreadyProcessedCount +=
-                1
-            }
-          } else {
-            failedCount += 1
+    const confirmed = window.confirm(
+      `هل أنت متأكد من قبول جميع الطلبات القابلة للقبول؟\n\nعدد الطلبات: ${allPendingRequests.length}\n\nسيتم إنشاء الطلاب وترحيلهم إلى قسم الطلاب.`,
+    )
 
-            failedRequests.push(
-              request.requestNumber ||
-                request.name ||
-                request.id,
-            )
-          }
-        }
+    if (!confirmed) {
+      return
+    }
 
-        setSelectedRequestIds([])
+    setBulkApproving(true)
+    setSaving(true)
 
-        await loadRequests()
+    setStatusMessage(
+      `جاري قبول جميع الطلبات (${allPendingRequests.length})...`,
+    )
 
-        if (failedCount === 0) {
-          if (
-            alreadyProcessedCount >
-            0
-          ) {
-            setStatusMessage(
-              `تم قبول جميع الطلبات (${successCount}) بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
-            )
-          } else {
-            setStatusMessage(
-              `تم قبول وترحيل جميع الطلبات (${successCount}) بنجاح إلى قسم الطلاب ✅`,
-            )
+    let successCount = 0
+    let failedCount = 0
+    let alreadyProcessedCount = 0
+
+    const failedRequests: string[] = []
+
+    try {
+      for (const request of allPendingRequests) {
+        const result =
+          await approveRequestInternal(request)
+
+        if (result.success) {
+          successCount += 1
+
+          if (result.alreadyProcessed) {
+            alreadyProcessedCount += 1
           }
         } else {
-          setStatusMessage(
-            `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
-          )
+          failedCount += 1
 
-          console.warn(
-            'Approve all failed requests:',
-            failedRequests,
+          failedRequests.push(
+            request.requestNumber ||
+              request.name ||
+              request.id,
           )
         }
-      } catch (error) {
-        console.error(
-          'Unexpected approve all error:',
-          error,
-        )
-
-        await loadRequests()
-
-        setStatusMessage(
-          `حدث خطأ أثناء قبول الكل. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
-        )
-      } finally {
-        setBulkApproving(false)
-        setSaving(false)
       }
+
+      setSelectedRequestIds([])
+
+      await loadRequests()
+
+      if (failedCount === 0) {
+        if (alreadyProcessedCount > 0) {
+          setStatusMessage(
+            `تم قبول جميع الطلبات (${successCount}) بنجاح، منها ${alreadyProcessedCount} طلب كانت مرحّلة مسبقاً ✅`,
+          )
+        } else {
+          setStatusMessage(
+            `تم قبول وترحيل جميع الطلبات (${successCount}) بنجاح إلى قسم الطلاب ✅`,
+          )
+        }
+      } else {
+        setStatusMessage(
+          `تم قبول ${successCount} طلب، وتعذر قبول ${failedCount} طلب. الطلبات التي تعذر قبولها بقيت في القائمة للمراجعة.`,
+        )
+
+        console.warn(
+          'Approve all failed requests:',
+          failedRequests,
+        )
+      }
+    } catch (error) {
+      console.error(
+        'Unexpected approve all error:',
+        error,
+      )
+
+      await loadRequests()
+
+      setStatusMessage(
+        `حدث خطأ أثناء قبول الكل. تم قبول ${successCount} طلب قبل حدوث الخطأ.`,
+      )
+    } finally {
+      setBulkApproving(false)
+      setSaving(false)
     }
+  }
 
   /*
    * =========================================================
@@ -1751,111 +1293,76 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const rejectRequest =
-    async (
-      request: RegistrationRequest,
-    ) => {
-      if (
-        request.status !==
-          'pending' &&
-        request.status !==
-          'under_review'
-      ) {
-        return
-      }
+  const rejectRequest = async (
+    request: RegistrationRequest,
+  ) => {
+    if (
+      request.status !== 'pending' &&
+      request.status !== 'under_review'
+    ) {
+      return
+    }
 
-      const confirmed =
-        window.confirm(
-          `هل أنت متأكد من رفض طلب ${
-            request.requestNumber ||
-            request.name
-          }؟`,
-        )
+    const confirmed = window.confirm(
+      `هل أنت متأكد من رفض طلب ${
+        request.requestNumber || request.name
+      }؟`,
+    )
 
-      if (!confirmed) return
+    if (!confirmed) return
 
-      setSaving(true)
+    setSaving(true)
 
+    setStatusMessage('جاري رفض الطلب...')
+
+    const { error } = await rejectEnrollmentRequest(
+      request.id,
+      new Date().toISOString(),
+    )
+
+    if (error) {
       setStatusMessage(
-        'جاري رفض الطلب...',
-      )
-
-      const {
-        error,
-      } = await supabase
-        .from(
-          'registration_requests',
-        )
-        .update({
-          status:
-            'rejected',
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'id',
-          request.id,
-        )
-
-      if (error) {
-        setStatusMessage(
-          `تعذر رفض الطلب: ${error.message}`,
-        )
-
-        setSaving(false)
-
-        return
-      }
-
-      setRequests(
-        (current) => {
-          const next =
-            current.map(
-              (item) =>
-                item.id ===
-                request.id
-                  ? {
-                      ...item,
-                      status:
-                        'rejected'as const,
-                    }
-                  : item,
-            )
-
-          updateEnrollmentCache({
-            requests: next,
-          })
-
-          return next
-        },
-      )
-
-      setSelectedRequestIds(
-        (current) =>
-          current.filter(
-            (id) =>
-              id !== request.id,
-          ),
-      )
-
-      setSelectedRequest(
-        (current) =>
-          current?.id ===
-          request.id
-            ? {
-                ...current,
-                status:
-                  'rejected' as const,
-              }
-            : current,
-      )
-
-      setStatusMessage(
-        'تم رفض الطلب.',
+        `تعذر رفض الطلب: ${error.message}`,
       )
 
       setSaving(false)
+      return
     }
+
+    setRequests((current) => {
+      const next = current.map((item) =>
+        item.id === request.id
+          ? {
+              ...item,
+              status: 'rejected' as const,
+            }
+          : item,
+      )
+
+      updateEnrollmentCache({
+        requests: next,
+      })
+
+      return next
+    })
+
+    setSelectedRequestIds((current) =>
+      current.filter((id) => id !== request.id),
+    )
+
+    setSelectedRequest((current) =>
+      current?.id === request.id
+        ? {
+            ...current,
+            status: 'rejected' as const,
+          }
+        : current,
+    )
+
+    setStatusMessage('تم رفض الطلب.')
+
+    setSaving(false)
+  }
 
   /*
    * =========================================================
@@ -1863,169 +1370,77 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const clearAllRegistrationRequests =
-    async () => {
-      if (
-        saving ||
-        bulkApproving
-      ) {
-        return
-      }
+  const clearAllRegistrationRequests = async () => {
+    if (saving || bulkApproving) {
+      return
+    }
 
-      if (requests.length === 0) {
-        setStatusMessage(
-          'لا توجد طلبات تسجيل لمسحها.',
-        )
-
-        return
-      }
-
-      const firstConfirmed =
-        window.confirm(
-          `⚠️ تنبيه مهم\n\nأنت على وشك مسح جميع طلبات التسجيل الموجودة في السنة الأكاديمية الحالية.\n\nعدد الطلبات: ${requests.length}\n\nسيتم حذف طلبات التسجيل فقط، ولن يتم حذف الطلاب أو التسجيلات أو المدفوعات.\n\nهل تريد المتابعة؟`,
-        )
-
-      if (!firstConfirmed) {
-        return
-      }
-
-      const secondConfirmed =
-        window.confirm(
-          `⚠️ تأكيد نهائي\n\nسيتم حذف ${requests.length} طلب تسجيل نهائيًا ولا يمكن التراجع عن هذه العملية.\n\nاضغط "موافق" للمتابعة.`,
-        )
-
-      if (!secondConfirmed) {
-        return
-      }
-
-      setSaving(true)
-
+    if (requests.length === 0) {
       setStatusMessage(
-        'جاري مسح طلبات التسجيل...',
+        'لا توجد طلبات تسجيل لمسحها.',
       )
 
-      try {
-        const {
-          data: academicYear,
-          error:
-            academicYearError,
-        } = await supabase
-          .from('academic_years')
-          .select('id')
-          .eq('is_current', true)
-          .eq('is_active', true)
-          .maybeSingle()
+      return
+    }
 
-        if (academicYearError) {
-          throw new Error(
-            `تعذر تحديد السنة الأكاديمية الحالية: ${academicYearError.message}`,
-          )
-        }
+    const firstConfirmed = window.confirm(
+      `⚠️ تنبيه مهم\n\nأنت على وشك مسح جميع طلبات التسجيل الموجودة في السنة الأكاديمية الحالية.\n\nعدد الطلبات: ${requests.length}\n\nسيتم حذف طلبات التسجيل فقط، ولن يتم حذف الطلاب أو التسجيلات أو المدفوعات.\n\nهل تريد المتابعة؟`,
+    )
 
-        if (!academicYear) {
-          throw new Error(
-            'لا توجد سنة أكاديمية حالية مفعلة.',
-          )
-        }
+    if (!firstConfirmed) {
+      return
+    }
 
-        const {
-          data: requestRows,
-          error:
-            requestRowsError,
-        } = await supabase
-          .from(
-            'registration_requests',
-          )
-          .select('id')
-          .eq(
-            'academic_year_id',
-            academicYear.id,
-          )
+    const secondConfirmed = window.confirm(
+      `⚠️ تأكيد نهائي\n\nسيتم حذف ${requests.length} طلب تسجيل نهائيًا ولا يمكن التراجع عن هذه العملية.\n\nاضغط "موافق" للمتابعة.`,
+    )
 
-        if (requestRowsError) {
-          throw new Error(
-            `تعذر تحميل طلبات التسجيل: ${requestRowsError.message}`,
-          )
-        }
+    if (!secondConfirmed) {
+      return
+    }
 
-        const requestIds =
-          (requestRows ?? []).map(
-            (row) => row.id,
-          )
+    setSaving(true)
 
-        if (
-          requestIds.length ===
-          0
-        ) {
-          setRequests([])
-          setSelectedRequestIds([])
-          setCustomFieldValues([])
-          setSelectedRequest(null)
-          setShowReview(false)
+    setStatusMessage(
+      'جاري مسح طلبات التسجيل...',
+    )
 
-          updateEnrollmentCache({
-            requests: [],
-            customFieldValues: [],
-          })
+    try {
+      const {
+        data: academicYear,
+        error: academicYearError,
+      } = await loadCurrentEnrollmentAcademicYearId()
 
-          setStatusMessage(
-            'لا توجد طلبات تسجيل لمسحها.',
-          )
+      if (academicYearError) {
+        throw new Error(
+          `تعذر تحديد السنة الأكاديمية الحالية: ${academicYearError.message}`,
+        )
+      }
 
-          return
-        }
+      if (!academicYear) {
+        throw new Error(
+          'لا توجد سنة أكاديمية حالية مفعلة.',
+        )
+      }
 
-        /*
-         * Delete custom field values first.
-         * These belong specifically to registration requests.
-         */
-        const {
-          error:
-            customValuesError,
-        } = await supabase
-          .from(
-            'custom_field_values',
-          )
-          .delete()
-          .eq(
-            'record_type',
-            'registration_request',
-          )
-          .in(
-            'record_id',
-            requestIds,
-          )
+      const {
+        data: requestRows,
+        error: requestRowsError,
+      } = await loadCurrentYearEnrollmentRequestIds(
+        academicYear.id,
+      )
 
-        if (customValuesError) {
-          throw new Error(
-            `تعذر مسح القيم الإضافية للطلبات: ${customValuesError.message}`,
-          )
-        }
+      if (requestRowsError) {
+        throw new Error(
+          `تعذر تحميل طلبات التسجيل: ${requestRowsError.message}`,
+        )
+      }
 
-        /*
-         * Delete requests belonging to the current academic year only.
-         */
-        const {
-          error: deleteError,
-        } = await supabase
-          .from(
-            'registration_requests',
-          )
-          .delete()
-          .eq(
-            'academic_year_id',
-            academicYear.id,
-          )
+      const requestIds = (requestRows ?? []).map(
+        (row) => row.id,
+      )
 
-        if (deleteError) {
-          throw new Error(
-            `تعذر مسح طلبات التسجيل: ${deleteError.message}`,
-          )
-        }
-
-        /*
-         * Clear local state
-         */
+      if (requestIds.length === 0) {
         setRequests([])
         setSelectedRequestIds([])
         setCustomFieldValues([])
@@ -2038,23 +1453,74 @@ export function EnrollmentView() {
         })
 
         setStatusMessage(
-          `تم مسح ${requestIds.length} طلب تسجيل بنجاح ✅`,
-        )
-      } catch (error) {
-        console.error(
-          'Clear registration requests error:',
-          error,
+          'لا توجد طلبات تسجيل لمسحها.',
         )
 
-        setStatusMessage(
-          error instanceof Error
-            ? error.message
-            : 'حدث خطأ أثناء مسح طلبات التسجيل.',
-        )
-      } finally {
-        setSaving(false)
+        return
       }
+
+      /*
+       * Delete custom field values first.
+       * These belong specifically to registration requests.
+       */
+      const {
+        error: customValuesError,
+      } = await deleteEnrollmentCustomFieldValues(
+        requestIds,
+      )
+
+      if (customValuesError) {
+        throw new Error(
+          `تعذر مسح القيم الإضافية للطلبات: ${customValuesError.message}`,
+        )
+      }
+
+      /*
+       * Delete requests belonging to the current academic year only.
+       */
+      const { error: deleteError } =
+        await deleteCurrentYearEnrollmentRequests(
+          academicYear.id,
+        )
+
+      if (deleteError) {
+        throw new Error(
+          `تعذر مسح طلبات التسجيل: ${deleteError.message}`,
+        )
+      }
+
+      /*
+       * Clear local state
+       */
+      setRequests([])
+      setSelectedRequestIds([])
+      setCustomFieldValues([])
+      setSelectedRequest(null)
+      setShowReview(false)
+
+      updateEnrollmentCache({
+        requests: [],
+        customFieldValues: [],
+      })
+
+      setStatusMessage(
+        `تم مسح ${requestIds.length} طلب تسجيل بنجاح ✅`,
+      )
+    } catch (error) {
+      console.error(
+        'Clear registration requests error:',
+        error,
+      )
+
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'حدث خطأ أثناء مسح طلبات التسجيل.',
+      )
+    } finally {
+      setSaving(false)
     }
+  }
 
   /*
    * =========================================================
@@ -2062,31 +1528,23 @@ export function EnrollmentView() {
    * =========================================================
    */
 
-  const hasFilters =
-    Object.values(
-      filters,
-    ).some(Boolean)
+  const hasFilters = Object.values(filters).some(Boolean)
 
-  const customColumnKeys =
-    useMemo(() => {
-      return customFields.map(
-        (field) =>
-          `custom:${field.id}`,
-      )
-    }, [customFields])
+  const customColumnKeys = useMemo(() => {
+    return customFields.map(
+      (field) => `custom:${field.id}`,
+    )
+  }, [customFields])
 
   const getCustomFieldValue = (
     requestId: string,
     fieldId: string,
   ) => {
-    const row =
-      customFieldValues.find(
-        (item) =>
-          item.record_id ===
-            requestId &&
-          item.custom_field_id ===
-            fieldId,
-      )
+    const row = customFieldValues.find(
+      (item) =>
+        item.record_id === requestId &&
+        item.custom_field_id === fieldId,
+    )
 
     return row?.value ?? ''
   }
@@ -2099,11 +1557,8 @@ export function EnrollmentView() {
     }
 
     return (
-      levels.find(
-        (level) =>
-          level.id === levelId,
-      )?.name ??
-      levelId
+      levels.find((level) => level.id === levelId)
+        ?.name ?? levelId
     )
   }
 
@@ -2115,75 +1570,52 @@ export function EnrollmentView() {
     }
 
     return (
-      courses.find(
-        (course) =>
-          course.id === courseId,
-      )?.name ??
-      '—'
+      courses.find((course) => course.id === courseId)
+        ?.name ?? '—'
     )
   }
 
   const isCustomColumnVisible = (
     fieldId: string,
   ) => {
-    const key =
-      `custom:${fieldId}`
+    const key = `custom:${fieldId}`
 
-    return Boolean(
-      visibleColumns[key],
-    )
+    return Boolean(visibleColumns[key])
   }
 
   const setCustomColumnVisible = (
     fieldId: string,
     value: boolean,
   ) => {
-    const key =
-      `custom:${fieldId}`
+    const key = `custom:${fieldId}`
 
-    setVisibleColumns(
-      (current) => ({
-        ...current,
-        [key]: value,
-      }),
-    )
+    setVisibleColumns((current) => ({
+      ...current,
+      [key]: value,
+    }))
   }
 
-  const toggleBaseColumn = (
-    key: ColumnKey,
-  ) => {
-    setVisibleColumns(
-      (current) => ({
-        ...current,
-        [key]: !current[key],
-      }),
-    )
+  const toggleBaseColumn = (key: ColumnKey) => {
+    setVisibleColumns((current) => ({
+      ...current,
+      [key]: !current[key],
+    }))
   }
 
   const resetColumnSettings = () => {
-    const next: Record<
-      string,
-      boolean
-    > = {
+    const next: Record<string, boolean> = {
       ...DEFAULT_COLUMNS,
     }
 
-    customColumnKeys.forEach(
-      (key) => {
-        next[key] = false
-      },
-    )
+    customColumnKeys.forEach((key) => {
+      next[key] = false
+    })
 
     setVisibleColumns(next)
   }
 
   return (
-    <div
-      className="space-y-6"
-      dir="rtl"
-    >
-   
-
+    <div className="space-y-6" dir="rtl">
       <PageHeader
         title="طلبات التسجيل"
         description={`${pendingCount} طلب بانتظار المراجعة من إجمالي ${requests.length} طلب`}
@@ -2213,8 +1645,7 @@ export function EnrollmentView() {
               <AlertTriangle className="size-4 shrink-0" />
 
               <span>
-                {specialCount}{' '}
-                طلب فيه ملاحظات أو معلومات صحية
+                {specialCount} طلب فيه ملاحظات أو معلومات صحية
               </span>
             </div>
           )}
@@ -2229,9 +1660,7 @@ export function EnrollmentView() {
             allowCurrentYearImport && (
               <Button
                 variant="outline"
-                onClick={() =>
-                  setShowImport(true)
-                }
+                onClick={() => setShowImport(true)}
                 className="shrink-0 whitespace-nowrap gap-2"
               >
                 <FileSpreadsheet className="size-4" />
@@ -2243,9 +1672,7 @@ export function EnrollmentView() {
             allowArchiveImport && (
               <Button
                 variant="outline"
-                onClick={() =>
-                  setShowArchive(true)
-                }
+                onClick={() => setShowArchive(true)}
                 className="shrink-0 whitespace-nowrap gap-2"
               >
                 <FileArchive className="size-4" />
@@ -2255,9 +1682,7 @@ export function EnrollmentView() {
 
           <Button
             variant="outline"
-            onClick={() =>
-              setShowColumnSettings(true)
-            }
+            onClick={() => setShowColumnSettings(true)}
             className="shrink-0 whitespace-nowrap gap-2"
           >
             <Settings2 className="size-4" />
@@ -2266,9 +1691,7 @@ export function EnrollmentView() {
 
           <Button
             variant="outline"
-            onClick={
-              clearAllRegistrationRequests
-            }
+            onClick={clearAllRegistrationRequests}
             disabled={
               loading ||
               saving ||
@@ -2323,78 +1746,38 @@ export function EnrollmentView() {
       <Card>
         <CardContent className="p-0">
           <EnrollmentTables
-            externalRequests={
-              externalRequests
-            }
-            importedRequests={
-              importedRequests
-            }
+            externalRequests={externalRequests}
+            importedRequests={importedRequests}
             loading={loading}
-            visibleColumns={
-              visibleColumns
-            }
-            customFields={
-              customFields
-            }
-            customFieldValues={
-              customFieldValues
-            }
+            visibleColumns={visibleColumns}
+            customFields={customFields}
+            customFieldValues={customFieldValues}
             levels={levels}
             filters={filters}
-            updateFilter={
-              updateFilter
-            }
-            openReview={
-              openReview
-            }
-            getLevelName={
-              getLevelName
-            }
-            getCourseName={
-              getCourseName
-            }
-            getCustomFieldValue={
-              getCustomFieldValue
-            }
+            updateFilter={updateFilter}
+            openReview={openReview}
+            getLevelName={getLevelName}
+            getCourseName={getCourseName}
+            getCustomFieldValue={getCustomFieldValue}
             getCustomFieldDisplayValue={
               getCustomFieldDisplayValue
             }
-            getStatusLabel={
-              getStatusLabel
-            }
-            formatDate={
-              formatDate
-            }
-            hasHealthNotes={
-              hasHealthNotes
-            }
-            hasNotes={
-              hasNotes
-            }
-            hasSpecialInformation={
-              hasSpecialInformation
-            }
-            selectedRequestIds={
-              selectedRequestIds
-            }
+            getStatusLabel={getStatusLabel}
+            formatDate={formatDate}
+            hasHealthNotes={hasHealthNotes}
+            hasNotes={hasNotes}
+            hasSpecialInformation={hasSpecialInformation}
+            selectedRequestIds={selectedRequestIds}
             toggleRequestSelection={
               toggleRequestSelection
             }
-            selectAllRequests={
-              selectAllRequests
-            }
-            clearSelectedRequests={
-              clearSelectedRequests
-            }
+            selectAllRequests={selectAllRequests}
+            clearSelectedRequests={clearSelectedRequests}
             approveSelectedRequests={
               approveSelectedRequests
             }
-            approveAllRequests={
-              approveAllRequests
-            }
-            bulkApproving={
-              bulkApproving
-            }
+            approveAllRequests={approveAllRequests}
+            bulkApproving={bulkApproving}
           />
 
           {hasFilters && (
@@ -2405,19 +1788,14 @@ export function EnrollmentView() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Filter className="size-4 shrink-0" />
 
-                عرض{' '}
-                {filteredRequests.length}{' '}
-                من{' '}
-                {requests.length}{' '}
-                طلب
+                عرض {filteredRequests.length} من{' '}
+                {requests.length} طلب
               </div>
 
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={
-                  clearFilters
-                }
+                onClick={clearFilters}
                 className="shrink-0 whitespace-nowrap"
               >
                 مسح الفلاتر
@@ -2435,7 +1813,6 @@ export function EnrollmentView() {
           }}
           onImported={async () => {
             setShowImport(false)
-
             await loadRequests()
           }}
         />
@@ -2444,9 +1821,7 @@ export function EnrollmentView() {
       {/* استيراد الأرشيف */}
       {showArchive && (
         <EnrollmentArchive
-          onClose={() =>
-            setShowArchive(false)
-          }
+          onClose={() => setShowArchive(false)}
         />
       )}
 
@@ -2471,9 +1846,7 @@ export function EnrollmentView() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() =>
-                  setShowColumnSettings(false)
-                }
+                onClick={() => setShowColumnSettings(false)}
               >
                 <X className="size-4" />
               </Button>
@@ -2485,30 +1858,21 @@ export function EnrollmentView() {
                   الحقول الأساسية
                 </div>
 
-                {Object.keys(
-                  DEFAULT_COLUMNS,
-                ).map((key) => {
+                {Object.keys(DEFAULT_COLUMNS).map((key) => {
                   const column =
                     {
                       name: 'اسم الطالب',
-                      personal_id:
-                        'الرقم الشخصي',
+                      personal_id: 'الرقم الشخصي',
                       gender: 'الجنس',
                       age: 'العمر',
                       phone: 'رقم الهاتف',
-                      whatsapp:
-                        'الواتساب',
-                      guardian_relation:
-                        'صلة القرابة',
-                      student_phone:
-                        'رقم الطالب',
-                      course:
-                        'دورة الالتحاق',
+                      whatsapp: 'الواتساب',
+                      guardian_relation: 'صلة القرابة',
+                      student_phone: 'رقم الطالب',
+                      course: 'دورة الالتحاق',
                       level: 'المستوى',
-                      created_at:
-                        'تاريخ التقديم',
-                      request_number:
-                        'رقم الطلب',
+                      created_at: 'تاريخ التقديم',
+                      request_number: 'رقم الطلب',
                       status: 'الحالة',
                     }[key] ?? key
 
@@ -2523,13 +1887,9 @@ export function EnrollmentView() {
 
                       <input
                         type="checkbox"
-                        checked={Boolean(
-                          visibleColumns[key],
-                        )}
+                        checked={Boolean(visibleColumns[key])}
                         onChange={() =>
-                          toggleBaseColumn(
-                            key as ColumnKey,
-                          )
+                          toggleBaseColumn(key as ColumnKey)
                         }
                         className="size-4"
                       />
@@ -2541,62 +1901,52 @@ export function EnrollmentView() {
                   الحقول الإضافية
                 </div>
 
-                {customFields.length ===
-                0 ? (
+                {customFields.length === 0 ? (
                   <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
                     لا توجد حقول إضافية مضافة للتسجيل حاليًا.
                   </div>
                 ) : (
-                  customFields.map(
-                    (field) => (
-                      <label
-                        key={field.id}
-                        className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
-                      >
-                        <div>
-                          <div className="text-sm font-medium">
-                            {field.name}
-                          </div>
-
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {field.field_type ===
-                            'text'
-                              ? 'نص'
-                              : field.field_type ===
-                                  'number'
-                                ? 'رقم'
-                                : field.field_type ===
-                                    'date'
-                                  ? 'تاريخ'
-                                  : field.field_type ===
-                                      'select'
-                                    ? 'اختيار'
-                                    : field.field_type ===
-                                        'boolean'
-                                      ? 'نعم / لا'
-                                      : field.field_type ===
-                                          'textarea'
-                                        ? 'نص طويل'
-                                        : field.field_type}
-                          </div>
+                  customFields.map((field) => (
+                    <label
+                      key={field.id}
+                      className="flex cursor-pointer items-center justify-between rounded-lg border px-4 py-3 transition-colors hover:bg-muted/40"
+                    >
+                      <div>
+                        <div className="text-sm font-medium">
+                          {field.name}
                         </div>
 
-                        <input
-                          type="checkbox"
-                          checked={isCustomColumnVisible(
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {field.field_type === 'text'
+                            ? 'نص'
+                            : field.field_type === 'number'
+                              ? 'رقم'
+                              : field.field_type === 'date'
+                                ? 'تاريخ'
+                                : field.field_type === 'select'
+                                  ? 'اختيار'
+                                  : field.field_type === 'boolean'
+                                    ? 'نعم / لا'
+                                    : field.field_type ===
+                                        'textarea'
+                                      ? 'نص طويل'
+                                      : field.field_type}
+                        </div>
+                      </div>
+
+                      <input
+                        type="checkbox"
+                        checked={isCustomColumnVisible(field.id)}
+                        onChange={(event) =>
+                          setCustomColumnVisible(
                             field.id,
-                          )}
-                          onChange={(event) =>
-                            setCustomColumnVisible(
-                              field.id,
-                              event.target.checked,
-                            )
-                          }
-                          className="size-4"
-                        />
-                      </label>
-                    ),
-                  )
+                            event.target.checked,
+                          )
+                        }
+                        className="size-4"
+                      />
+                    </label>
+                  ))
                 )}
               </div>
             </div>
@@ -2607,17 +1957,13 @@ export function EnrollmentView() {
             >
               <Button
                 variant="ghost"
-                onClick={
-                  resetColumnSettings
-                }
+                onClick={resetColumnSettings}
               >
                 استعادة الافتراضي
               </Button>
 
               <Button
-                onClick={() =>
-                  setShowColumnSettings(false)
-                }
+                onClick={() => setShowColumnSettings(false)}
               >
                 تم
               </Button>
@@ -2627,430 +1973,382 @@ export function EnrollmentView() {
       )}
 
       {/* مراجعة الطلب */}
-      {showReview &&
-        selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl"
-              dir="rtl"
-            >
-              <div className="flex items-center justify-between border-b p-5">
-                <div>
-                  <h2 className="text-lg font-semibold">
-                    مراجعة طلب التسجيل
-                  </h2>
+      {showReview && selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background shadow-xl"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b p-5">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  مراجعة طلب التسجيل
+                </h2>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <p className="text-sm text-muted-foreground">
-                      {selectedRequest.requestNumber ||
-                        selectedRequest.id}
-                    </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedRequest.requestNumber ||
+                      selectedRequest.id}
+                  </p>
 
-                    {selectedRequest.source ===
-                      'import' && (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                        مستورد من Excel
-                      </span>
-                    )}
-                  </div>
+                  {selectedRequest.source === 'import' && (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                      مستورد من Excel
+                    </span>
+                  )}
                 </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={closeReview}
-                  disabled={saving}
-                >
-                  <X className="size-4" />
-                </Button>
               </div>
 
-              <div className="space-y-5 p-5">
-                {hasSpecialInformation(
-                  selectedRequest,
-                ) && (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={closeReview}
+                disabled={saving}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
 
-                      <div>
-                        <p className="font-semibold">
-                          تنبيه: توجد معلومات تحتاج الانتباه
-                        </p>
+            <div className="space-y-5 p-5">
+              {hasSpecialInformation(selectedRequest) && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 size-5 shrink-0" />
 
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {hasHealthNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
-                              🩺 يحتوي على معلومات صحية
-                            </span>
-                          )}
+                    <div>
+                      <p className="font-semibold">
+                        تنبيه: توجد معلومات تحتاج الانتباه
+                      </p>
 
-                          {hasNotes(
-                            selectedRequest,
-                          ) && (
-                            <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                              📝 يحتوي على ملاحظات
-                            </span>
-                          )}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {hasHealthNotes(selectedRequest) && (
+                          <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700">
+                            🩺 يحتوي على معلومات صحية
+                          </span>
+                        )}
+
+                        {hasNotes(selectedRequest) && (
+                          <span className="rounded-full border border-amber-200 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                            📝 يحتوي على ملاحظات
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    اسم الطالب
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.name || 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الرقم الشخصي
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.personalId || 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    صلة القرابة
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.guardianRelation ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    رقم الطالب
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.studentPhone ||
+                      'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    العمر
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.age ?? 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الجنس
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {selectedRequest.gender || 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    رقم الهاتف
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.phone || 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    الواتساب
+                  </p>
+                  <p className="mt-1 font-medium tabular-nums">
+                    {selectedRequest.whatsapp || 'غير مضاف'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    المستوى
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {getLevelName(selectedRequest.levelId)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    دورة الالتحاق
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {getCourseName(selectedRequest.courseId)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    تاريخ التقديم
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {formatDate(selectedRequest.createdAt)}
+                  </p>
+                </div>
+              </div>
+
+              {customFields.length > 0 && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    الحقول الإضافية
+                  </p>
+
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    {customFields.map((field) => {
+                      const value = getCustomFieldValue(
+                        selectedRequest.id,
+                        field.id,
+                      )
+
+                      return (
+                        <div key={field.id}>
+                          <p className="text-xs text-muted-foreground">
+                            {field.name}
+                          </p>
+
+                          <p className="mt-1 whitespace-pre-wrap font-medium">
+                            {getCustomFieldDisplayValue(
+                              field,
+                              value,
+                            )}
+                          </p>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      اسم الطالب
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.name ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الرقم الشخصي
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.personalId ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      صلة القرابة
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.guardianRelation ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      رقم الطالب
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.studentPhone ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      العمر
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.age ??
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الجنس
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {selectedRequest.gender ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      رقم الهاتف
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.phone ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      الواتساب
-                    </p>
-                    <p className="mt-1 font-medium tabular-nums">
-                      {selectedRequest.whatsapp ||
-                        'غير مضاف'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      المستوى
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {getLevelName(
-                        selectedRequest.levelId,
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      دورة الالتحاق
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {getCourseName(
-                        selectedRequest.courseId,
-                      )}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      تاريخ التقديم
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {formatDate(
-                        selectedRequest.createdAt,
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {customFields.length > 0 && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm font-medium">
-                      الحقول الإضافية
-                    </p>
-
-                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                      {customFields.map(
-                        (field) => {
-                          const value =
-                            getCustomFieldValue(
-                              selectedRequest.id,
-                              field.id,
-                            )
-
-                          return (
-                            <div
-                              key={field.id}
-                            >
-                              <p className="text-xs text-muted-foreground">
-                                {field.name}
-                              </p>
-
-                              <p className="mt-1 whitespace-pre-wrap font-medium">
-                                {getCustomFieldDisplayValue(
-                                  field,
-                                  value,
-                                )}
-                              </p>
-                            </div>
-                          )
-                        },
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    المعلومات الصحية
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasHealthNotes(
-                        selectedRequest,
                       )
-                        ? 'font-medium text-rose-700'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {selectedRequest.healthNotes ||
-                      'لا توجد معلومات صحية'}
-                  </p>
-                </div>
-
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm font-medium">
-                    الملاحظات
-                  </p>
-
-                  <p
-                    className={`mt-2 whitespace-pre-wrap text-sm ${
-                      hasNotes(
-                        selectedRequest,
-                      )
-                        ? 'font-medium text-amber-800'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {selectedRequest.notes ||
-                      'لا توجد ملاحظات'}
-                  </p>
-                </div>
-
-                {selectedRequest.paymentMethod && (
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm font-medium">
-                      بيانات الدفع
-                    </p>
-
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          طريقة الدفع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {
-                            selectedRequest.paymentMethod
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المبلغ المدخل
-                        </p>
-                        <p className="mt-1 font-medium tabular-nums">
-                          {formatAmount(
-                            selectedRequest.paymentAmount,
-                          )}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          المرجع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {selectedRequest.paymentReference ||
-                            '—'}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          حالة الدفع
-                        </p>
-                        <p className="mt-1 font-medium">
-                          {selectedRequest.paymentStatus ===
-                          'verified'
-                            ? 'تم التحقق'
-                            : selectedRequest.paymentStatus ===
-                                'rejected'
-                              ? 'مرفوض'
-                              : selectedRequest.paymentStatus ===
-                                  'pending'
-                                ? 'بانتظار التحقق'
-                                : 'غير مطلوب'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedRequest.paymentProofUrl && (
-                      <a
-                        href={
-                          selectedRequest.paymentProofUrl
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 inline-flex text-sm font-medium text-primary underline"
-                      >
-                        عرض إثبات الدفع
-                      </a>
-                    )}
+                    })}
                   </div>
-                )}
+                </div>
+              )}
 
-                {selectedRequest.rejectionReason && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
-                    <p className="text-sm font-medium">
-                      سبب الرفض
-                    </p>
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  المعلومات الصحية
+                </p>
 
-                    <p className="mt-2 text-sm">
-                      {
-                        selectedRequest.rejectionReason
-                      }
-                    </p>
-                  </div>
-                )}
-
-                {/* أزرار المراجعة */}
-                <div
-                  className="flex flex-wrap items-center justify-start gap-2 border-t pt-4"
-                  dir="rtl"
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasHealthNotes(selectedRequest)
+                      ? 'font-medium text-rose-700'
+                      : 'text-muted-foreground'
+                  }`}
                 >
-                  <Button
-                    variant="ghost"
-                    onClick={closeReview}
-                    disabled={saving}
-                    className="shrink-0 whitespace-nowrap"
-                  >
-                    إغلاق
-                  </Button>
+                  {selectedRequest.healthNotes ||
+                    'لا توجد معلومات صحية'}
+                </p>
+              </div>
 
-                  {(selectedRequest.status ===
-                    'pending' ||
-                    selectedRequest.status ===
-                      'under_review') && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          rejectRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          bulkApproving
-                        }
-                        className="shrink-0 whitespace-nowrap gap-2 border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <X className="size-4" />
-                        )}
-                        رفض الطلب
-                      </Button>
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium">
+                  الملاحظات
+                </p>
 
-                      <Button
-                        onClick={() =>
-                          approveRequest(
-                            selectedRequest,
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          bulkApproving
-                        }
-                        className="shrink-0 whitespace-nowrap gap-2"
-                      >
-                        {saving ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Check className="size-4" />
-                        )}
-                        قبول وترحيل للطلاب
-                      </Button>
-                    </>
-                  )}
+                <p
+                  className={`mt-2 whitespace-pre-wrap text-sm ${
+                    hasNotes(selectedRequest)
+                      ? 'font-medium text-amber-800'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {selectedRequest.notes || 'لا توجد ملاحظات'}
+                </p>
+              </div>
 
-                  {selectedRequest.status ===
-                    'approved' && (
-                    <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                      <Check className="size-4" />
-                      تم قبول الطلب وترحيله للطلاب
+              {selectedRequest.paymentMethod && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm font-medium">
+                    بيانات الدفع
+                  </p>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        طريقة الدفع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentMethod}
+                      </p>
                     </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المبلغ المدخل
+                      </p>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatAmount(
+                          selectedRequest.paymentAmount,
+                        )}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        المرجع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentReference ||
+                          '—'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        حالة الدفع
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {selectedRequest.paymentStatus ===
+                        'verified'
+                          ? 'تم التحقق'
+                          : selectedRequest.paymentStatus ===
+                              'rejected'
+                            ? 'مرفوض'
+                            : selectedRequest.paymentStatus ===
+                                'pending'
+                              ? 'بانتظار التحقق'
+                              : 'غير مطلوب'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedRequest.paymentProofUrl && (
+                    <a
+                      href={selectedRequest.paymentProofUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex text-sm font-medium text-primary underline"
+                    >
+                      عرض إثبات الدفع
+                    </a>
                   )}
                 </div>
+              )}
+
+              {selectedRequest.rejectionReason && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+                  <p className="text-sm font-medium">
+                    سبب الرفض
+                  </p>
+
+                  <p className="mt-2 text-sm">
+                    {selectedRequest.rejectionReason}
+                  </p>
+                </div>
+              )}
+
+              {/* أزرار المراجعة */}
+              <div
+                className="flex flex-wrap items-center justify-start gap-2 border-t pt-4"
+                dir="rtl"
+              >
+                <Button
+                  variant="ghost"
+                  onClick={closeReview}
+                  disabled={saving}
+                  className="shrink-0 whitespace-nowrap"
+                >
+                  إغلاق
+                </Button>
+
+                {(selectedRequest.status === 'pending' ||
+                  selectedRequest.status ===
+                    'under_review') && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        rejectRequest(selectedRequest)
+                      }
+                      disabled={saving || bulkApproving}
+                      className="shrink-0 whitespace-nowrap gap-2 border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50 hover:text-red-800"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <X className="size-4" />
+                      )}
+                      رفض الطلب
+                    </Button>
+
+                    <Button
+                      onClick={() =>
+                        approveRequest(selectedRequest)
+                      }
+                      disabled={saving || bulkApproving}
+                      className="shrink-0 whitespace-nowrap gap-2"
+                    >
+                      {saving ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Check className="size-4" />
+                      )}
+                      قبول وترحيل للطلاب
+                    </Button>
+                  </>
+                )}
+
+                {selectedRequest.status === 'approved' && (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+                    <Check className="size-4" />
+                    تم قبول الطلب وترحيله للطلاب
+                  </div>
+                )}
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   )
 }
