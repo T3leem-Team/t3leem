@@ -13,6 +13,9 @@ const supabaseAdmin = createClient(
   },
 )
 
+/**
+ * تحميل سجل دفعات طالب في سنة دراسية محددة.
+ */
 export async function loadStudentPaymentHistory(
   studentId: string,
   academicYearId: string,
@@ -38,4 +41,271 @@ export async function loadStudentPaymentHistory(
     .order('created_at', {
       ascending: false,
     })
+}
+
+/**
+ * تحميل السنة الدراسية الحالية.
+ */
+export async function loadCurrentPaymentsAcademicYear() {
+  return await supabaseAdmin
+    .from('academic_years')
+    .select('id, name, annual_fee')
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+}
+
+/**
+ * تحميل سنة دراسية محددة بشرط أن تكون الحالية والنشطة.
+ */
+export async function loadActivePaymentsAcademicYear(
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('academic_years')
+    .select('id, name, annual_fee')
+    .eq('id', academicYearId)
+    .eq('is_current', true)
+    .eq('is_active', true)
+    .maybeSingle()
+}
+
+/**
+ * تحميل الطلاب.
+ */
+export async function loadPaymentsStudents() {
+  return await supabaseAdmin
+    .from('students')
+    .select(
+      'id, name, personal_id, fee_exempt, created_at',
+    )
+    .order('created_at', {
+      ascending: false,
+    })
+}
+
+/**
+ * تحميل تسجيلات الطلاب للسنة الدراسية.
+ */
+export async function loadPaymentsEnrollments(
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('enrollments')
+    .select('student_id, level_id, course_id')
+    .eq('academic_year_id', academicYearId)
+    .eq('status', 'نشط')
+}
+
+/**
+ * تحميل دفعات السنة الدراسية.
+ */
+export async function loadPaymentsByAcademicYear(
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .select(`
+      id,
+      student_id,
+      academic_year_id,
+      course_id,
+      amount,
+      payment_method,
+      payment_date,
+      reference_number,
+      notes,
+      created_at
+    `)
+    .eq('academic_year_id', academicYearId)
+    .order('payment_date', {
+      ascending: false,
+    })
+    .order('created_at', {
+      ascending: false,
+    })
+}
+
+/**
+ * تحميل المستويات النشطة.
+ */
+export async function loadActivePaymentLevels() {
+  return await supabaseAdmin
+    .from('levels')
+    .select('id, name, sort_order')
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+      nullsFirst: false,
+    })
+}
+
+/**
+ * تحميل طالب محدد لإضافة أو تعديل دفعة.
+ */
+export async function loadPaymentStudent(
+  studentId: string,
+) {
+  return await supabaseAdmin
+    .from('students')
+    .select('id, name, personal_id, fee_exempt')
+    .eq('id', studentId)
+    .maybeSingle()
+}
+
+/**
+ * تحميل تسجيل الطالب النشط.
+ */
+export async function loadActivePaymentEnrollment(
+  studentId: string,
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('enrollments')
+    .select('id, course_id')
+    .eq('student_id', studentId)
+    .eq('academic_year_id', academicYearId)
+    .eq('status', 'نشط')
+    .maybeSingle()
+}
+
+/**
+ * تحميل تسجيل الطالب النشط مع course_id.
+ * يستخدم عند الحاجة لتحديد كورس دفعة قديمة.
+ */
+export async function loadPaymentEnrollmentCourse(
+  studentId: string,
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('enrollments')
+    .select('course_id')
+    .eq('student_id', studentId)
+    .eq('academic_year_id', academicYearId)
+    .eq('status', 'نشط')
+    .maybeSingle()
+}
+
+/**
+ * تحميل الكورسات للسنة الدراسية.
+ * نطلب سجلين كحد أقصى حتى نعرف هل يوجد كورس وحيد.
+ */
+export async function loadPaymentCourses(
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('courses')
+    .select('id')
+    .eq('academic_year_id', academicYearId)
+    .limit(2)
+}
+
+/**
+ * تحميل مبالغ دفعات الطالب في السنة الدراسية.
+ */
+export async function loadStudentPaymentsForYear(
+  studentId: string,
+  academicYearId: string,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .select('amount')
+    .eq('student_id', studentId)
+    .eq('academic_year_id', academicYearId)
+}
+
+/**
+ * تحميل مبالغ دفعات الطالب باستثناء دفعة محددة.
+ */
+export async function loadOtherStudentPaymentsForYear(
+  studentId: string,
+  academicYearId: string,
+  excludedPaymentId: string,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .select('amount')
+    .eq('student_id', studentId)
+    .eq('academic_year_id', academicYearId)
+    .neq('id', excludedPaymentId)
+}
+
+/**
+ * تحميل دفعة محددة للتعديل.
+ */
+export async function loadPaymentForUpdate(
+  paymentId: string,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .select(`
+      id,
+      student_id,
+      academic_year_id,
+      course_id,
+      amount
+    `)
+    .eq('id', paymentId)
+    .maybeSingle()
+}
+
+const PAYMENT_RETURN_FIELDS = `
+  id,
+  student_id,
+  academic_year_id,
+  course_id,
+  amount,
+  payment_method,
+  payment_date,
+  reference_number,
+  notes,
+  created_at
+`
+
+export type StudentPaymentInput = {
+  student_id: string
+  academic_year_id: string
+  course_id: string
+  amount: number
+  payment_method: string
+  payment_date: string
+  reference_number: string | null
+  notes: string | null
+}
+
+export type UpdateStudentPaymentInput = {
+  course_id: string
+  amount: number
+  payment_method: string
+  payment_date: string
+  reference_number: string | null
+  notes: string | null
+}
+
+/**
+ * إنشاء دفعة طالب.
+ */
+export async function insertStudentPayment(
+  input: StudentPaymentInput,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .insert(input)
+    .select(PAYMENT_RETURN_FIELDS)
+    .single()
+}
+
+/**
+ * تحديث دفعة طالب.
+ */
+export async function updateStudentPayment(
+  paymentId: string,
+  input: UpdateStudentPaymentInput,
+) {
+  return await supabaseAdmin
+    .from('payments')
+    .update(input)
+    .eq('id', paymentId)
+    .select(PAYMENT_RETURN_FIELDS)
+    .single()
 }
