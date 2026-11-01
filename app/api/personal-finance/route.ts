@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadPersonalFinancialCycle,
+  loadPersonalFinancialCycles,
+  loadPersonalFinancialTransactions,
+  insertPersonalFinancialCycle,
+  insertPersonalFinancialTransaction,
+  loadPersonalFinancialTransaction,
+  updatePersonalFinancialCycle,
+  touchPersonalFinancialCycle,
+  deletePersonalFinancialCycle,
+  deletePersonalFinancialTransaction,
+  deletePersonalFinancialTransactionsByCycle,
+} from '@/lib/features/payments/repositories/personal-finance-admin.repository'
 
 async function checkAccess() {
   return validateDashboardSection('payments')
@@ -32,11 +34,7 @@ async function getOwnedCycle(
   cycleId: string,
 ) {
   const { data, error } =
-    await supabaseAdmin
-      .from('personal_financial_cycles')
-      .select('*')
-      .eq('id', cycleId)
-      .maybeSingle()
+    await loadPersonalFinancialCycle(cycleId)
 
   if (error) {
     throw error
@@ -49,29 +47,7 @@ async function getCycleTransactions(
   cycleId: string,
 ) {
   const { data, error } =
-    await supabaseAdmin
-      .from(
-        'personal_financial_transactions',
-      )
-      .select(`
-        id,
-        cycle_id,
-        transaction_type,
-        amount,
-        description,
-        note,
-        adjustment_sign,
-        balance_after,
-        created_by,
-        created_at
-      `)
-      .eq('cycle_id', cycleId)
-      .order('created_at', {
-        ascending: true,
-      })
-      .order('id', {
-        ascending: true,
-      })
+    await loadPersonalFinancialTransactions(cycleId)
 
   if (error) {
     throw error
@@ -92,23 +68,18 @@ function calculateBalance(
         Number(transaction.amount) || 0
 
       if (
-        transaction.transaction_type ===
-        'in'
+        transaction.transaction_type === 'in'
       ) {
         balance += amount
       } else if (
-        transaction.transaction_type ===
-        'out'
+        transaction.transaction_type === 'out'
       ) {
         balance -= amount
       } else if (
-        transaction.transaction_type ===
-        'adjustment'
+        transaction.transaction_type === 'adjustment'
       ) {
         const sign =
-          Number(
-            transaction.adjustment_sign,
-          ) === -1
+          Number(transaction.adjustment_sign) === -1
             ? -1
             : 1
 
@@ -173,50 +144,18 @@ export async function GET(
   }
 
   try {
-    const url = new URL(
-      request.url,
-    )
+    const url = new URL(request.url)
 
     const action =
-      url.searchParams.get(
-        'action',
-      ) ?? 'cycles'
+      url.searchParams.get('action') ?? 'cycles'
 
     // =========================================
     // تحميل الدفاتر
     // =========================================
 
-    if (
-      action === 'cycles'
-    ) {
+    if (action === 'cycles') {
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .select(`
-            id,
-            name,
-            initial_balance,
-            initial_source,
-            initial_note,
-            status,
-            created_by,
-            created_at,
-            closed_by,
-            closed_at,
-            close_note,
-            reopened_by,
-            reopened_at,
-            reopen_note,
-            updated_at
-          `)
-          .order(
-            'created_at',
-            {
-              ascending: false,
-            },
-          )
+        await loadPersonalFinancialCycles()
 
       if (error) {
         throw error
@@ -231,14 +170,9 @@ export async function GET(
     // تحميل عمليات دفتر
     // =========================================
 
-    if (
-      action ===
-      'transactions'
-    ) {
+    if (action === 'transactions') {
       const cycleId =
-        url.searchParams.get(
-          'cycleId',
-        )
+        url.searchParams.get('cycleId')
 
       if (!cycleId) {
         return errorResponse(
@@ -247,9 +181,7 @@ export async function GET(
       }
 
       const cycle =
-        await getOwnedCycle(
-          cycleId,
-        )
+        await getOwnedCycle(cycleId)
 
       if (!cycle) {
         return errorResponse(
@@ -259,25 +191,18 @@ export async function GET(
       }
 
       const transactions =
-        await getCycleTransactions(
-          cycleId,
-        )
+        await getCycleTransactions(cycleId)
 
       const result =
         calculateBalance(
-          Number(
-            cycle.initial_balance ??
-              0,
-          ),
+          Number(cycle.initial_balance ?? 0),
           transactions,
         )
 
       return NextResponse.json({
         cycle,
-        transactions:
-          result.transactions,
-        currentBalance:
-          result.balance,
+        transactions: result.transactions,
+        currentBalance: result.balance,
       })
     }
 
@@ -328,32 +253,21 @@ export async function POST(
   }
 
   try {
-    const body =
-      await request.json()
+    const body = await request.json()
 
     const action =
-      String(
-        body.action ?? '',
-      ).trim()
+      String(body.action ?? '').trim()
 
     // =========================================
     // إنشاء دفتر جديد
     // =========================================
 
-    if (
-      action ===
-      'create-cycle'
-    ) {
+    if (action === 'create-cycle') {
       const name =
-        String(
-          body.name ?? '',
-        ).trim()
+        String(body.name ?? '').trim()
 
       const initialBalance =
-        Number(
-          body.initial_balance ??
-            0,
-        )
+        Number(body.initial_balance ?? 0)
 
       if (!name) {
         return errorResponse(
@@ -362,9 +276,7 @@ export async function POST(
       }
 
       if (
-        !Number.isFinite(
-          initialBalance,
-        ) ||
+        !Number.isFinite(initialBalance) ||
         initialBalance < 0
       ) {
         return errorResponse(
@@ -373,32 +285,17 @@ export async function POST(
       }
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .insert({
-            name,
-            initial_balance:
-              Number(
-                initialBalance.toFixed(
-                  3,
-                ),
-              ),
-            initial_source:
-              String(
-                body.initial_source ??
-                  '',
-              ).trim() || null,
-            initial_note:
-              String(
-                body.initial_note ??
-                  '',
-              ).trim() || null,
-            status: 'open',
-          })
-          .select()
-          .single()
+        await insertPersonalFinancialCycle({
+          name,
+          initial_balance: Number(
+            initialBalance.toFixed(3),
+          ),
+          initial_source:
+            String(body.initial_source ?? '').trim() || null,
+          initial_note:
+            String(body.initial_note ?? '').trim() || null,
+          status: 'open',
+        })
 
       if (error) {
         throw error
@@ -416,27 +313,18 @@ export async function POST(
     // إضافة عملية
     // =========================================
 
-    if (
-      action ===
-      'add-transaction'
-    ) {
+    if (action === 'add-transaction') {
       const cycleId =
-        String(
-          body.cycle_id ?? '',
-        ).trim()
+        String(body.cycle_id ?? '').trim()
 
       const transactionType =
         body.transaction_type
 
       const amount =
-        normalizeAmount(
-          body.amount,
-        )
+        normalizeAmount(body.amount)
 
       const description =
-        String(
-          body.description ?? '',
-        ).trim()
+        String(body.description ?? '').trim()
 
       if (!cycleId) {
         return errorResponse(
@@ -449,9 +337,7 @@ export async function POST(
           'in',
           'out',
           'adjustment',
-        ].includes(
-          transactionType,
-        )
+        ].includes(transactionType)
       ) {
         return errorResponse(
           'نوع العملية غير صحيح.',
@@ -471,9 +357,7 @@ export async function POST(
       }
 
       const cycle =
-        await getOwnedCycle(
-          cycleId,
-        )
+        await getOwnedCycle(cycleId)
 
       if (!cycle) {
         return errorResponse(
@@ -486,33 +370,21 @@ export async function POST(
       // الدفتر المغلق لا يقبل عمليات جديدة
       // =========================================
 
-      if (
-        cycle.status !==
-        'open'
-      ) {
+      if (cycle.status !== 'open') {
         return errorResponse(
           'الدفتر مغلق ولا يمكن إضافة عمليات جديدة.',
         )
       }
 
-      let adjustmentSign:
-        | number
-        | null = null
+      let adjustmentSign: number | null = null
 
-      if (
-        transactionType ===
-        'adjustment'
-      ) {
+      if (transactionType === 'adjustment') {
         adjustmentSign =
-          Number(
-            body.adjustment_sign,
-          )
+          Number(body.adjustment_sign)
 
         if (
-          adjustmentSign !==
-            1 &&
-          adjustmentSign !==
-            -1
+          adjustmentSign !== 1 &&
+          adjustmentSign !== -1
         ) {
           return errorResponse(
             'يجب تحديد اتجاه التسوية.',
@@ -521,101 +393,50 @@ export async function POST(
       }
 
       const transactions =
-        await getCycleTransactions(
-          cycleId,
-        )
+        await getCycleTransactions(cycleId)
 
       const current =
         calculateBalance(
-          Number(
-            cycle.initial_balance ??
-              0,
-          ),
+          Number(cycle.initial_balance ?? 0),
           transactions,
         )
 
-      let newBalance =
-        current.balance
+      let newBalance = current.balance
 
-      if (
-        transactionType ===
-        'in'
-      ) {
+      if (transactionType === 'in') {
         newBalance += amount
-      } else if (
-        transactionType ===
-        'out'
-      ) {
+      } else if (transactionType === 'out') {
         newBalance -= amount
-      } else if (
-        transactionType ===
-        'adjustment'
-      ) {
+      } else if (transactionType === 'adjustment') {
         newBalance +=
-          amount *
-          Number(
-            adjustmentSign,
-          )
+          amount * Number(adjustmentSign)
       }
 
       newBalance = Number(
-        newBalance.toFixed(
-          3,
-        ),
+        newBalance.toFixed(3),
       )
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_transactions',
-          )
-          .insert({
-            cycle_id:
-              cycleId,
-            transaction_type:
-              transactionType,
-            amount,
-            description,
-            note:
-              String(
-                body.note ?? '',
-              ).trim() || null,
-            adjustment_sign:
-              adjustmentSign,
-            balance_after:
-              newBalance,
-          })
-          .select(`
-            id,
-            cycle_id,
-            transaction_type,
-            amount,
-            description,
-            note,
-            adjustment_sign,
-            balance_after,
-            created_by,
-            created_at
-          `)
-          .single()
+        await insertPersonalFinancialTransaction({
+          cycle_id: cycleId,
+          transaction_type: transactionType,
+          amount,
+          description,
+          note:
+            String(body.note ?? '').trim() || null,
+          adjustment_sign: adjustmentSign,
+          balance_after: newBalance,
+        })
 
       if (error) {
         throw error
       }
 
       const { error: updateError } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .update({
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq(
-            'id',
-            cycleId,
-          )
+        await touchPersonalFinancialCycle(
+          cycleId,
+          new Date().toISOString(),
+        )
 
       if (updateError) {
         throw updateError
@@ -624,8 +445,7 @@ export async function POST(
       return NextResponse.json(
         {
           transaction: data,
-          currentBalance:
-            newBalance,
+          currentBalance: newBalance,
         },
         { status: 201 },
       )
@@ -638,17 +458,11 @@ export async function POST(
     // من PaymentPersonal.tsx
     // =========================================
 
-    if (
-      action ===
-      'update-cycle-status'
-    ) {
+    if (action === 'update-cycle-status') {
       const cycleId =
-        String(
-          body.cycle_id ?? '',
-        ).trim()
+        String(body.cycle_id ?? '').trim()
 
-      const status =
-        body.status
+      const status = body.status
 
       if (!cycleId) {
         return errorResponse(
@@ -666,9 +480,7 @@ export async function POST(
       }
 
       const cycle =
-        await getOwnedCycle(
-          cycleId,
-        )
+        await getOwnedCycle(cycleId)
 
       if (!cycle) {
         return errorResponse(
@@ -677,10 +489,7 @@ export async function POST(
         )
       }
 
-      if (
-        cycle.status ===
-        status
-      ) {
+      if (cycle.status === status) {
         return errorResponse(
           status === 'closed'
             ? 'الدفتر مغلق بالفعل.'
@@ -688,18 +497,11 @@ export async function POST(
         )
       }
 
-      const now =
-        new Date().toISOString()
+      const now = new Date().toISOString()
 
-      let updateData: Record<
-        string,
-        unknown
-      >
+      let updateData: Record<string, unknown>
 
-      if (
-        status ===
-        'closed'
-      ) {
+      if (status === 'closed') {
         updateData = {
           status: 'closed',
           closed_at: now,
@@ -714,17 +516,10 @@ export async function POST(
       }
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .update(updateData)
-          .eq(
-            'id',
-            cycleId,
-          )
-          .select()
-          .single()
+        await updatePersonalFinancialCycle(
+          cycleId,
+          updateData,
+        )
 
       if (error) {
         throw error
@@ -743,14 +538,9 @@ export async function POST(
     // حتى لا نعتمد على ON DELETE CASCADE
     // =========================================
 
-    if (
-      action ===
-      'delete-cycle'
-    ) {
+    if (action === 'delete-cycle') {
       const cycleId =
-        String(
-          body.cycle_id ?? '',
-        ).trim()
+        String(body.cycle_id ?? '').trim()
 
       if (!cycleId) {
         return errorResponse(
@@ -759,9 +549,7 @@ export async function POST(
       }
 
       const cycle =
-        await getOwnedCycle(
-          cycleId,
-        )
+        await getOwnedCycle(cycleId)
 
       if (!cycle) {
         return errorResponse(
@@ -772,38 +560,19 @@ export async function POST(
 
       // حذف جميع العمليات التابعة للدفتر
       const {
-        error:
-          transactionsDeleteError,
+        error: transactionsDeleteError,
       } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_transactions',
-          )
-          .delete()
-          .eq(
-            'cycle_id',
-            cycleId,
-          )
+        await deletePersonalFinancialTransactionsByCycle(
+          cycleId,
+        )
 
-      if (
-        transactionsDeleteError
-      ) {
+      if (transactionsDeleteError) {
         throw transactionsDeleteError
       }
 
       // ثم حذف الدفتر
-      const {
-        error: cycleDeleteError,
-      } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .delete()
-          .eq(
-            'id',
-            cycleId,
-          )
+      const { error: cycleDeleteError } =
+        await deletePersonalFinancialCycle(cycleId)
 
       if (cycleDeleteError) {
         throw cycleDeleteError
@@ -811,8 +580,7 @@ export async function POST(
 
       return NextResponse.json({
         success: true,
-        deletedCycleId:
-          cycleId,
+        deletedCycleId: cycleId,
       })
     }
 
@@ -827,8 +595,7 @@ export async function POST(
 
     return NextResponse.json(
       {
-        error:
-          'تعذر حفظ العملية.',
+        error: 'تعذر حفظ العملية.',
       },
       { status: 500 },
     )
@@ -862,23 +629,16 @@ export async function PATCH(
   }
 
   try {
-    const body =
-      await request.json()
+    const body = await request.json()
 
     const action =
-      String(
-        body.action ?? '',
-      ).trim()
+      String(body.action ?? '').trim()
 
     const cycleId =
-      String(
-        body.cycle_id ?? '',
-      ).trim()
+      String(body.cycle_id ?? '').trim()
 
     const note =
-      String(
-        body.note ?? '',
-      ).trim()
+      String(body.note ?? '').trim()
 
     if (!cycleId) {
       return errorResponse(
@@ -887,9 +647,7 @@ export async function PATCH(
     }
 
     const cycle =
-      await getOwnedCycle(
-        cycleId,
-      )
+      await getOwnedCycle(cycleId)
 
     if (!cycle) {
       return errorResponse(
@@ -902,47 +660,30 @@ export async function PATCH(
     // إغلاق
     // =========================================
 
-    if (
-      action === 'close'
-    ) {
-      if (
-        cycle.status ===
-        'closed'
-      ) {
+    if (action === 'close') {
+      if (cycle.status === 'closed') {
         return errorResponse(
           'الدفتر مغلق بالفعل.',
         )
       }
 
-      const now =
-        new Date().toISOString()
+      const now = new Date().toISOString()
 
-      const updateData: Record<
-        string,
-        unknown
-      > = {
+      const updateData: Record<string, unknown> = {
         status: 'closed',
         closed_at: now,
         updated_at: now,
       }
 
       if (note) {
-        updateData.close_note =
-          note
+        updateData.close_note = note
       }
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .update(updateData)
-          .eq(
-            'id',
-            cycleId,
-          )
-          .select()
-          .single()
+        await updatePersonalFinancialCycle(
+          cycleId,
+          updateData,
+        )
 
       if (error) {
         throw error
@@ -958,47 +699,30 @@ export async function PATCH(
     // إعادة فتح
     // =========================================
 
-    if (
-      action === 'reopen'
-    ) {
-      if (
-        cycle.status !==
-        'closed'
-      ) {
+    if (action === 'reopen') {
+      if (cycle.status !== 'closed') {
         return errorResponse(
           'الدفتر مفتوح بالفعل.',
         )
       }
 
-      const now =
-        new Date().toISOString()
+      const now = new Date().toISOString()
 
-      const updateData: Record<
-        string,
-        unknown
-      > = {
+      const updateData: Record<string, unknown> = {
         status: 'open',
         reopened_at: now,
         updated_at: now,
       }
 
       if (note) {
-        updateData.reopen_note =
-          note
+        updateData.reopen_note = note
       }
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .update(updateData)
-          .eq(
-            'id',
-            cycleId,
-          )
-          .select()
-          .single()
+        await updatePersonalFinancialCycle(
+          cycleId,
+          updateData,
+        )
 
       if (error) {
         throw error
@@ -1014,12 +738,8 @@ export async function PATCH(
     // تحديث الحالة بالطريقة العامة
     // =========================================
 
-    if (
-      action ===
-      'update-cycle-status'
-    ) {
-      const status =
-        body.status
+    if (action === 'update-cycle-status') {
+      const status = body.status
 
       if (
         status !== 'open' &&
@@ -1030,10 +750,7 @@ export async function PATCH(
         )
       }
 
-      if (
-        cycle.status ===
-        status
-      ) {
+      if (cycle.status === status) {
         return errorResponse(
           status === 'closed'
             ? 'الدفتر مغلق بالفعل.'
@@ -1041,50 +758,32 @@ export async function PATCH(
         )
       }
 
-      const now =
-        new Date().toISOString()
+      const now = new Date().toISOString()
 
-      const updateData: Record<
-        string,
-        unknown
-      > = {
+      const updateData: Record<string, unknown> = {
         status,
         updated_at: now,
       }
 
-      if (
-        status ===
-        'closed'
-      ) {
-        updateData.closed_at =
-          now
+      if (status === 'closed') {
+        updateData.closed_at = now
 
         if (note) {
-          updateData.close_note =
-            note
+          updateData.close_note = note
         }
       } else {
-        updateData.reopened_at =
-          now
+        updateData.reopened_at = now
 
         if (note) {
-          updateData.reopen_note =
-            note
+          updateData.reopen_note = note
         }
       }
 
       const { data, error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .update(updateData)
-          .eq(
-            'id',
-            cycleId,
-          )
-          .select()
-          .single()
+        await updatePersonalFinancialCycle(
+          cycleId,
+          updateData,
+        )
 
       if (error) {
         throw error
@@ -1107,8 +806,7 @@ export async function PATCH(
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تحديث الدفتر.',
+        error: 'تعذر تحديث الدفتر.',
       },
       { status: 500 },
     )
@@ -1135,8 +833,7 @@ export async function DELETE(
   if (!access.allowed) {
     return NextResponse.json(
       {
-        error:
-          'غير مصرح لك بالحذف.',
+        error: 'غير مصرح لك بالحذف.',
         reason: access.reason,
       },
       { status: 403 },
@@ -1144,26 +841,18 @@ export async function DELETE(
   }
 
   try {
-    const body =
-      await request.json()
+    const body = await request.json()
 
     const action =
-      String(
-        body.action ?? '',
-      ).trim()
+      String(body.action ?? '').trim()
 
     // =========================================
     // حذف دفتر كامل
     // =========================================
 
-    if (
-      action ===
-      'delete-cycle'
-    ) {
+    if (action === 'delete-cycle') {
       const cycleId =
-        String(
-          body.cycle_id ?? '',
-        ).trim()
+        String(body.cycle_id ?? '').trim()
 
       if (!cycleId) {
         return errorResponse(
@@ -1172,9 +861,7 @@ export async function DELETE(
       }
 
       const cycle =
-        await getOwnedCycle(
-          cycleId,
-        )
+        await getOwnedCycle(cycleId)
 
       if (!cycle) {
         return errorResponse(
@@ -1185,38 +872,19 @@ export async function DELETE(
 
       // حذف العمليات أولًا
       const {
-        error:
-          transactionsDeleteError,
+        error: transactionsDeleteError,
       } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_transactions',
-          )
-          .delete()
-          .eq(
-            'cycle_id',
-            cycleId,
-          )
+        await deletePersonalFinancialTransactionsByCycle(
+          cycleId,
+        )
 
-      if (
-        transactionsDeleteError
-      ) {
+      if (transactionsDeleteError) {
         throw transactionsDeleteError
       }
 
       // حذف الدفتر
-      const {
-        error: cycleDeleteError,
-      } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_cycles',
-          )
-          .delete()
-          .eq(
-            'id',
-            cycleId,
-          )
+      const { error: cycleDeleteError } =
+        await deletePersonalFinancialCycle(cycleId)
 
       if (cycleDeleteError) {
         throw cycleDeleteError
@@ -1224,8 +892,7 @@ export async function DELETE(
 
       return NextResponse.json({
         success: true,
-        deletedCycleId:
-          cycleId,
+        deletedCycleId: cycleId,
       })
     }
 
@@ -1233,15 +900,9 @@ export async function DELETE(
     // حذف عملية
     // =========================================
 
-    if (
-      action ===
-      'delete-transaction'
-    ) {
+    if (action === 'delete-transaction') {
       const transactionId =
-        String(
-          body.transaction_id ??
-            '',
-        ).trim()
+        String(body.transaction_id ?? '').trim()
 
       if (!transactionId) {
         return errorResponse(
@@ -1251,22 +912,11 @@ export async function DELETE(
 
       const {
         data: transaction,
-        error:
-          transactionError,
+        error: transactionError,
       } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_transactions',
-          )
-          .select(`
-            id,
-            cycle_id
-          `)
-          .eq(
-            'id',
-            transactionId,
-          )
-          .maybeSingle()
+        await loadPersonalFinancialTransaction(
+          transactionId,
+        )
 
       if (transactionError) {
         throw transactionError
@@ -1280,9 +930,7 @@ export async function DELETE(
       }
 
       const cycle =
-        await getOwnedCycle(
-          transaction.cycle_id,
-        )
+        await getOwnedCycle(transaction.cycle_id)
 
       if (!cycle) {
         return errorResponse(
@@ -1292,47 +940,31 @@ export async function DELETE(
       }
 
       // احترام حالة الدفتر
-      if (
-        cycle.status !==
-        'open'
-      ) {
+      if (cycle.status !== 'open') {
         return errorResponse(
           'الدفتر مغلق ولا يمكن حذف عمليات منه.',
         )
       }
 
       const { error } =
-        await supabaseAdmin
-          .from(
-            'personal_financial_transactions',
-          )
-          .delete()
-          .eq(
-            'id',
-            transactionId,
-          )
+        await deletePersonalFinancialTransaction(
+          transactionId,
+        )
 
       if (error) {
         throw error
       }
 
-      await supabaseAdmin
-        .from(
-          'personal_financial_cycles',
-        )
-        .update({
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          'id',
-          transaction.cycle_id,
-        )
+      // نحافظ على السلوك الأصلي:
+      // لا نوقف نجاح الحذف إذا فشل تحديث updated_at.
+      await touchPersonalFinancialCycle(
+        transaction.cycle_id,
+        new Date().toISOString(),
+      )
 
       return NextResponse.json({
         success: true,
-        deletedTransactionId:
-          transactionId,
+        deletedTransactionId: transactionId,
       })
     }
 
@@ -1347,8 +979,7 @@ export async function DELETE(
 
     return NextResponse.json(
       {
-        error:
-          'تعذر تنفيذ عملية الحذف.',
+        error: 'تعذر تنفيذ عملية الحذف.',
       },
       { status: 500 },
     )
