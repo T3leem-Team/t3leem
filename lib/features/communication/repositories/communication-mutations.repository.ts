@@ -163,3 +163,33 @@ export async function insertCommunicationGroup(
     })
 }
 
+
+
+export async function updateCommunicationMessageTemplate(
+  id: string,
+  input: {
+    name: string
+    content: string
+  },
+) {
+  return supabase
+    .from('communication_message_templates')
+    .update({
+      name: input.name,
+      content: input.content,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('id, name, content, created_at, updated_at')
+    .single()
+}
+
+export async function deleteCommunicationMessageTemplate(
+  id: string,
+) {
+  return supabase
+    .from('communication_message_templates')
+    .delete()
+    .eq('id', id)
+}
+
