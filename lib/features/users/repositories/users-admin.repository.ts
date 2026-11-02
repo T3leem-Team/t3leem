@@ -235,3 +235,36 @@ export async function insertUserProfile(profile: {
     .single()
 }
 
+
+export async function loadLoginActivityForDay(
+  startOfDay: string,
+  endOfDay: string,
+) {
+  return await supabaseAdmin
+    .from('auth_audit_logs')
+    .select(`
+      id,
+      auth_user_id,
+      event_type,
+      success,
+      created_at
+    `)
+    .eq('event_type', 'login_success')
+    .eq('success', true)
+    .gte('created_at', startOfDay)
+    .lte('created_at', endOfDay)
+    .order('created_at', { ascending: false })
+}
+
+export async function loadProfilesByAuthUserIds(
+  userIds: string[],
+) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .select(`
+      auth_user_id,
+      username,
+      full_name
+    `)
+    .in('auth_user_id', userIds)
+}
