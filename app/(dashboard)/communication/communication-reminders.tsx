@@ -140,6 +140,7 @@ export function CommunicationReminders({
 
   const [groupUrl, setGroupUrl] = useState('')
   const [groupUrlInput, setGroupUrlInput] = useState('')
+  const [editingGroupUrl, setEditingGroupUrl] = useState(false)
 
   const [messageTitle, setMessageTitle] = useState('')
   const [messageContent, setMessageContent] = useState('')
@@ -237,11 +238,14 @@ export function CommunicationReminders({
           )
         } else {
           const savedUrl = groupResult.data?.content ?? ''
+
           setGroupUrl(savedUrl)
           setGroupUrlInput(savedUrl)
+          setEditingGroupUrl(!savedUrl)
         }
       } catch (error) {
         console.error('Load reminder settings error:', error)
+
         if (!cancelled) {
           setStatus('حدث خطأ أثناء تحميل إعدادات التذكير.', true)
         }
@@ -438,7 +442,7 @@ export function CommunicationReminders({
     const url = groupUrlInput.trim()
 
     if (!url) {
-      setStatus('أدخل رابط مجموعة WhatsApp أولاً.', true)
+      setStatus('أدخل رابط مجتمع WhatsApp أولاً.', true)
       return
     }
 
@@ -453,7 +457,7 @@ export function CommunicationReminders({
         return
       }
     } catch {
-      setStatus('صيغة رابط المجموعة غير صحيحة.', true)
+      setStatus('صيغة رابط المجتمع غير صحيحة.', true)
       return
     }
 
@@ -466,21 +470,22 @@ export function CommunicationReminders({
 
       if (error) {
         console.error('Save reminder group URL error:', error)
-        setStatus('تعذر حفظ رابط المجموعة.', true)
+        setStatus('تعذر حفظ رابط المجتمع.', true)
         return
       }
 
       if (!data) {
-        setStatus('لم يتم تأكيد حفظ رابط المجموعة.', true)
+        setStatus('لم يتم تأكيد حفظ رابط المجتمع.', true)
         return
       }
 
       setGroupUrl(data.content ?? url)
       setGroupUrlInput(data.content ?? url)
-      setStatus('تم حفظ رابط مجموعة التذكير بنجاح.')
+      setEditingGroupUrl(false)
+      setStatus('تم حفظ رابط المجتمع بنجاح.')
     } catch (error) {
       console.error('Save reminder group URL error:', error)
-      setStatus('حدث خطأ أثناء حفظ رابط المجموعة.', true)
+      setStatus('حدث خطأ أثناء حفظ رابط المجتمع.', true)
     } finally {
       setSavingGroupUrl(false)
     }
@@ -504,7 +509,7 @@ export function CommunicationReminders({
 
   const openWhatsAppGroup = async () => {
     if (!groupUrl) {
-      setStatus('احفظ رابط مجموعة WhatsApp أولاً.', true)
+      setStatus('احفظ رابط المجتمع أولاً.', true)
       return
     }
 
@@ -513,7 +518,7 @@ export function CommunicationReminders({
       return
     }
 
-    // Open the group directly from the saved group invitation URL.
+    // Open the saved WhatsApp Community / Announcements URL.
     const whatsappWindow = window.open(
       groupUrl,
       '_blank',
@@ -525,8 +530,8 @@ export function CommunicationReminders({
 
       setStatus(
         whatsappWindow
-          ? 'تم نسخ الرسالة وفتح المجموعة. الصق الرسالة داخل WhatsApp ثم أرسلها يدوياً.'
-          : 'تم نسخ الرسالة، لكن المتصفح منع فتح المجموعة. افتح رابط المجموعة المحفوظ يدوياً.',
+          ? 'تم نسخ الرسالة وفتح المجتمع. ادخل Announcements والصق الرسالة ثم أرسلها يدوياً.'
+          : 'تم نسخ الرسالة، لكن المتصفح منع فتح المجتمع. افتح رابط المجتمع المحفوظ يدوياً.',
         !whatsappWindow,
       )
     } catch (error) {
@@ -534,8 +539,8 @@ export function CommunicationReminders({
 
       setStatus(
         whatsappWindow
-          ? 'تم فتح المجموعة، لكن تعذر نسخ الرسالة. انسخها يدوياً.'
-          : 'تعذر النسخ وفتح المجموعة. حاول مرة أخرى.',
+          ? 'تم فتح المجتمع، لكن تعذر نسخ الرسالة. انسخها يدوياً.'
+          : 'تعذر النسخ وفتح المجتمع. حاول مرة أخرى.',
         true,
       )
     }
@@ -567,7 +572,7 @@ export function CommunicationReminders({
               </h2>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                إدارة رسائل التذكير ورابط مجموعة WhatsApp.
+                إدارة رسائل التذكير ورابط مجتمع WhatsApp.
               </p>
             </div>
           </div>
@@ -584,54 +589,94 @@ export function CommunicationReminders({
         </div>
       </div>
 
-      {/* Independent WhatsApp group URL */}
-      <div className="space-y-4 rounded-xl border bg-card p-5">
-        <div className="flex items-center gap-2">
-          <LinkIcon className="size-5 text-primary" />
+      {/* WhatsApp Community URL */}
+      <div className="space-y-4 rounded-xl border bg-card p-5" dir="rtl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {groupUrl && !editingGroupUrl ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setGroupUrlInput(groupUrl)
+                setEditingGroupUrl(true)
+                setStatus('')
+              }}
+            >
+              <Pencil className="size-4" />
+              تعديل الرابط
+            </Button>
+          ) : null}
 
-          <div>
-            <h3 className="font-semibold">
-              رابط مجموعة التذكير
-            </h3>
+          <div className="flex items-center gap-2">
+            <LinkIcon className="size-5 text-primary" />
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              هذا الرابط مستقل عن رابط التواصل الجماعي.
-            </p>
+            <div>
+              <h3 className="font-semibold">
+                رابط مجتمع WhatsApp
+              </h3>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                يفتح المجتمع، ومنه يمكنك الدخول إلى Announcements.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <input
-            type="url"
-            dir="ltr"
-            value={groupUrlInput}
-            onChange={(event) => setGroupUrlInput(event.target.value)}
-            placeholder="https://chat.whatsapp.com/..."
-            className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
+        {groupUrl && !editingGroupUrl ? (
+          <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-3">
+            <div className="size-2 rounded-full bg-green-500" />
 
-          <Button
-            type="button"
-            onClick={saveGroupUrl}
-            disabled={
-              savingGroupUrl ||
-              !groupUrlInput.trim() ||
-              groupUrlInput.trim() === groupUrl
-            }
-          >
-            {savingGroupUrl ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            حفظ الرابط
-          </Button>
-        </div>
+            <span className="text-sm font-medium text-green-700 dark:text-green-400">
+              تم حفظ رابط المجتمع بنجاح
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <input
+              type="url"
+              dir="ltr"
+              value={groupUrlInput}
+              onChange={(event) => setGroupUrlInput(event.target.value)}
+              placeholder="https://..."
+              className="w-full min-w-0 rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
 
-        {groupUrl && (
-          <p className="text-xs text-muted-foreground" dir="ltr">
-            {groupUrl}
-          </p>
+            <div className="flex flex-wrap justify-start gap-2" dir="rtl">
+              <Button
+                type="button"
+                onClick={saveGroupUrl}
+                disabled={
+                  savingGroupUrl ||
+                  !groupUrlInput.trim() ||
+                  groupUrlInput.trim() === groupUrl
+                }
+              >
+                {savingGroupUrl ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Save className="size-4" />
+                )}
+                حفظ الرابط
+              </Button>
+
+              {groupUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={savingGroupUrl}
+                  onClick={() => {
+                    setGroupUrlInput(groupUrl)
+                    setEditingGroupUrl(false)
+                    setStatus('')
+                  }}
+                >
+                  <X className="size-4" />
+                  إلغاء
+                </Button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -651,7 +696,19 @@ export function CommunicationReminders({
         <>
           {/* Saved message titles */}
           <div className="space-y-4 rounded-xl border bg-card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div
+              className="flex flex-wrap items-center justify-between gap-3"
+              dir="rtl"
+            >
+              <Button
+                type="button"
+                onClick={startNewMessage}
+                disabled={editing || saving}
+              >
+                <Plus className="size-4" />
+                رسالة جديدة
+              </Button>
+
               <div>
                 <h3 className="font-semibold">
                   الرسائل المحفوظة
@@ -661,15 +718,6 @@ export function CommunicationReminders({
                   اضغط على عنوان الرسالة لفتحها.
                 </p>
               </div>
-
-              <Button
-                type="button"
-                onClick={startNewMessage}
-                disabled={editing || saving}
-              >
-                <Plus className="size-4" />
-                رسالة جديدة
-              </Button>
             </div>
 
             {messages.length === 0 ? (
@@ -710,7 +758,10 @@ export function CommunicationReminders({
           {/* Selected message / editor */}
           {(selectedMessage || creating) && (
             <div className="space-y-4 rounded-xl border bg-card p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div
+                className="flex flex-wrap items-center justify-between gap-3"
+                dir="rtl"
+              >
                 <div>
                   <h3 className="font-semibold">
                     {creating
@@ -721,12 +772,12 @@ export function CommunicationReminders({
                   </h3>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    رسالة عامة للمجموعة، دون أسماء المقررات أو أوقاتها.
+                    رسالة عامة للمجتمع، دون أسماء المقررات أو أوقاتها.
                   </p>
                 </div>
 
                 {!editing && selectedMessage && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-start gap-2" dir="rtl">
                     <Button
                       type="button"
                       size="sm"
@@ -769,6 +820,7 @@ export function CommunicationReminders({
                         setMessageTitle(event.target.value)
                       }
                       placeholder="مثال: تذكير دروس اليوم"
+                      dir="rtl"
                       className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                   </div>
@@ -784,12 +836,13 @@ export function CommunicationReminders({
                         setMessageContent(event.target.value)
                       }
                       rows={5}
+                      dir="rtl"
                       placeholder="اكتب نص التذكير هنا..."
                       className="w-full resize-y rounded-lg border bg-background p-4 text-sm leading-7 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-start gap-2" dir="rtl">
                     <Button
                       type="button"
                       onClick={saveMessage}
@@ -827,7 +880,7 @@ export function CommunicationReminders({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-start gap-2" dir="rtl">
                     <Button
                       type="button"
                       variant="outline"
@@ -844,13 +897,13 @@ export function CommunicationReminders({
                     >
                       <MessageCircle className="size-4" />
                       <ExternalLink className="size-4" />
-                      إرسال للمجموعة
+                      إرسال للمجتمع
                     </Button>
                   </div>
 
                   {!groupUrl && (
                     <p className="text-sm text-muted-foreground">
-                      احفظ رابط مجموعة WhatsApp أعلاه لتفعيل الإرسال.
+                      احفظ رابط مجتمع WhatsApp أعلاه لتفعيل الإرسال.
                     </p>
                   )}
                 </>
@@ -874,8 +927,8 @@ export function CommunicationReminders({
 
       {hasLessonsToday && (
         <p className="text-xs text-muted-foreground">
-          عند الضغط على إرسال للمجموعة، يتم نسخ الرسالة وفتح رابط المجموعة.
-          الصق الرسالة داخل WhatsApp ثم أرسلها يدوياً.
+          عند الضغط على إرسال للمجتمع، يتم نسخ الرسالة وفتح رابط المجتمع.
+          ادخل Announcements والصق الرسالة ثم أرسلها يدوياً.
         </p>
       )}
     </div>
