@@ -1,18 +1,19 @@
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 import { requireAuth } from '@/lib/require-auth'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadPrimaryAdminProfile,
+  loadSystemElements,
+  loadActiveSystemUsers,
+  loadSystemElementAssignments,
+  loadSystemElementById,
+  loadSystemElementUserById,
+  upsertSystemElementAssignment,
+  loadSystemElementUserForDelete,
+  deleteSystemElementAssignment,
+} from '@/lib/features/system/repositories/system-elements-admin.repository'
 
 /*
  * --------------------------------------------------
@@ -51,24 +52,9 @@ async function requirePrimaryAdmin() {
   const {
     data: profile,
     error,
-  } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select(
-        `
-        id,
-        auth_user_id,
-        username,
-        full_name,
-        role,
-        is_active
-        `,
-      )
-      .eq(
-        'auth_user_id',
-        access.userId,
-      )
-      .maybeSingle()
+  } = await loadPrimaryAdminProfile(
+    access.userId,
+  )
 
   if (error) {
     console.error(
@@ -157,33 +143,7 @@ export async function GET() {
     const {
       data: elements,
       error: elementsError,
-    } =
-      await supabaseAdmin
-        .from('system_elements')
-        .select(
-          `
-          id,
-          element_key,
-          element_name,
-          description,
-          section_name,
-          is_active,
-          created_at,
-          updated_at
-          `,
-        )
-        .order(
-          'section_name',
-          {
-            ascending: true,
-          },
-        )
-        .order(
-          'element_name',
-          {
-            ascending: true,
-          },
-        )
+    } = await loadSystemElements()
 
     if (elementsError) {
       console.error(
@@ -211,35 +171,7 @@ export async function GET() {
     const {
       data: users,
       error: usersError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          `
-          id,
-          username,
-          full_name,
-          role,
-          department,
-          is_active
-          `,
-        )
-        .eq(
-          'is_active',
-          true,
-        )
-        .order(
-          'role',
-          {
-            ascending: true,
-          },
-        )
-        .order(
-          'full_name',
-          {
-            ascending: true,
-          },
-        )
+    } = await loadActiveSystemUsers()
 
     if (usersError) {
       console.error(
@@ -264,19 +196,7 @@ export async function GET() {
     const {
       data: assignments,
       error: assignmentsError,
-    } =
-      await supabaseAdmin
-        .from(
-          'system_element_users',
-        )
-        .select(
-          `
-          id,
-          element_id,
-          user_profile_id,
-          created_at
-          `,
-        )
+    } = await loadSystemElementAssignments()
 
     if (assignmentsError) {
       console.error(
@@ -367,14 +287,6 @@ export async function GET() {
  *
  * إضافة مستخدم إلى عنصر
  * --------------------------------------------------
- *
- * body:
- *
- * {
- *   elementId: "...",
- *   userProfileId: "..."
- * }
- * --------------------------------------------------
  */
 export async function POST(
   request: Request,
@@ -423,17 +335,9 @@ export async function POST(
     const {
       data: element,
       error: elementError,
-    } =
-      await supabaseAdmin
-        .from('system_elements')
-        .select(
-          'id, element_key, is_active',
-        )
-        .eq(
-          'id',
-          elementId,
-        )
-        .maybeSingle()
+    } = await loadSystemElementById(
+      elementId,
+    )
 
     if (elementError) {
       console.error(
@@ -478,23 +382,9 @@ export async function POST(
     const {
       data: user,
       error: userError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          `
-          id,
-          username,
-          full_name,
-          role,
-          is_active
-          `,
-        )
-        .eq(
-          'id',
-          userProfileId,
-        )
-        .maybeSingle()
+    } = await loadSystemElementUserById(
+      userProfileId,
+    )
 
     if (userError) {
       console.error(
@@ -561,33 +451,10 @@ export async function POST(
     const {
       data: assignment,
       error: assignmentError,
-    } =
-      await supabaseAdmin
-        .from(
-          'system_element_users',
-        )
-        .upsert(
-          {
-            element_id:
-              elementId,
-
-            user_profile_id:
-              userProfileId,
-          },
-          {
-            onConflict:
-              'element_id,user_profile_id',
-          },
-        )
-        .select(
-          `
-          id,
-          element_id,
-          user_profile_id,
-          created_at
-          `,
-        )
-        .single()
+    } = await upsertSystemElementAssignment(
+      elementId,
+      userProfileId,
+    )
 
     if (assignmentError) {
       console.error(
@@ -632,14 +499,6 @@ export async function POST(
  * DELETE
  *
  * إزالة مستخدم من عنصر
- * --------------------------------------------------
- *
- * body:
- *
- * {
- *   elementId: "...",
- *   userProfileId: "..."
- * }
  * --------------------------------------------------
  */
 export async function DELETE(
@@ -689,17 +548,9 @@ export async function DELETE(
     const {
       data: targetUser,
       error: targetUserError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          'id, username',
-        )
-        .eq(
-          'id',
-          userProfileId,
-        )
-        .maybeSingle()
+    } = await loadSystemElementUserForDelete(
+      userProfileId,
+    )
 
     if (targetUserError) {
       console.error(
@@ -736,20 +587,10 @@ export async function DELETE(
      */
     const {
       error: deleteError,
-    } =
-      await supabaseAdmin
-        .from(
-          'system_element_users',
-        )
-        .delete()
-        .eq(
-          'element_id',
-          elementId,
-        )
-        .eq(
-          'user_profile_id',
-          userProfileId,
-        )
+    } = await deleteSystemElementAssignment(
+      elementId,
+      userProfileId,
+    )
 
     if (deleteError) {
       console.error(
