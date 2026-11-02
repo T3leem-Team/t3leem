@@ -1,4 +1,3 @@
-
 import 'server-only'
 
 import { createClient } from '@supabase/supabase-js'
@@ -57,18 +56,6 @@ export async function loadRolePermissionIds(
     .from('role_permissions')
     .select('permission_id')
     .eq('role', role)
-}
-
-export async function loadAllUserPermissions() {
-  return await supabaseAdmin
-    .from('user_permissions')
-    .select('id, user_profile_id, permission_id, created_at')
-}
-
-export async function loadAllRolePermissions() {
-  return await supabaseAdmin
-    .from('role_permissions')
-    .select('role, permission_id')
 }
 
 export async function loadActiveSystemElementKeys() {
@@ -139,6 +126,7 @@ export async function updateSupervisionSettings(
     )
     .single()
 }
+
 
 export async function loadPermissionProfileById(
   profileId: string,
