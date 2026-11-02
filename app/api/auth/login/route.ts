@@ -4,10 +4,24 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomBytes } from 'crypto'
 
+import {
+  loadLoginProfile,
+  insertLoginAuditLog,
+  closeActiveSessionsForDevice,
+  loadTrustedDeviceByToken,
+  loadBlockedFingerprintRecords,
+  loadApprovedDevicesByFingerprint,
+  updateTrustedDeviceForReapproval,
+  recoverTrustedDevice,
+  updatePendingTrustedDevice,
+  insertPendingTrustedDevice,
+  updateApprovedTrustedDevice,
+  createSingleActiveSession,
+} from '@/lib/features/auth/repositories/login/login.repository'
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const publishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const DEVICE_COOKIE = 't3leem_device_token'
 const SESSION_COOKIE = 't3leem_session_id'
@@ -16,17 +30,6 @@ const SESSION_COOKIE_MAX_DAYS = 30
 const DEVICE_COOKIE_MAX_DAYS = 365
 const DEVICE_GRACE_PERIOD_DAYS = 30
 const RECOVERY_TIME_ZONE = 'Asia/Bahrain'
-
-const supabaseAdmin = createClient(
-  supabaseUrl,
-  serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
 
 type DeviceType =
   | 'iphone'
@@ -258,17 +261,12 @@ async function writeAudit(
   success: boolean,
   details: AuditDetails,
 ) {
-  const { error } = await supabaseAdmin
-    .from('auth_audit_logs')
-    .insert({
-      auth_user_id: authUserId,
-      trusted_device_id: details.deviceId ?? null,
-      event_type: eventType,
-      success,
-      ip_address: details.ipAddress,
-      user_agent: details.userAgent || null,
-      metadata: details.metadata ?? {},
-    })
+  const { error } = await insertLoginAuditLog(
+    authUserId,
+    eventType,
+    success,
+    details,
+  )
 
   if (error) {
     console.error(`Auth audit error (${eventType}):`, error)
@@ -297,16 +295,11 @@ async function closeDeviceSessions(
 ) {
   const now = new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('auth_user_id', authUserId)
-    .eq('trusted_device_id', deviceId)
-    .eq('is_active', true)
+  const { error } = await closeActiveSessionsForDevice(
+    authUserId,
+    deviceId,
+    now,
+  )
 
   if (error) {
     console.error('Close device sessions error:', error)
@@ -325,18 +318,12 @@ async function requireDeviceReapproval(
   const now = new Date().toISOString()
 
   const { data: updatedDevice, error } =
-    await supabaseAdmin
-      .from('trusted_devices')
-      .update({
-        status: 'pending',
-        pending_device_type: detectedType,
-        device_type_detected_at: now,
-      })
-      .eq('id', device.id)
-      .eq('auth_user_id', authUserId)
-      .eq('status', 'approved')
-      .select('id')
-      .maybeSingle()
+    await updateTrustedDeviceForReapproval(
+      device.id,
+      authUserId,
+      detectedType,
+      now,
+    )
 
   if (error) {
     console.error('Device reapproval update error:', error)
@@ -423,19 +410,7 @@ export async function POST(request: NextRequest) {
      * 2. البحث عن حساب المستخدم.
      */
     const { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(`
-          id,
-          auth_user_id,
-          username,
-          full_name,
-          role,
-          is_active,
-          email
-        `)
-        .eq('username', username)
-        .maybeSingle()
+      await loadLoginProfile(username)
 
     markLoginTiming('profile lookup')
 
@@ -540,30 +515,14 @@ export async function POST(request: NextRequest) {
 
     /*
      * 5. محاولة مطابقة الكوكي الموجودة.
-     *
-     * إذا كانت الكوكي غير موجودة أو لا تطابق سجلًا
-     * لهذا المستخدم، ننتقل إلى مسار البصمة أدناه.
-     *
-     * إذا طابقت جهازًا مرفوضًا أو مسحوب الاعتماد،
-     * فسيُرفض الجهاز ولا نتجاوز الرفض بالبصمة.
      */
     if (existingDeviceToken) {
       const tokenHash = hashDeviceToken(existingDeviceToken)
 
-      const { data, error } = await supabaseAdmin
-        .from('trusted_devices')
-        .select(`
-          id,
-          status,
-          device_name,
-          approved_device_type,
-          pending_device_type,
-          grace_period_days,
-          grace_expires_at
-        `)
-        .eq('device_token_hash', tokenHash)
-        .eq('auth_user_id', profile.auth_user_id)
-        .maybeSingle()
+      const { data, error } = await loadTrustedDeviceByToken(
+        tokenHash,
+        profile.auth_user_id,
+      )
 
       if (error) {
         console.error(
@@ -582,9 +541,6 @@ export async function POST(request: NextRequest) {
 
     /*
      * 6. الاسترجاع بالبصمة عند غياب الكوكي أو عدم صلاحيتها.
-     *
-     * المقصود بعدم صلاحيتها هنا أن رمزها لا يطابق
-     * سجل جهاز لهذا المستخدم.
      */
     const cookieMissingOrInvalid = !device
 
@@ -592,23 +548,13 @@ export async function POST(request: NextRequest) {
       cookieMissingOrInvalid &&
       isAutomaticRecoveryAllowed()
     ) {
-      /*
-       * أولًا: نتحقق من عدم وجود أي سجل سابق مطابق
-       * للبصمة حالته revoked أو rejected.
-       *
-       * إذا وجدنا سجلًا مانعًا، لا نجرب استرجاع
-       * أي سجل approved بهذه البصمة.
-       */
       const {
         data: blockedFingerprintRecords,
         error: blockedFingerprintError,
-      } = await supabaseAdmin
-        .from('trusted_devices')
-        .select('id, status')
-        .eq('auth_user_id', profile.auth_user_id)
-        .eq('device_fingerprint_hash', fingerprintHash)
-        .in('status', ['revoked', 'rejected'])
-        .limit(1)
+      } = await loadBlockedFingerprintRecords(
+        profile.auth_user_id,
+        fingerprintHash,
+      )
 
       if (blockedFingerprintError) {
         console.error(
@@ -629,32 +575,12 @@ export async function POST(request: NextRequest) {
         console.info(
           '[DEVICE RECOVERY] blocked: matching revoked/rejected record exists',
         )
-
-        /*
-         * لا نعيّن recoveryCandidate.
-         * سيواصل الكود مساره المعتاد لطلب موافقة جديدة
-         * بدل استرجاع الجهاز تلقائيًا.
-         */
       } else {
-        /*
-         * لا نبحث عن جهاز معتمد للاسترجاع إلا إذا
-         * لم يوجد أي سجل مانع مطابق للبصمة.
-         */
-        const { data, error } = await supabaseAdmin
-          .from('trusted_devices')
-          .select(`
-            id,
-            status,
-            device_name,
-            approved_device_type,
-            pending_device_type,
-            grace_period_days,
-            grace_expires_at
-          `)
-          .eq('auth_user_id', profile.auth_user_id)
-          .eq('device_fingerprint_hash', fingerprintHash)
-          .eq('status', 'approved')
-          .limit(2)
+        const { data, error } =
+          await loadApprovedDevicesByFingerprint(
+            profile.auth_user_id,
+            fingerprintHash,
+          )
 
         if (error) {
           console.error(
@@ -670,9 +596,6 @@ export async function POST(request: NextRequest) {
 
         const candidates = (data ?? []) as TrustedDevice[]
 
-        /*
-         * لا نسترجع الجهاز إذا وُجد أكثر من تطابق.
-         */
         if (candidates.length === 1) {
           recoveryCandidate = candidates[0]
         }
@@ -693,11 +616,6 @@ export async function POST(request: NextRequest) {
      * 7. التعامل مع الجهاز المطابق للبصمة.
      */
     if (recoveryCandidate) {
-      /*
-       * إذا انتهت فترة السماح أو اختلف نوع الجهاز،
-       * لا نسمح بالاسترجاع التلقائي.
-       * نطلب موافقة جديدة على سجل الجهاز نفسه.
-       */
       if (!isGracePeriodValid(recoveryCandidate)) {
         return await requireDeviceReapproval(
           recoveryCandidate,
@@ -725,29 +643,17 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      /*
-       * توليد كوكي جديدة وتدوير رمز الجهاز.
-       * التحديث مشروط ببقاء الجهاز معتمدًا
-       * وبقاء البصمة المطابقة في قاعدة البيانات.
-       */
       const newDeviceToken = randomBytes(32).toString('hex')
       const now = new Date().toISOString()
 
       const { data: recovered, error: recoveryError } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            device_token_hash:
-              hashDeviceToken(newDeviceToken),
-            last_used_at: now,
-            device_type_detected_at: now,
-          })
-          .eq('id', recoveryCandidate.id)
-          .eq('auth_user_id', profile.auth_user_id)
-          .eq('status', 'approved')
-          .eq('device_fingerprint_hash', fingerprintHash)
-          .select('id')
-          .maybeSingle()
+        await recoverTrustedDevice(
+          recoveryCandidate.id,
+          profile.auth_user_id,
+          fingerprintHash,
+          hashDeviceToken(newDeviceToken),
+          now,
+        )
 
       if (recoveryError) {
         console.error(
@@ -793,8 +699,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 8. إذا كانت الكوكي تطابق جهازًا مرفوضًا
-     * أو مسحوب الاعتماد، نرفض الدخول.
+     * 8. رفض الأجهزة المرفوضة أو المسحوب اعتمادها.
      */
     if (
       device &&
@@ -835,15 +740,12 @@ export async function POST(request: NextRequest) {
      * 9. إذا كان الجهاز معلقًا، نطلب الموافقة.
      */
     if (device && device.status === 'pending') {
-      const { error } = await supabaseAdmin
-        .from('trusted_devices')
-        .update({
-          pending_device_type: detectedType,
-          device_type_detected_at: new Date().toISOString(),
-        })
-        .eq('id', device.id)
-        .eq('auth_user_id', profile.auth_user_id)
-        .eq('status', 'pending')
+      const { error } = await updatePendingTrustedDevice(
+        device.id,
+        profile.auth_user_id,
+        detectedType,
+        new Date().toISOString(),
+      )
 
       if (error) {
         console.error(
@@ -859,8 +761,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 10. لم نجد جهازًا صالحًا للاسترجاع.
-     * نسجل جهازًا جديدًا بحالة pending.
+     * 10. تسجيل جهاز جديد بحالة pending.
      */
     if (!device) {
       const deviceToken = randomBytes(32).toString('hex')
@@ -868,20 +769,16 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString()
 
       const { data: newDevice, error: insertError } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .insert({
-            auth_user_id: profile.auth_user_id,
-            device_name: 'جهاز جديد',
-            device_token_hash: tokenHash,
-            device_fingerprint_hash: fingerprintHash,
-            status: 'pending',
-            pending_device_type: detectedType,
-            device_type_detected_at: now,
-            grace_period_days: DEVICE_GRACE_PERIOD_DAYS,
-          })
-          .select('id, status')
-          .single()
+        await insertPendingTrustedDevice({
+          auth_user_id: profile.auth_user_id,
+          device_name: 'جهاز جديد',
+          device_token_hash: tokenHash,
+          device_fingerprint_hash: fingerprintHash,
+          status: 'pending',
+          pending_device_type: detectedType,
+          device_type_detected_at: now,
+          grace_period_days: DEVICE_GRACE_PERIOD_DAYS,
+        })
 
       if (insertError || !newDevice) {
         console.error(
@@ -998,14 +895,11 @@ export async function POST(request: NextRequest) {
     const {
       data: updatedDevice,
       error: deviceUpdateError,
-    } = await supabaseAdmin
-      .from('trusted_devices')
-      .update(deviceUpdate)
-      .eq('id', device.id)
-      .eq('auth_user_id', profile.auth_user_id)
-      .eq('status', 'approved')
-      .select('id')
-      .maybeSingle()
+    } = await updateApprovedTrustedDevice(
+      device.id,
+      profile.auth_user_id,
+      deviceUpdate,
+    )
 
     if (deviceUpdateError) {
       console.error(
@@ -1027,7 +921,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 15. تجهيز جلسة Supabase.
+     * 15. تجهيز جلسة Supabase Auth.
      */
     const response = NextResponse.json({
       user: {
@@ -1097,13 +991,10 @@ export async function POST(request: NextRequest) {
     const {
       data: activeSessionId,
       error: sessionError,
-    } = await supabaseAdmin.rpc(
-      'create_single_active_session',
-      {
-        p_auth_user_id: profile.auth_user_id,
-        p_trusted_device_id: device.id,
-        p_expires_at: expiresAt.toISOString(),
-      },
+    } = await createSingleActiveSession(
+      profile.auth_user_id,
+      device.id,
+      expiresAt.toISOString(),
     )
 
     if (sessionError || !activeSessionId) {
