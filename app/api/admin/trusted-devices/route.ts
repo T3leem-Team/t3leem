@@ -204,13 +204,11 @@ export async function GET() {
       loadTrustedDevicesByStatus(
         'pending',
         'created_at',
-        columns,
       ),
-
+    
       loadTrustedDevicesByStatus(
         'approved',
         'approved_at',
-        columns,
       ),
     ])
 
