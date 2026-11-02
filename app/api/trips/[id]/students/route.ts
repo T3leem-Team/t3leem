@@ -1,7 +1,32 @@
+
 import { NextResponse } from 'next/server'
 
 import { requireAuth } from '@/lib/require-auth'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+
+import {
+  loadTripStudentsTrip,
+  loadTripStudentsCourse,
+  loadTripStudentsTripLevels,
+  loadTripStudentsLevelsByIds,
+  loadTripStudentsEnrollments,
+  loadTripStudentsAssignments,
+  loadTripStudentsProfiles,
+  loadTripStudentsAttendanceStatuses,
+  loadTripStudentsAttendance,
+  loadSavedTripStudents,
+  loadTripStudentsForSaving,
+  loadTripLevelIdsForSaving,
+  loadTripStudentNotes,
+  deleteStaleTripStudents,
+  updateTripStudentSelection,
+  insertNewTripStudents,
+  loadFinalTripStudents,
+  loadTripStatusForStudentUpdate,
+  updateTripStudentParticipant,
+  updateTripStudentPayment,
+  updateTripStudentResponse,
+} from '@/lib/features/trips/repositories/trip-students-admin.repository'
 
 type RouteContext = {
   params: Promise<{
@@ -286,8 +311,7 @@ export async function GET(
     if (!access) {
       return NextResponse.json(
         {
-          error:
-            'غير مصرح بالوصول',
+          error: 'غير مصرح بالوصول',
         },
         { status: 401 },
       )
@@ -298,8 +322,7 @@ export async function GET(
     if (!id) {
       return NextResponse.json(
         {
-          error:
-            'معرف الرحلة مطلوب',
+          error: 'معرف الرحلة مطلوب',
         },
         { status: 400 },
       )
@@ -314,29 +337,10 @@ export async function GET(
     const {
       data: trip,
       error: tripError,
-    } = await supabase
-      .from('trips')
-      .select(`
-        id,
-        name,
-        description,
-        location,
-        trip_date,
-        meeting_time,
-        return_time,
-        fee,
-        note,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status,
-        created_at,
-        updated_at
-      `)
-      .eq('id', id)
-      .maybeSingle()
+    } = await loadTripStudentsTrip(
+      supabase,
+      id,
+    )
 
     if (tripError) {
       console.error(
@@ -346,10 +350,8 @@ export async function GET(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل الرحلة',
-          details:
-            tripError.message,
+          error: 'تعذر تحميل الرحلة',
+          details: tripError.message,
         },
         { status: 500 },
       )
@@ -358,8 +360,7 @@ export async function GET(
     if (!trip) {
       return NextResponse.json(
         {
-          error:
-            'الرحلة غير موجودة',
+          error: 'الرحلة غير موجودة',
         },
         { status: 404 },
       )
@@ -371,18 +372,10 @@ export async function GET(
     const {
       data: course,
       error: courseError,
-    } = await supabase
-      .from('courses')
-      .select(`
-        id,
-        name,
-        academic_year_id,
-        start_date,
-        end_date,
-        days
-      `)
-      .eq('id', trip.course_id)
-      .maybeSingle()
+    } = await loadTripStudentsCourse(
+      supabase,
+      trip.course_id,
+    )
 
     if (courseError) {
       console.error(
@@ -392,10 +385,8 @@ export async function GET(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل الدورة',
-          details:
-            courseError.message,
+          error: 'تعذر تحميل الدورة',
+          details: courseError.message,
         },
         { status: 500 },
       )
@@ -407,14 +398,10 @@ export async function GET(
     const {
       data: tripLevels,
       error: tripLevelsError,
-    } = await supabase
-      .from('trip_levels')
-      .select(`
-        id,
-        trip_id,
-        level_id
-      `)
-      .eq('trip_id', id)
+    } = await loadTripStudentsTripLevels(
+      supabase,
+      id,
+    )
 
     if (tripLevelsError) {
       console.error(
@@ -424,10 +411,8 @@ export async function GET(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل مستويات الرحلة',
-          details:
-            tripLevelsError.message,
+          error: 'تعذر تحميل مستويات الرحلة',
+          details: tripLevelsError.message,
         },
         { status: 500 },
       )
@@ -451,14 +436,10 @@ export async function GET(
       const {
         data: levelRows,
         error: levelsError,
-      } = await supabase
-        .from('levels')
-        .select(`
-          id,
-          name,
-          sort_order
-        `)
-        .in('id', levelIds)
+      } = await loadTripStudentsLevelsByIds(
+        supabase,
+        levelIds,
+      )
 
       if (levelsError) {
         console.error(
@@ -468,10 +449,8 @@ export async function GET(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل المستويات',
-            details:
-              levelsError.message,
+            error: 'تعذر تحميل المستويات',
+            details: levelsError.message,
           },
           { status: 500 },
         )
@@ -496,24 +475,11 @@ export async function GET(
       const {
         data: enrollments,
         error: enrollmentsError,
-      } = await supabase
-        .from('enrollments')
-        .select(`
-          id,
-          student_id,
-          academic_year_id,
-          level_id,
-          class_id,
-          status
-        `)
-        .eq(
-          'academic_year_id',
-          trip.academic_year_id,
-        )
-        .in(
-          'level_id',
-          levelIds,
-        )
+      } = await loadTripStudentsEnrollments(
+        supabase,
+        trip.academic_year_id,
+        levelIds,
+      )
 
       if (enrollmentsError) {
         console.error(
@@ -523,18 +489,15 @@ export async function GET(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل تسجيلات الطلاب',
-            details:
-              enrollmentsError.message,
+            error: 'تعذر تحميل تسجيلات الطلاب',
+            details: enrollmentsError.message,
           },
           { status: 500 },
         )
       }
 
       enrollmentRows =
-        (enrollments ??
-          []) as EnrollmentRow[]
+        (enrollments ?? []) as EnrollmentRow[]
     }
 
     /*
@@ -550,27 +513,15 @@ export async function GET(
 
     let assignmentRows: AssignmentRow[] = []
 
-    if (
-      enrollmentStudentIds.length > 0
-    ) {
+    if (enrollmentStudentIds.length > 0) {
       const {
         data: assignments,
         error: assignmentsError,
-      } = await supabase
-        .from('teacher_student_assignments')
-        .select(`
-          id,
-          student_id,
-          course_id
-        `)
-        .eq(
-          'course_id',
-          trip.course_id,
-        )
-        .in(
-          'student_id',
-          enrollmentStudentIds,
-        )
+      } = await loadTripStudentsAssignments(
+        supabase,
+        trip.course_id,
+        enrollmentStudentIds,
+      )
 
       if (assignmentsError) {
         console.error(
@@ -580,18 +531,15 @@ export async function GET(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل إسنادات الطلاب للدورة',
-            details:
-              assignmentsError.message,
+            error: 'تعذر تحميل إسنادات الطلاب للدورة',
+            details: assignmentsError.message,
           },
           { status: 500 },
         )
       }
 
       assignmentRows =
-        (assignments ??
-          []) as AssignmentRow[]
+        (assignments ?? []) as AssignmentRow[]
     }
 
     const assignedStudentIds =
@@ -622,26 +570,14 @@ export async function GET(
      */
     let students: StudentRow[] = []
 
-    if (
-      candidateStudentIds.length > 0
-    ) {
+    if (candidateStudentIds.length > 0) {
       const {
         data: studentRows,
         error: studentsError,
-      } = await supabase
-        .from('students')
-        .select(`
-          id,
-          name,
-          personal_id,
-          phone,
-          whatsapp,
-          notes
-        `)
-        .in(
-          'id',
-          candidateStudentIds,
-        )
+      } = await loadTripStudentsProfiles(
+        supabase,
+        candidateStudentIds,
+      )
 
       if (studentsError) {
         console.error(
@@ -651,18 +587,15 @@ export async function GET(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل الطلاب',
-            details:
-              studentsError.message,
+            error: 'تعذر تحميل الطلاب',
+            details: studentsError.message,
           },
           { status: 500 },
         )
       }
 
       students =
-        (studentRows ??
-          []) as StudentRow[]
+        (studentRows ?? []) as StudentRow[]
     }
 
     /*
@@ -671,12 +604,9 @@ export async function GET(
     const {
       data: attendanceStatuses,
       error: attendanceStatusesError,
-    } = await supabase
-      .from('attendance_statuses')
-      .select(`
-        id,
-        name
-      `)
+    } = await loadTripStudentsAttendanceStatuses(
+      supabase,
+    )
 
     if (attendanceStatusesError) {
       console.error(
@@ -686,10 +616,8 @@ export async function GET(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل حالات الحضور',
-          details:
-            attendanceStatusesError.message,
+          error: 'تعذر تحميل حالات الحضور',
+          details: attendanceStatusesError.message,
         },
         { status: 500 },
       )
@@ -698,8 +626,7 @@ export async function GET(
     const statusMap =
       new Map<string, string>(
         (
-          (attendanceStatuses ??
-            []) as AttendanceStatus[]
+          (attendanceStatuses ?? []) as AttendanceStatus[]
         ).map((status) => [
           status.id,
           status.name,
@@ -711,42 +638,16 @@ export async function GET(
      */
     let attendance: AttendanceRow[] = []
 
-    if (
-      candidateStudentIds.length > 0
-    ) {
-      let attendanceQuery =
-        supabase
-          .from('attendance')
-          .select(`
-            id,
-            student_id,
-            enrollment_id,
-            attendance_date,
-            status_id,
-            note,
-            course_id
-          `)
-          .eq(
-            'course_id',
-            trip.course_id,
-          )
-          .in(
-            'student_id',
-            candidateStudentIds,
-          )
-
-      if (course?.end_date) {
-        attendanceQuery =
-          attendanceQuery.lte(
-            'attendance_date',
-            course.end_date,
-          )
-      }
-
+    if (candidateStudentIds.length > 0) {
       const {
         data: attendanceRows,
         error: attendanceError,
-      } = await attendanceQuery
+      } = await loadTripStudentsAttendance(
+        supabase,
+        trip.course_id,
+        candidateStudentIds,
+        course?.end_date,
+      )
 
       if (attendanceError) {
         console.error(
@@ -756,18 +657,15 @@ export async function GET(
 
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل الحضور',
-            details:
-              attendanceError.message,
+            error: 'تعذر تحميل الحضور',
+            details: attendanceError.message,
           },
           { status: 500 },
         )
       }
 
       attendance =
-        (attendanceRows ??
-          []) as AttendanceRow[]
+        (attendanceRows ?? []) as AttendanceRow[]
     }
 
     /*
@@ -776,27 +674,10 @@ export async function GET(
     const {
       data: tripStudents,
       error: tripStudentsError,
-    } = await supabase
-      .from('trip_students')
-      .select(`
-        id,
-        trip_id,
-        student_id,
-        enrollment_id,
-        attendance_percentage,
-        attendance_present,
-        attendance_absent,
-        attendance_late,
-        attendance_excused,
-        attendance_not_recorded,
-        eligibility_note,
-        selected,
-        response,
-        response_note,
-        responded_at,
-        payment_amount
-      `)
-      .eq('trip_id', id)
+    } = await loadSavedTripStudents(
+      supabase,
+      id,
+    )
 
     if (tripStudentsError) {
       console.error(
@@ -806,18 +687,15 @@ export async function GET(
 
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل طلاب الرحلة',
-          details:
-            tripStudentsError.message,
+          error: 'تعذر تحميل طلاب الرحلة',
+          details: tripStudentsError.message,
         },
         { status: 500 },
       )
     }
 
     const savedTripStudents =
-      (tripStudents ??
-        []) as TripStudentRow[]
+      (tripStudents ?? []) as TripStudentRow[]
 
     const savedTripStudentMap =
       new Map(
@@ -833,10 +711,7 @@ export async function GET(
      * تجميع الحضور
      */
     const attendanceByStudent =
-      new Map<
-        string,
-        AttendanceRow[]
-      >()
+      new Map<string, AttendanceRow[]>()
 
     for (const record of attendance) {
       const current =
@@ -861,8 +736,7 @@ export async function GET(
           const enrollment =
             candidateEnrollmentRows.find(
               (item) =>
-                item.student_id ===
-                student.id,
+                item.student_id === student.id,
             )
 
           if (!enrollment) {
@@ -870,14 +744,10 @@ export async function GET(
           }
 
           const level =
-            levelMap.get(
-              enrollment.level_id,
-            )
+            levelMap.get(enrollment.level_id)
 
           const records =
-            attendanceByStudent.get(
-              student.id,
-            ) ?? []
+            attendanceByStudent.get(student.id) ?? []
 
           const attendanceSummary =
             calculateAttendance(
@@ -899,13 +769,10 @@ export async function GET(
             )
 
           const eligible =
-            attendanceEligible &&
-            notesEligible
+            attendanceEligible && notesEligible
 
           const saved =
-            savedTripStudentMap.get(
-              student.id,
-            )
+            savedTripStudentMap.get(student.id)
 
           const eligibilityNote =
             getEligibilityNote(
@@ -919,26 +786,20 @@ export async function GET(
           return {
             id: student.id,
             name: student.name,
-            personal_id:
-              student.personal_id,
+            personal_id: student.personal_id,
             phone: student.phone,
-            whatsapp:
-              student.whatsapp,
+            whatsapp: student.whatsapp,
 
             level: level
               ? {
                   id: level.id,
                   name: level.name,
-                  sort_order:
-                    level.sort_order,
+                  sort_order: level.sort_order,
                 }
               : null,
 
-            enrollment_id:
-              enrollment.id,
-
-            enrollment_status:
-              enrollment.status,
+            enrollment_id: enrollment.id,
+            enrollment_status: enrollment.status,
 
             attendance_percentage:
               attendanceSummary.percentage,
@@ -958,67 +819,43 @@ export async function GET(
             attendance_not_recorded:
               attendanceSummary.notRecorded,
 
-            course_notes:
-              student.notes
-                ? [
-                    {
-                      note: student.notes,
-                      source: 'student',
-                    },
-                  ]
-                : [],
+            course_notes: student.notes
+              ? [
+                  {
+                    note: student.notes,
+                    source: 'student',
+                  },
+                ]
+              : [],
 
             eligible,
+            eligibility_note: eligibilityNote,
 
-            eligibility_note:
-              eligibilityNote,
+            selected: saved
+              ? Boolean(saved.selected)
+              : eligible,
 
-            selected:
-              saved
-                ? Boolean(
-                    saved.selected,
-                  )
-                : eligible,
-
-            response:
-              saved?.response ??
-              'pending',
-
-            response_note:
-              saved?.response_note ??
-              null,
-
-            responded_at:
-              saved?.responded_at ??
-              null,
-
-            payment_amount:
-              saved?.payment_amount ??
-              0,
-
-            trip_student_id:
-              saved?.id ?? null,
+            response: saved?.response ?? 'pending',
+            response_note: saved?.response_note ?? null,
+            responded_at: saved?.responded_at ?? null,
+            payment_amount: saved?.payment_amount ?? 0,
+            trip_student_id: saved?.id ?? null,
           }
         })
         .filter(
           (
             item,
-          ): item is NonNullable<
-            typeof item
-          > => item !== null,
+          ): item is NonNullable<typeof item> =>
+            item !== null,
         )
         .sort((a, b) =>
-          a.name.localeCompare(
-            b.name,
-            'ar',
-          ),
+          a.name.localeCompare(b.name, 'ar'),
         )
 
     const lessonDates = [
       ...new Set(
         attendance.map(
-          (item) =>
-            item.attendance_date,
+          (item) => item.attendance_date,
         ),
       ),
     ].sort()
@@ -1027,8 +864,7 @@ export async function GET(
       trip,
       course,
       levels,
-      tripLevels:
-        tripLevels ?? [],
+      tripLevels: tripLevels ?? [],
       lesson_dates: lessonDates,
       students: resultStudents,
     })
@@ -1040,8 +876,7 @@ export async function GET(
 
     return NextResponse.json(
       {
-        error:
-          'حدث خطأ أثناء تحميل طلاب الرحلة',
+        error: 'حدث خطأ أثناء تحميل طلاب الرحلة',
       },
       { status: 500 },
     )
@@ -1071,8 +906,7 @@ export async function POST(
     if (!access) {
       return NextResponse.json(
         {
-          error:
-            'غير مصرح بالوصول',
+          error: 'غير مصرح بالوصول',
         },
         { status: 401 },
       )
@@ -1083,8 +917,7 @@ export async function POST(
     if (!id) {
       return NextResponse.json(
         {
-          error:
-            'معرف الرحلة مطلوب',
+          error: 'معرف الرحلة مطلوب',
         },
         { status: 400 },
       )
@@ -1096,27 +929,16 @@ export async function POST(
     const {
       data: trip,
       error: tripError,
-    } = await supabase
-      .from('trips')
-      .select(`
-        id,
-        academic_year_id,
-        course_id,
-        attendance_min,
-        attendance_max,
-        notes_requirement,
-        status
-      `)
-      .eq('id', id)
-      .maybeSingle()
+    } = await loadTripStudentsForSaving(
+      supabase,
+      id,
+    )
 
     if (tripError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر التحقق من الرحلة',
-          details:
-            tripError.message,
+          error: 'تعذر التحقق من الرحلة',
+          details: tripError.message,
         },
         { status: 500 },
       )
@@ -1125,8 +947,7 @@ export async function POST(
     if (!trip) {
       return NextResponse.json(
         {
-          error:
-            'الرحلة غير موجودة',
+          error: 'الرحلة غير موجودة',
         },
         { status: 404 },
       )
@@ -1138,8 +959,7 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          error:
-            'لا يمكن تعديل قائمة طلاب رحلة منشورة أو مغلقة',
+          error: 'لا يمكن تعديل قائمة طلاب رحلة منشورة أو مغلقة',
         },
         { status: 400 },
       )
@@ -1152,54 +972,43 @@ export async function POST(
     } catch {
       return NextResponse.json(
         {
-          error:
-            'بيانات الطلب غير صحيحة',
+          error: 'بيانات الطلب غير صحيحة',
         },
         { status: 400 },
       )
     }
 
     const selectedStudentIds =
-      Array.isArray(
-        body.student_ids,
-      )
+      Array.isArray(body.student_ids)
         ? [
             ...new Set(
               body.student_ids.filter(
                 (
                   value: unknown,
                 ): value is string =>
-                  typeof value ===
-                    'string' &&
-                  value.trim()
-                    .length > 0,
+                  typeof value === 'string' &&
+                  value.trim().length > 0,
               ),
             ),
           ]
         : []
 
     const selectedSet =
-      new Set(
-        selectedStudentIds,
-      )
+      new Set(selectedStudentIds)
 
     const {
       data: tripLevels,
       error: tripLevelsError,
-    } = await supabase
-      .from('trip_levels')
-      .select(`
-        level_id
-      `)
-      .eq('trip_id', id)
+    } = await loadTripLevelIdsForSaving(
+      supabase,
+      id,
+    )
 
     if (tripLevelsError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل مستويات الرحلة',
-          details:
-            tripLevelsError.message,
+          error: 'تعذر تحميل مستويات الرحلة',
+          details: tripLevelsError.message,
         },
         { status: 500 },
       )
@@ -1213,8 +1022,7 @@ export async function POST(
     if (levelIds.length === 0) {
       return NextResponse.json(
         {
-          error:
-            'لا توجد مستويات مرتبطة بالرحلة',
+          error: 'لا توجد مستويات مرتبطة بالرحلة',
         },
         { status: 400 },
       )
@@ -1223,40 +1031,24 @@ export async function POST(
     const {
       data: enrollments,
       error: enrollmentsError,
-    } = await supabase
-      .from('enrollments')
-      .select(`
-        id,
-        student_id,
-        academic_year_id,
-        level_id,
-        class_id,
-        status
-      `)
-      .eq(
-        'academic_year_id',
-        trip.academic_year_id,
-      )
-      .in(
-        'level_id',
-        levelIds,
-      )
+    } = await loadTripStudentsEnrollments(
+      supabase,
+      trip.academic_year_id,
+      levelIds,
+    )
 
     if (enrollmentsError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر التحقق من تسجيلات الطلاب',
-          details:
-            enrollmentsError.message,
+          error: 'تعذر التحقق من تسجيلات الطلاب',
+          details: enrollmentsError.message,
         },
         { status: 500 },
       )
     }
 
     const enrollmentRows =
-      (enrollments ??
-        []) as EnrollmentRow[]
+      (enrollments ?? []) as EnrollmentRow[]
 
     const enrollmentStudentIds = [
       ...new Set(
@@ -1268,43 +1060,28 @@ export async function POST(
 
     let assignmentRows: AssignmentRow[] = []
 
-    if (
-      enrollmentStudentIds.length > 0
-    ) {
+    if (enrollmentStudentIds.length > 0) {
       const {
         data: assignments,
         error: assignmentsError,
-      } = await supabase
-        .from('teacher_student_assignments')
-        .select(`
-          id,
-          student_id,
-          course_id
-        `)
-        .eq(
-          'course_id',
-          trip.course_id,
-        )
-        .in(
-          'student_id',
-          enrollmentStudentIds,
-        )
+      } = await loadTripStudentsAssignments(
+        supabase,
+        trip.course_id,
+        enrollmentStudentIds,
+      )
 
       if (assignmentsError) {
         return NextResponse.json(
           {
-            error:
-              'تعذر التحقق من إسنادات الطلاب للدورة',
-            details:
-              assignmentsError.message,
+            error: 'تعذر التحقق من إسنادات الطلاب للدورة',
+            details: assignmentsError.message,
           },
           { status: 500 },
         )
       }
 
       assignmentRows =
-        (assignments ??
-          []) as AssignmentRow[]
+        (assignments ?? []) as AssignmentRow[]
     }
 
     const assignedStudentIds =
@@ -1331,23 +1108,18 @@ export async function POST(
     ]
 
     const candidateStudentSet =
-      new Set(
-        candidateStudentIds,
-      )
+      new Set(candidateStudentIds)
 
     const invalidStudentIds =
       (selectedStudentIds as string[]).filter(
         (studentId) =>
-          !candidateStudentSet.has(
-            studentId,
-          ),
+          !candidateStudentSet.has(studentId),
       )
 
     if (invalidStudentIds.length > 0) {
       return NextResponse.json(
         {
-          error:
-            'يوجد طالب غير مرتبط بالسنة أو المستوى أو غير مسند للدورة المحددة',
+          error: 'يوجد طالب غير مرتبط بالسنة أو المستوى أو غير مسند للدورة المحددة',
         },
         { status: 400 },
       )
@@ -1356,43 +1128,23 @@ export async function POST(
     const {
       data: existingTripStudents,
       error: existingTripStudentsError,
-    } = await supabase
-      .from('trip_students')
-      .select(`
-        id,
-        trip_id,
-        student_id,
-        enrollment_id,
-        attendance_percentage,
-        attendance_present,
-        attendance_absent,
-        attendance_late,
-        attendance_excused,
-        attendance_not_recorded,
-        eligibility_note,
-        selected,
-        response,
-        response_note,
-        responded_at,
-        payment_amount
-      `)
-      .eq('trip_id', id)
+    } = await loadSavedTripStudents(
+      supabase,
+      id,
+    )
 
     if (existingTripStudentsError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل الاختيارات السابقة',
-          details:
-            existingTripStudentsError.message,
+          error: 'تعذر تحميل الاختيارات السابقة',
+          details: existingTripStudentsError.message,
         },
         { status: 500 },
       )
     }
 
     const existingRows =
-      (existingTripStudents ??
-        []) as TripStudentRow[]
+      (existingTripStudents ?? []) as TripStudentRow[]
 
     const existingMap =
       new Map(
@@ -1406,67 +1158,48 @@ export async function POST(
 
     const staleStudentIds =
       existingRows
-        .map(
-          (row) =>
-            row.student_id,
-        )
+        .map((row) => row.student_id)
         .filter(
           (studentId) =>
-            !candidateStudentSet.has(
-              studentId,
-            ),
+            !candidateStudentSet.has(studentId),
         )
 
-    if (
-      staleStudentIds.length > 0
-    ) {
+    if (staleStudentIds.length > 0) {
       const {
         error: deleteStaleError,
-      } = await supabase
-        .from('trip_students')
-        .delete()
-        .eq('trip_id', id)
-        .in(
-          'student_id',
-          staleStudentIds,
-        )
+      } = await deleteStaleTripStudents(
+        supabase,
+        id,
+        staleStudentIds,
+      )
 
       if (deleteStaleError) {
         return NextResponse.json(
           {
-            error:
-              'تعذر تنظيف طلاب الرحلة السابقين',
-            details:
-              deleteStaleError.message,
+            error: 'تعذر تنظيف طلاب الرحلة السابقين',
+            details: deleteStaleError.message,
           },
           { status: 500 },
         )
       }
 
       for (const studentId of staleStudentIds) {
-        existingMap.delete(
-          studentId,
-        )
+        existingMap.delete(studentId)
       }
     }
 
     const {
       data: attendanceStatuses,
       error: attendanceStatusesError,
-    } = await supabase
-      .from('attendance_statuses')
-      .select(`
-        id,
-        name
-      `)
+    } = await loadTripStudentsAttendanceStatuses(
+      supabase,
+    )
 
     if (attendanceStatusesError) {
       return NextResponse.json(
         {
-          error:
-            'تعذر تحميل حالات الحضور',
-          details:
-            attendanceStatusesError.message,
+          error: 'تعذر تحميل حالات الحضور',
+          details: attendanceStatusesError.message,
         },
         { status: 500 },
       )
@@ -1475,8 +1208,7 @@ export async function POST(
     const statusMap =
       new Map<string, string>(
         (
-          (attendanceStatuses ??
-            []) as AttendanceStatus[]
+          (attendanceStatuses ?? []) as AttendanceStatus[]
         ).map((status) => [
           status.id,
           status.name,
@@ -1485,54 +1217,32 @@ export async function POST(
 
     let attendanceRows: AttendanceRow[] = []
 
-    if (
-      candidateStudentIds.length > 0
-    ) {
+    if (candidateStudentIds.length > 0) {
       const {
         data: attendance,
         error: attendanceError,
-      } = await supabase
-        .from('attendance')
-        .select(`
-          id,
-          student_id,
-          enrollment_id,
-          attendance_date,
-          status_id,
-          note,
-          course_id
-        `)
-        .eq(
-          'course_id',
-          trip.course_id,
-        )
-        .in(
-          'student_id',
-          candidateStudentIds,
-        )
+      } = await loadTripStudentsAttendance(
+        supabase,
+        trip.course_id,
+        candidateStudentIds,
+      )
 
       if (attendanceError) {
         return NextResponse.json(
           {
-            error:
-              'تعذر حساب حضور الطلاب',
-            details:
-              attendanceError.message,
+            error: 'تعذر حساب حضور الطلاب',
+            details: attendanceError.message,
           },
           { status: 500 },
         )
       }
 
       attendanceRows =
-        (attendance ??
-          []) as AttendanceRow[]
+        (attendance ?? []) as AttendanceRow[]
     }
 
     const attendanceByStudent =
-      new Map<
-        string,
-        AttendanceRow[]
-      >()
+      new Map<string, AttendanceRow[]>()
 
     for (const record of attendanceRows) {
       const current =
@@ -1553,37 +1263,26 @@ export async function POST(
       notes: string | null
     }> = []
 
-    if (
-      candidateStudentIds.length > 0
-    ) {
+    if (candidateStudentIds.length > 0) {
       const {
         data: students,
         error: studentsError,
-      } = await supabase
-        .from('students')
-        .select(`
-          id,
-          notes
-        `)
-        .in(
-          'id',
-          candidateStudentIds,
-        )
+      } = await loadTripStudentNotes(
+        supabase,
+        candidateStudentIds,
+      )
 
       if (studentsError) {
         return NextResponse.json(
           {
-            error:
-              'تعذر تحميل ملاحظات الطلاب',
-            details:
-              studentsError.message,
+            error: 'تعذر تحميل ملاحظات الطلاب',
+            details: studentsError.message,
           },
           { status: 500 },
         )
       }
 
-      studentRows =
-        students ?? []
+      studentRows = students ?? []
     }
 
     const studentNotesMap =
@@ -1613,9 +1312,7 @@ export async function POST(
     for (const studentId of candidateStudentIds) {
       const enrollment =
         candidateEnrollmentRows.find(
-          (item) =>
-            item.student_id ===
-            studentId,
+          (item) => item.student_id === studentId,
         )
 
       if (!enrollment) {
@@ -1623,9 +1320,7 @@ export async function POST(
       }
 
       const records =
-        attendanceByStudent.get(
-          studentId,
-        ) ?? []
+        attendanceByStudent.get(studentId) ?? []
 
       const summary =
         calculateAttendance(
@@ -1634,9 +1329,7 @@ export async function POST(
         )
 
       const notes =
-        studentNotesMap.get(
-          studentId,
-        ) ?? null
+        studentNotesMap.get(studentId) ?? null
 
       const eligibilityNote =
         getEligibilityNote(
@@ -1648,51 +1341,35 @@ export async function POST(
         )
 
       const selected =
-        selectedSet.has(
-          studentId,
-        )
+        selectedSet.has(studentId)
 
       const existing =
-        existingMap.get(
-          studentId,
-        )
+        existingMap.get(studentId)
 
       if (existing) {
         const {
           error: updateError,
-        } = await supabase
-          .from('trip_students')
-          .update({
-            enrollment_id:
-              enrollment.id,
-            attendance_percentage:
-              summary.percentage,
-            attendance_present:
-              summary.present,
-            attendance_absent:
-              summary.absent,
-            attendance_late:
-              summary.late,
-            attendance_excused:
-              summary.excused,
-            attendance_not_recorded:
-              summary.notRecorded,
-            eligibility_note:
-              eligibilityNote,
+        } = await updateTripStudentSelection(
+          supabase,
+          existing.id,
+          {
+            enrollment_id: enrollment.id,
+            attendance_percentage: summary.percentage,
+            attendance_present: summary.present,
+            attendance_absent: summary.absent,
+            attendance_late: summary.late,
+            attendance_excused: summary.excused,
+            attendance_not_recorded: summary.notRecorded,
+            eligibility_note: eligibilityNote,
             selected,
-          })
-          .eq(
-            'id',
-            existing.id,
-          )
+          },
+        )
 
         if (updateError) {
           return NextResponse.json(
             {
-              error:
-                'تعذر تحديث اختيار أحد الطلاب',
-              details:
-                updateError.message,
+              error: 'تعذر تحديث اختيار أحد الطلاب',
+              details: updateError.message,
             },
             { status: 500 },
           )
@@ -1704,22 +1381,14 @@ export async function POST(
       newRows.push({
         trip_id: id,
         student_id: studentId,
-        enrollment_id:
-          enrollment.id,
-        attendance_percentage:
-          summary.percentage,
-        attendance_present:
-          summary.present,
-        attendance_absent:
-          summary.absent,
-        attendance_late:
-          summary.late,
-        attendance_excused:
-          summary.excused,
-        attendance_not_recorded:
-          summary.notRecorded,
-        eligibility_note:
-          eligibilityNote,
+        enrollment_id: enrollment.id,
+        attendance_percentage: summary.percentage,
+        attendance_present: summary.present,
+        attendance_absent: summary.absent,
+        attendance_late: summary.late,
+        attendance_excused: summary.excused,
+        attendance_not_recorded: summary.notRecorded,
+        eligibility_note: eligibilityNote,
         selected,
       })
     }
@@ -1727,22 +1396,16 @@ export async function POST(
     if (newRows.length > 0) {
       const {
         error: insertError,
-      } = await supabase
-        .from('trip_students')
-        .insert(
-          newRows.map((row) => ({
-            ...row,
-            response: 'pending',
-          })),
-        )
+      } = await insertNewTripStudents(
+        supabase,
+        newRows,
+      )
 
       if (insertError) {
         return NextResponse.json(
           {
-            error:
-              'تعذر حفظ طلاب الرحلة الجدد',
-            details:
-              insertError.message,
+            error: 'تعذر حفظ طلاب الرحلة الجدد',
+            details: insertError.message,
           },
           { status: 500 },
         )
@@ -1752,43 +1415,17 @@ export async function POST(
     const {
       data: finalStudents,
       error: finalStudentsError,
-    } = await supabase
-      .from('trip_students')
-      .select(`
-        id,
-        trip_id,
-        student_id,
-        enrollment_id,
-        attendance_percentage,
-        attendance_present,
-        attendance_absent,
-        attendance_late,
-        attendance_excused,
-        attendance_not_recorded,
-        eligibility_note,
-        selected,
-        response,
-        response_note,
-        responded_at,
-        payment_amount
-      `)
-      .eq('trip_id', id)
-      .in(
-        'student_id',
-        candidateStudentIds.length > 0
-          ? candidateStudentIds
-          : [
-              '00000000-0000-0000-0000-000000000000',
-            ],
-      )
+    } = await loadFinalTripStudents(
+      supabase,
+      id,
+      candidateStudentIds,
+    )
 
     if (finalStudentsError) {
       return NextResponse.json(
         {
-          error:
-            'تم الحفظ ولكن تعذر تحميل النتيجة النهائية',
-          details:
-            finalStudentsError.message,
+          error: 'تم الحفظ ولكن تعذر تحميل النتيجة النهائية',
+          details: finalStudentsError.message,
         },
         { status: 500 },
       )
@@ -1798,8 +1435,7 @@ export async function POST(
       success: true,
       tripId: id,
       selectedStudentIds,
-      students:
-        finalStudents ?? [],
+      students: finalStudents ?? [],
     })
   } catch (error) {
     console.error(
@@ -1809,8 +1445,7 @@ export async function POST(
 
     return NextResponse.json(
       {
-        error:
-          'حدث خطأ أثناء حفظ طلاب الرحلة',
+        error: 'حدث خطأ أثناء حفظ طلاب الرحلة',
       },
       { status: 500 },
     )
@@ -1821,22 +1456,15 @@ export async function POST(
  * ============================================================
  * PATCH
  * ============================================================
- *
- * حالياً نستخدم PATCH لتحديث:
- *
- * 1. payment_amount
- * 2. response
- *
- * بدون التأثير على selected.
  */
-
 
 export async function PATCH(
   request: Request,
   { params }: RouteContext,
 ) {
   try {
-    const { access, response } = await requireAuth()
+    const { access, response } =
+      await requireAuth()
 
     if (response) return response
 
@@ -1856,13 +1484,16 @@ export async function PATCH(
       )
     }
 
-    const supabase = await createSupabaseServerClient()
+    const supabase =
+      await createSupabaseServerClient()
 
-    const { data: trip, error: tripError } = await supabase
-      .from('trips')
-      .select('id, status')
-      .eq('id', id)
-      .maybeSingle()
+    const {
+      data: trip,
+      error: tripError,
+    } = await loadTripStatusForStudentUpdate(
+      supabase,
+      id,
+    )
 
     if (tripError) {
       return NextResponse.json(
@@ -1977,36 +1608,28 @@ export async function PATCH(
           ? body.response_note.trim() || null
           : null
 
-      const isPending = tripResponse === 'pending'
+      const isPending =
+        tripResponse === 'pending'
 
-      const { data: updated, error: updateError } =
-        await supabase
-          .from('trip_students')
-          .update({
-            payment_amount: roundedAmount,
-            response: tripResponse,
-            response_note: responseNote,
-            responded_at: isPending
-              ? null
-              : new Date().toISOString(),
-            response_source: isPending
-              ? null
-              : 'admin',
-          })
-          .eq('trip_id', id)
-          .eq('student_id', studentId)
-          .select(`
-            id,
-            trip_id,
-            student_id,
-            selected,
-            payment_amount,
-            response,
-            response_note,
-            responded_at,
-            response_source
-          `)
-          .maybeSingle()
+      const {
+        data: updated,
+        error: updateError,
+      } = await updateTripStudentParticipant(
+        supabase,
+        id,
+        studentId,
+        {
+          payment_amount: roundedAmount,
+          response: tripResponse,
+          response_note: responseNote,
+          responded_at: isPending
+            ? null
+            : new Date().toISOString(),
+          response_source: isPending
+            ? null
+            : 'admin',
+        },
+      )
 
       if (updateError) {
         console.error(
@@ -2074,19 +1697,15 @@ export async function PATCH(
       paymentAmount =
         Math.round(paymentAmount * 1000) / 1000
 
-      const { data: updated, error: updateError } =
-        await supabase
-          .from('trip_students')
-          .update({ payment_amount: paymentAmount })
-          .eq('trip_id', id)
-          .eq('student_id', studentId)
-          .select(`
-            id,
-            trip_id,
-            student_id,
-            payment_amount
-          `)
-          .maybeSingle()
+      const {
+        data: updated,
+        error: updateError,
+      } = await updateTripStudentPayment(
+        supabase,
+        id,
+        studentId,
+        paymentAmount,
+      )
 
       if (updateError) {
         console.error(
@@ -2150,34 +1769,27 @@ export async function PATCH(
           ? body.response_note.trim() || null
           : null
 
-      const isPending = tripResponse === 'pending'
+      const isPending =
+        tripResponse === 'pending'
 
-      const { data: updated, error: updateError } =
-        await supabase
-          .from('trip_students')
-          .update({
-            response: tripResponse,
-            response_note: responseNote,
-            responded_at: isPending
-              ? null
-              : new Date().toISOString(),
-            response_source: isPending
-              ? null
-              : 'admin',
-          })
-          .eq('trip_id', id)
-          .eq('student_id', studentId)
-          .select(`
-            id,
-            trip_id,
-            student_id,
-            selected,
-            response,
-            response_note,
-            responded_at,
-            response_source
-          `)
-          .maybeSingle()
+      const {
+        data: updated,
+        error: updateError,
+      } = await updateTripStudentResponse(
+        supabase,
+        id,
+        studentId,
+        {
+          response: tripResponse,
+          response_note: responseNote,
+          responded_at: isPending
+            ? null
+            : new Date().toISOString(),
+          response_source: isPending
+            ? null
+            : 'admin',
+        },
+      )
 
       if (updateError) {
         console.error(
