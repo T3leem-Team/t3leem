@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/require-auth'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadTrustedDevicesAdminProfile,
+  loadTrustedDeviceOwnerProfiles,
+  insertTrustedDeviceAuditLog,
+  closeTrustedDeviceSessions,
+  loadTrustedDevicesByStatus,
+  loadTrustedDeviceById,
+  approveTrustedDevice,
+  rejectTrustedDevice,
+  revokeTrustedDevice,
+  updateTrustedDeviceGracePeriod,
+} from '@/lib/features/system/repositories/trusted-devices-admin.repository'
 
 const DEFAULT_GRACE_PERIOD_DAYS = 30
 const MAX_GRACE_PERIOD_DAYS = 3650
@@ -48,11 +48,7 @@ async function getAdmin() {
   const userId = access.userId
 
   const { data: profile, error: profileError } =
-    await supabaseAdmin
-      .from('user_profiles')
-      .select('auth_user_id, username, full_name, role, is_active')
-      .eq('auth_user_id', userId)
-      .maybeSingle()
+    await loadTrustedDevicesAdminProfile(userId)
 
   if (profileError) {
     console.error('Admin profile lookup error:', profileError)
@@ -95,10 +91,8 @@ async function attachUsers<
     }))
   }
 
-  const { data: profiles, error } = await supabaseAdmin
-    .from('user_profiles')
-    .select('auth_user_id, username, full_name, role')
-    .in('auth_user_id', userIds)
+  const { data: profiles, error } =
+    await loadTrustedDeviceOwnerProfiles(userIds)
 
   if (error) {
     throw new Error(
@@ -136,18 +130,15 @@ async function writeAudit(
   adminUserId: string,
   metadata: Record<string, unknown> = {},
 ) {
-  const { error } = await supabaseAdmin
-    .from('auth_audit_logs')
-    .insert({
-      auth_user_id: authUserId,
-      trusted_device_id: deviceId,
-      event_type: eventType,
-      success: true,
-      metadata: {
-        ...metadata,
-        performed_by: adminUserId,
-      },
-    })
+  const { error } = await insertTrustedDeviceAuditLog(
+    authUserId,
+    deviceId,
+    eventType,
+    {
+      ...metadata,
+      performed_by: adminUserId,
+    },
+  )
 
   if (error) {
     console.error(`Audit log error (${eventType}):`, error)
@@ -164,16 +155,11 @@ async function closeDeviceSessions(
 ) {
   const now = new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('auth_user_id', authUserId)
-    .eq('trusted_device_id', deviceId)
-    .eq('is_active', true)
+  const { error } = await closeTrustedDeviceSessions(
+    authUserId,
+    deviceId,
+    now,
+  )
 
   if (error) {
     console.error('Close device sessions error:', error)
@@ -215,17 +201,17 @@ export async function GET() {
     `
 
     const [pendingResult, approvedResult] = await Promise.all([
-      supabaseAdmin
-        .from('trusted_devices')
-        .select(columns)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false }),
+      loadTrustedDevicesByStatus(
+        'pending',
+        'created_at',
+        columns,
+      ),
 
-      supabaseAdmin
-        .from('trusted_devices')
-        .select(columns)
-        .eq('status', 'approved')
-        .order('approved_at', { ascending: false }),
+      loadTrustedDevicesByStatus(
+        'approved',
+        'approved_at',
+        columns,
+      ),
     ])
 
     if (pendingResult.error || approvedResult.error) {
@@ -331,20 +317,7 @@ export async function POST(request: Request) {
     }
 
     const { data: device, error: deviceError } =
-      await supabaseAdmin
-        .from('trusted_devices')
-        .select(`
-          id,
-          auth_user_id,
-          status,
-          device_name,
-          approved_device_type,
-          pending_device_type,
-          grace_period_days,
-          grace_expires_at
-        `)
-        .eq('id', deviceId)
-        .maybeSingle()
+      await loadTrustedDeviceById(deviceId)
 
     if (deviceError) {
       console.error('Trusted device lookup error:', deviceError)
@@ -380,35 +353,14 @@ export async function POST(request: Request) {
       const graceExpiresAt = getGraceExpiry(gracePeriodDays!)
 
       const { data: updatedDevice, error } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            status: 'approved',
-            approved_at: approvedAt,
-            approved_by: adminUserId,
-            approved_device_type: approvedDeviceType,
-            pending_device_type: null,
-            grace_period_days: gracePeriodDays,
-            grace_expires_at: graceExpiresAt,
-            rejected_at: null,
-            rejected_by: null,
-            revoked_at: null,
-            revoked_by: null,
-          })
-          .eq('id', device.id)
-          .eq('status', 'pending')
-          .select(`
-            id,
-            auth_user_id,
-            device_name,
-            status,
-            approved_at,
-            approved_by,
-            approved_device_type,
-            grace_period_days,
-            grace_expires_at
-          `)
-          .maybeSingle()
+        await approveTrustedDevice(
+          device.id,
+          adminUserId,
+          approvedDeviceType,
+          approvedAt,
+          gracePeriodDays!,
+          graceExpiresAt,
+        )
 
       if (error) {
         console.error('Trusted device approval error:', error)
@@ -460,24 +412,11 @@ export async function POST(request: Request) {
       }
 
       const { data: updatedDevice, error } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            status: 'rejected',
-            rejected_at: new Date().toISOString(),
-            rejected_by: adminUserId,
-            approved_at: null,
-            approved_by: null,
-            pending_device_type: null,
-            revoked_at: null,
-            revoked_by: null,
-          })
-          .eq('id', device.id)
-          .eq('status', 'pending')
-          .select(
-            'id, auth_user_id, device_name, status, rejected_at, rejected_by',
-          )
-          .maybeSingle()
+        await rejectTrustedDevice(
+          device.id,
+          adminUserId,
+          new Date().toISOString(),
+        )
 
       if (error) {
         console.error('Trusted device rejection error:', error)
@@ -525,19 +464,11 @@ export async function POST(request: Request) {
       }
 
       const { data: updatedDevice, error } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            status: 'revoked',
-            revoked_at: new Date().toISOString(),
-            revoked_by: adminUserId,
-          })
-          .eq('id', device.id)
-          .eq('status', 'approved')
-          .select(
-            'id, auth_user_id, device_name, status, revoked_at, revoked_by',
-          )
-          .maybeSingle()
+        await revokeTrustedDevice(
+          device.id,
+          adminUserId,
+          new Date().toISOString(),
+        )
 
       if (error) {
         console.error('Trusted device revoke error:', error)
@@ -593,24 +524,11 @@ export async function POST(request: Request) {
       const graceExpiresAt = getGraceExpiry(gracePeriodDays!)
 
       const { data: updatedDevice, error } =
-        await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            grace_period_days: gracePeriodDays,
-            grace_expires_at: graceExpiresAt,
-          })
-          .eq('id', device.id)
-          .eq('status', 'approved')
-          .select(`
-            id,
-            auth_user_id,
-            device_name,
-            status,
-            approved_device_type,
-            grace_period_days,
-            grace_expires_at
-          `)
-          .maybeSingle()
+        await updateTrustedDeviceGracePeriod(
+          device.id,
+          gracePeriodDays!,
+          graceExpiresAt,
+        )
 
       if (error) {
         console.error('Grace period update error:', error)
