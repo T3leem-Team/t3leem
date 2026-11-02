@@ -24,6 +24,9 @@ export type Course = {
   id: string
   name: string
   academicYearId: string
+  days: string[]
+  startDate: string | null
+  endDate: string | null
 }
 
 export type TeacherAssignment = {
@@ -188,6 +191,9 @@ export async function loadCommunicationData(): Promise<CommunicationCache> {
       id: course.id,
       name: course.name ?? '',
       academicYearId: course.academic_year_id,
+      days: Array.isArray(course.days) ? course.days : [],
+      startDate: course.start_date ?? null,
+      endDate: course.end_date ?? null,
     }),
   )
 
