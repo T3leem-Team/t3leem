@@ -1,18 +1,9 @@
-
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { validateCurrentAccess } from '@/lib/auth-guard'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  updateActiveSessionActivity,
+} from '@/lib/features/auth/repositories/session/session.repository'
 
 type SessionRequestType = 'heartbeat' | 'activity'
 
@@ -74,17 +65,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const { error: updateError } = await supabaseAdmin
-      .from('active_sessions')
-      .update({
-        last_activity_at: new Date().toISOString(),
-      })
-      .eq('id', access.sessionId)
-      .eq('auth_user_id', access.userId)
-      .eq('is_active', true)
+    const { error: updateError } =
+      await updateActiveSessionActivity(
+        access.sessionId,
+        access.userId,
+        new Date().toISOString(),
+      )
 
     if (updateError) {
-      console.error('Session activity update error:', updateError)
+      console.error(
+        'Session activity update error:',
+        updateError,
+      )
 
       return NextResponse.json(
         {
