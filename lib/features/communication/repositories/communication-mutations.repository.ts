@@ -2,6 +2,53 @@
 import { supabase } from '@/lib/supabase'
 
 // ==========================================
+// Admin Lesson Reminder Template
+// ==========================================
+
+export const ADMIN_LESSON_REMINDER_TEMPLATE_NAME =
+  '__ADMIN_DAILY_LESSON_REMINDER__'
+
+export async function loadAdminLessonReminderTemplate() {
+  return supabase
+    .from('communication_message_templates')
+    .select('id, name, content, created_at, updated_at')
+    .eq('name', ADMIN_LESSON_REMINDER_TEMPLATE_NAME)
+    .maybeSingle()
+}
+
+export async function saveAdminLessonReminderTemplate(
+  content: string,
+) {
+  const { data: existing, error: loadError } =
+    await loadAdminLessonReminderTemplate()
+
+  if (loadError) {
+    return { data: null, error: loadError }
+  }
+
+  if (existing) {
+    return supabase
+      .from('communication_message_templates')
+      .update({
+        content,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .select('id, name, content, created_at, updated_at')
+      .single()
+  }
+
+  return supabase
+    .from('communication_message_templates')
+    .insert({
+      name: ADMIN_LESSON_REMINDER_TEMPLATE_NAME,
+      content,
+    })
+    .select('id, name, content, created_at, updated_at')
+    .single()
+}
+
+// ==========================================
 // Create Communication Message Template
 // ==========================================
 
@@ -93,7 +140,8 @@ export async function loadCommunicationRecords(
     supabase
       .from('communication_message_templates')
       .select('id, name, content, created_at, updated_at')
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .not('name', 'eq', ADMIN_LESSON_REMINDER_TEMPLATE_NAME),
 
     supabase
       .from('attendance_award_results')
@@ -114,8 +162,6 @@ export async function loadCommunicationRecords(
     attendanceAwardResult,
   }
 }
-
-
 
 // ==========================================
 // Communication WhatsApp Group
@@ -163,7 +209,9 @@ export async function insertCommunicationGroup(
     })
 }
 
-
+// ==========================================
+// Update / Delete Communication Message Template
+// ==========================================
 
 export async function updateCommunicationMessageTemplate(
   id: string,
@@ -192,4 +240,3 @@ export async function deleteCommunicationMessageTemplate(
     .delete()
     .eq('id', id)
 }
-
