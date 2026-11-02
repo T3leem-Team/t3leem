@@ -165,3 +165,35 @@ export async function loadAllUserDashboardSections() {
     .from('user_dashboard_sections')
     .select('id, user_profile_id, section_id, created_at')
 }
+
+
+
+export async function loadUserForDeletion(userId: string) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .select('id, auth_user_id, username, role')
+    .eq('id', userId)
+    .maybeSingle()
+}
+
+export async function deleteUserPermissionsByUserId(userId: string) {
+  return await supabaseAdmin
+    .from('user_permissions')
+    .delete()
+    .eq('user_profile_id', userId)
+}
+
+export async function deleteUserSectionsByUserId(userId: string) {
+  return await supabaseAdmin
+    .from('user_dashboard_sections')
+    .delete()
+    .eq('user_profile_id', userId)
+}
+
+export async function deleteUserProfile(userId: string) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .delete()
+    .eq('id', userId)
+}
+
