@@ -1,6 +1,14 @@
+
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
-import { supabaseAdmin } from './users-supabase'
+import {
+  loadAllUsers,
+  loadAllPermissions,
+  loadAllUserPermissions,
+  loadAllRolePermissions,
+  loadAllDashboardSections,
+  loadAllUserDashboardSections,
+} from '@/lib/features/users/repositories/users-admin.repository'
 
 export async function getUsers() {
   try {
@@ -15,38 +23,12 @@ export async function getUsers() {
       sectionsResult,
       userSectionsResult,
     ] = await Promise.all([
-      supabaseAdmin
-        .from('user_profiles')
-        .select(`
-          id, auth_user_id, username, email, full_name,
-          role, department, is_active, created_at, updated_at
-        `)
-        .order('created_at', { ascending: false }),
-
-      supabaseAdmin
-        .from('permissions')
-        .select('id, permission_key, permission_name, description, created_at')
-        .order('permission_name', { ascending: true }),
-
-      supabaseAdmin
-        .from('user_permissions')
-        .select('id, user_profile_id, permission_id, created_at'),
-
-      supabaseAdmin
-        .from('role_permissions')
-        .select('role, permission_id'),
-
-      supabaseAdmin
-        .from('dashboard_sections')
-        .select(`
-          id, section_key, section_name, description, icon,
-          href, sort_order, is_active, created_at, updated_at
-        `)
-        .order('sort_order', { ascending: true }),
-
-      supabaseAdmin
-        .from('user_dashboard_sections')
-        .select('id, user_profile_id, section_id, created_at'),
+      loadAllUsers(),
+      loadAllPermissions(),
+      loadAllUserPermissions(),
+      loadAllRolePermissions(),
+      loadAllDashboardSections(),
+      loadAllUserDashboardSections(),
     ])
 
     const results = [
@@ -62,7 +44,10 @@ export async function getUsers() {
 
     if (failed) {
       console.error(`${failed.name} lookup error:`, failed.error)
-      return NextResponse.json({ error: failed.message }, { status: 500 })
+      return NextResponse.json(
+        { error: failed.message },
+        { status: 500 },
+      )
     }
 
     const users = usersResult.data ?? []
