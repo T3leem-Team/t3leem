@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
+
 import {
   loadAllUsers,
   loadAllPermissions,
@@ -12,8 +13,11 @@ import {
 
 export async function getUsers() {
   try {
-    const { error } = await requirePermission('users.view')
-    if (error) return error
+    const permissionCheck = await requirePermission('users.view')
+
+    if (permissionCheck.error) {
+      return permissionCheck.error
+    }
 
     const [
       usersResult,
@@ -44,6 +48,7 @@ export async function getUsers() {
 
     if (failed) {
       console.error(`${failed.name} lookup error:`, failed.error)
+
       return NextResponse.json(
         { error: failed.message },
         { status: 500 },
