@@ -5,7 +5,7 @@ import {
   loadActiveSessionForLogout,
   closeActiveSessionForLogout,
   insertLogoutAuditLog,
-} from '@/lib/features/auth/repositories/logout/logout.repository'
+} from '@/lib/features/auth/repositories/logout.repository'
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL!
