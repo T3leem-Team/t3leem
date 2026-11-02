@@ -1,18 +1,9 @@
-
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { requirePermission } from '@/lib/auth/authorization'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadAcademicYearForArchive,
+  archiveAcademicYear,
+} from '@/lib/features/system/repositories/archive-admin.repository'
 
 export async function POST(request: Request) {
   const authorization =
@@ -53,11 +44,7 @@ export async function POST(request: Request) {
   }
 
   const { data: year, error: lookupError } =
-    await supabaseAdmin
-      .from('academic_years')
-      .select('id, is_current, is_active')
-      .eq('id', yearId)
-      .maybeSingle()
+    await loadAcademicYearForArchive(yearId)
 
   if (lookupError) {
     console.error(
@@ -86,17 +73,7 @@ export async function POST(request: Request) {
   }
 
   const { data: archivedYear, error: updateError } =
-    await supabaseAdmin
-      .from('academic_years')
-      .update({
-        is_active: false,
-        is_current: false,
-      })
-      .eq('id', year.id)
-      .eq('is_active', true)
-      .eq('is_current', false)
-      .select('id')
-      .maybeSingle()
+    await archiveAcademicYear(year.id)
 
   if (updateError) {
     console.error(
