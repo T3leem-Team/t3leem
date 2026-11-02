@@ -288,8 +288,8 @@ export async function PATCH(request: Request) {
       'supervision.manage',
     )
 
-    if (permissionCheck) {
-      return permissionCheck
+    if (permissionCheck.error) {
+      return permissionCheck.error
     }
 
     const body = await request.json()
