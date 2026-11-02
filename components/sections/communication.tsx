@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -15,6 +16,7 @@ import {
   Pencil,
   FileText,
   X,
+  CalendarDays,
 } from 'lucide-react'
 
 import {
@@ -60,6 +62,7 @@ type CommunicationSection =
   | 'direct'
   | 'group'
   | 'templates'
+  | 'reminders'
 
 const MESSAGE_VARIABLES = [
   { key: '{{name}}', label: 'اسم الطالب' },
@@ -805,9 +808,22 @@ export function CommunicationView() {
           <FileText className="size-4" />
           الرسائل المحفوظة
         </Button>
+
+        <Button
+          type="button"
+          variant={
+            activeSection === 'reminders'
+              ? 'default'
+              : 'outline'
+          }
+          onClick={() => setActiveSection('reminders')}
+        >
+          <CalendarDays className="size-4" />
+          تذكير الدروس
+        </Button>
       </div>
 
-      {/* قسم التواصل المباشر: الواجهة موجودة في الملف المفصول */}
+      {/* قسم التواصل المباشر */}
       {activeSection === 'direct' && (
         <CommunicationDirect
           teachers={teachers}
@@ -865,6 +881,13 @@ export function CommunicationView() {
             }
           }}
         />
+      )}
+
+      {/* تذكير الدروس - سيتم إنشاء مكوّن مستقل له */}
+      {activeSection === 'reminders' && (
+        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+          سيتم تجهيز تذكير الدروس هنا.
+        </div>
       )}
 
       {/* نافذة الرسالة */}
