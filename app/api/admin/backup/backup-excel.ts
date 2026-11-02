@@ -1,7 +1,7 @@
 
 import 'server-only'
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import type { BackupData } from '@/lib/features/system/repositories/backup-admin.repository'
 
 type Row = Record<string, unknown>
@@ -325,11 +325,11 @@ function makeMap(
 }
 
 /* =========================================================
-   إضافة Sheet
+   إضافة Sheet باستخدام ExcelJS
    ========================================================= */
 
 function appendSheet(
-  workbook: XLSX.WorkBook,
+  workbook: ExcelJS.Workbook,
   name: string,
   rows: Row[],
   context?: RowContext,
@@ -346,13 +346,87 @@ function appendSheet(
       ? readableRows
       : [{ 'لا توجد بيانات': '' }]
 
-  const sheet = XLSX.utils.json_to_sheet(safeRows)
-
-  XLSX.utils.book_append_sheet(
-    workbook,
-    sheet,
-    name.slice(0, 31),
+  const headers = Array.from(
+    new Set(
+      safeRows.flatMap((row) => Object.keys(row)),
+    ),
   )
+
+  const sheet = workbook.addWorksheet(
+    name.slice(0, 31),
+    {
+      views: [
+        {
+          rightToLeft: true,
+        },
+      ],
+    },
+  )
+
+  // عناوين الأعمدة
+  sheet.addRow(headers)
+
+  // البيانات
+  for (const row of safeRows) {
+    sheet.addRow(
+      headers.map((header) => {
+        const value = row[header]
+
+        return (
+          value === null || value === undefined
+            ? ''
+            : value
+        ) as ExcelJS.CellValue
+      }),
+    )
+  }
+
+  // تثبيت صف العناوين
+  sheet.views = [
+    {
+      rightToLeft: true,
+      state: 'frozen',
+      ySplit: 1,
+    },
+  ]
+
+  // تنسيق صف العناوين
+  const headerRow = sheet.getRow(1)
+
+  headerRow.font = {
+    bold: true,
+  }
+
+  headerRow.alignment = {
+    horizontal: 'right',
+    vertical: 'middle',
+    wrapText: true,
+  }
+
+  // ضبط محاذاة البيانات
+  sheet.eachRow((row) => {
+    row.alignment = {
+      horizontal: 'right',
+      vertical: 'middle',
+      wrapText: true,
+    }
+  })
+
+  // عرض الأعمدة حسب المحتوى
+  sheet.columns.forEach((column) => {
+    let maxLength = 12
+
+    column.eachCell?.({ includeEmpty: false }, (cell) => {
+      const cellLength = String(cell.value ?? '').length
+
+      maxLength = Math.max(
+        maxLength,
+        Math.min(cellLength, 50),
+      )
+    })
+
+    column.width = Math.min(maxLength + 3, 55)
+  })
 }
 
 /* =========================================================
@@ -361,7 +435,7 @@ function appendSheet(
 
 export function buildBackupWorkbook(
   data: BackupData,
-): XLSX.WorkBook {
+): ExcelJS.Workbook {
   const {
     academicYear,
     students,
@@ -551,7 +625,7 @@ export function buildBackupWorkbook(
      إنشاء Excel
      ===================================================== */
 
-  const workbook = XLSX.utils.book_new()
+  const workbook = new ExcelJS.Workbook()
 
   /* معلومات النسخة */
 
