@@ -39,3 +39,90 @@ export async function loadAllPermissions() {
       ascending: true,
     })
 }
+
+export async function loadUserPermissionIds(
+  userProfileId: string,
+) {
+  return await supabaseAdmin
+    .from('user_permissions')
+    .select('permission_id')
+    .eq('user_profile_id', userProfileId)
+}
+
+export async function loadRolePermissionIds(
+  role: string,
+) {
+  return await supabaseAdmin
+    .from('role_permissions')
+    .select('permission_id')
+    .eq('role', role)
+}
+
+export async function loadActiveSystemElementKeys() {
+  return await supabaseAdmin
+    .from('system_elements')
+    .select('element_key')
+    .eq('is_active', true)
+}
+
+export async function loadUserSystemElementAssignments(
+  userProfileId: string,
+) {
+  return await supabaseAdmin
+    .from('system_element_users')
+    .select(`
+      element_id,
+      system_elements!inner (
+        element_key,
+        is_active
+      )
+    `)
+    .eq('user_profile_id', userProfileId)
+}
+
+export async function loadSupervisionSettings() {
+  return await supabaseAdmin
+    .from('supervision_settings')
+    .select(
+      'allow_teacher_transfer, allow_teacher_remove',
+    )
+    .eq('id', 'default')
+    .maybeSingle()
+}
+
+export async function createDefaultSupervisionSettings(
+  settings?: {
+    allow_teacher_transfer?: boolean
+    allow_teacher_remove?: boolean
+  },
+) {
+  return await supabaseAdmin
+    .from('supervision_settings')
+    .insert({
+      id: 'default',
+      allow_teacher_transfer:
+        settings?.allow_teacher_transfer ?? true,
+      allow_teacher_remove:
+        settings?.allow_teacher_remove ?? true,
+    })
+    .select(
+      'allow_teacher_transfer, allow_teacher_remove',
+    )
+    .single()
+}
+
+export async function updateSupervisionSettings(
+  updates: {
+    allow_teacher_transfer?: boolean
+    allow_teacher_remove?: boolean
+  },
+) {
+  return await supabaseAdmin
+    .from('supervision_settings')
+    .update(updates)
+    .eq('id', 'default')
+    .select(
+      'allow_teacher_transfer, allow_teacher_remove',
+    )
+    .single()
+}
