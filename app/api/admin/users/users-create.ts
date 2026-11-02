@@ -2,6 +2,21 @@
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
 import { supabaseAdmin } from './users-supabase'
+
+import {
+  loadExistingUsername,
+  loadExistingEmail,
+  insertUserProfile,
+  loadPermissionIdsByIds,
+  insertUserPermissions,
+  loadDashboardSectionIdsByIds,
+  insertUserDashboardSections,
+  loadRolePermissionIds,
+  deleteUserSectionsByUserId,
+  deleteUserPermissionsByUserId,
+  deleteUserProfile,
+} from '@/lib/features/users/repositories/users-admin.repository'
+
 import {
   isAllowedRole,
   isValidEmail,
@@ -79,14 +94,13 @@ export async function createUser(request: Request) {
     const {
       data: existingUsername,
       error: usernameError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id')
-      .eq('username', username)
-      .maybeSingle()
+    } = await loadExistingUsername(username)
 
     if (usernameError) {
-      console.error('Existing username lookup error:', usernameError)
+      console.error(
+        'Existing username lookup error:',
+        usernameError,
+      )
 
       return NextResponse.json(
         { error: 'تعذر التحقق من اسم المستخدم.' },
@@ -104,11 +118,7 @@ export async function createUser(request: Request) {
     const {
       data: existingEmail,
       error: emailError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle()
+    } = await loadExistingEmail(email)
 
     if (emailError) {
       console.error('Existing email lookup error:', emailError)
@@ -152,23 +162,16 @@ export async function createUser(request: Request) {
     const {
       data: profile,
       error: profileError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .insert({
-        auth_user_id: authUserId,
-        username,
-        email,
-        full_name: fullName,
-        role,
-        department,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      })
-      .select(`
-        id, auth_user_id, username, email, full_name,
-        role, department, is_active, created_at, updated_at
-      `)
-      .single()
+    } = await insertUserProfile({
+      auth_user_id: authUserId,
+      username,
+      email,
+      full_name: fullName,
+      role,
+      department,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    })
 
     if (profileError || !profile) {
       console.error('Profile creation error:', profileError)
@@ -190,10 +193,7 @@ export async function createUser(request: Request) {
       const {
         data,
         error: validationError,
-      } = await supabaseAdmin
-        .from('permissions')
-        .select('id')
-        .in('id', permissionIds)
+      } = await loadPermissionIdsByIds(permissionIds)
 
       if (validationError) {
         throw new Error('تعذر التحقق من الصلاحيات.')
@@ -205,14 +205,10 @@ export async function createUser(request: Request) {
 
       if (validPermissionIds.length > 0) {
         const { error: insertError } =
-          await supabaseAdmin
-            .from('user_permissions')
-            .insert(
-              validPermissionIds.map((permissionId) => ({
-                user_profile_id: profile.id,
-                permission_id: permissionId,
-              })),
-            )
+          await insertUserPermissions(
+            profile.id,
+            validPermissionIds,
+          )
 
         if (insertError) {
           throw new Error('تعذر حفظ صلاحيات المستخدم.')
@@ -226,10 +222,7 @@ export async function createUser(request: Request) {
       const {
         data,
         error: validationError,
-      } = await supabaseAdmin
-        .from('dashboard_sections')
-        .select('id')
-        .in('id', sectionIds)
+      } = await loadDashboardSectionIdsByIds(sectionIds)
 
       if (validationError) {
         throw new Error(
@@ -243,14 +236,10 @@ export async function createUser(request: Request) {
 
       if (validSectionIds.length > 0) {
         const { error: insertError } =
-          await supabaseAdmin
-            .from('user_dashboard_sections')
-            .insert(
-              validSectionIds.map((sectionId) => ({
-                user_profile_id: profile.id,
-                section_id: sectionId,
-              })),
-            )
+          await insertUserDashboardSections(
+            profile.id,
+            validSectionIds,
+          )
 
         if (insertError) {
           throw new Error(
@@ -263,10 +252,7 @@ export async function createUser(request: Request) {
     const {
       data: rolePermissions,
       error: rolePermissionsError,
-    } = await supabaseAdmin
-      .from('role_permissions')
-      .select('permission_id')
-      .eq('role', role)
+    } = await loadRolePermissionIds(role)
 
     if (rolePermissionsError) {
       throw new Error('تعذر تحميل صلاحيات الدور.')
@@ -305,20 +291,9 @@ export async function createUser(request: Request) {
 
     // تنظيف البيانات التي أنشأها الطلب إذا فشل.
     if (profileId) {
-      await supabaseAdmin
-        .from('user_dashboard_sections')
-        .delete()
-        .eq('user_profile_id', profileId)
-
-      await supabaseAdmin
-        .from('user_permissions')
-        .delete()
-        .eq('user_profile_id', profileId)
-
-      await supabaseAdmin
-        .from('user_profiles')
-        .delete()
-        .eq('id', profileId)
+      await deleteUserSectionsByUserId(profileId)
+      await deleteUserPermissionsByUserId(profileId)
+      await deleteUserProfile(profileId)
     }
 
     if (authUserId) {
