@@ -589,39 +589,24 @@ export function CommunicationReminders({
         </div>
       </div>
 
-      {/* WhatsApp Community URL */}
-      <div className="space-y-4 rounded-xl border bg-card p-5" dir="rtl">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {groupUrl && !editingGroupUrl ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setGroupUrlInput(groupUrl)
-                setEditingGroupUrl(true)
-                setStatus('')
-              }}
-            >
-              <Pencil className="size-4" />
-              تعديل الرابط
-            </Button>
-          ) : null}
-
-          <div className="flex items-center gap-2">
-            <LinkIcon className="size-5 text-primary" />
-
-            <div>
-              <h3 className="font-semibold">
-                رابط مجتمع WhatsApp
-              </h3>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                يفتح المجتمع، ومنه يمكنك الدخول إلى Announcements.
-              </p>
-            </div>
-          </div>
-        </div>
+     <div className="space-y-4 rounded-xl border bg-card p-5" dir="rtl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {groupUrl && !editingGroupUrl ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setGroupUrlInput(groupUrl)
+              setEditingGroupUrl(true)
+              setStatus('')
+            }}
+          >
+            <Pencil className="size-4" />
+            تعديل الرابط
+          </Button>
+        ) : null}
+      </div>
 
         {groupUrl && !editingGroupUrl ? (
           <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-3">
@@ -709,15 +694,7 @@ export function CommunicationReminders({
                 رسالة جديدة
               </Button>
 
-              <div>
-                <h3 className="font-semibold">
-                  الرسائل المحفوظة
-                </h3>
-
-                <p className="mt-1 text-sm text-muted-foreground">
-                  اضغط على عنوان الرسالة لفتحها.
-                </p>
-              </div>
+            
             </div>
 
             {messages.length === 0 ? (
