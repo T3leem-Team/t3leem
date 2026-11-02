@@ -242,3 +242,106 @@ export async function deleteCommunicationMessageTemplate(
     .delete()
     .eq('id', id)
 }
+
+
+
+// ==========================================
+// Admin Lesson Reminder Messages
+// ==========================================
+
+export const ADMIN_LESSON_REMINDER_MESSAGE_PREFIX =
+  '__ADMIN_DAILY_LESSON_REMINDER_MESSAGE__:'
+
+export const ADMIN_LESSON_REMINDER_GROUP_URL_NAME =
+  '__ADMIN_DAILY_LESSON_REMINDER_GROUP_URL__'
+
+export async function loadAdminLessonReminderMessages() {
+  return supabase
+    .from('communication_message_templates')
+    .select('id, name, content, created_at, updated_at')
+    .like('name', `${ADMIN_LESSON_REMINDER_MESSAGE_PREFIX}%`)
+    .order('created_at', { ascending: false })
+}
+
+export async function createAdminLessonReminderMessage(input: {
+  title: string
+  content: string
+}) {
+  return supabase
+    .from('communication_message_templates')
+    .insert({
+      name: `${ADMIN_LESSON_REMINDER_MESSAGE_PREFIX}${input.title.trim()}`,
+      content: input.content.trim(),
+    })
+    .select('id, name, content, created_at, updated_at')
+    .single()
+}
+
+export async function updateAdminLessonReminderMessage(
+  id: string,
+  input: {
+    title: string
+    content: string
+  },
+) {
+  return supabase
+    .from('communication_message_templates')
+    .update({
+      name: `${ADMIN_LESSON_REMINDER_MESSAGE_PREFIX}${input.title.trim()}`,
+      content: input.content.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('id, name, content, created_at, updated_at')
+    .single()
+}
+
+export async function deleteAdminLessonReminderMessage(id: string) {
+  return supabase
+    .from('communication_message_templates')
+    .delete()
+    .eq('id', id)
+}
+
+// ==========================================
+// Admin Lesson Reminder WhatsApp Group
+// ==========================================
+
+export async function loadAdminLessonReminderGroupUrl() {
+  return supabase
+    .from('communication_message_templates')
+    .select('id, content')
+    .eq('name', ADMIN_LESSON_REMINDER_GROUP_URL_NAME)
+    .maybeSingle()
+}
+
+export async function saveAdminLessonReminderGroupUrl(url: string) {
+  const { data: existing, error } =
+    await loadAdminLessonReminderGroupUrl()
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  if (existing) {
+    return supabase
+      .from('communication_message_templates')
+      .update({
+        content: url.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .select('id, content')
+      .single()
+  }
+
+  return supabase
+    .from('communication_message_templates')
+    .insert({
+      name: ADMIN_LESSON_REMINDER_GROUP_URL_NAME,
+      content: url.trim(),
+    })
+    .select('id, content')
+    .single()
+}
+
