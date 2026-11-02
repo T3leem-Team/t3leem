@@ -1,7 +1,11 @@
-
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
+
+import {
+  loadActiveSessionForLogout,
+  closeActiveSessionForLogout,
+  insertLogoutAuditLog,
+} from '@/lib/features/auth/repositories/logout/logout.repository'
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -9,21 +13,7 @@ const supabaseUrl =
 const publishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 
-const serviceRoleKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-
 const SESSION_COOKIE = 't3leem_session_id'
-
-const supabaseAdmin = createClient(
-  supabaseUrl,
-  serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
 
 function getCookie(
   request: Request,
@@ -99,22 +89,13 @@ export async function POST(request: Request) {
 
     /*
      * إنهاء جلسة النظام باستخدام معرّف الجلسة
-     * الموجود في الكوكي، دون طلب getUser إضافي.
+     * الموجود في الكوكي.
      */
     if (sessionId) {
       const {
         data: activeSession,
         error: lookupError,
-      } = await supabaseAdmin
-        .from('active_sessions')
-        .select(`
-          id,
-          auth_user_id,
-          trusted_device_id,
-          is_active
-        `)
-        .eq('id', sessionId)
-        .maybeSingle()
+      } = await loadActiveSessionForLogout(sessionId)
 
       if (lookupError) {
         console.error(
@@ -130,18 +111,11 @@ export async function POST(request: Request) {
         const {
           data: closedSession,
           error: updateError,
-        } = await supabaseAdmin
-          .from('active_sessions')
-          .update({
-            is_active: false,
-            logout_at: now,
-            last_activity_at: now,
-          })
-          .eq('id', activeSession.id)
-          .eq('auth_user_id', activeSession.auth_user_id)
-          .eq('is_active', true)
-          .select('id')
-          .maybeSingle()
+        } = await closeActiveSessionForLogout(
+          activeSession.id,
+          activeSession.auth_user_id,
+          now,
+        )
 
         if (updateError) {
           console.error(
@@ -153,20 +127,13 @@ export async function POST(request: Request) {
            * الاحتفاظ بسجل التدقيق بعد نجاح إغلاق الجلسة.
            */
           const { error: auditError } =
-            await supabaseAdmin
-              .from('auth_audit_logs')
-              .insert({
-                auth_user_id: activeSession.auth_user_id,
-                trusted_device_id:
-                  activeSession.trusted_device_id,
-                event_type: 'logout',
-                success: true,
-                ip_address: ipAddress,
-                user_agent: userAgent,
-                metadata: {
-                  active_session_id: activeSession.id,
-                },
-              })
+            await insertLogoutAuditLog(
+              activeSession.auth_user_id,
+              activeSession.trusted_device_id,
+              ipAddress,
+              userAgent,
+              activeSession.id,
+            )
 
           if (auditError) {
             console.error(
@@ -180,7 +147,7 @@ export async function POST(request: Request) {
 
     /*
      * إنهاء جلسة Supabase Auth.
-     * نبقي هذا الاستدعاء في هذه المرحلة.
+     * يبقى هذا الاستدعاء داخل API.
      */
     const supabase = createServerClient(
       supabaseUrl,
