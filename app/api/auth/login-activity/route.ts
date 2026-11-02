@@ -1,18 +1,12 @@
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 import { requirePermission } from '@/lib/auth/authorization'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadLoginActivityForDay,
+  loadProfilesByAuthUserIds,
+} from '@/lib/features/users/repositories/users-admin.repository'
 
 export async function GET() {
   try {
@@ -57,39 +51,10 @@ export async function GET() {
     const {
       data: logs,
       error: logsError,
-    } = await supabaseAdmin
-      .from('auth_audit_logs')
-      .select(
-        `
-        id,
-        auth_user_id,
-        event_type,
-        success,
-        created_at
-        `,
-      )
-      .eq(
-        'event_type',
-        'login_success',
-      )
-      .eq(
-        'success',
-        true,
-      )
-      .gte(
-        'created_at',
-        startOfDay.toISOString(),
-      )
-      .lte(
-        'created_at',
-        endOfDay.toISOString(),
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false,
-        },
-      )
+    } = await loadLoginActivityForDay(
+      startOfDay.toISOString(),
+      endOfDay.toISOString(),
+    )
 
     if (logsError) {
       console.error(
@@ -123,8 +88,7 @@ export async function GET() {
     const userIds = [
       ...new Set(
         logs.map(
-          (log) =>
-            log.auth_user_id,
+          (log) => log.auth_user_id,
         ),
       ),
     ]
@@ -132,20 +96,7 @@ export async function GET() {
     const {
       data: profiles,
       error: profilesError,
-    } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .select(
-          `
-          auth_user_id,
-          username,
-          full_name
-          `,
-        )
-        .in(
-          'auth_user_id',
-          userIds,
-        )
+    } = await loadProfilesByAuthUserIds(userIds)
 
     if (profilesError) {
       console.error(
@@ -176,10 +127,8 @@ export async function GET() {
         profileMap.set(
           profile.auth_user_id,
           {
-            username:
-              profile.username,
-            full_name:
-              profile.full_name,
+            username: profile.username,
+            full_name: profile.full_name,
           },
         )
       },
@@ -188,9 +137,7 @@ export async function GET() {
     const items = logs.map(
       (log) => {
         const profile =
-          profileMap.get(
-            log.auth_user_id,
-          )
+          profileMap.get(log.auth_user_id)
 
         return {
           id: log.id,
