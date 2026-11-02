@@ -27,9 +27,7 @@ export async function loadAllUsers() {
 export async function loadAllPermissions() {
   return await supabaseAdmin
     .from('permissions')
-    .select(`
-      id, permission_key, permission_name, description, created_at
-    `)
+    .select('id, permission_key, permission_name, description, created_at')
     .order('permission_name', { ascending: true })
 }
 
