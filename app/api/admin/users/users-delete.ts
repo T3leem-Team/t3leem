@@ -3,6 +3,14 @@ import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
 import { supabaseAdmin } from './users-supabase'
 import { readString } from './users-validation'
+
+import {
+  loadUserForDeletion,
+  deleteUserPermissionsByUserId,
+  deleteUserSectionsByUserId,
+  deleteUserProfile,
+} from '@/lib/features/users/repositories/users-admin.repository'
+
 import {
   isProtectedAdmin,
   denyProtectedAdminDelete,
@@ -38,11 +46,7 @@ export async function deleteUser(request: Request) {
     const {
       data: targetUser,
       error: targetUserError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select('id, auth_user_id, username, role')
-      .eq('id', userId)
-      .maybeSingle()
+    } = await loadUserForDeletion(userId)
 
     if (targetUserError) {
       console.error(
@@ -77,10 +81,7 @@ export async function deleteUser(request: Request) {
     }
 
     const { error: permissionsDeleteError } =
-      await supabaseAdmin
-        .from('user_permissions')
-        .delete()
-        .eq('user_profile_id', targetUser.id)
+      await deleteUserPermissionsByUserId(targetUser.id)
 
     if (permissionsDeleteError) {
       console.error(
@@ -95,10 +96,7 @@ export async function deleteUser(request: Request) {
     }
 
     const { error: sectionsDeleteError } =
-      await supabaseAdmin
-        .from('user_dashboard_sections')
-        .delete()
-        .eq('user_profile_id', targetUser.id)
+      await deleteUserSectionsByUserId(targetUser.id)
 
     if (sectionsDeleteError) {
       console.error(
@@ -113,10 +111,7 @@ export async function deleteUser(request: Request) {
     }
 
     const { error: profileDeleteError } =
-      await supabaseAdmin
-        .from('user_profiles')
-        .delete()
-        .eq('id', targetUser.id)
+      await deleteUserProfile(targetUser.id)
 
     if (profileDeleteError) {
       console.error(
