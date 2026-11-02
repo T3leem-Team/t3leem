@@ -111,7 +111,9 @@ export async function loadCommunicationRecords(
 
     supabase
       .from('courses')
-      .select('id, name, academic_year_id')
+      .select(
+        'id, name, academic_year_id, days, start_date, end_date',
+      )
       .eq('academic_year_id', academicYearId)
       .order('name', { ascending: true }),
 
