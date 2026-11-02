@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button'
 import { CommunicationViewGroups } from '@/app/(dashboard)/communication/communication-groups'
 import { CommunicationTemplates } from '@/app/(dashboard)/communication/communication-templates'
 import { CommunicationDirect } from '@/app/(dashboard)/communication/communication-direct'
+import { CommunicationReminders } from '@/app/(dashboard)/communication/communication-reminders'
 
 import type { FilterType } from '@/app/(dashboard)/communication/communication-direct'
 
