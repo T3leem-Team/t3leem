@@ -2,6 +2,20 @@
 import { NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/auth/authorization'
 import { supabaseAdmin } from './users-supabase'
+
+import {
+  loadUserById,
+  loadExistingUserEmail,
+  loadPermissionIdsByIds,
+  updateUserProfile,
+  deleteUserPermissions,
+  insertUserPermissions,
+  loadDashboardSectionIdsByIds,
+  deleteUserDashboardSections,
+  insertUserDashboardSections,
+  loadRolePermissionIds,
+} from '@/lib/features/users/repositories/users-admin.repository'
+
 import {
   isAllowedRole,
   isValidEmail,
@@ -9,6 +23,7 @@ import {
   readStringArray,
   uniqueStrings,
 } from './users-validation'
+
 import {
   isProtectedAdmin,
   denyProtectedAdminEdit,
@@ -94,14 +109,7 @@ export async function updateUser(request: Request) {
     const {
       data: targetUser,
       error: targetUserError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .select(`
-        id, auth_user_id, username, email, full_name,
-        role, department, is_active
-      `)
-      .eq('id', userId)
-      .maybeSingle()
+    } = await loadUserById(userId)
 
     if (targetUserError) {
       console.error(
@@ -124,7 +132,6 @@ export async function updateUser(request: Request) {
 
     // حماية الحساب الإداري الأساسي قبل أي عملية كتابة.
     if (isProtectedAdmin(targetUser.id)) {
-      // لا نعتمد على profileId قبل التأكد من شكل access.
       if (targetUser.auth_user_id !== access?.userId) {
         return denyProtectedAdminEdit()
       }
@@ -139,12 +146,7 @@ export async function updateUser(request: Request) {
       const {
         data: existingEmail,
         error: existingEmailError,
-      } = await supabaseAdmin
-        .from('user_profiles')
-        .select('id')
-        .eq('email', email)
-        .neq('id', userId)
-        .maybeSingle()
+      } = await loadExistingUserEmail(email, userId)
 
       if (existingEmailError) {
         console.error(
@@ -244,15 +246,7 @@ export async function updateUser(request: Request) {
     const {
       data: updatedProfile,
       error: profileUpdateError,
-    } = await supabaseAdmin
-      .from('user_profiles')
-      .update(profileUpdate)
-      .eq('id', userId)
-      .select(`
-        id, auth_user_id, username, email, full_name,
-        role, department, is_active, created_at, updated_at
-      `)
-      .single()
+    } = await updateUserProfile(userId, profileUpdate)
 
     if (profileUpdateError || !updatedProfile) {
       console.error(
@@ -272,10 +266,7 @@ export async function updateUser(request: Request) {
       const {
         data,
         error: permissionsError,
-      } = await supabaseAdmin
-        .from('permissions')
-        .select('id')
-        .in('id', permissionIds)
+      } = await loadPermissionIdsByIds(permissionIds)
 
       if (permissionsError) {
         console.error(
@@ -295,10 +286,7 @@ export async function updateUser(request: Request) {
     }
 
     const { error: deletePermissionsError } =
-      await supabaseAdmin
-        .from('user_permissions')
-        .delete()
-        .eq('user_profile_id', userId)
+      await deleteUserPermissions(userId)
 
     if (deletePermissionsError) {
       console.error(
@@ -314,14 +302,10 @@ export async function updateUser(request: Request) {
 
     if (validPermissionIds.length > 0) {
       const { error: insertPermissionsError } =
-        await supabaseAdmin
-          .from('user_permissions')
-          .insert(
-            validPermissionIds.map((permissionId) => ({
-              user_profile_id: userId,
-              permission_id: permissionId,
-            })),
-          )
+        await insertUserPermissions(
+          userId,
+          validPermissionIds,
+        )
 
       if (insertPermissionsError) {
         console.error(
@@ -342,10 +326,7 @@ export async function updateUser(request: Request) {
       const {
         data,
         error: sectionsError,
-      } = await supabaseAdmin
-        .from('dashboard_sections')
-        .select('id')
-        .in('id', sectionIds)
+      } = await loadDashboardSectionIdsByIds(sectionIds)
 
       if (sectionsError) {
         console.error(
@@ -368,10 +349,7 @@ export async function updateUser(request: Request) {
     }
 
     const { error: deleteSectionsError } =
-      await supabaseAdmin
-        .from('user_dashboard_sections')
-        .delete()
-        .eq('user_profile_id', userId)
+      await deleteUserDashboardSections(userId)
 
     if (deleteSectionsError) {
       console.error(
@@ -390,14 +368,10 @@ export async function updateUser(request: Request) {
 
     if (validSectionIds.length > 0) {
       const { error: insertSectionsError } =
-        await supabaseAdmin
-          .from('user_dashboard_sections')
-          .insert(
-            validSectionIds.map((sectionId) => ({
-              user_profile_id: userId,
-              section_id: sectionId,
-            })),
-          )
+        await insertUserDashboardSections(
+          userId,
+          validSectionIds,
+        )
 
       if (insertSectionsError) {
         console.error(
@@ -418,10 +392,7 @@ export async function updateUser(request: Request) {
     const {
       data: rolePermissions,
       error: rolePermissionsError,
-    } = await supabaseAdmin
-      .from('role_permissions')
-      .select('permission_id')
-      .eq('role', role)
+    } = await loadRolePermissionIds(role)
 
     if (rolePermissionsError) {
       console.error(
