@@ -197,3 +197,41 @@ export async function deleteUserProfile(userId: string) {
     .eq('id', userId)
 }
 
+
+
+export async function loadExistingUsername(username: string) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .select('id')
+    .eq('username', username)
+    .maybeSingle()
+}
+
+export async function loadExistingEmail(email: string) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle()
+}
+
+export async function insertUserProfile(profile: {
+  auth_user_id: string
+  username: string
+  email: string
+  full_name: string
+  role: string
+  department: string | null
+  is_active: boolean
+  updated_at: string
+}) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .insert(profile)
+    .select(`
+      id, auth_user_id, username, email, full_name,
+      role, department, is_active, created_at, updated_at
+    `)
+    .single()
+}
+
