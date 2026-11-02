@@ -15,26 +15,6 @@ const supabaseAdmin = createClient(
 type DeviceStatus = 'pending' | 'approved'
 type DeviceOrderColumn = 'created_at' | 'approved_at'
 
-type TrustedDeviceListColumns = `
-  id,
-  auth_user_id,
-  device_name,
-  status,
-  created_at,
-  approved_at,
-  approved_by,
-  rejected_at,
-  rejected_by,
-  revoked_at,
-  revoked_by,
-  last_used_at,
-  approved_device_type,
-  pending_device_type,
-  grace_period_days,
-  grace_expires_at,
-  device_type_detected_at
-`
-
 export async function loadTrustedDevicesAdminProfile(
   userId: string,
 ) {
@@ -91,11 +71,28 @@ export async function closeTrustedDeviceSessions(
 export async function loadTrustedDevicesByStatus(
   status: DeviceStatus,
   orderColumn: DeviceOrderColumn,
-  columns: TrustedDeviceListColumns,
 ) {
   return await supabaseAdmin
     .from('trusted_devices')
-    .select(columns)
+    .select(`
+      id,
+      auth_user_id,
+      device_name,
+      status,
+      created_at,
+      approved_at,
+      approved_by,
+      rejected_at,
+      rejected_by,
+      revoked_at,
+      revoked_by,
+      last_used_at,
+      approved_device_type,
+      pending_device_type,
+      grace_period_days,
+      grace_expires_at,
+      device_type_detected_at
+    `)
     .eq('status', status)
     .order(orderColumn, { ascending: false })
 }
