@@ -884,11 +884,12 @@ export function CommunicationView() {
         />
       )}
 
-      {/* تذكير الدروس - سيتم إنشاء مكوّن مستقل له */}
+      {/* تذكير الدروس */}
       {activeSection === 'reminders' && (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          سيتم تجهيز تذكير الدروس هنا.
-        </div>
+        <CommunicationReminders
+          courses={courses}
+          loading={loading}
+        />
       )}
 
       {/* نافذة الرسالة */}
