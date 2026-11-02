@@ -126,3 +126,14 @@ export async function updateSupervisionSettings(
     )
     .single()
 }
+
+
+export async function loadPermissionProfileById(
+  profileId: string,
+) {
+  return await supabaseAdmin
+    .from('user_profiles')
+    .select('id, username, role, is_active')
+    .eq('id', profileId)
+    .maybeSingle()
+}
