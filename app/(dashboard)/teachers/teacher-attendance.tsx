@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -171,6 +172,12 @@ export function AttendanceView(
       }
     >
   >({})
+
+  // مفتاح إعادة تحميل ملخص النسب بعد تعديل الحضور
+  const [
+    summaryRefreshKey,
+    setSummaryRefreshKey,
+  ] = useState(0)
 
   const studentCardRefs =
     useRef<
@@ -364,6 +371,7 @@ export function AttendanceView(
     attendedStatusIdsKey,
     absentStatusIdsKey,
     cancelledDatesKey,
+    summaryRefreshKey,
   ])
 
   // فحص إلغاء اليوم أو الدرس المحدد
@@ -790,6 +798,7 @@ export function AttendanceView(
       )
     }
 
+  // حفظ حضور طالب واحد
   const saveAttendance = async (
     student: Student,
     date: string,
@@ -872,8 +881,6 @@ export function AttendanceView(
         )
       }
 
-      // التحقق من السجل مباشرة من قاعدة البيانات،
-      // لأن السجل قد لا يكون موجودًا في الذاكرة المحلية.
       const {
         data: databaseRecord,
         error: lookupError,
@@ -909,7 +916,6 @@ export function AttendanceView(
       let saveError
 
       if (databaseRecord) {
-        // السجل موجود: تحديثه بدل إنشاء سجل مكرر.
         const result = await updateAttendanceRecord(
           databaseRecord.id,
           {
@@ -923,7 +929,6 @@ export function AttendanceView(
         savedData = result.data
         saveError = result.error
       } else {
-        // لا يوجد سجل: إنشاء سجل جديد.
         const result = await createAttendanceRecord({
           student_id: student.id,
           enrollment_id:
@@ -959,8 +964,6 @@ export function AttendanceView(
         note: savedData.note ?? '',
       }
 
-      // استبدال السجل في الذاكرة المحلية،
-      // ومنع بقاء نسخة مؤقتة أو سجل مكرر.
       setAttendanceRecords((records) => {
         const withoutDuplicate = records.filter(
           (record) =>
@@ -973,6 +976,9 @@ export function AttendanceView(
 
         return [...withoutDuplicate, savedRecord]
       })
+
+      // تحديث النسب مباشرة بعد نجاح الحفظ
+      setSummaryRefreshKey((value) => value + 1)
 
       setLocalStatuses((current) => ({
         ...current,
@@ -1009,6 +1015,7 @@ export function AttendanceView(
     }
   }
 
+  // حفظ حضور جميع الطلاب
   const saveAllAttendance =
     async (
       statusName: TeacherAttendanceStatus,
@@ -1074,6 +1081,9 @@ export function AttendanceView(
       setIsBulkSaving(true)
       setShowBulkStatusMenu(false)
       setEditingStatusKey(null)
+
+      // نستخدمه لمعرفة هل تم تعديل أي سجل في قاعدة البيانات
+      let hasBulkChanges = false
 
       try {
         const isCancelledNow =
@@ -1187,6 +1197,8 @@ export function AttendanceView(
             }
 
             if (data) {
+              hasBulkChanges = true
+
               savedRecords.push({
                 id: data.id,
                 studentId:
@@ -1230,6 +1242,8 @@ export function AttendanceView(
             }
 
             if (data) {
+              hasBulkChanges = true
+
               savedRecords.push({
                 id: data.id,
                 studentId:
@@ -1426,10 +1440,17 @@ export function AttendanceView(
             'تعذر إكمال تسجيل جميع الطلاب.',
         )
       } finally {
+        // حتى لو فشل التحقق بعد حفظ بعض الطلاب،
+        // نحدّث الملخص إذا حصلت تغييرات فعلية.
+        if (hasBulkChanges) {
+          setSummaryRefreshKey((value) => value + 1)
+        }
+
         setIsBulkSaving(false)
       }
     }
 
+  // حذف تسجيل حضور طالب
   const clearAttendance = async (
     student: Student,
     date: string,
@@ -1538,6 +1559,9 @@ export function AttendanceView(
         throw error
       }
 
+      // تحديث النسب مباشرة بعد نجاح الحذف
+      setSummaryRefreshKey((value) => value + 1)
+
       setStatusMessage(
         `تم إلغاء تسجيل حضور ${student.name}`,
       )
@@ -1572,6 +1596,7 @@ export function AttendanceView(
     }
   }
 
+  // حفظ ملاحظة الطالب
   const saveNote = async (
     student: Student,
     date: string,
