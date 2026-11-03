@@ -15,8 +15,7 @@ import {
   recoverTrustedDevice,
   updatePendingTrustedDevice,
   insertPendingTrustedDevice,
-  updateApprovedTrustedDevice,
-  createSingleActiveSession,
+  loginWithTrustedDevice,
 } from '@/lib/features/auth/repositories/login/login.repository'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -447,8 +446,6 @@ export async function POST(request: NextRequest) {
 
     /*
      * 3. التحقق من كلمة المرور أولًا.
-     *
-     * لا نبحث عن الجهاز أو البصمة قبل نجاح المصادقة.
      */
     const passwordClient = createClient(
       supabaseUrl,
@@ -872,56 +869,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 14. تحديث آخر استخدام والبصمة الحالية.
-     */
-    const now = new Date().toISOString()
-    const approvedType = device.approved_device_type
-
-    const deviceUpdate: {
-      last_used_at: string
-      device_type_detected_at: string
-      device_fingerprint_hash: string
-      approved_device_type?: DeviceType
-    } = {
-      last_used_at: now,
-      device_type_detected_at: now,
-      device_fingerprint_hash: fingerprintHash,
-    }
-
-    if (!approvedType || approvedType === 'unknown') {
-      deviceUpdate.approved_device_type = detectedType
-    }
-
-    const {
-      data: updatedDevice,
-      error: deviceUpdateError,
-    } = await updateApprovedTrustedDevice(
-      device.id,
-      profile.auth_user_id,
-      deviceUpdate,
-    )
-
-    if (deviceUpdateError) {
-      console.error(
-        'Trusted device update error:',
-        deviceUpdateError,
-      )
-
-      return NextResponse.json(
-        { error: 'تعذر تحديث بيانات الجهاز.' },
-        { status: 500 },
-      )
-    }
-
-    if (!updatedDevice) {
-      return deviceApprovalRequiredResponse(
-        'تغيرت حالة الجهاز. حدّث الصفحة وحاول تسجيل الدخول مجددًا.',
-        device.id,
-      )
-    }
-
-    /*
-     * 15. تجهيز جلسة Supabase Auth.
+     * 14. تجهيز جلسة Supabase Auth.
      */
     const response = NextResponse.json({
       user: {
@@ -979,7 +927,8 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 16. إنشاء جلسة النظام النشطة الواحدة.
+     * 15. تحديث الجهاز المعتمد وإنشاء الجلسة النشطة
+     * باستدعاء RPC واحد.
      */
     const loginAt = new Date()
 
@@ -991,15 +940,17 @@ export async function POST(request: NextRequest) {
     const {
       data: activeSessionId,
       error: sessionError,
-    } = await createSingleActiveSession(
+    } = await loginWithTrustedDevice(
       profile.auth_user_id,
       device.id,
+      fingerprintHash,
+      detectedType,
       expiresAt.toISOString(),
     )
 
     if (sessionError || !activeSessionId) {
       console.error(
-        'Create single active session error:',
+        'Login with trusted device error:',
         sessionError,
       )
 
@@ -1012,7 +963,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 17. حفظ كوكي الجلسة.
+     * 16. حفظ كوكي الجلسة.
      */
     response.cookies.set(SESSION_COOKIE, activeSessionId, {
       httpOnly: true,
@@ -1040,7 +991,7 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * 18. تسجيل نجاح الدخول.
+     * 17. تسجيل نجاح الدخول.
      */
     scheduleAudit(
       profile.auth_user_id,
