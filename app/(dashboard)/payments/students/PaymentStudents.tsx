@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -11,6 +10,7 @@ import { students as fallbackStudents } from '@/lib/data'
 import {
   getPaymentsCache,
   loadPaymentsCache,
+  loadMorePaymentsCache,
   type PaymentStatus,
   type StudentRow,
   type PaymentLevel,
@@ -40,28 +40,62 @@ import {
   selectedRemaining,
 } from './payment-students.utils'
 
+type PaymentsSummary = {
+  totalStudents: number
+  totalExempt: number
+  totalDue: number
+  totalPaid: number
+}
+
+const EMPTY_SUMMARY: PaymentsSummary = {
+  totalStudents: 0,
+  totalExempt: 0,
+  totalDue: 0,
+  totalPaid: 0,
+}
+
 export function PaymentStudents() {
   const router = useRouter()
   const initialCache = getPaymentsCache()
 
   const [returnPath, setReturnPath] = useState('')
   const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null)
+
   const autoOpenedStudentRef = useRef<string | null>(null)
+  const initialLoadDoneRef = useRef(Boolean(initialCache))
 
   const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const [search, setSearch] = useState('')
 
   const [studentList, setStudentList] = useState<StudentRow[]>(
     initialCache?.studentList ?? [],
   )
+
   const [levels, setLevels] = useState<PaymentLevel[]>(
     initialCache?.levels ?? [],
   )
+
   const [loading, setLoading] = useState(initialCache === null)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const [totalStudents, setTotalStudents] = useState(
+    initialCache?.totalStudents ?? 0,
+  )
+
+  const [hasMore, setHasMore] = useState(
+    initialCache?.hasMore ?? false,
+  )
+
+  const [summary, setSummary] = useState<PaymentsSummary>(
+    initialCache?.summary ?? EMPTY_SUMMARY,
+  )
 
   const [currentAcademicYearId, setCurrentAcademicYearId] =
     useState<string | null>(initialCache?.currentAcademicYearId ?? null)
+
   const [currentAcademicYearName, setCurrentAcademicYearName] =
     useState(initialCache?.currentAcademicYearName ?? '')
+
   const [currentAnnualFee, setCurrentAnnualFee] =
     useState(initialCache?.currentAnnualFee ?? 0)
 
@@ -80,13 +114,16 @@ export function PaymentStudents() {
   }, [])
 
   const applyPaymentsCache = (
-    cache: Awaited<ReturnType<typeof loadPaymentsCache>>,
+    cache: NonNullable<Awaited<ReturnType<typeof loadPaymentsCache>>>,
   ) => {
     setStudentList(cache.studentList)
     setLevels(cache.levels ?? [])
     setCurrentAcademicYearId(cache.currentAcademicYearId)
     setCurrentAcademicYearName(cache.currentAcademicYearName)
     setCurrentAnnualFee(cache.currentAnnualFee)
+    setTotalStudents(cache.totalStudents ?? 0)
+    setHasMore(cache.hasMore ?? false)
+    setSummary(cache.summary ?? EMPTY_SUMMARY)
     setLoading(false)
 
     if (detailsStudent) {
@@ -94,13 +131,22 @@ export function PaymentStudents() {
         (student) => student.id === detailsStudent.id,
       )
 
-      if (updatedStudent) setDetailsStudent(updatedStudent)
+      if (updatedStudent) {
+        setDetailsStudent(updatedStudent)
+      }
     }
   }
 
-  const loadPayments = async (force = false): Promise<StudentRow[]> => {
+  const loadPayments = async (
+    force = false,
+    searchValue = search,
+  ): Promise<StudentRow[]> => {
     try {
-      const cache = await loadPaymentsCache({ force })
+      const cache = await loadPaymentsCache({
+        force,
+        search: searchValue,
+      })
+
       applyPaymentsCache(cache)
       return cache.studentList
     } catch (error) {
@@ -143,6 +189,7 @@ export function PaymentStudents() {
       setLevels([])
       setStudentList(fallback)
       setLoading(false)
+
       return fallback
     } finally {
       setLoading(false)
@@ -154,14 +201,32 @@ export function PaymentStudents() {
 
     if (cache) {
       applyPaymentsCache(cache)
+      initialLoadDoneRef.current = true
       return
     }
 
-    void loadPayments()
+    void loadPayments().then(() => {
+      initialLoadDoneRef.current = true
+    })
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // البحث في جميع الطلاب من الخادم، وليس فقط الطلاب المحمّلين.
+  useEffect(() => {
+    if (!initialLoadDoneRef.current) return
+
+    const timer = setTimeout(() => {
+      setLoading(true)
+      void loadPayments(true, search.trim())
+    }, 350)
+
+    return () => clearTimeout(timer)
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
+
+  // تحميل الطالب المطلوب من رابط الصفحة إن كان موجوداً ضمن النتائج.
   useEffect(() => {
     if (
       loading ||
@@ -172,7 +237,10 @@ export function PaymentStudents() {
       return
     }
 
-    const student = studentList.find((item) => item.id === studentIdFromUrl)
+    const student = studentList.find(
+      (item) => item.id === studentIdFromUrl,
+    )
+
     if (!student) return
 
     autoOpenedStudentRef.current = studentIdFromUrl
@@ -181,12 +249,62 @@ export function PaymentStudents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, studentIdFromUrl, studentList, detailsDialogOpen])
 
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return
+
+    setLoadingMore(true)
+
+    try {
+      const cache = await loadMorePaymentsCache()
+
+      if (cache) {
+        applyPaymentsCache(cache)
+      }
+    } catch (error) {
+      console.error('Failed to load more payment students:', error)
+      alert(getErrorMessage(error, 'تعذر تحميل بقية الطلاب.'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  // تحديث البيانات بعد إضافة أو تعديل دفعة، مع الاحتفاظ بعدد الصفحات المحمّلة.
+  const refreshLoadedPayments = async (): Promise<StudentRow[]> => {
+    const previousCount = getPaymentsCache()?.studentList.length ?? 50
+
+    let cache = await loadPaymentsCache({
+      force: true,
+      search: search.trim(),
+    })
+
+    let attempts = 0
+
+    while (
+      cache.hasMore &&
+      cache.studentList.length < previousCount &&
+      attempts < 100
+    ) {
+      const nextCache = await loadMorePaymentsCache()
+
+      if (!nextCache) break
+
+      cache = nextCache
+      attempts += 1
+    }
+
+    applyPaymentsCache(cache)
+
+    return cache.studentList
+  }
+
   const updateFilter = (key: keyof Filters, value: string) => {
     setFilters((current) => ({ ...current, [key]: value }))
   }
 
   const grades = useMemo(() => {
-    const availableGrades = new Set(studentList.map((student) => student.grade))
+    const availableGrades = new Set(
+      studentList.map((student) => student.grade),
+    )
 
     const orderedGrades = levels
       .filter((level) => availableGrades.has(level.name))
@@ -202,7 +320,10 @@ export function PaymentStudents() {
   }, [studentList, levels])
 
   const paymentStatuses = useMemo(
-    () => Array.from(new Set(studentList.map((student) => student.paymentStatus))),
+    () =>
+      Array.from(
+        new Set(studentList.map((student) => student.paymentStatus)),
+      ),
     [studentList],
   )
 
@@ -218,9 +339,11 @@ export function PaymentStudents() {
           student.name.toLowerCase().includes(filters.name.toLowerCase())
 
         const matchesPersonalId =
-          !filters.personalId || student.personalId.includes(filters.personalId)
+          !filters.personalId ||
+          student.personalId.includes(filters.personalId)
 
-        const matchesGrade = !filters.grade || student.grade === filters.grade
+        const matchesGrade =
+          !filters.grade || student.grade === filters.grade
 
         const matchesDue =
           !filters.amountDue ||
@@ -251,31 +374,26 @@ export function PaymentStudents() {
     [studentList, filters],
   )
 
-  const totalDue = filteredStudents.reduce(
-    (total, student) => total + (student.feeExempt ? 0 : student.amountDue),
-    0,
-  )
-
-  const totalPaid = filteredStudents.reduce(
-    (total, student) => total + (student.feeExempt ? 0 : student.amountPaid),
-    0,
-  )
-
-  const totalExempt = filteredStudents.filter((student) => student.feeExempt).length
+  // الإحصائيات من جميع طلاب السنة الدراسية، وليس من الصفحة الحالية.
+  const totalDue = summary.totalDue
+  const totalPaid = summary.totalPaid
+  const totalExempt = summary.totalExempt
 
   const collectionPercentage =
-    totalDue > 0 ? Math.round((totalPaid / totalDue) * 100) : 0
+    totalDue > 0
+      ? Math.round((totalPaid / totalDue) * 100)
+      : 0
 
   const exemptionPercentage =
-    filteredStudents.length > 0
-      ? Math.round((totalExempt / filteredStudents.length) * 100)
+    summary.totalStudents > 0
+      ? Math.round((totalExempt / summary.totalStudents) * 100)
       : 0
 
   const paymentStats = [
     {
       label: 'إجمالي المستحق',
       value: formatCurrency(totalDue),
-      change: `${filteredStudents.length} طالب`,
+      change: `${summary.totalStudents} طالب`,
       trend: 'up' as const,
       hint: 'إجمالي الرسوم',
     },
@@ -302,7 +420,9 @@ export function PaymentStudents() {
     },
   ]
 
-  const hasFilters = Object.values(filters).some((value) => value !== '')
+  const hasFilters = Object.values(filters).some(
+    (value) => value !== '',
+  )
 
   const clearFilters = () => setFilters(emptyFilters)
 
@@ -310,7 +430,7 @@ export function PaymentStudents() {
     void openDetailsDialog(student)
   }
 
-  // تحميل سجل الدفعات من Repository.
+  // تحميل سجل الدفعات عند اختيار الطالب فقط.
   const openDetailsDialog = async (student: StudentRow) => {
     if (!currentAcademicYearId) {
       alert('لا توجد سنة دراسية حالية مفعلة.')
@@ -349,7 +469,6 @@ export function PaymentStudents() {
     if (returnPath) router.push(returnPath)
   }
 
-  // تحديث سجل الدفعات من Repository.
   const refreshPaymentHistory = async (
     studentId: string,
     academicYearId: string,
@@ -382,10 +501,14 @@ export function PaymentStudents() {
       formData.get('paymentMethod') || 'نقدي',
     ) as PaymentMethod
 
-    const paymentDate = String(formData.get('paymentDate') || '').trim()
+    const paymentDate = String(
+      formData.get('paymentDate') || '',
+    ).trim()
+
     const referenceNumber = String(
       formData.get('referenceNumber') || '',
     ).trim()
+
     const notes = String(formData.get('notes') || '').trim()
 
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -406,7 +529,9 @@ export function PaymentStudents() {
     }
 
     if (amount > remaining) {
-      alert(`المبلغ أكبر من المبلغ المتبقي. المتبقي: ${formatCurrency(remaining)}`)
+      alert(
+        `المبلغ أكبر من المبلغ المتبقي. المتبقي: ${formatCurrency(remaining)}`,
+      )
       return
     }
 
@@ -426,17 +551,25 @@ export function PaymentStudents() {
       const data = await createPayment(paymentPayload)
 
       if (!data.payment) {
-        throw new Error('تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة.')
+        throw new Error(
+          'تم إرسال الدفعة ولكن لم يتم إرجاع سجل الدفعة.',
+        )
       }
 
-      const refreshedStudents = await loadPayments(true)
+      const refreshedStudents = await refreshLoadedPayments()
+
       const refreshedStudent = refreshedStudents.find(
         (student) => student.id === detailsStudent.id,
       )
 
-      if (refreshedStudent) setDetailsStudent(refreshedStudent)
+      if (refreshedStudent) {
+        setDetailsStudent(refreshedStudent)
+      }
 
-      await refreshPaymentHistory(detailsStudent.id, currentAcademicYearId)
+      await refreshPaymentHistory(
+        detailsStudent.id,
+        currentAcademicYearId,
+      )
 
       form.reset()
 
@@ -482,7 +615,9 @@ export function PaymentStudents() {
       formData.get('editReferenceNumber') || '',
     ).trim()
 
-    const notes = String(formData.get('editNotes') || '').trim()
+    const notes = String(
+      formData.get('editNotes') || '',
+    ).trim()
 
     if (!Number.isFinite(amount) || amount <= 0) {
       alert('أدخل مبلغاً صحيحاً.')
@@ -507,24 +642,34 @@ export function PaymentStudents() {
       })
 
       if (!data.payment) {
-        throw new Error('تم تعديل الدفعة ولكن لم يتم إرجاع السجل المحدث.')
+        throw new Error(
+          'تم تعديل الدفعة ولكن لم يتم إرجاع السجل المحدث.',
+        )
       }
 
-      const refreshedStudents = await loadPayments(true)
+      const refreshedStudents = await refreshLoadedPayments()
+
       const refreshedStudent = refreshedStudents.find(
         (student) => student.id === detailsStudent.id,
       )
 
-      if (refreshedStudent) setDetailsStudent(refreshedStudent)
+      if (refreshedStudent) {
+        setDetailsStudent(refreshedStudent)
+      }
 
-      await refreshPaymentHistory(detailsStudent.id, currentAcademicYearId)
+      await refreshPaymentHistory(
+        detailsStudent.id,
+        currentAcademicYearId,
+      )
 
       setEditingPayment(null)
       alert('تم تعديل الدفعة بنجاح.')
     } catch (error) {
       console.error('Failed to edit payment:', error)
 
-      const paymentError = error as Error & { maxAmount?: number }
+      const paymentError = error as Error & {
+        maxAmount?: number
+      }
 
       if (paymentError.maxAmount != null) {
         alert(
@@ -555,7 +700,9 @@ export function PaymentStudents() {
             </div>
 
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">الرسوم السنوية</p>
+              <p className="text-sm text-muted-foreground">
+                الرسوم السنوية
+              </p>
               <p className="text-lg font-semibold tabular-nums">
                 {formatCurrency(currentAnnualFee)}
               </p>
@@ -570,6 +717,29 @@ export function PaymentStudents() {
         ))}
       </div>
 
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">البحث في جميع الطلاب</p>
+              <p className="text-sm text-muted-foreground">
+                البحث يشمل جميع الطلاب، حتى غير المحمّلين في الجدول.
+              </p>
+            </div>
+
+            <div className="w-full sm:max-w-sm">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="اسم الطالب أو الرقم الشخصي..."
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <PaymentStudentsTable
         students={filteredStudents}
         loading={loading}
@@ -581,6 +751,23 @@ export function PaymentStudents() {
         onClearFilters={clearFilters}
         onOpenStudent={openPaymentDialog}
       />
+
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-sm text-muted-foreground">
+          عرض {studentList.length} من أصل {totalStudents} طالب
+        </p>
+
+        {hasMore && (
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={loadingMore || loading}
+            className="rounded-md border px-6 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loadingMore ? 'جاري تحميل الطلاب...' : 'تحميل 50 طالب إضافي'}
+          </button>
+        )}
+      </div>
 
       {detailsDialogOpen && detailsStudent && (
         <PaymentDetailsModal
