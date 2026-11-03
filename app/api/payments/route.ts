@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server'
 
 import { validateDashboardSection } from '@/lib/dashboard-section-guard'
@@ -5,9 +6,6 @@ import { validateDashboardSection } from '@/lib/dashboard-section-guard'
 import {
   loadCurrentPaymentsAcademicYear,
   loadActivePaymentsAcademicYear,
-  loadPaymentsStudents,
-  loadPaymentsEnrollments,
-  loadPaymentsByAcademicYear,
   loadActivePaymentLevels,
   loadPaymentStudent,
   loadActivePaymentEnrollment,
@@ -20,6 +18,8 @@ import {
   updateStudentPayment,
   loadPaymentsStudentsPage,
   loadPaymentsSummary,
+  loadPaymentsEnrollmentsForStudents,
+  loadPaymentsForStudents,
 } from '@/lib/features/payments/repositories/payments-admin.repository'
 
 import {
@@ -241,7 +241,14 @@ async function syncPaymentToFinancialManagement(
   }
 }
 
-export async function GET() {
+/**
+ * تحميل المدفوعات:
+ * - أول 50 طالبًا عند فتح الصفحة.
+ * - البحث في جميع الطلاب من خلال قاعدة البيانات.
+ * - تحميل تسجيلات ودفعات الطلاب الظاهرين فقط.
+ * - الإحصائيات محسوبة على كامل السنة الدراسية.
+ */
+export async function GET(request: Request) {
   const access = await checkPaymentsAccess()
 
   if (!access.allowed) {
@@ -255,6 +262,19 @@ export async function GET() {
   }
 
   try {
+    const { searchParams } = new URL(request.url)
+
+    const page = Math.max(
+      0,
+      Number(searchParams.get('page') ?? 0) || 0,
+    )
+
+    const search = String(
+      searchParams.get('search') ?? '',
+    ).trim()
+
+    const pageSize = 50
+
     const {
       data: currentYear,
       error: yearError,
@@ -268,27 +288,70 @@ export async function GET() {
       return NextResponse.json({
         academicYear: null,
         students: [],
+        totalStudents: 0,
+        hasMore: false,
         enrollments: [],
         payments: [],
         levels: [],
+        summary: {
+          totalStudents: 0,
+          totalExempt: 0,
+          totalDue: 0,
+          totalPaid: 0,
+        },
       })
     }
 
+    // تحميل الطلاب والإحصائيات والمستويات بالتوازي.
     const [
       studentsResult,
-      enrollmentsResult,
-      paymentsResult,
       levelsResult,
+      summaryResult,
     ] = await Promise.all([
-      loadPaymentsStudents(),
-      loadPaymentsEnrollments(currentYear.id),
-      loadPaymentsByAcademicYear(currentYear.id),
+      loadPaymentsStudentsPage(
+        page,
+        pageSize,
+        search,
+      ),
       loadActivePaymentLevels(),
+      loadPaymentsSummary(
+        currentYear.id,
+        Number(currentYear.annual_fee ?? 0),
+      ),
     ])
 
     if (studentsResult.error) {
       throw studentsResult.error
     }
+
+    if (levelsResult.error) {
+      throw levelsResult.error
+    }
+
+    if (summaryResult.error) {
+      throw summaryResult.error
+    }
+
+    const students = studentsResult.data ?? []
+
+    const studentIds = students.map(
+      (student) => student.id,
+    )
+
+    // تحميل تسجيلات ودفعات الطلاب الموجودين في هذه الدفعة فقط.
+    const [
+      enrollmentsResult,
+      paymentsResult,
+    ] = await Promise.all([
+      loadPaymentsEnrollmentsForStudents(
+        currentYear.id,
+        studentIds,
+      ),
+      loadPaymentsForStudents(
+        currentYear.id,
+        studentIds,
+      ),
+    ])
 
     if (enrollmentsResult.error) {
       throw enrollmentsResult.error
@@ -296,10 +359,6 @@ export async function GET() {
 
     if (paymentsResult.error) {
       throw paymentsResult.error
-    }
-
-    if (levelsResult.error) {
-      throw levelsResult.error
     }
 
     const levels = (levelsResult.data ?? [])
@@ -328,12 +387,17 @@ export async function GET() {
         )
       })
 
+    const totalStudents = studentsResult.count ?? 0
+
     return NextResponse.json({
       academicYear: currentYear,
-      students: studentsResult.data ?? [],
+      students,
+      totalStudents,
+      hasMore: (page + 1) * pageSize < totalStudents,
       enrollments: enrollmentsResult.data ?? [],
       payments: paymentsResult.data ?? [],
       levels,
+      summary: summaryResult.data,
     })
   } catch (error) {
     console.error('Payments API GET error:', error)
