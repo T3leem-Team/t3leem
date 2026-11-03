@@ -329,16 +329,18 @@ export function AttendanceView(
           }
         > = {}
 
-        result.forEach((row) => {
-          summary[row.student_id] = {
-            attendedCount: Number(
-              row.attended_count,
-            ),
-            absentCount: Number(
-              row.absent_count,
-            ),
-          }
-        })
+        result.forEach(
+          (row: {
+            student_id: string
+            attended_count: number | string
+            absent_count: number | string
+          }) => {
+            summary[row.student_id] = {
+              attendedCount: Number(row.attended_count),
+              absentCount: Number(row.absent_count),
+            }
+          },
+        )
 
         setHistoricalAttendanceSummary(
           summary,
