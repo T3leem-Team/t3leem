@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase'
 import type {
   PostgrestError,
@@ -602,8 +603,24 @@ export async function loadDashboardSectionMappingsForUser(
 ) {
   return await client
     .from('user_dashboard_sections')
-    .select('section_id')
+    .select(`
+      section:dashboard_sections!inner(
+        id,
+        section_key,
+        section_name,
+        description,
+        icon,
+        href,
+        sort_order,
+        is_active
+      )
+    `)
     .eq('user_profile_id', profileId)
+    .eq('section.is_active', true)
+    .order('sort_order', {
+      referencedTable: 'section',
+      ascending: true,
+    })
 }
 
 export async function loadDashboardSectionsByIds(
