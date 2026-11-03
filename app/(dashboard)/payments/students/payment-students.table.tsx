@@ -1,4 +1,3 @@
-
 'use client'
 
 import { Eye, Plus } from 'lucide-react'
@@ -18,6 +17,15 @@ import {
 import type { PaymentStudentsTableProps } from './payment-students.types'
 import { formatCurrency } from './payment-students.utils'
 
+type Props = PaymentStudentsTableProps & {
+  totalLoaded?: number
+  totalStudents?: number
+  loadingMore?: boolean
+  hasMore?: boolean
+  scrollRef?: React.RefObject<HTMLDivElement | null>
+  sentinelRef?: React.RefObject<HTMLDivElement | null>
+}
+
 export default function PaymentStudentsTable({
   students,
   loading,
@@ -28,13 +36,30 @@ export default function PaymentStudentsTable({
   onUpdateFilter,
   onClearFilters,
   onOpenStudent,
-}: PaymentStudentsTableProps) {
+  totalLoaded = students.length,
+  totalStudents = students.length,
+  loadingMore = false,
+  hasMore = false,
+  scrollRef,
+  sentinelRef,
+}: Props) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        <div className="flex items-center justify-between border-b px-5 py-3">
+          <h3 className="font-semibold">قائمة المدفوعات</h3>
+
+          <span className="text-sm text-muted-foreground tabular-nums">
+            عرض {totalLoaded} من {totalStudents} طالب
+          </span>
+        </div>
+
+        <div
+          ref={scrollRef}
+          className="h-[65vh] min-h-[350px] max-h-[650px] overflow-auto"
+        >
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead className="w-12 text-center">#</TableHead>
 
@@ -149,19 +174,13 @@ export default function PaymentStudentsTable({
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="py-10 text-center text-muted-foreground"
-                  >
+                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                     جاري تحميل بيانات المدفوعات
                   </TableCell>
                 </TableRow>
               ) : students.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="py-10 text-center text-muted-foreground"
-                  >
+                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                     لا توجد نتائج مطابقة للفلاتر
                   </TableCell>
                 </TableRow>
@@ -229,6 +248,23 @@ export default function PaymentStudentsTable({
               )}
             </TableBody>
           </Table>
+
+          <div
+            ref={sentinelRef}
+            className="flex min-h-12 items-center justify-center p-3"
+          >
+            {loadingMore && (
+              <span className="text-sm text-muted-foreground">
+                جاري تحميل 50 طالب...
+              </span>
+            )}
+
+            {!hasMore && !loading && students.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                تم عرض جميع الطلاب
+              </span>
+            )}
+          </div>
         </div>
 
         {hasFilters && (
