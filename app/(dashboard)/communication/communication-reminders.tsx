@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import type { Course } from './communication-data'
 
 import {
+  loadTodayLessonCancellations,
   loadAdminLessonReminderTemplate,
   loadAdminLessonReminderMessages,
   createAdminLessonReminderMessage,
@@ -42,6 +43,15 @@ type ReminderMessage = {
   content: string
   created_at: string | null
   updated_at: string | null
+}
+
+type LessonCancellation = {
+  id: string
+  course_id: string
+  type: string
+  record_date: string
+  reason: string | null
+  note: string | null
 }
 
 const MESSAGE_PREFIX =
@@ -155,6 +165,11 @@ export function CommunicationReminders({
   const [statusMessage, setStatusMessage] = useState('')
   const [statusError, setStatusError] = useState(false)
 
+  // Today's full-day cancellations only.
+  const [todayCancellations, setTodayCancellations] = useState<
+    LessonCancellation[]
+  >([])
+
   const scheduledCourses = useMemo(
     () => courses.filter((course) => courseHasToday(course, today)),
     [courses, today],
@@ -262,6 +277,44 @@ export function CommunicationReminders({
       cancelled = true
     }
   }, [])
+
+  // Load today's full-day cancellations.
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadCancellations() {
+      const academicYearId = courses[0]?.academicYearId
+
+      if (!academicYearId) {
+        setTodayCancellations([])
+        return
+      }
+
+      try {
+        const { data, error } = await loadTodayLessonCancellations(
+          academicYearId,
+          today,
+        )
+
+        if (cancelled) return
+
+        if (error) {
+          console.error('Load today cancellations error:', error)
+          return
+        }
+
+        setTodayCancellations((data ?? []) as LessonCancellation[])
+      } catch (error) {
+        console.error('Load today cancellations error:', error)
+      }
+    }
+
+    void loadCancellations()
+
+    return () => {
+      cancelled = true
+    }
+  }, [courses, today])
 
   const openMessage = (message: ReminderMessage) => {
     setSelectedMessageId(message.id)
@@ -589,24 +642,24 @@ export function CommunicationReminders({
         </div>
       </div>
 
-     <div className="space-y-4 rounded-xl border bg-card p-5" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {groupUrl && !editingGroupUrl ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setGroupUrlInput(groupUrl)
-              setEditingGroupUrl(true)
-              setStatus('')
-            }}
-          >
-            <Pencil className="size-4" />
-            تعديل الرابط
-          </Button>
-        ) : null}
-      </div>
+      <div className="space-y-4 rounded-xl border bg-card p-5" dir="rtl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {groupUrl && !editingGroupUrl ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setGroupUrlInput(groupUrl)
+                setEditingGroupUrl(true)
+                setStatus('')
+              }}
+            >
+              <Pencil className="size-4" />
+              تعديل الرابط
+            </Button>
+          ) : null}
+        </div>
 
         {groupUrl && !editingGroupUrl ? (
           <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-3">
@@ -665,6 +718,65 @@ export function CommunicationReminders({
         )}
       </div>
 
+      {/* Today's full-day cancellation alert */}
+      {todayCancellations.length > 0 && (
+        <div
+          className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-5"
+          dir="rtl"
+        >
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-destructive/10 p-2 text-destructive">
+              <CalendarDays className="size-6" />
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-destructive">
+                تنبيه: تم إلغاء يوم دراسي اليوم
+              </h3>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                يوجد إلغاء ليوم دراسي مسجل في الإشراف. يرجى الانتباه وإبلاغ المجتمع.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {todayCancellations.map((cancellation) => {
+              const course = courses.find(
+                (item) => item.id === cancellation.course_id,
+              )
+
+              return (
+                <div
+                  key={cancellation.id}
+                  className="rounded-lg border bg-card p-3"
+                >
+                  <p className="font-medium">
+                    {course?.name ?? 'مقرر غير معروف'}
+                  </p>
+
+                  {cancellation.reason && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      سبب الإلغاء: {cancellation.reason}
+                    </p>
+                  )}
+
+                  {cancellation.note && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {cancellation.note}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            هذا التنبيه للتذكير فقط. إرسال إشعار الإلغاء إلى Community يتم يدوياً.
+          </p>
+        </div>
+      )}
+
       {!hasLessonsToday ? (
         <div className="rounded-xl border border-dashed p-8 text-center">
           <CalendarDays className="mx-auto mb-3 size-10 text-muted-foreground" />
@@ -693,8 +805,6 @@ export function CommunicationReminders({
                 <Plus className="size-4" />
                 رسالة جديدة
               </Button>
-
-            
             </div>
 
             {messages.length === 0 ? (
