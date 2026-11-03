@@ -1,23 +1,22 @@
 
-import { createClient } from '@supabase/supabase-js'
 import { cookies, headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+
+import {
+  closeActiveSession,
+  loadCurrentAccessRecords,
+  updateApprovedDeviceType,
+} from '@/lib/features/app-core/repositories/auth-guard.repository'
+
+import {
+  closeActiveSessionsForDevice,
+  updateTrustedDeviceForReapproval,
+} from '@/lib/features/auth/repositories/login/login.repository'
 
 const SESSION_COOKIE = 't3leem_session_id'
 const DEVICE_COOKIE = 't3leem_device_token'
 
 const IDLE_TIMEOUT_MINUTES = 20
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
 
 type DeviceType =
   | 'iphone'
@@ -147,11 +146,11 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
     const {
       data: records,
       error: accessError,
-    } = await supabaseAdmin.rpc('get_current_access_records', {
-      p_session_id: sessionId,
-      p_auth_user_id: user.id,
-      p_device_token_hash: deviceTokenHash,
-    })
+    } = await loadCurrentAccessRecords(
+      sessionId,
+      user.id,
+      deviceTokenHash,
+    )
 
     console.info(
       '[AUTH GUARD TIMING] get_current_access_records duration:',
@@ -301,15 +300,13 @@ export async function validateCurrentAccess(): Promise<GuardResult> {
       if (detectedDeviceType !== 'unknown') {
         const backfillStartedAt = performance.now()
 
-        const { error: backfillError } = await supabaseAdmin
-          .from('trusted_devices')
-          .update({
-            approved_device_type: detectedDeviceType,
-            device_type_detected_at: new Date().toISOString(),
-          })
-          .eq('id', record.device_id)
-          .eq('auth_user_id', user.id)
-          .eq('status', 'approved')
+        const { error: backfillError } =
+          await updateApprovedDeviceType(
+            record.device_id,
+            user.id,
+            detectedDeviceType,
+            new Date().toISOString(),
+          )
 
         console.info(
           '[AUTH GUARD TIMING] device type backfill duration:',
@@ -393,16 +390,13 @@ async function requireDeviceReapproval({
 }) {
   const now = new Date().toISOString()
 
-  const { error: updateError } = await supabaseAdmin
-    .from('trusted_devices')
-    .update({
-      status: 'pending',
-      pending_device_type: detectedDeviceType,
-      device_type_detected_at: now,
-    })
-    .eq('id', deviceId)
-    .eq('auth_user_id', authUserId)
-    .eq('status', 'approved')
+  const { error: updateError } =
+    await updateTrustedDeviceForReapproval(
+      deviceId,
+      authUserId,
+      detectedDeviceType,
+      now,
+    )
 
   if (updateError) {
     console.error(
@@ -431,16 +425,11 @@ async function closeDeviceSessions(
 ) {
   const now = new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('trusted_device_id', deviceId)
-    .eq('auth_user_id', authUserId)
-    .eq('is_active', true)
+  const { error } = await closeActiveSessionsForDevice(
+    authUserId,
+    deviceId,
+    now,
+  )
 
   if (error) {
     console.error('Close device sessions error:', error)
@@ -456,16 +445,11 @@ async function closeSession(
 ) {
   const now = new Date().toISOString()
 
-  const { error } = await supabaseAdmin
-    .from('active_sessions')
-    .update({
-      is_active: false,
-      logout_at: now,
-      last_activity_at: now,
-    })
-    .eq('id', sessionId)
-    .eq('auth_user_id', authUserId)
-    .eq('is_active', true)
+  const { error } = await closeActiveSession(
+    sessionId,
+    authUserId,
+    now,
+  )
 
   if (error) {
     console.error('Close session error:', error)
