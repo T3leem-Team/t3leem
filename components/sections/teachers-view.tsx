@@ -815,7 +815,7 @@ export function TeachersView() {
             courseId: row.course_id,
             attendanceDate: row.attendance_date,
             statusId: row.status_id,
-            note: row.note,
+            note: row.note ?? '',
           }))
 
         updateAttendanceRecords((previous) => {
