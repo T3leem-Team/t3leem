@@ -14,9 +14,6 @@ const supabaseAdmin = createClient(
   },
 )
 
-/**
- * Load the current session, user and trusted device access record.
- */
 export async function loadCurrentAccessRecords(
   sessionId: string,
   authUserId: string,
@@ -29,9 +26,6 @@ export async function loadCurrentAccessRecords(
   })
 }
 
-/**
- * Backfill the approved device type for older trusted devices.
- */
 export async function updateApprovedDeviceType(
   deviceId: string,
   authUserId: string,
@@ -49,9 +43,6 @@ export async function updateApprovedDeviceType(
     .eq('status', 'approved')
 }
 
-/**
- * Close one active session only.
- */
 export async function closeActiveSession(
   sessionId: string,
   authUserId: string,
