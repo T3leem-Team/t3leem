@@ -63,6 +63,7 @@ export type StudentsRepositoryOptions = {
   limit?: number
   search?: string
   filters?: RepositoryStudentFilters
+  includeAttendance?: boolean
 }
 
 export type StudentsRepositoryData = {
@@ -771,45 +772,74 @@ export async function loadStudentsRepositoryData(
     ;(teachersData ?? []).forEach((teacher) => teacherNames.set(teacher.id, teacher.name ?? ''))
   }
 
-  const { data: statusesData, error: statusesError } = await supabase
-    .from('attendance_statuses')
-    .select('id, name, is_active, sort_order')
-    .order('sort_order', { ascending: true })
-  if (statusesError) throw new Error(`خطأ في تحميل حالات الحضور: ${statusesError.message}`)
-  const loadedAttendanceStatuses: RepositoryAttendanceStatus[] = (statusesData ?? []).map((status) => ({
-    id: status.id,
-    name: status.name,
-    isActive: Boolean(status.is_active),
-    sortOrder: Number(status.sort_order ?? 0),
-  }))
+    /*
+   * حالات الحضور وسجلاته
+   * يمكن تعطيل تحميلها عند تحميل قائمة الطلاب.
+   */
+  let loadedAttendanceStatuses: RepositoryAttendanceStatus[] = []
+  let attendanceRows: RepositoryAttendanceRecord[] = []
 
-  /* سجلات الحضور الخاصة بالطلاب المحمّلين فقط */
-  const attendanceRows: RepositoryAttendanceRecord[] = []
-  if (loadedCourses.length > 0 && studentIds.length > 0) {
-    let from = 0
-    while (true) {
-      const { data: attendanceData, error: attendanceError } = await supabase
-        .from('attendance')
-        .select('id, student_id, enrollment_id, attendance_date, status_id, note, course_id')
-        .in('course_id', loadedCourses.map((course) => course.id))
-        .in('student_id', studentIds)
-        .order('id', { ascending: true })
-        .range(from, from + ATTENDANCE_PAGE_SIZE - 1)
-      if (attendanceError) throw new Error(`خطأ في تحميل سجلات الحضور: ${attendanceError.message}`)
-      const page = attendanceData ?? []
-      attendanceRows.push(...page.map((record) => ({
-        id: record.id,
-        studentId: record.student_id,
-        enrollmentId: record.enrollment_id ?? null,
-        courseId: record.course_id,
-        attendanceDate: record.attendance_date,
-        statusId: record.status_id,
-        note: record.note ?? '',
-      })))
-      if (page.length < ATTENDANCE_PAGE_SIZE) break
-      from += ATTENDANCE_PAGE_SIZE
+  if (options.includeAttendance !== false) {
+    const { data: statusesData, error: statusesError } = await supabase
+      .from('attendance_statuses')
+      .select('id, name, is_active, sort_order')
+      .order('sort_order', { ascending: true })
+
+    if (statusesError) {
+      throw new Error(
+        `خطأ في تحميل حالات الحضور: ${statusesError.message}`
+      )
     }
-  }
+
+    loadedAttendanceStatuses = (statusesData ?? []).map((status) => ({
+      id: status.id,
+      name: status.name,
+      isActive: Boolean(status.is_active),
+      sortOrder: Number(status.sort_order ?? 0),
+    }))
+
+    /* سجلات الحضور الخاصة بالطلاب المحمّلين فقط */
+    if (loadedCourses.length > 0 && studentIds.length > 0) {
+      let from = 0
+
+      while (true) {
+        const { data: attendanceData, error: attendanceError } =
+          await supabase
+            .from('attendance')
+            .select(
+              'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
+            )
+            .in('course_id', loadedCourses.map((course) => course.id))
+            .in('student_id', studentIds)
+            .order('id', { ascending: true })
+            .range(from, from + ATTENDANCE_PAGE_SIZE - 1)
+
+        if (attendanceError) {
+          throw new Error(
+            `خطأ في تحميل سجلات الحضور: ${attendanceError.message}`
+          )
+        }
+
+        const page = attendanceData ?? []
+
+        attendanceRows.push(
+          ...page.map((record) => ({
+            id: record.id,
+            studentId: record.student_id,
+            enrollmentId: record.enrollment_id ?? null,
+            courseId: record.course_id,
+            attendanceDate: record.attendance_date,
+            statusId: record.status_id,
+            note: record.note ?? '',
+          }))
+        )
+
+        if (page.length < ATTENDANCE_PAGE_SIZE) break
+
+        from += ATTENDANCE_PAGE_SIZE
+      }
+    }
+  
 
   return {
     currentYear,
