@@ -68,6 +68,11 @@ export function PaymentStudents() {
   // منع البحث التلقائي عند فتح الصفحة أو الرجوع إليها.
   const lastSearchedValueRef = useRef('')
 
+  // التمرير الداخلي وتحميل الدفعات.
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  const loadMoreLock = useRef(false)
+
   const [filters, setFilters] = useState<Filters>(emptyFilters)
   const [search, setSearch] = useState('')
   const [isSearching, setIsSearching] = useState(false)
@@ -225,14 +230,12 @@ export function PaymentStudents() {
 
     const searchValue = search.trim()
 
-    // منع إعادة البحث إذا لم تتغير قيمة البحث.
     if (searchValue === lastSearchedValueRef.current) {
       return
     }
 
     lastSearchedValueRef.current = searchValue
 
-    // إظهار حالة البحث مباشرة.
     setIsSearching(true)
     setLoading(true)
 
@@ -270,9 +273,18 @@ export function PaymentStudents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, studentIdFromUrl, studentList, detailsDialogOpen])
 
+  // تحميل 50 طالباً إضافياً.
   const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) return
+    if (
+      loadMoreLock.current ||
+      loadingMore ||
+      !hasMore ||
+      loading
+    ) {
+      return
+    }
 
+    loadMoreLock.current = true
     setLoadingMore(true)
 
     try {
@@ -285,9 +297,37 @@ export function PaymentStudents() {
       console.error('Failed to load more payment students:', error)
       alert(getErrorMessage(error, 'تعذر تحميل بقية الطلاب.'))
     } finally {
+      loadMoreLock.current = false
       setLoadingMore(false)
     }
   }
+
+  // مراقبة نهاية التمرير داخل الجدول.
+  useEffect(() => {
+    const container = tableScrollRef.current
+    const sentinel = loadMoreSentinelRef.current
+
+    if (!container || !sentinel || !hasMore || loading) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void handleLoadMore()
+        }
+      },
+      {
+        root: container,
+        rootMargin: '150px',
+        threshold: 0,
+      },
+    )
+
+    observer.observe(sentinel)
+
+    return () => observer.disconnect()
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, loading, loadingMore, studentList.length])
 
   // تحديث البيانات بعد إضافة أو تعديل دفعة.
   const refreshLoadedPayments = async (): Promise<StudentRow[]> => {
@@ -780,24 +820,13 @@ export function PaymentStudents() {
         onUpdateFilter={updateFilter}
         onClearFilters={clearFilters}
         onOpenStudent={openPaymentDialog}
+        totalLoaded={studentList.length}
+        totalStudents={totalStudents}
+        loadingMore={loadingMore}
+        hasMore={hasMore}
+        scrollRef={tableScrollRef}
+        sentinelRef={loadMoreSentinelRef}
       />
-
-      <div className="flex flex-col items-center gap-2">
-        <p className="text-sm text-muted-foreground">
-          عرض {studentList.length} من أصل {totalStudents} طالب
-        </p>
-
-        {hasMore && (
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            disabled={loadingMore || loading}
-            className="rounded-md border px-6 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loadingMore ? 'جاري تحميل الطلاب...' : 'تحميل 50 طالب إضافي'}
-          </button>
-        )}
-      </div>
 
       {detailsDialogOpen && detailsStudent && (
         <PaymentDetailsModal
