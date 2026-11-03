@@ -1,4 +1,3 @@
-
 import 'server-only'
 
 import { createClient } from '@supabase/supabase-js'
@@ -237,41 +236,23 @@ export async function insertPendingTrustedDevice(
 }
 
 /**
- * Update an approved trusted device
+ * Update an approved trusted device and create the user's single active
+ * session in one database round trip.
  */
-export async function updateApprovedTrustedDevice(
-  deviceId: string,
-  authUserId: string,
-  deviceUpdate: {
-    last_used_at: string
-    device_type_detected_at: string
-    device_fingerprint_hash: string
-    approved_device_type?: string
-  },
-) {
-  return await supabaseAdmin
-    .from('trusted_devices')
-    .update(deviceUpdate)
-    .eq('id', deviceId)
-    .eq('auth_user_id', authUserId)
-    .eq('status', 'approved')
-    .select('id')
-    .maybeSingle()
-}
-
-/**
- * Create a single active system session
- */
-export async function createSingleActiveSession(
+export async function loginWithTrustedDevice(
   authUserId: string,
   deviceId: string,
+  fingerprintHash: string,
+  detectedDeviceType: string,
   expiresAt: string,
 ) {
   return await supabaseAdmin.rpc(
-    'create_single_active_session',
+    'login_with_trusted_device',
     {
       p_auth_user_id: authUserId,
       p_trusted_device_id: deviceId,
+      p_fingerprint_hash: fingerprintHash,
+      p_detected_device_type: detectedDeviceType,
       p_expires_at: expiresAt,
     },
   )
