@@ -17,6 +17,7 @@ import {
   getStudentsCache,
   loadStudentsCache,
   loadStudentsCachePage,
+  loadStudentAttendanceDetails,
   updateStudentsCacheStudentList,
   type AcademicLevel,
   type AttendanceStatus,
@@ -150,6 +151,9 @@ export function StudentsView() {
   const activeQueryKey = useRef('')
   const lastQueryKey = useRef('')
 
+  // يمنع نتيجة طلب حضور قديم من استبدال تفاصيل طالب أحدث.
+  const attendanceRequestVersion = useRef(0)
+
   const [attendanceStatuses, setAttendanceStatuses] = useState<
     AttendanceStatus[]
   >(initialCache?.attendanceStatuses ?? [])
@@ -264,9 +268,16 @@ export function StudentsView() {
         setTotalFilteredStudents(data.totalStudents)
         setAttendanceStatuses(data.attendanceStatuses)
         setSupabaseStatus(data.supabaseStatus)
-        const initialKey = JSON.stringify({ search: '', filters: emptyFilters, refresh: 0 })
+
+        const initialKey = JSON.stringify({
+          search: '',
+          filters: emptyFilters,
+          refresh: 0,
+        })
+
         activeQueryKey.current = initialKey
         lastQueryKey.current = initialKey
+
         setHasLoadedInitialStudents(true)
       } catch (error) {
         console.error('StudentsView load error:', error)
@@ -302,21 +313,28 @@ export function StudentsView() {
 
   // إعادة جلب أول 50 نتيجة من قاعدة البيانات عند تغيير البحث أو الفلاتر.
   useEffect(() => {
-    if (!hasLoadedInitialStudents || queryKey === lastQueryKey.current) {
+    if (
+      !hasLoadedInitialStudents ||
+      queryKey === lastQueryKey.current
+    ) {
       return
     }
 
     activeQueryKey.current = queryKey
     lastQueryKey.current = queryKey
+
     setIsLoadingStudents(true)
     setIsLoadingMoreStudents(false)
     setLoadMoreFailed(false)
+
     loadMoreLock.current = false
+
     setStudentList([])
     setTotalFilteredStudents(0)
     setSelectedStudentId('')
 
     let cancelled = false
+
     const timeout = window.setTimeout(async () => {
       try {
         const result = await loadStudentsCachePage({
@@ -325,16 +343,36 @@ export function StudentsView() {
           filters,
         })
 
-        if (cancelled || activeQueryKey.current !== queryKey) return
+        if (
+          cancelled ||
+          activeQueryKey.current !== queryKey
+        ) {
+          return
+        }
 
         setStudentList(result.students)
         setTotalFilteredStudents(result.totalStudents)
-        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
-          updateStudentsCacheStudentList(result.students, totalStudents)
+
+        if (
+          !search.trim() &&
+          JSON.stringify(filters) ===
+            JSON.stringify(emptyFilters)
+        ) {
+          updateStudentsCacheStudentList(
+            result.students,
+            totalStudents
+          )
         }
-        setSupabaseStatus('تم تحديث نتائج البحث والتصفية ✅')
+
+        setSupabaseStatus(
+          'تم تحديث نتائج البحث والتصفية ✅'
+        )
       } catch (error) {
-        console.error('Students search/filter error:', error)
+        console.error(
+          'Students search/filter error:',
+          error
+        )
+
         if (!cancelled) {
           setSupabaseStatus(
             error instanceof Error
@@ -343,7 +381,9 @@ export function StudentsView() {
           )
         }
       } finally {
-        if (!cancelled) setIsLoadingStudents(false)
+        if (!cancelled) {
+          setIsLoadingStudents(false)
+        }
       }
     }, 250)
 
@@ -351,8 +391,17 @@ export function StudentsView() {
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [queryKey, hasLoadedInitialStudents, search, filters])
+  }, [
+    queryKey,
+    hasLoadedInitialStudents,
+    search,
+    filters,
+    totalStudents,
+  ])
 
+  /*
+   * تحميل دفعة إضافية من الطلاب
+   */
   const loadMoreStudents = async () => {
     if (
       loadMoreLock.current ||
@@ -364,7 +413,9 @@ export function StudentsView() {
 
     const requestKey = activeQueryKey.current
     const requestOffset = studentList.length
+
     loadMoreLock.current = true
+
     setLoadMoreFailed(false)
     setIsLoadingMoreStudents(true)
 
@@ -383,20 +434,37 @@ export function StudentsView() {
       }
 
       setStudentList((current) => {
-        const existingIds = new Set(current.map((student) => student.id))
+        const existingIds = new Set(
+          current.map((student) => student.id)
+        )
+
         const next = [
           ...current,
-          ...result.students.filter((student) => !existingIds.has(student.id)),
+          ...result.students.filter(
+            (student) => !existingIds.has(student.id)
+          ),
         ]
-        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
-          updateStudentsCacheStudentList(next, totalStudents)
+
+        if (
+          !search.trim() &&
+          JSON.stringify(filters) ===
+            JSON.stringify(emptyFilters)
+        ) {
+          updateStudentsCacheStudentList(
+            next,
+            totalStudents
+          )
         }
+
         return next
       })
+
       setTotalFilteredStudents(result.totalStudents)
     } catch (error) {
       console.error('Load more students error:', error)
+
       setLoadMoreFailed(true)
+
       setSupabaseStatus(
         error instanceof Error
           ? `تعذر تحميل بقية الطلاب: ${error.message}`
@@ -410,7 +478,6 @@ export function StudentsView() {
 
   /*
    * تحديث الفلاتر
-   * يقبل النصوص لبقية الفلاتر والمصفوفة للمستويات الدراسية
    */
   const updateFilter = (
     key: keyof Filters,
@@ -505,7 +572,6 @@ export function StudentsView() {
             filters.personalId
           ),
 
-        // مطابقة الطالب مع أي مستوى دراسي محدد
         grade:
           filters.grade.length === 0 ||
           filters.grade.includes(
@@ -597,23 +663,81 @@ export function StudentsView() {
   }
 
   /*
-   * تفاصيل الطالب
+   * تفاصيل الملاحظات
+   * لا يتم تحميل سجلات الحضور هنا.
    */
   const openNotesDetails = (
     student: StudentTableStudent
   ) => {
+    attendanceRequestVersion.current++
+
     setDetailsStudent(student)
     setDetailsMode('notes')
   }
 
-  const openAttendanceDetails = (
+  /*
+   * تفاصيل الحضور
+   * تحميل سجلات الطالب عند فتح التفاصيل فقط.
+   */
+  const openAttendanceDetails = async (
     student: StudentTableStudent
   ) => {
-    setDetailsStudent(student)
+    const requestVersion =
+      ++attendanceRequestVersion.current
+
+    setDetailsStudent(null)
     setDetailsMode('attendance')
+
+    try {
+      const attendanceData =
+        await loadStudentAttendanceDetails(student.id)
+
+      // تجاهل النتيجة إذا تم فتح طالب آخر أو إغلاق التفاصيل.
+      if (
+        attendanceRequestVersion.current !==
+        requestVersion
+      ) {
+        return
+      }
+
+      setDetailsStudent({
+        ...student,
+        attendanceSummaries:
+          attendanceData.attendanceSummaries,
+        attendanceRecords:
+          attendanceData.attendanceRecords,
+      })
+    } catch (error) {
+      console.error(
+        'Load student attendance details error:',
+        error
+      )
+
+      if (
+        attendanceRequestVersion.current !==
+        requestVersion
+      ) {
+        return
+      }
+
+      setDetailsStudent({
+        ...student,
+        attendanceSummaries: [],
+        attendanceRecords: [],
+      })
+
+      setSupabaseStatus(
+        error instanceof Error
+          ? `تعذر تحميل تفاصيل الحضور: ${error.message}`
+          : 'تعذر تحميل تفاصيل الحضور.'
+      )
+    }
   }
 
   const closeDetails = () => {
+    // إلغاء صلاحية أي طلب حضور ما زال قيد التنفيذ.
+    attendanceRequestVersion.current++
+
     setDetailsStudent(null)
     setDetailsMode(null)
   }
@@ -682,8 +806,15 @@ export function StudentsView() {
           : student
       )
 
-      if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
-        updateStudentsCacheStudentList(next, totalStudents)
+      if (
+        !search.trim() &&
+        JSON.stringify(filters) ===
+          JSON.stringify(emptyFilters)
+      ) {
+        updateStudentsCacheStudentList(
+          next,
+          totalStudents
+        )
       }
 
       return next
@@ -753,11 +884,15 @@ export function StudentsView() {
           (student) => student.id !== selectedStudentId
         )
 
-        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+        if (
+          !search.trim() &&
+          JSON.stringify(filters) ===
+            JSON.stringify(emptyFilters)
+        ) {
           updateStudentsCacheStudentList(
             next,
             Math.max(0, totalStudents - 1),
-            [selectedStudentId],
+            [selectedStudentId]
           )
         }
 
@@ -765,8 +900,14 @@ export function StudentsView() {
       })
 
       setSelectedStudentId('')
-      setTotalStudents((current) => Math.max(0, current - 1))
-      setTotalFilteredStudents((current) => Math.max(0, current - 1))
+
+      setTotalStudents((current) =>
+        Math.max(0, current - 1)
+      )
+
+      setTotalFilteredStudents((current) =>
+        Math.max(0, current - 1)
+      )
 
       setSupabaseStatus(
         `تم حذف الطالب «${selected.name}» نهائيًا من النظام ✅`
@@ -850,11 +991,18 @@ export function StudentsView() {
           (student) => !ids.includes(student.id)
         )
 
-        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+        if (
+          !search.trim() &&
+          JSON.stringify(filters) ===
+            JSON.stringify(emptyFilters)
+        ) {
           updateStudentsCacheStudentList(
             next,
-            Math.max(0, totalStudents - selectedStudents.length),
-            ids,
+            Math.max(
+              0,
+              totalStudents - selectedStudents.length
+            ),
+            ids
           )
         }
 
@@ -864,8 +1012,20 @@ export function StudentsView() {
       if (ids.includes(selectedStudentId)) {
         setSelectedStudentId('')
       }
-      setTotalStudents((current) => Math.max(0, current - selectedStudents.length))
-      setTotalFilteredStudents((current) => Math.max(0, current - selectedStudents.length))
+
+      setTotalStudents((current) =>
+        Math.max(
+          0,
+          current - selectedStudents.length
+        )
+      )
+
+      setTotalFilteredStudents((current) =>
+        Math.max(
+          0,
+          current - selectedStudents.length
+        )
+      )
 
       setSupabaseStatus(
         `تم حذف ${selectedStudents.length} طالب نهائيًا من النظام ✅`
@@ -890,9 +1050,12 @@ export function StudentsView() {
    * تصدير بيانات الطلاب إلى Excel
    */
   const exportStudentsToExcel = async () => {
-    setSupabaseStatus('جاري تجهيز جميع نتائج التصدير...')
+    setSupabaseStatus(
+      'جاري تجهيز جميع نتائج التصدير...'
+    )
 
     const exportStudents: StudentTableStudent[] = []
+
     let exportOffset = 0
     let exportTotal = 0
 
@@ -906,20 +1069,30 @@ export function StudentsView() {
         })
 
         exportTotal = page.totalStudents
+
         exportStudents.push(...page.students)
+
         exportOffset += page.students.length
 
-        if (page.students.length === 0 || exportOffset >= exportTotal) {
+        if (
+          page.students.length === 0 ||
+          exportOffset >= exportTotal
+        ) {
           break
         }
       }
     } catch (error) {
-      console.error('Export students load error:', error)
+      console.error(
+        'Export students load error:',
+        error
+      )
+
       setSupabaseStatus(
         error instanceof Error
           ? `تعذر تجهيز ملف Excel: ${error.message}`
           : 'تعذر تجهيز ملف Excel.'
       )
+
       return
     }
 
@@ -984,30 +1157,43 @@ export function StudentsView() {
     )
 
     const workbook = new ExcelJS.Workbook()
+
     workbook.creator = 'T3leem'
     workbook.created = new Date()
 
     const worksheet = workbook.addWorksheet('الطلاب', {
-      views: [{ rightToLeft: true, showGridLines: true }],
+      views: [
+        {
+          rightToLeft: true,
+          showGridLines: true,
+        },
+      ],
     })
 
     const headers = Object.keys(exportData[0] ?? {})
 
-    worksheet.columns = headers.map((header, index) => ({
-      header,
-      key: header,
-      width: index === 0 ? 6 : 24,
-    }))
+    worksheet.columns = headers.map(
+      (header, index) => ({
+        header,
+        key: header,
+        width: index === 0 ? 6 : 24,
+      })
+    )
 
     worksheet.addRows(exportData)
 
     const headerRow = worksheet.getRow(1)
-    headerRow.font = { bold: true }
+
+    headerRow.font = {
+      bold: true,
+    }
+
     headerRow.alignment = {
       horizontal: 'right',
       vertical: 'middle',
       wrapText: true,
     }
+
     headerRow.height = 28
 
     worksheet.eachRow((row) => {
@@ -1029,17 +1215,24 @@ export function StudentsView() {
       : 'الطلاب.xlsx'
 
     const buffer = await workbook.xlsx.writeBuffer()
+
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
+
     const url = URL.createObjectURL(blob)
+
     const link = document.createElement('a')
 
     link.href = url
     link.download = fileName
+
     document.body.appendChild(link)
+
     link.click()
+
     link.remove()
+
     URL.revokeObjectURL(url)
 
     setSupabaseStatus(
@@ -1047,19 +1240,40 @@ export function StudentsView() {
     )
   }
 
+  /*
+   * تحديث قائمة الطلاب من نموذج الإضافة والتعديل
+   */
   const setStudentListFromForm: React.Dispatch<
     React.SetStateAction<StudentTableStudent[]>
   > = (value) => {
     setStudentList((current) => {
-      const next = typeof value === 'function' ? value(current) : value
-      const currentIds = new Set(current.map((student) => student.id))
-      const nextIds = new Set(next.map((student) => student.id))
-      const addedCount = next.filter((student) => !currentIds.has(student.id)).length
-      const removedCount = current.filter((student) => !nextIds.has(student.id)).length
+      const next =
+        typeof value === 'function'
+          ? value(current)
+          : value
+
+      const currentIds = new Set(
+        current.map((student) => student.id)
+      )
+
+      const nextIds = new Set(
+        next.map((student) => student.id)
+      )
+
+      const addedCount = next.filter(
+        (student) => !currentIds.has(student.id)
+      ).length
+
+      const removedCount = current.filter(
+        (student) => !nextIds.has(student.id)
+      ).length
 
       if (addedCount || removedCount) {
         setTotalStudents((total) =>
-          Math.max(0, total + addedCount - removedCount),
+          Math.max(
+            0,
+            total + addedCount - removedCount
+          )
         )
       }
 
@@ -1097,7 +1311,10 @@ export function StudentsView() {
       totalStudents={totalStudents}
       totalFilteredStudents={totalFilteredStudents}
       loadMoreStudents={loadMoreStudents}
-      hasMoreStudents={studentList.length < totalFilteredStudents && !loadMoreFailed}
+      hasMoreStudents={
+        studentList.length < totalFilteredStudents &&
+        !loadMoreFailed
+      }
       isLoadingMoreStudents={isLoadingMoreStudents}
       loadMoreFailed={loadMoreFailed}
       attendanceStatuses={attendanceStatuses}
