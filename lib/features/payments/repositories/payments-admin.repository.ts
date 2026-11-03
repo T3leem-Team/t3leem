@@ -348,3 +348,115 @@ export async function updateStudentPayment(
     .select(PAYMENT_RETURN_FIELDS)
     .single()
 }
+
+
+/**
+ * حساب إحصائيات المدفوعات لجميع الطلاب
+ * دون إرسال سجلات الدفعات كاملة إلى الواجهة.
+ */
+export async function loadPaymentsSummary(
+  academicYearId: string,
+  annualFee: number,
+) {
+  try {
+    const [
+      studentsCountResult,
+      exemptCountResult,
+    ] = await Promise.all([
+      supabaseAdmin
+        .from('students')
+        .select('id', {
+          count: 'exact',
+          head: true,
+        }),
+
+      supabaseAdmin
+        .from('students')
+        .select('id', {
+          count: 'exact',
+          head: true,
+        })
+        .eq('fee_exempt', true),
+    ])
+
+    if (studentsCountResult.error) {
+      return {
+        data: null,
+        error: studentsCountResult.error,
+      }
+    }
+
+    if (exemptCountResult.error) {
+      return {
+        data: null,
+        error: exemptCountResult.error,
+      }
+    }
+
+    const totalStudents =
+      studentsCountResult.count ?? 0
+
+    const totalExempt =
+      exemptCountResult.count ?? 0
+
+    // تحميل مبالغ الدفعات فقط، على دفعات داخل السيرفر.
+    let totalPaid = 0
+    let from = 0
+    const batchSize = 1000
+
+    while (true) {
+      const {
+        data: payments,
+        error: paymentsError,
+      } = await supabaseAdmin
+        .from('payments')
+        .select('amount')
+        .eq('academic_year_id', academicYearId)
+        .range(from, from + batchSize - 1)
+
+      if (paymentsError) {
+        return {
+          data: null,
+          error: paymentsError,
+        }
+      }
+
+      const rows = payments ?? []
+
+      totalPaid += rows.reduce(
+        (total, payment) =>
+          total + Number(payment.amount ?? 0),
+        0,
+      )
+
+      if (rows.length < batchSize) {
+        break
+      }
+
+      from += batchSize
+    }
+
+    const payingStudents = Math.max(
+      totalStudents - totalExempt,
+      0,
+    )
+
+    const totalDue =
+      payingStudents * Number(annualFee ?? 0)
+
+    return {
+      data: {
+        totalStudents,
+        totalExempt,
+        totalDue: Number(totalDue.toFixed(3)),
+        totalPaid: Number(totalPaid.toFixed(3)),
+      },
+      error: null,
+    }
+  } catch (error) {
+    return {
+      data: null,
+      error,
+    }
+  }
+}
