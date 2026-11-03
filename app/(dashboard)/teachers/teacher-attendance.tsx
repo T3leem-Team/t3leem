@@ -19,6 +19,7 @@ import {
   verifyAttendanceForCourseDate,
   deleteAttendanceRecord,
   updateAttendanceNote,
+  loadTeacherAttendanceSummary,
 } from '@/lib/features/teachers/repositories/teacher-attendance.repository'
 
 import {
@@ -36,7 +37,6 @@ import type {
 } from '@/app/(dashboard)/teachers/teacher-attendance-utils'
 
 import {
-  getAttendancePercentage,
   getStatusIdByName,
   getStatusName,
   getTodayString,
@@ -158,6 +158,20 @@ export function AttendanceView(
     setIsBulkSaving,
   ] = useState(false)
 
+  // ملخص الحضور التاريخي لكل طالب
+  const [
+    historicalAttendanceSummary,
+    setHistoricalAttendanceSummary,
+  ] = useState<
+    Record<
+      string,
+      {
+        attendedCount: number
+        absentCount: number
+      }
+    >
+  >({})
+
   const studentCardRefs =
     useRef<
       Record<
@@ -177,6 +191,7 @@ export function AttendanceView(
     isDayCancelled ||
     isLessonCancelled
 
+  // تحميل أيام إلغاء الدورة
   useEffect(() => {
     if (!currentCourse) {
       setCancelledDates(new Set())
@@ -241,6 +256,115 @@ export function AttendanceView(
     teacherId,
   ])
 
+  // تحميل ملخص الحضور التاريخي من Supabase
+  const summaryStudentIdsKey =
+    assignedStudents
+      .map((student) => student.id)
+      .sort()
+      .join('|')
+
+  const attendedStatusIdsKey =
+    attendanceStatuses
+      .filter((status) =>
+        [
+          'حاضر',
+          'متأخر',
+          'مستأذن',
+        ].includes(status.name.trim()),
+      )
+      .map((status) => status.id)
+      .sort()
+      .join('|')
+
+  const absentStatusIdsKey =
+    attendanceStatuses
+      .filter(
+        (status) =>
+          status.name.trim() === 'غائب',
+      )
+      .map((status) => status.id)
+      .sort()
+      .join('|')
+
+  const cancelledDatesKey =
+    [...cancelledDates]
+      .sort()
+      .join('|')
+
+  useEffect(() => {
+    if (
+      !currentCourse?.id ||
+      !summaryStudentIdsKey ||
+      !attendedStatusIdsKey ||
+      !absentStatusIdsKey
+    ) {
+      setHistoricalAttendanceSummary({})
+      return
+    }
+
+    let cancelled = false
+
+    const loadSummary = async () => {
+      try {
+        const result =
+          await loadTeacherAttendanceSummary(
+            currentCourse.id,
+            summaryStudentIdsKey.split('|'),
+            attendedStatusIdsKey.split('|'),
+            absentStatusIdsKey.split('|'),
+            cancelledDatesKey
+              ? cancelledDatesKey.split('|')
+              : [],
+          )
+
+        if (cancelled) {
+          return
+        }
+
+        const summary: Record<
+          string,
+          {
+            attendedCount: number
+            absentCount: number
+          }
+        > = {}
+
+        result.forEach((row) => {
+          summary[row.student_id] = {
+            attendedCount: Number(
+              row.attended_count,
+            ),
+            absentCount: Number(
+              row.absent_count,
+            ),
+          }
+        })
+
+        setHistoricalAttendanceSummary(
+          summary,
+        )
+      } catch (error) {
+        console.error(
+          'Teacher attendance summary error:',
+          error,
+        )
+      }
+    }
+
+    void loadSummary()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    currentCourse?.id,
+    summaryStudentIdsKey,
+    attendedStatusIdsKey,
+    absentStatusIdsKey,
+    cancelledDatesKey,
+  ])
+
+  // فحص إلغاء اليوم أو الدرس المحدد
   useEffect(() => {
     if (!currentCourse || !activeDate) {
       setIsDayCancelled(false)
@@ -450,6 +574,7 @@ export function AttendanceView(
     return date >= student.joinDate
   }
 
+  // إحصائيات تسجيل الحضور في اليوم المحدد
   const attendanceSummary = useMemo(() => {
     let recorded = 0
     let total = 0
@@ -500,30 +625,34 @@ export function AttendanceView(
     localStatuses,
   ])
 
+  // النسب التاريخية الكاملة من ملخص قاعدة البيانات
   const attendancePercentages = useMemo(() => {
-    if (!currentCourse) {
-      return {}
-    }
-
     const result: Record<string, number> = {}
 
     for (const student of assignedStudents) {
-      result[student.id] = getAttendancePercentage(
-        student.id,
-        currentCourse.id,
-        attendanceRecords,
-        attendanceStatuses,
-        cancelledDates,
-      )
+      const summary =
+        historicalAttendanceSummary[student.id]
+
+      const attended =
+        summary?.attendedCount ?? 0
+
+      const absent =
+        summary?.absentCount ?? 0
+
+      const total = attended + absent
+
+      result[student.id] =
+        total === 0
+          ? 0
+          : Math.round(
+              (attended / total) * 100,
+            )
     }
 
     return result
   }, [
     assignedStudents,
-    attendanceRecords,
-    attendanceStatuses,
-    currentCourse,
-    cancelledDates,
+    historicalAttendanceSummary,
   ])
 
   const filteredStudents = assignedStudents.filter(
