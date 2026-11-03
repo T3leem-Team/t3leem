@@ -24,12 +24,23 @@ export type StudentRow = {
   paymentStatus: PaymentStatus
 }
 
+export type PaymentSummary = {
+  totalStudents: number
+  totalExempt: number
+  totalDue: number
+  totalPaid: number
+}
+
 export type PaymentStudentsRepositoryData = {
   studentList: StudentRow[]
   currentAcademicYearId: string | null
   currentAcademicYearName: string
   currentAnnualFee: number
   levels: PaymentLevel[]
+  totalStudents: number
+  hasMore: boolean
+  currentPage: number
+  summary: PaymentSummary
 }
 
 export type PaymentApiResponse<T = unknown> = {
@@ -37,6 +48,22 @@ export type PaymentApiResponse<T = unknown> = {
   payments?: T[]
   error?: string
   maxAmount?: number
+}
+
+type PaymentsListApiResponse = {
+  academicYear?: {
+    id: string
+    name: string
+    annual_fee: number | string | null
+  } | null
+  students?: any[]
+  totalStudents?: number
+  hasMore?: boolean
+  enrollments?: any[]
+  payments?: any[]
+  levels?: any[]
+  summary?: Partial<PaymentSummary>
+  error?: string
 }
 
 async function paymentRequest<T>(
@@ -65,25 +92,63 @@ async function paymentRequest<T>(
   return (data ?? {}) as T
 }
 
+const EMPTY_SUMMARY: PaymentSummary = {
+  totalStudents: 0,
+  totalExempt: 0,
+  totalDue: 0,
+  totalPaid: 0,
+}
+
 /**
- * تحميل بيانات المدفوعات والطلاب والسنة الدراسية.
+ * تحميل صفحة من بيانات المدفوعات.
+ *
+ * page يبدأ من صفر.
+ * كل صفحة تحتوي على 50 طالبًا كحد أقصى.
+ * البحث يتم في قاعدة البيانات ويشمل جميع الطلاب.
  */
-export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepositoryData> {
-  const response = await fetch('/api/payments', {
-    method: 'GET',
-    cache: 'no-store',
+export async function loadPaymentsRepositoryData(
+  options?: {
+    page?: number
+    search?: string
+  },
+): Promise<PaymentStudentsRepositoryData> {
+  const page = Math.max(
+    0,
+    Math.floor(options?.page ?? 0),
+  )
+
+  const search = String(
+    options?.search ?? '',
+  ).trim()
+
+  const params = new URLSearchParams({
+    page: String(page),
   })
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null)
+  if (search) {
+    params.set('search', search)
+  }
 
+  const response = await fetch(
+    `/api/payments?${params.toString()}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+
+  const data =
+    (await response.json().catch(() => null)) as
+      | PaymentsListApiResponse
+      | null
+
+  if (!response.ok) {
     throw new Error(
-      errorData?.error ?? 'تعذر تحميل بيانات المدفوعات.',
+      data?.error ?? 'تعذر تحميل بيانات المدفوعات.',
     )
   }
 
-  const data = await response.json()
-  const currentYear = data.academicYear ?? null
+  const currentYear = data?.academicYear ?? null
 
   if (!currentYear) {
     return {
@@ -92,15 +157,21 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
       currentAcademicYearName: '',
       currentAnnualFee: 0,
       levels: [],
+      totalStudents: 0,
+      hasMore: false,
+      currentPage: page,
+      summary: EMPTY_SUMMARY,
     }
   }
 
-  const annualFee = Number(currentYear.annual_fee ?? 0)
+  const annualFee = Number(
+    currentYear.annual_fee ?? 0,
+  )
 
-  const students = data.students ?? []
-  const enrollments = data.enrollments ?? []
-  const payments = data.payments ?? []
-  const levels = data.levels ?? []
+  const students = data?.students ?? []
+  const enrollments = data?.enrollments ?? []
+  const payments = data?.payments ?? []
+  const levels = data?.levels ?? []
 
   // Normalize academic levels.
   const normalizedLevels: PaymentLevel[] = levels
@@ -112,21 +183,19 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
           ? null
           : Number(level.sort_order),
     }))
-    .sort(
-      (a: PaymentLevel, b: PaymentLevel) => {
-        const aOrder =
-          a.sortOrder ?? Number.MAX_SAFE_INTEGER
+    .sort((a, b) => {
+      const aOrder =
+        a.sortOrder ?? Number.MAX_SAFE_INTEGER
 
-        const bOrder =
-          b.sortOrder ?? Number.MAX_SAFE_INTEGER
+      const bOrder =
+        b.sortOrder ?? Number.MAX_SAFE_INTEGER
 
-        if (aOrder !== bOrder) {
-          return aOrder - bOrder
-        }
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder
+      }
 
-        return a.name.localeCompare(b.name, 'ar')
-      },
-    )
+      return a.name.localeCompare(b.name, 'ar')
+    })
 
   const levelMap = new Map<string, PaymentLevel>(
     normalizedLevels.map((level) => [
@@ -178,12 +247,13 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
     )
   }
 
-  // Build the student list.
+  // Build the student list for this page only.
   const studentList: StudentRow[] = []
 
   for (const student of students) {
     const enrollment = enrollmentMap.get(student.id)
 
+    // لا نعرض طالبًا غير مسجل في السنة الحالية.
     if (!enrollment) {
       continue
     }
@@ -237,12 +307,31 @@ export async function loadPaymentsRepositoryData(): Promise<PaymentStudentsRepos
     return a.name.localeCompare(b.name, 'ar')
   })
 
+  const summary: PaymentSummary = {
+    totalStudents: Number(
+      data?.summary?.totalStudents ?? 0,
+    ),
+    totalExempt: Number(
+      data?.summary?.totalExempt ?? 0,
+    ),
+    totalDue: Number(
+      data?.summary?.totalDue ?? 0,
+    ),
+    totalPaid: Number(
+      data?.summary?.totalPaid ?? 0,
+    ),
+  }
+
   return {
     studentList,
     currentAcademicYearId: currentYear.id,
     currentAcademicYearName: currentYear.name,
     currentAnnualFee: annualFee,
     levels: normalizedLevels,
+    totalStudents: Number(data?.totalStudents ?? 0),
+    hasMore: Boolean(data?.hasMore),
+    currentPage: page,
+    summary,
   }
 }
 
