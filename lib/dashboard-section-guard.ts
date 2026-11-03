@@ -1,18 +1,9 @@
 
-import { createClient } from '@supabase/supabase-js'
-
 import { validateCurrentAccess } from '@/lib/auth-guard'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadDashboardSectionByKey,
+  loadUserDashboardSectionPermission,
+} from '@/lib/features/app-core/repositories/dashboard-section-guard.repository'
 
 export type DashboardSectionAccess = {
   allowed: boolean
@@ -34,11 +25,7 @@ export async function validateDashboardSection(
   }
 
   const { data: section, error: sectionError } =
-    await supabaseAdmin
-      .from('dashboard_sections')
-      .select('id, is_active')
-      .eq('section_key', sectionKey)
-      .maybeSingle()
+    await loadDashboardSectionByKey(sectionKey)
 
   if (
     sectionError ||
@@ -52,12 +39,10 @@ export async function validateDashboardSection(
   }
 
   const { data: permission, error: permissionError } =
-    await supabaseAdmin
-      .from('user_dashboard_sections')
-      .select('id')
-      .eq('user_profile_id', access.profileId)
-      .eq('section_id', section.id)
-      .maybeSingle()
+    await loadUserDashboardSectionPermission(
+      access.profileId,
+      section.id,
+    )
 
   if (permissionError) {
     console.error(
