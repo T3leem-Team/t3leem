@@ -1,7 +1,12 @@
 
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   loadActiveEnrollments,
@@ -120,7 +125,21 @@ export type DashboardCache = {
 }
 
 let dashboardCache: DashboardCache | null = null
+
 let dashboardDataLoading = false
+
+// كاش مستقل لكل دورة وتاريخ.
+const attendanceDateCache = new Map<
+  string,
+  AttendanceRecord[]
+>()
+
+function getAttendanceCacheKey(
+  courseId: string,
+  date: string,
+) {
+  return `${normalizeId(courseId)}|${normalizeAttendanceDate(date)}`
+}
 
 export function getLocalDateString() {
   const now = new Date()
@@ -394,6 +413,31 @@ export function useDashboardData() {
     dashboardCache?.pendingRegistrationCount ?? 0,
   )
 
+  // يمنع استجابة طلب قديم من استبدال بيانات الاختيار الجديد.
+  const attendanceRequestId = useRef(0)
+
+  // إذا كانت هناك بيانات محفوظة من تحميل سابق،
+  // نربطها بمفتاح الدورة والتاريخ الصحيح.
+  useEffect(() => {
+    if (
+      dashboardCache?.selectedCourseId &&
+      dashboardCache?.selectedDate &&
+      dashboardCache.attendanceRecords.length > 0
+    ) {
+      const key = getAttendanceCacheKey(
+        dashboardCache.selectedCourseId,
+        dashboardCache.selectedDate,
+      )
+
+      if (!attendanceDateCache.has(key)) {
+        attendanceDateCache.set(
+          key,
+          dashboardCache.attendanceRecords,
+        )
+      }
+    }
+  }, [])
+
   const updateDashboardCache = useCallback(
     (patch: Partial<DashboardCache>) => {
       const current = dashboardCache
@@ -457,21 +501,39 @@ export function useDashboardData() {
     ],
   )
 
+  // تحميل حضور يوم واحد لدورة واحدة فقط.
   const loadAttendance = useCallback(
-    async (courseIds: string[]) => {
-      const normalizedCourseIds = Array.from(
-        new Set(
-          courseIds
-            .map(normalizeId)
-            .filter(Boolean),
-        ),
+    async (
+      courseId: string,
+      date: string,
+      forceRefresh = false,
+    ) => {
+      const normalizedCourseId = normalizeId(courseId)
+      const normalizedDate = normalizeAttendanceDate(date)
+
+      if (!normalizedCourseId || !normalizedDate) {
+        return
+      }
+
+      const requestId = ++attendanceRequestId.current
+
+      const cacheKey = getAttendanceCacheKey(
+        normalizedCourseId,
+        normalizedDate,
       )
 
-      if (normalizedCourseIds.length === 0) {
-        setAttendanceRecords([])
+      // استخدام الكاش إذا كانت بيانات اليوم موجودة.
+      if (
+        !forceRefresh &&
+        attendanceDateCache.has(cacheKey)
+      ) {
+        const cachedRecords =
+          attendanceDateCache.get(cacheKey) ?? []
+
+        setAttendanceRecords(cachedRecords)
 
         updateDashboardCache({
-          attendanceRecords: [],
+          attendanceRecords: cachedRecords,
         })
 
         return
@@ -492,9 +554,10 @@ export function useDashboardData() {
       while (true) {
         const { data, error } =
           await loadAttendancePage(
-            normalizedCourseIds,
+            [normalizedCourseId],
             from,
             from + ATTENDANCE_PAGE_SIZE - 1,
+            normalizedDate,
           )
 
         if (error) {
@@ -503,8 +566,6 @@ export function useDashboardData() {
             error,
           )
 
-          // لا نستبدل البيانات الحالية بنتيجة ناقصة
-          // إذا فشلت إحدى دفعات التحميل.
           return
         }
 
@@ -533,6 +594,14 @@ export function useDashboardData() {
           note: record.note ?? null,
           courseId: normalizeId(record.course_id),
         }))
+
+      // حفظ نتيجة اليوم في الكاش حتى عند الانتقال والعودة إليه.
+      attendanceDateCache.set(cacheKey, records)
+
+      // لا نسمح لطلب قديم بتغيير بيانات اليوم الحالي.
+      if (requestId !== attendanceRequestId.current) {
+        return
+      }
 
       setAttendanceRecords(records)
 
@@ -746,6 +815,8 @@ export function useDashboardData() {
         }
 
         if (!yearResult.data) {
+          attendanceRequestId.current += 1
+
           setAcademicYear(null)
           setCourses([])
           setEnrollments([])
@@ -932,15 +1003,28 @@ export function useDashboardData() {
     updateDashboardCache,
   ])
 
+  // تحميل بيانات الدورة والتاريخ المختارين فقط.
   useEffect(() => {
-    if (!selectedCourseId) {
+    if (!selectedCourseId || !selectedDate) {
+      attendanceRequestId.current += 1
+      setAttendanceRecords([])
+
+      updateDashboardCache({
+        attendanceRecords: [],
+      })
+
       return
     }
 
-    void loadAttendance([selectedCourseId])
+    void loadAttendance(
+      selectedCourseId,
+      selectedDate,
+    )
   }, [
     selectedCourseId,
+    selectedDate,
     loadAttendance,
+    updateDashboardCache,
   ])
 
   useEffect(() => {
@@ -954,14 +1038,20 @@ export function useDashboardData() {
     loadAttendanceStatuses,
   ])
 
+  // عند الرجوع للنافذة نحدّث اليوم الحالي فقط.
+  // لا يوجد تحديث دوري كل 5 ثوانٍ.
   useEffect(() => {
-    if (!selectedCourseId) {
+    if (!selectedCourseId || !selectedDate) {
       return
     }
 
     const refresh = () => {
       if (document.visibilityState === 'visible') {
-        void loadAttendance([selectedCourseId])
+        void loadAttendance(
+          selectedCourseId,
+          selectedDate,
+          true,
+        )
       }
     }
 
@@ -972,12 +1062,6 @@ export function useDashboardData() {
       refresh,
     )
 
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void loadAttendance([selectedCourseId])
-      }
-    }, 5000)
-
     return () => {
       window.removeEventListener('focus', refresh)
 
@@ -985,11 +1069,10 @@ export function useDashboardData() {
         'visibilitychange',
         refresh,
       )
-
-      window.clearInterval(interval)
     }
   }, [
     selectedCourseId,
+    selectedDate,
     loadAttendance,
   ])
 
