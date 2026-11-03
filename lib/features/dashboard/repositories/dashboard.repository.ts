@@ -287,8 +287,16 @@ export async function loadAttendancePage(
   courseIds: string[],
   from: number,
   to: number,
+  attendanceDate?: string,
 ): Promise<RepositoryResult<AttendanceRow[]>> {
-  const { data, error } = await supabase
+  if (courseIds.length === 0) {
+    return {
+      data: [],
+      error: EMPTY_RESULT_ERROR,
+    }
+  }
+
+  let query = supabase
     .from('attendance')
     .select(`
       id,
@@ -300,6 +308,12 @@ export async function loadAttendancePage(
       course_id
     `)
     .in('course_id', courseIds)
+
+  if (attendanceDate) {
+    query = query.eq('attendance_date', attendanceDate)
+  }
+
+  const { data, error } = await query
     .order('attendance_date', {
       ascending: false,
     })
