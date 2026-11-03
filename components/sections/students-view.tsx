@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -127,7 +128,7 @@ export function StudentsView() {
 
   const [studentList, setStudentList] = useState<
     StudentTableStudent[]
-  >(initialCache?.studentList.slice(0, 50) ?? [])
+  >(initialCache?.studentList ?? [])
 
   const [totalStudents, setTotalStudents] = useState(
     initialCache?.totalStudents ?? 0
@@ -263,7 +264,10 @@ export function StudentsView() {
         setCurrentCourseId(data.currentCourseId)
         setCurrentCourseName(data.currentCourseName)
         setDynamicFields(data.dynamicFields)
-        setStudentList(data.studentList.slice(0, 50))
+
+        // الاحتفاظ بجميع الطلاب المحمّلين في الكاش.
+        setStudentList(data.studentList)
+
         setTotalStudents(data.totalStudents)
         setTotalFilteredStudents(data.totalStudents)
         setAttendanceStatuses(data.attendanceStatuses)
