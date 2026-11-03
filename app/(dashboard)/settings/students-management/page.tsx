@@ -14,7 +14,7 @@ import {
   Filter,
 } from 'lucide-react';
 
-import { getStudentsCache } from '@/lib/students-cache';
+import { getStudentsCache, loadStudentsCache } from '@/lib/students-cache';
 import {
   getTeachersCache,
   loadTeachersCache,
@@ -348,6 +348,7 @@ export default function StudentsManagementPage() {
         }
 
         setCanManageDates(true);
+        await loadStudentsCache({ all: true });
         refreshCachedData();
       } catch {
         if (!active) return;
