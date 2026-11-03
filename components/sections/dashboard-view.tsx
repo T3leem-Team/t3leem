@@ -487,6 +487,7 @@ export function DashboardView() {
         teachers={teachers}
         students={students}
         attendanceRecords={attendanceRecords}
+        studentAttendanceRecords={studentAttendanceRecords}
         attendanceStatuses={attendanceStatuses}
         selectedCourseId={selectedCourseId}
         selectedDate={selectedDate}
