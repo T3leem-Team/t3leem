@@ -839,7 +839,7 @@ export async function loadStudentsRepositoryData(
         from += ATTENDANCE_PAGE_SIZE
       }
     }
-  
+   }
 
   return {
     currentYear,
