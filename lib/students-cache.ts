@@ -1,7 +1,10 @@
 
 'use client'
 
-import { loadStudentsRepositoryData } from '@/lib/features/students/repositories/students.repository'
+import {
+  loadStudentsRepositoryData,
+  type RepositoryStudentFilters,
+} from '@/lib/features/students/repositories/students.repository'
 
 import type {
   StudentAttendanceSummary,
@@ -65,6 +68,7 @@ export type StudentsCacheData = {
   studentList: StudentTableStudent[]
   attendanceStatuses: AttendanceStatus[]
   supabaseStatus: string
+  totalStudents: number
 }
 
 let studentsCache: StudentsCacheData | null = null
@@ -347,97 +351,40 @@ function calculateAttendanceSummary(
   }
 }
 
-export function getStudentsCache() {
-  return studentsCache
-}
-
-export function setStudentsCache(
-  data: StudentsCacheData
-) {
-  studentsCacheVersion++
-  studentsCacheLoading = null
-  studentsCache = data
-}
-
-export function clearStudentsCache() {
-  studentsCacheVersion++
-  studentsCacheLoading = null
-  studentsCache = null
-}
-
-export function updateStudentsCacheStudentList(
-  studentList: StudentTableStudent[]
-) {
-  if (!studentsCache) {
-    return
-  }
-
-  studentsCacheVersion++
-  studentsCacheLoading = null
-
-  studentsCache = {
-    ...studentsCache,
-    studentList,
-  }
-}
-
-export async function loadStudentsCache(options?: {
-  force?: boolean
-}) {
-  const force = options?.force ?? false
-
-  if (!force && studentsCache) {
-    return studentsCache
-  }
-
-  if (force) {
-    studentsCacheVersion++
-    studentsCacheLoading = null
-  }
-
-  if (studentsCacheLoading) {
-    return studentsCacheLoading
-  }
-
-  const requestVersion = studentsCacheVersion
-
-  const loadingPromise = (async (): Promise<StudentsCacheData> => {
-    /*
-     * جلب البيانات من Repository
-     */
-    const {
-      currentYear,
-      annualFee,
-      loadedAcademicLevels,
-      loadedCourses: repositoryCourses,
-      today,
-      currentCourse: repositoryCurrentCourse,
-      loadedDynamicFields,
-      dynamicValuesMap,
-      enrollmentMap,
-      studentsData,
-      paymentsData,
-      assignments,
-      teacherNames,
-      loadedAttendanceStatuses,
-      attendanceRows,
-    } = await loadStudentsRepositoryData()
+function mapStudentsRepositoryDataToStudentList(
+  repositoryData: Awaited<ReturnType<typeof loadStudentsRepositoryData>>,
+): StudentTableStudent[] {
+  const {
+    currentYear,
+    annualFee,
+    loadedCourses: repositoryCourses,
+    today,
+    currentCourse: repositoryCurrentCourse,
+    dynamicValuesMap,
+    enrollmentMap,
+    studentsData,
+    paymentsData,
+    assignments,
+    teacherNames,
+    loadedAttendanceStatuses,
+    attendanceRows,
+  } = repositoryData
 
     // المحافظة على أنواع البيانات العامة المستخدمة حالياً في النظام.
-    const loadedCourses = repositoryCourses as Course[]
+  const loadedCourses = repositoryCourses as Course[]
 
-    const currentCourse = repositoryCurrentCourse as Course | null
+  const currentCourse = repositoryCurrentCourse as Course | null
 
     /*
      * فهارس داخل الذاكرة لتقليل البحث المتكرر أثناء بناء قائمة الطلاب.
      * نحافظ على أول توزيع وأول سجل حضور مطابق، مثل سلوك find السابق.
      */
-    const assignmentByStudentCourse = new Map<
+  const assignmentByStudentCourse = new Map<
       string,
       TeacherStudentAssignment
     >()
 
-    assignments.forEach((assignment) => {
+  assignments.forEach((assignment) => {
       const key = getAssignmentKey(
         assignment.student_id,
         assignment.course_id
@@ -448,23 +395,23 @@ export async function loadStudentsCache(options?: {
       }
     })
 
-    const statusNameById = new Map<string, string>()
+  const statusNameById = new Map<string, string>()
 
-    loadedAttendanceStatuses.forEach((status) => {
+  loadedAttendanceStatuses.forEach((status) => {
       statusNameById.set(status.id, status.name)
     })
 
-    const attendanceByStudent = new Map<
+  const attendanceByStudent = new Map<
       string,
       AttendanceRecord[]
     >()
 
-    const attendanceByStudentCourseDate = new Map<
+  const attendanceByStudentCourseDate = new Map<
       string,
       AttendanceRecord
     >()
 
-    attendanceRows.forEach((record) => {
+  attendanceRows.forEach((record) => {
       const studentRecords =
         attendanceByStudent.get(record.studentId) ?? []
 
@@ -485,9 +432,9 @@ export async function loadStudentsCache(options?: {
     /*
      * المدفوع لكل طالب
      */
-    const paidMap = new Map<string, number>()
+  const paidMap = new Map<string, number>()
 
-    ;(paymentsData ?? []).forEach((payment) => {
+  ;(paymentsData ?? []).forEach((payment) => {
       const current =
         paidMap.get(payment.student_id) ?? 0
 
@@ -500,7 +447,7 @@ export async function loadStudentsCache(options?: {
     /*
      * بناء بيانات الطلاب النهائية
      */
-    const mappedStudents = (studentsData ?? []).map(
+  const mappedStudents = (studentsData ?? []).map(
       (student: any) => {
         const amountPaid = paidMap.get(student.id) ?? 0
 
@@ -659,6 +606,154 @@ export async function loadStudentsCache(options?: {
       }
     )
 
+  return mappedStudents as StudentTableStudent[]
+}
+
+export function getStudentsCache() {
+  return studentsCache
+}
+
+export function setStudentsCache(
+  data: StudentsCacheData
+) {
+  studentsCacheVersion++
+  studentsCacheLoading = null
+  studentsCache = data
+}
+
+export function clearStudentsCache() {
+  studentsCacheVersion++
+  studentsCacheLoading = null
+  studentsCache = null
+}
+
+export function updateStudentsCacheStudentList(
+  studentList: StudentTableStudent[],
+  totalStudents?: number,
+  removedIds: string[] = [],
+) {
+  if (!studentsCache) {
+    return
+  }
+
+  studentsCacheVersion++
+  studentsCacheLoading = null
+
+  const hasFullStudentCache =
+    studentsCache.studentList.length >= studentsCache.totalStudents
+
+  let nextStudentList = studentList
+
+  if (hasFullStudentCache) {
+    const byId = new Map(
+      studentsCache.studentList.map((student) => [student.id, student]),
+    )
+
+    studentList.forEach((student) => {
+      byId.set(student.id, student)
+    })
+
+    removedIds.forEach((id) => byId.delete(id))
+    nextStudentList = Array.from(byId.values()).sort((a, b) => {
+      const dateOrder = String(b.createdAt ?? '').localeCompare(
+        String(a.createdAt ?? ''),
+      )
+      return dateOrder || b.id.localeCompare(a.id)
+    })
+  }
+
+  studentsCache = {
+    ...studentsCache,
+    studentList: nextStudentList,
+    totalStudents: totalStudents ?? studentsCache.totalStudents,
+  }
+}
+
+export async function loadStudentsCachePage(options: {
+  offset: number
+  limit?: number
+  search?: string
+  filters?: RepositoryStudentFilters
+}) {
+  const repositoryData = await loadStudentsRepositoryData({
+    offset: options.offset,
+    limit: options.limit ?? 50,
+    search: options.search,
+    filters: options.filters,
+  })
+
+  return {
+    students: mapStudentsRepositoryDataToStudentList(repositoryData),
+    totalStudents: repositoryData.totalStudents,
+  }
+}
+
+export async function loadStudentsCache(options?: {
+  force?: boolean
+  all?: boolean
+}) {
+  const loadAll = options?.all ?? false
+  const force = (options?.force ?? false) || loadAll
+
+  if (!force && studentsCache) {
+    return studentsCache
+  }
+
+  if (force) {
+    studentsCacheVersion++
+    studentsCacheLoading = null
+  }
+
+  if (studentsCacheLoading) {
+    return studentsCacheLoading
+  }
+
+  const requestVersion = studentsCacheVersion
+
+  const loadingPromise = (async (): Promise<StudentsCacheData> => {
+    /*
+     * جلب البيانات من Repository
+     */
+    const repositoryData = await loadStudentsRepositoryData({
+      offset: 0,
+      limit: loadAll ? 500 : 50,
+    })
+
+    const {
+      currentYear,
+      annualFee,
+      loadedAcademicLevels,
+      loadedCourses: repositoryCourses,
+      currentCourse: repositoryCurrentCourse,
+      loadedDynamicFields,
+      loadedAttendanceStatuses,
+      totalStudents,
+    } = repositoryData
+
+    const loadedCourses = repositoryCourses as Course[]
+    const currentCourse = repositoryCurrentCourse as Course | null
+
+    const mappedStudents = mapStudentsRepositoryDataToStudentList(repositoryData)
+
+    if (loadAll) {
+      let offset = repositoryData.studentsData.length
+
+      while (offset < totalStudents) {
+        const page = await loadStudentsRepositoryData({
+          offset,
+          limit: 500,
+        })
+
+        if (page.studentsData.length === 0) break
+
+        mappedStudents.push(
+          ...mapStudentsRepositoryDataToStudentList(page),
+        )
+
+        offset += page.studentsData.length
+      }
+    }
+
     const finalStatus = 'متصل بقاعدة البيانات ✅'
 
     const data: StudentsCacheData = {
@@ -684,6 +779,7 @@ export async function loadStudentsCache(options?: {
       attendanceStatuses: loadedAttendanceStatuses,
 
       supabaseStatus: finalStatus,
+      totalStudents,
     }
 
     // الطلب القديم لا يستبدل الكاش إذا تغير الإصدار أثناء تحميله.
