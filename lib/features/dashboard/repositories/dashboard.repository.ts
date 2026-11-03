@@ -283,6 +283,41 @@ export async function loadTeachers(
   }
 }
 
+export async function loadStudentAttendanceHistoryPage(
+  studentId: string,
+  courseId: string,
+  fromDate: string,
+  toDate: string,
+  from: number,
+  to: number,
+): Promise<RepositoryResult<AttendanceRow[]>> {
+  const { data, error } = await supabase
+    .from('attendance')
+    .select(
+      'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
+    )
+    .eq('student_id', studentId)
+    .eq('course_id', courseId)
+    .gte('attendance_date', fromDate)
+    .lte('attendance_date', toDate)
+    .order('attendance_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    return {
+      data: [],
+      error: error.message,
+    }
+  }
+
+  return {
+    data: (data ?? []) as AttendanceRow[],
+    error: null,
+  }
+}
+
 export async function loadAttendancePage(
   courseIds: string[],
   from: number,
