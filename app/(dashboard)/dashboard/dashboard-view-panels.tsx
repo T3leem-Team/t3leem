@@ -120,6 +120,7 @@ type DashboardViewPanelsProps = {
   teachers: Teacher[]
   students: Student[]
   attendanceRecords: AttendanceRecord[]
+  studentAttendanceRecords: AttendanceRecord[]
   attendanceStatuses: AttendanceStatus[]
   selectedCourseId: string
   selectedDate: string
@@ -449,6 +450,7 @@ export function DashboardViewPanels({
   teachers,
   students,
   attendanceRecords,
+  studentAttendanceRecords,
   attendanceStatuses,
   selectedCourseId,
   selectedDate,
@@ -893,8 +895,8 @@ export function DashboardViewPanels({
           selectedCourse,
         )
 
-      const studentRecords =
-        attendanceRecords.filter(
+     const studentRecords =
+        studentAttendanceRecords.filter(
           (record) =>
             normalizeId(
               record.studentId,
@@ -1029,7 +1031,7 @@ export function DashboardViewPanels({
     }, [
       selectedStudent,
       selectedCourse,
-      attendanceRecords,
+      studentAttendanceRecords,
       statusMap,
     ])
 
