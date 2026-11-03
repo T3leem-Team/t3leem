@@ -1,18 +1,11 @@
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '@/lib/require-auth'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  checkUserPermission,
+  loadPermissionByKey,
+  loadUserDashboardSection,
+} from '@/lib/features/app-core/repositories/authorization.repository'
 
 type AuthorizationAccess = {
   allowed: true
@@ -82,11 +75,11 @@ export async function requirePermission(
 
   try {
     const { data: hasPermission, error } =
-      await supabaseAdmin.rpc('check_user_permission', {
-        p_profile_id: access.profileId,
-        p_role: access.role ?? '',
-        p_permission_key: permissionKey,
-      })
+      await checkUserPermission(
+        access.profileId,
+        access.role ?? '',
+        permissionKey,
+      )
 
     if (error) {
       console.error('Permission lookup error:', error)
@@ -114,12 +107,7 @@ export async function requirePermission(
     // Distinguish a missing permission configuration
     // from a valid permission that the user does not have.
     const { data: permission, error: permissionError } =
-      await supabaseAdmin
-        .from('permissions')
-        .select('id')
-        .eq('permission_key', permissionKey)
-        .limit(1)
-        .maybeSingle()
+      await loadPermissionByKey(permissionKey)
 
     if (permissionError) {
       console.error('Permission configuration lookup error:', permissionError)
@@ -239,20 +227,10 @@ export async function requireDashboardSection(
     const {
       data: userSection,
       error: userSectionError,
-    } = await supabaseAdmin
-      .from('user_dashboard_sections')
-      .select(`
-        section_id,
-        dashboard_sections!inner (
-          section_key,
-          is_active
-        )
-      `)
-      .eq('user_profile_id', access.profileId)
-      .eq('dashboard_sections.section_key', sectionKey)
-      .eq('dashboard_sections.is_active', true)
-      .limit(1)
-      .maybeSingle()
+    } = await loadUserDashboardSection(
+      access.profileId,
+      sectionKey,
+    )
 
     if (userSectionError) {
       console.error(
