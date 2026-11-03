@@ -370,116 +370,127 @@ function mapStudentsRepositoryDataToStudentList(
     attendanceRows,
   } = repositoryData
 
-    // المحافظة على أنواع البيانات العامة المستخدمة حالياً في النظام.
+  // المحافظة على أنواع البيانات العامة المستخدمة حالياً في النظام.
   const loadedCourses = repositoryCourses as Course[]
 
   const currentCourse = repositoryCurrentCourse as Course | null
 
-    /*
-     * فهارس داخل الذاكرة لتقليل البحث المتكرر أثناء بناء قائمة الطلاب.
-     * نحافظ على أول توزيع وأول سجل حضور مطابق، مثل سلوك find السابق.
-     */
+  /*
+   * نعرف من وجود حالات الحضور أن بيانات الحضور تم تحميلها.
+   * عند تعطيل تحميل الحضور تكون القائمتان فارغتين.
+   */
+  const hasAttendanceData =
+    loadedAttendanceStatuses.length > 0
+
+  /*
+   * فهارس داخل الذاكرة لتقليل البحث المتكرر أثناء بناء قائمة الطلاب.
+   * نحافظ على أول توزيع وأول سجل حضور مطابق، مثل سلوك find السابق.
+   */
   const assignmentByStudentCourse = new Map<
-      string,
-      TeacherStudentAssignment
-    >()
+    string,
+    TeacherStudentAssignment
+  >()
 
   assignments.forEach((assignment) => {
-      const key = getAssignmentKey(
-        assignment.student_id,
-        assignment.course_id
-      )
+    const key = getAssignmentKey(
+      assignment.student_id,
+      assignment.course_id
+    )
 
-      if (!assignmentByStudentCourse.has(key)) {
-        assignmentByStudentCourse.set(key, assignment)
-      }
-    })
+    if (!assignmentByStudentCourse.has(key)) {
+      assignmentByStudentCourse.set(key, assignment)
+    }
+  })
 
   const statusNameById = new Map<string, string>()
 
   loadedAttendanceStatuses.forEach((status) => {
-      statusNameById.set(status.id, status.name)
-    })
+    statusNameById.set(status.id, status.name)
+  })
 
   const attendanceByStudent = new Map<
-      string,
-      AttendanceRecord[]
-    >()
+    string,
+    AttendanceRecord[]
+  >()
 
   const attendanceByStudentCourseDate = new Map<
-      string,
-      AttendanceRecord
-    >()
+    string,
+    AttendanceRecord
+  >()
 
   attendanceRows.forEach((record) => {
-      const studentRecords =
-        attendanceByStudent.get(record.studentId) ?? []
+    const studentRecords =
+      attendanceByStudent.get(record.studentId) ?? []
 
-      studentRecords.push(record)
-      attendanceByStudent.set(record.studentId, studentRecords)
+    studentRecords.push(record)
+    attendanceByStudent.set(record.studentId, studentRecords)
 
-      const key = getAttendanceKey(
-        record.studentId,
-        record.courseId,
-        record.attendanceDate
-      )
+    const key = getAttendanceKey(
+      record.studentId,
+      record.courseId,
+      record.attendanceDate
+    )
 
-      if (!attendanceByStudentCourseDate.has(key)) {
-        attendanceByStudentCourseDate.set(key, record)
-      }
-    })
+    if (!attendanceByStudentCourseDate.has(key)) {
+      attendanceByStudentCourseDate.set(key, record)
+    }
+  })
 
-    /*
-     * المدفوع لكل طالب
-     */
+  /*
+   * المدفوع لكل طالب
+   */
   const paidMap = new Map<string, number>()
 
   ;(paymentsData ?? []).forEach((payment) => {
-      const current =
-        paidMap.get(payment.student_id) ?? 0
+    const current =
+      paidMap.get(payment.student_id) ?? 0
 
-      paidMap.set(
-        payment.student_id,
-        current + Number(payment.amount ?? 0)
-      )
-    })
+    paidMap.set(
+      payment.student_id,
+      current + Number(payment.amount ?? 0)
+    )
+  })
 
-    /*
-     * بناء بيانات الطلاب النهائية
-     */
+  /*
+   * بناء بيانات الطلاب النهائية
+   */
   const mappedStudents = (studentsData ?? []).map(
-      (student: any) => {
-        const amountPaid = paidMap.get(student.id) ?? 0
+    (student: any) => {
+      const amountPaid = paidMap.get(student.id) ?? 0
 
-        const feeExempt = Boolean(student.fee_exempt)
+      const feeExempt = Boolean(student.fee_exempt)
 
-        const paymentStatus = feeExempt
-          ? 'معفي'
-          : amountPaid >= annualFee && annualFee > 0
-            ? 'مدفوع بالكامل'
-            : amountPaid > 0
-              ? 'مدفوع جزئيًا'
-              : 'غير مدفوع'
+      const paymentStatus = feeExempt
+        ? 'معفي'
+        : amountPaid >= annualFee && annualFee > 0
+          ? 'مدفوع بالكامل'
+          : amountPaid > 0
+            ? 'مدفوع جزئيًا'
+            : 'غير مدفوع'
 
-        const enrollment = enrollmentMap.get(student.id)
+      const enrollment = enrollmentMap.get(student.id)
 
-        const courseStatuses = loadedCourses.map(
-          (course) => ({
-            courseId: course.id,
-            courseName: course.name,
-            startDate: course.start_date,
-            endDate: course.end_date,
-            status: getCourseStatus(
-              course,
-              student.id,
-              assignmentByStudentCourse,
-              today
-            ),
-          })
-        )
+      const courseStatuses = loadedCourses.map(
+        (course) => ({
+          courseId: course.id,
+          courseName: course.name,
+          startDate: course.start_date,
+          endDate: course.end_date,
+          status: getCourseStatus(
+            course,
+            student.id,
+            assignmentByStudentCourse,
+            today
+          ),
+        })
+      )
 
-        const attendanceSummaries = loadedCourses.map(
-          (course) => {
+      /*
+       * ملخصات الحضور تُحسب فقط إذا كانت بيانات الحضور محمّلة.
+       * في تحميل القائمة العادي نتركها فارغة.
+       */
+      const attendanceSummaries = hasAttendanceData
+        ? loadedCourses.map((course) => {
             const assignment = assignmentByStudentCourse.get(
               getAssignmentKey(student.id, course.id)
             )
@@ -496,115 +507,115 @@ function mapStudentsRepositoryDataToStudentList(
               teacherName,
               today
             )
-          }
-        )
+          })
+        : []
 
-        const attendanceRecords: StudentAttendanceRecord[] =
-          (attendanceByStudent.get(student.id) ?? [])
-            .map((record) => {
-              const status = normalizeAttendanceStatus(
-                statusNameById.get(record.statusId) ?? ''
-              )
-
-              if (!status) {
-                return null
-              }
-
-              return {
-                id: record.id,
-                studentId: record.studentId,
-                courseId: record.courseId,
-                attendanceDate: record.attendanceDate,
-                status,
-                note: record.note,
-              }
-            })
-            .filter(
-              (
-                record
-              ): record is StudentAttendanceRecord =>
-                Boolean(record)
+      const attendanceRecords: StudentAttendanceRecord[] =
+        (attendanceByStudent.get(student.id) ?? [])
+          .map((record) => {
+            const status = normalizeAttendanceStatus(
+              statusNameById.get(record.statusId) ?? ''
             )
 
-        const currentStatus = currentCourse
-          ? getCourseStatus(
-              currentCourse,
-              student.id,
-              assignmentByStudentCourse,
-              today
-            )
-          : 'لم يحضر'
+            if (!status) {
+              return null
+            }
 
-        return {
-          id: student.id,
+            return {
+              id: record.id,
+              studentId: record.studentId,
+              courseId: record.courseId,
+              attendanceDate: record.attendanceDate,
+              status,
+              note: record.note,
+            }
+          })
+          .filter(
+            (
+              record
+            ): record is StudentAttendanceRecord =>
+              Boolean(record)
+          )
 
-          studentId: student.student_id ?? '',
+      const currentStatus = currentCourse
+        ? getCourseStatus(
+            currentCourse,
+            student.id,
+            assignmentByStudentCourse,
+            today
+          )
+        : 'لم يحضر'
 
-          name: student.name ?? '',
+      return {
+        id: student.id,
 
-          personalId: student.personal_id ?? '',
+        studentId: student.student_id ?? '',
 
-          gender: student.gender ?? '',
+        name: student.name ?? '',
 
-          age: student.age ?? null,
+        personalId: student.personal_id ?? '',
 
-          grade: enrollment?.levelName ?? '',
+        gender: student.gender ?? '',
 
-          className: enrollment?.className ?? '',
+        age: student.age ?? null,
 
-          phone: student.phone ?? '',
+        grade: enrollment?.levelName ?? '',
 
-          whatsapp: student.whatsapp ?? '',
+        className: enrollment?.className ?? '',
 
-          guardianRelation:
-            student.guardian_relation ?? '',
+        phone: student.phone ?? '',
 
-          studentPhone: student.student_phone ?? '',
+        whatsapp: student.whatsapp ?? '',
 
-          enrollmentCourseId:
-            enrollment?.courseId ?? '',
+        guardianRelation:
+          student.guardian_relation ?? '',
 
-          enrollmentCourseName:
-            enrollment?.courseName ?? '',
+        studentPhone: student.student_phone ?? '',
 
-          status: student.status ?? '',
+        enrollmentCourseId:
+          enrollment?.courseId ?? '',
 
-          paymentStatus,
+        enrollmentCourseName:
+          enrollment?.courseName ?? '',
 
-          amountDue: annualFee,
+        status: student.status ?? '',
 
-          amountPaid,
+        paymentStatus,
 
-          feeExempt,
+        amountDue: annualFee,
 
-          chronicDiseases: student.health_notes ?? '',
+        amountPaid,
 
-          notes: student.notes ?? '',
+        feeExempt,
 
-          source: student.source ?? '',
+        chronicDiseases: student.health_notes ?? '',
 
-          createdAt: student.created_at ?? '',
+        notes: student.notes ?? '',
 
-          updatedAt: student.updated_at ?? '',
+        source: student.source ?? '',
 
-          academicYearId:
-            student.academic_year_id ?? currentYear.id,
+        createdAt: student.created_at ?? '',
 
-          academicYearName: currentYear.name ?? '',
+        updatedAt: student.updated_at ?? '',
 
-          attendance: currentStatus,
+        academicYearId:
+          student.academic_year_id ?? currentYear.id,
 
-          courseStatuses,
+        academicYearName: currentYear.name ?? '',
 
-          attendanceSummaries,
+        attendance: currentStatus,
 
-          attendanceRecords,
+        courseStatuses,
 
-          dynamicValues:
-            dynamicValuesMap.get(student.id) ?? {},
-        }
+        attendanceSummaries,
+
+        attendanceRecords,
+
+        dynamicValues:
+          dynamicValuesMap.get(student.id) ?? {},
       }
-    )
+    }
+  )
 
   return mappedStudents as StudentTableStudent[]
 }
@@ -654,10 +665,12 @@ export function updateStudentsCacheStudentList(
     })
 
     removedIds.forEach((id) => byId.delete(id))
+
     nextStudentList = Array.from(byId.values()).sort((a, b) => {
       const dateOrder = String(b.createdAt ?? '').localeCompare(
         String(a.createdAt ?? ''),
       )
+
       return dateOrder || b.id.localeCompare(a.id)
     })
   }
@@ -680,6 +693,9 @@ export async function loadStudentsCachePage(options: {
     limit: options.limit ?? 50,
     search: options.search,
     filters: options.filters,
+
+    // تحميل قائمة الطلاب بدون سجلات الحضور.
+    includeAttendance: false,
   })
 
   return {
@@ -717,6 +733,9 @@ export async function loadStudentsCache(options?: {
     const repositoryData = await loadStudentsRepositoryData({
       offset: 0,
       limit: loadAll ? 500 : 50,
+
+      // تحميل قائمة الطلاب بدون سجلات الحضور.
+      includeAttendance: false,
     })
 
     const {
@@ -742,6 +761,9 @@ export async function loadStudentsCache(options?: {
         const page = await loadStudentsRepositoryData({
           offset,
           limit: 500,
+
+          // تعطيل الحضور في جميع الدفعات الإضافية أيضاً.
+          includeAttendance: false,
         })
 
         if (page.studentsData.length === 0) break
@@ -779,6 +801,7 @@ export async function loadStudentsCache(options?: {
       attendanceStatuses: loadedAttendanceStatuses,
 
       supabaseStatus: finalStatus,
+
       totalStudents,
     }
 
