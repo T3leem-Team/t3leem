@@ -3,15 +3,12 @@ import { cookies, headers } from 'next/headers'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 import {
-  closeActiveSession,
   loadCurrentAccessRecords,
   updateApprovedDeviceType,
-} from '@/lib/features/app-core/repositories/auth-guard.repository'
-
-import {
+  requireTrustedDeviceReapproval,
   closeActiveSessionsForDevice,
-  updateTrustedDeviceForReapproval,
-} from '@/lib/features/auth/repositories/login/login.repository'
+  closeActiveSession,
+} from '@/lib/features/app-core/repositories/auth-guard.repository'
 
 const SESSION_COOKIE = 't3leem_session_id'
 const DEVICE_COOKIE = 't3leem_device_token'
@@ -391,7 +388,7 @@ async function requireDeviceReapproval({
   const now = new Date().toISOString()
 
   const { error: updateError } =
-    await updateTrustedDeviceForReapproval(
+    await requireTrustedDeviceReapproval(
       deviceId,
       authUserId,
       detectedDeviceType,
@@ -426,8 +423,8 @@ async function closeDeviceSessions(
   const now = new Date().toISOString()
 
   const { error } = await closeActiveSessionsForDevice(
-    authUserId,
     deviceId,
+    authUserId,
     now,
   )
 
