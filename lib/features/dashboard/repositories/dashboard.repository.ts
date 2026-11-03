@@ -622,19 +622,3 @@ export async function loadDashboardSectionMappingsForUser(
       ascending: true,
     })
 }
-
-export async function loadDashboardSectionsByIds(
-  client: SupabaseClient,
-  sectionIds: string[],
-) {
-  return await client
-    .from('dashboard_sections')
-    .select(
-      'id, section_key, section_name, description, icon, href, sort_order, is_active',
-    )
-    .in('id', sectionIds)
-    .eq('is_active', true)
-    .order('sort_order', {
-      ascending: true,
-    })
-}
