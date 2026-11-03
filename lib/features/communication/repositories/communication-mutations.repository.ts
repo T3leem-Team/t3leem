@@ -348,3 +348,20 @@ export async function deleteCommunicationMessageTemplate(
     .delete()
     .eq('id', id)
 }
+
+// ==========================================
+// Admin Lesson Cancellation Alerts
+// ==========================================
+
+export async function loadTodayLessonCancellations(
+  academicYearId: string,
+  today: string,
+) {
+  return supabase
+    .from('supervision_records')
+    .select('id, course_id, type, record_date, reason, note')
+    .eq('academic_year_id', academicYearId)
+    .eq('record_date', today)
+    .eq('type', 'day_cancelled')
+    .order('created_at', { ascending: false })
+}
