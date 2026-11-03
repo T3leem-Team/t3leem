@@ -4,6 +4,8 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
+
 } from 'react'
 
 import {
@@ -17,6 +19,10 @@ import {
 import {
   loadActiveAcademicLevels,
 } from '@/lib/features/teachers/repositories/teachers.repository'
+
+import {
+  loadAttendanceForCourseDateRange,
+} from '@/lib/features/teachers/repositories/teacher-attendance.repository'
 
 import {
   getTeachersCache,
@@ -92,6 +98,12 @@ export function TeachersView() {
   ] = useState<AttendanceRecord[]>(
     initialTeachersCache?.attendanceRecords ?? [],
   )
+
+  const loadedAttendanceKeysRef =
+    useRef(new Set<string>())
+
+  const loadingAttendanceKeysRef =
+    useRef(new Set<string>())
 
   const [
     teacherCourseSubjects,
@@ -711,6 +723,139 @@ export function TeachersView() {
         student.id,
       ),
     )
+
+    const attendanceStudentIdsKey =
+    [...new Set(assignedStudentIds)]
+      .sort()
+      .join('|')
+
+  useEffect(() => {
+    if (
+      activePanel !== 'attendance' ||
+      !currentCourse?.id ||
+      !selectedTeacherId ||
+      !attendanceStudentIdsKey
+    ) {
+      return
+    }
+
+    const loadAttendance = async () => {
+      const studentIds =
+        attendanceStudentIdsKey.split('|')
+
+      const today = new Date()
+
+      const formatDate = (date: Date) =>
+        [
+          date.getFullYear(),
+          String(date.getMonth() + 1).padStart(2, '0'),
+          String(date.getDate()).padStart(2, '0'),
+        ].join('-')
+
+      const todayString = formatDate(today)
+
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      const yesterdayString = formatDate(yesterday)
+
+      const dates = selectedAttendanceDate
+        ? [selectedAttendanceDate]
+        : [yesterdayString, todayString]
+
+      const requests = dates
+        .map((date) => ({
+          date,
+          key: [
+            currentCourse.id,
+            date,
+            attendanceStudentIdsKey,
+          ].join(':'),
+        }))
+        .filter(
+          ({ key }) =>
+            !loadedAttendanceKeysRef.current.has(key) &&
+            !loadingAttendanceKeysRef.current.has(key),
+        )
+
+      if (requests.length === 0) {
+        return
+      }
+
+      requests.forEach(({ key }) => {
+        loadingAttendanceKeysRef.current.add(key)
+      })
+
+      try {
+        const missingDates = requests.map(
+          ({ date }) => date,
+        )
+
+        const startDate = missingDates.reduce(
+          (a, b) => (a < b ? a : b),
+        )
+
+        const endDate = missingDates.reduce(
+          (a, b) => (a > b ? a : b),
+        )
+
+        const rows =
+          await loadAttendanceForCourseDateRange(
+            currentCourse.id,
+            startDate,
+            endDate,
+            studentIds,
+          )
+
+        const newRecords: AttendanceRecord[] =
+          rows.map((row) => ({
+            id: row.id,
+            studentId: row.student_id,
+            enrollmentId: row.enrollment_id,
+            courseId: row.course_id,
+            attendanceDate: row.attendance_date,
+            statusId: row.status_id,
+            note: row.note,
+          }))
+
+        updateAttendanceRecords((previous) => {
+          const merged = new Map(
+            previous.map((record) => [
+              record.id,
+              record,
+            ]),
+          )
+
+          newRecords.forEach((record) => {
+            merged.set(record.id, record)
+          })
+
+          return Array.from(merged.values())
+        })
+
+        requests.forEach(({ key }) => {
+          loadedAttendanceKeysRef.current.add(key)
+        })
+      } catch (error) {
+        console.error(
+          'Teacher attendance load error:',
+          error,
+        )
+      } finally {
+        requests.forEach(({ key }) => {
+          loadingAttendanceKeysRef.current.delete(key)
+        })
+      }
+    }
+
+    void loadAttendance()
+  }, [
+    activePanel,
+    currentCourse?.id,
+    selectedTeacherId,
+    attendanceStudentIdsKey,
+    selectedAttendanceDate,
+  ])
 
   const availableGrades =
     useMemo(() => {
