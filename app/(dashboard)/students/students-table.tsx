@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Filter } from 'lucide-react'
+import { Filter, Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -119,6 +119,11 @@ type Props = {
   selectedStudentIds: string[]
 
   allStudentsSelected: boolean
+  onLoadMore: () => void
+  hasMore: boolean
+  isLoadingMore: boolean
+  loadMoreFailed: boolean
+  isLoading: boolean
   onToggleSelectAll: () => void
   onToggleStudentSelection: (studentId: string) => void
   onSelectStudent: (studentId: string) => void
@@ -144,6 +149,11 @@ export function StudentsTable({
   selectionMode,
   selectedStudentIds,
   allStudentsSelected,
+  onLoadMore,
+  hasMore,
+  isLoadingMore,
+  loadMoreFailed,
+  isLoading,
   onToggleSelectAll,
   onToggleStudentSelection,
   onSelectStudent,
@@ -153,6 +163,35 @@ export function StudentsTable({
 }: Props) {
   const [paymentStudent, setPaymentStudent] =
     useState<PaymentStudent | null>(null)
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null)
+  const onLoadMoreRef = useRef(onLoadMore)
+  onLoadMoreRef.current = onLoadMore
+
+  useEffect(() => {
+    const root = scrollContainerRef.current
+    const sentinel = loadMoreSentinelRef.current
+
+    if (!root || !sentinel || !hasMore || isLoadingMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          onLoadMoreRef.current()
+        }
+      },
+      {
+        root,
+        rootMargin: '160px 0px',
+        threshold: 0.01,
+      },
+    )
+
+    observer.observe(sentinel)
+
+    return () => observer.disconnect()
+  }, [hasMore, isLoadingMore, students.length])
 
   // التحكم في فتح وإغلاق قائمة المستويات
   const [gradeMenuOpen, setGradeMenuOpen] = useState(false)
@@ -209,57 +248,20 @@ export function StudentsTable({
     return [...ordered, ...remaining]
   }, [students, academicLevels])
 
-  const paymentStatusOptions = useMemo(() => {
-    const values = new Set<string>()
+  const paymentStatusOptions = useMemo(
+    () => ['غير مدفوع', 'مدفوع جزئيًا', 'مدفوع بالكامل', 'معفي'],
+    [],
+  )
 
-    students.forEach((student) => {
-      const value = normalizePaymentStatus(student.paymentStatus)
+  const attendanceOptions = useMemo(
+    () => ['حاضر', 'لم يحضر'],
+    [],
+  )
 
-      if (value && value !== '-') {
-        values.add(value)
-      }
-    })
-
-    return Array.from(values)
-  }, [students])
-
-  const attendanceOptions = useMemo(() => {
-    const values = new Set<string>()
-
-    students.forEach((student) => {
-      const value = normalizeAttendanceStatus(student.attendance)
-
-      if (value) {
-        values.add(value)
-      }
-    })
-
-    return Array.from(values)
-  }, [students])
-
-  const enrollmentCourseOptions = useMemo(() => {
-    const values = new Set<string>()
-
-    students.forEach((student) => {
-      const value = String(
-        student.enrollmentCourseName || '',
-      ).trim()
-
-      if (value) {
-        values.add(value)
-      }
-    })
-
-    const ordered = courses
-      .filter((course) => values.has(course.name))
-      .map((course) => course.name)
-
-    const remaining = Array.from(values).filter(
-      (value) => !ordered.includes(value),
-    )
-
-    return [...ordered, ...remaining]
-  }, [students, courses])
+  const enrollmentCourseOptions = useMemo(
+    () => Array.from(new Set(courses.map((course) => course.name))),
+    [courses],
+  )
 
   // إضافة مستوى أو إلغاء تحديده دون إغلاق القائمة
   const toggleGrade = (grade: string) => {
@@ -349,6 +351,7 @@ export function StudentsTable({
   return (
     <>
       <div
+        ref={scrollContainerRef}
         dir="ltr"
         className="relative max-h-[590px] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950 [&>div]:overflow-visible"
       >
@@ -825,12 +828,43 @@ export function StudentsTable({
                   colSpan={Math.max(totalColumns, 1)}
                   className="h-32 text-center text-sm text-slate-500 dark:text-slate-400"
                 >
-                  لا توجد بيانات مطابقة للبحث أو التصفية.
+                  {isLoading
+                    ? 'جاري تحميل نتائج الطلاب...'
+                    : 'لا توجد بيانات مطابقة للبحث أو التصفية.'}
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
+
+        <div
+          ref={loadMoreSentinelRef}
+          className="flex min-h-10 items-center justify-center py-2"
+          aria-live="polite"
+        >
+          {isLoadingMore ? (
+            <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <Loader2 className="size-4 animate-spin" />
+              جاري تحميل المزيد من الطلاب...
+            </span>
+          ) : loadMoreFailed ? (
+            <button
+              type="button"
+              onClick={onLoadMore}
+              className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-300"
+            >
+              تعذر تحميل المزيد — اضغط لإعادة المحاولة
+            </button>
+          ) : hasMore ? (
+            <span className="text-xs text-slate-400">
+              مرّر لأسفل لتحميل المزيد
+            </span>
+          ) : students.length > 0 ? (
+            <span className="text-xs text-slate-400">
+              تم عرض جميع النتائج
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {paymentStudent && (
