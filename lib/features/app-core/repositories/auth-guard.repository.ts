@@ -43,6 +43,41 @@ export async function updateApprovedDeviceType(
     .eq('status', 'approved')
 }
 
+export async function requireTrustedDeviceReapproval(
+  deviceId: string,
+  authUserId: string,
+  detectedDeviceType: string,
+  now: string,
+) {
+  return await supabaseAdmin
+    .from('trusted_devices')
+    .update({
+      status: 'pending',
+      pending_device_type: detectedDeviceType,
+      device_type_detected_at: now,
+    })
+    .eq('id', deviceId)
+    .eq('auth_user_id', authUserId)
+    .eq('status', 'approved')
+}
+
+export async function closeActiveSessionsForDevice(
+  deviceId: string,
+  authUserId: string,
+  now: string,
+) {
+  return await supabaseAdmin
+    .from('active_sessions')
+    .update({
+      is_active: false,
+      logout_at: now,
+      last_activity_at: now,
+    })
+    .eq('trusted_device_id', deviceId)
+    .eq('auth_user_id', authUserId)
+    .eq('is_active', true)
+}
+
 export async function closeActiveSession(
   sessionId: string,
   authUserId: string,
