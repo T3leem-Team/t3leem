@@ -170,6 +170,45 @@ export async function loadActivePaymentEnrollment(
 }
 
 /**
+ * تحميل صفحة من الطلاب مع البحث في جميع السجلات.
+ */
+export async function loadPaymentsStudentsPage(
+  page: number = 0,
+  pageSize: number = 50,
+  search: string = '',
+) {
+  const from = page * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabaseAdmin
+    .from('students')
+    .select(
+      'id, name, personal_id, fee_exempt, created_at',
+      { count: 'exact' },
+    )
+    .order('created_at', {
+      ascending: false,
+    })
+    .range(from, to)
+
+  const searchTerm = search.trim()
+
+  if (searchTerm) {
+    const safeSearch = searchTerm
+      .replace(/[,%()\\]/g, '')
+      .replace(/\./g, '')
+
+    if (safeSearch) {
+      query = query.or(
+        `name.ilike.%${safeSearch}%,personal_id.ilike.%${safeSearch}%`,
+      )
+    }
+  }
+
+  return await query
+}
+
+/**
  * تحميل تسجيل الطالب النشط مع course_id.
  * يستخدم عند الحاجة لتحديد كورس دفعة قديمة.
  */
