@@ -135,3 +135,70 @@ export async function updateAttendanceNote(
     .select(ATTENDANCE_SELECT)
     .single()
 }
+
+
+
+export async function loadAttendanceForCourseDateRange(
+  courseId: string,
+  startDate: string,
+  endDate: string,
+  studentIds: string[],
+) {
+  if (
+    !courseId ||
+    !startDate ||
+    !endDate ||
+    studentIds.length === 0
+  ) {
+    return []
+  }
+
+  const rows: {
+    id: string
+    student_id: string
+    enrollment_id: string | null
+    attendance_date: string
+    status_id: string
+    note: string | null
+    course_id: string
+  }[] = []
+
+  const pageSize = 1000
+  let from = 0
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('attendance')
+      .select(ATTENDANCE_SELECT)
+      .eq('course_id', courseId)
+      .gte('attendance_date', startDate)
+      .lte('attendance_date', endDate)
+      .in('student_id', studentIds)
+      .order('attendance_date', {
+        ascending: true,
+      })
+      .order('id', {
+        ascending: true,
+      })
+      .range(from, from + pageSize - 1)
+
+    if (error) {
+      throw new Error(
+        `خطأ في تحميل سجلات الحضور: ${error.message}`,
+      )
+    }
+
+    const batch = data ?? []
+
+    rows.push(...batch)
+
+    if (batch.length < pageSize) {
+      break
+    }
+
+    from += pageSize
+  }
+
+  return rows
+}
+
