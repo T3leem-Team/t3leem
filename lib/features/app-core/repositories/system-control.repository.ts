@@ -23,13 +23,13 @@ export async function loadSystemSettings() {
 }
 
 export async function updateSystemSettings(
-  systemEnabled: boolean,
+  enabled: boolean,
   updatedAt: string,
 ) {
   return await supabaseAdmin
     .from('system_settings')
     .update({
-      system_enabled: systemEnabled,
+      system_enabled: !enabled,
       updated_at: updatedAt,
     })
     .eq('id', 1)
