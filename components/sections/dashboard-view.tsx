@@ -31,9 +31,10 @@ import {
 import {
   formatDate,
   getLessonDateStatus,
+  getLocalDateString,
   normalizeId,
+  useDashboardData,
 } from '@/app/(dashboard)/dashboard/dashboard-data'
-import { useDashboardData } from '@/app/(dashboard)/dashboard/dashboard-data'
 import { useDashboardStats } from '@/app/(dashboard)/dashboard/dashboard-stats'
 
 export function DashboardView() {
@@ -55,6 +56,9 @@ export function DashboardView() {
     teachers,
     attendanceStatuses,
     attendanceRecords,
+    studentAttendanceRecords,
+    studentAttendanceLoading,
+    loadStudentAttendanceHistory,
     students,
     selectedCourseId,
     setSelectedCourseId,
@@ -77,6 +81,26 @@ export function DashboardView() {
     () => getLessonDateStatus(selectedCourse, selectedDate),
     [selectedCourse, selectedDate],
   )
+
+  const handleSelectStudent = (result: StudentSearchResult) => {
+    setSelectedStudent(result)
+
+    if (!selectedCourse?.id || !selectedCourse.startDate) {
+      return
+    }
+
+    const today = getLocalDateString()
+    const courseEnd = selectedCourse.endDate?.slice(0, 10)
+    const toDate =
+      courseEnd && courseEnd < today ? courseEnd : today
+
+    void loadStudentAttendanceHistory(
+      result.student.id,
+      selectedCourse.id,
+      selectedCourse.startDate.slice(0, 10),
+      toDate,
+    )
+  }
 
   useEffect(() => {
     const sections = getDashboardSections()
@@ -187,7 +211,7 @@ export function DashboardView() {
         selectedCourseId={selectedCourseId}
         selectedDate={selectedDate}
         lessonDateStatus={lessonDateStatus}
-        onSelectStudent={setSelectedStudent}
+        onSelectStudent={handleSelectStudent}
       />
 
       <Card className="border-border bg-card shadow-sm">
@@ -488,6 +512,7 @@ export function DashboardView() {
         students={students}
         attendanceRecords={attendanceRecords}
         studentAttendanceRecords={studentAttendanceRecords}
+        studentAttendanceLoading={studentAttendanceLoading}
         attendanceStatuses={attendanceStatuses}
         selectedCourseId={selectedCourseId}
         selectedDate={selectedDate}
