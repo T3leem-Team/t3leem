@@ -243,68 +243,18 @@ export async function loadTeachersRepositoryData(): Promise<TeachersRepositoryDa
     return data ?? []
   }
 
-  const loadAttendance = async () => {
-    const rows: {
-      id: string
-      student_id: string
-      enrollment_id: string | null
-      attendance_date: string
-      status_id: string
-      note: string | null
-      course_id: string
-    }[] = []
-
-    if (courseIds.length === 0) {
-      return rows
-    }
-
-    const pageSize = 1000
-    let from = 0
-
-    while (true) {
-      const { data, error } = await supabase
-        .from('attendance')
-        .select(
-          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id',
-        )
-        .in('course_id', courseIds)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1)
-
-      if (error) {
-        throw new Error(
-          `خطأ في تحميل الحضور: ${error.message}`,
-        )
-      }
-
-      const batch = data ?? []
-
-      rows.push(...batch)
-
-      if (batch.length < pageSize) {
-        break
-      }
-
-      from += pageSize
-    }
-
-    return rows
-  }
-
   const [
     courseTeacherRows,
     courseSubjectRows,
     enrollmentRows,
     rawAssignmentRows,
     statusRows,
-    attendanceRows,
   ] = await Promise.all([
     loadCourseTeachers(),
     loadCourseSubjects(),
     loadEnrollments(),
     loadAssignments(),
     loadAttendanceStatuses(),
-    loadAttendance(),
   ])
 
   /*
@@ -714,19 +664,12 @@ export async function loadTeachersRepositoryData(): Promise<TeachersRepositoryDa
       }))
 
   /*
-   * سجلات الحضور
+   * سجلات الحضور:
+   * لا يتم تحميلها عند فتح صفحة المعلمين.
+   * سيتم تحميلها لاحقاً عند فتح تبويب الحضور.
    */
 
-  const attendanceRecords: AttendanceRecord[] =
-    attendanceRows.map((record) => ({
-      id: record.id,
-      studentId: record.student_id,
-      enrollmentId: record.enrollment_id,
-      courseId: record.course_id,
-      attendanceDate: record.attendance_date,
-      statusId: record.status_id,
-      note: record.note ?? '',
-    }))
+  const attendanceRecords: AttendanceRecord[] = []
 
   return {
     teachers,
@@ -742,6 +685,7 @@ export async function loadTeachersRepositoryData(): Promise<TeachersRepositoryDa
     academicLevels,
   }
 }
+
 export async function loadActiveAcademicLevels() {
   return await supabase
     .from('levels')
