@@ -57,7 +57,6 @@ export function DashboardView() {
     attendanceStatuses,
     attendanceRecords,
     studentAttendanceRecords,
-    studentAttendanceLoading,
     loadStudentAttendanceHistory,
     students,
     selectedCourseId,
@@ -512,7 +511,6 @@ export function DashboardView() {
         students={students}
         attendanceRecords={attendanceRecords}
         studentAttendanceRecords={studentAttendanceRecords}
-        studentAttendanceLoading={studentAttendanceLoading}
         attendanceStatuses={attendanceStatuses}
         selectedCourseId={selectedCourseId}
         selectedDate={selectedDate}
