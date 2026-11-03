@@ -202,3 +202,33 @@ export async function loadAttendanceForCourseDateRange(
   return rows
 }
 
+export async function loadTeacherAttendanceSummary(
+  courseId: string,
+  studentIds: string[],
+  attendedStatusIds: string[],
+  absentStatusIds: string[],
+  cancelledDates: string[],
+) {
+  if (!courseId || studentIds.length === 0) {
+    return []
+  }
+
+  const { data, error } = await supabase.rpc(
+    'get_teacher_attendance_summary',
+    {
+      p_course_id: courseId,
+      p_student_ids: studentIds,
+      p_attended_status_ids: attendedStatusIds,
+      p_absent_status_ids: absentStatusIds,
+      p_cancelled_dates: cancelledDates,
+    },
+  )
+
+  if (error) {
+    throw new Error(
+      `خطأ في حساب نسب الحضور: ${error.message}`,
+    )
+  }
+
+  return data ?? []
+}
