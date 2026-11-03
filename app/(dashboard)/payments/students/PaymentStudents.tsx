@@ -65,8 +65,12 @@ export function PaymentStudents() {
   const autoOpenedStudentRef = useRef<string | null>(null)
   const initialLoadDoneRef = useRef(Boolean(initialCache))
 
+  // منع البحث التلقائي عند فتح الصفحة أو الرجوع إليها.
+  const lastSearchedValueRef = useRef('')
+
   const [filters, setFilters] = useState<Filters>(emptyFilters)
   const [search, setSearch] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
 
   const [studentList, setStudentList] = useState<StudentRow[]>(
     initialCache?.studentList ?? [],
@@ -197,6 +201,7 @@ export function PaymentStudents() {
     }
   }
 
+  // تحميل البيانات عند فتح الصفحة فقط إذا لم يكن الكاش موجوداً.
   useEffect(() => {
     const cache = getPaymentsCache()
 
@@ -214,12 +219,27 @@ export function PaymentStudents() {
   }, [])
 
   // البحث الشامل في جميع الطلاب من الخادم.
+  // لا يعيد البحث تلقائياً عند فتح الصفحة أو الرجوع إليها.
   useEffect(() => {
     if (!initialLoadDoneRef.current) return
 
+    const searchValue = search.trim()
+
+    // منع إعادة البحث إذا لم تتغير قيمة البحث.
+    if (searchValue === lastSearchedValueRef.current) {
+      return
+    }
+
+    lastSearchedValueRef.current = searchValue
+
+    // إظهار حالة البحث مباشرة.
+    setIsSearching(true)
+    setLoading(true)
+
     const timer = setTimeout(() => {
-      setLoading(true)
-      void loadPayments(true, search.trim())
+      void loadPayments(true, searchValue).finally(() => {
+        setIsSearching(false)
+      })
     }, 350)
 
     return () => clearTimeout(timer)
@@ -738,6 +758,17 @@ export function PaymentStudents() {
           <StatCard key={stat.label} stat={stat} />
         ))}
       </div>
+
+      {isSearching && (
+        <div
+          className="flex items-center justify-center gap-2 text-sm text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          جاري البحث...
+        </div>
+      )}
 
       <PaymentStudentsTable
         students={filteredStudents}
