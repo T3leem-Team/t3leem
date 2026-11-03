@@ -359,50 +359,60 @@ export async function loadPaymentsSummary(
   annualFee: number,
 ) {
   try {
-    const [
-      studentsCountResult,
-      exemptCountResult,
-    ] = await Promise.all([
-      supabaseAdmin
-        .from('students')
-        .select('id', {
-          count: 'exact',
-          head: true,
-        }),
+    const {
+      data: enrollments,
+      error: enrollmentsError,
+    } = await loadPaymentsEnrollments(academicYearId)
 
-      supabaseAdmin
-        .from('students')
-        .select('id', {
-          count: 'exact',
-          head: true,
-        })
-        .eq('fee_exempt', true),
-    ])
-
-    if (studentsCountResult.error) {
-      return {
-        data: null,
-        error: studentsCountResult.error,
-      }
+    if (enrollmentsError) {
+      throw enrollmentsError
     }
 
-    if (exemptCountResult.error) {
-      return {
-        data: null,
-        error: exemptCountResult.error,
+    // نحتفظ بكل طالب مرة واحدة فقط.
+    const studentIds = [
+      ...new Set(
+        (enrollments ?? []).map(
+          (enrollment) => enrollment.student_id,
+        ),
+      ),
+    ]
+
+    let totalExempt = 0
+
+    // نقرأ حالة الإعفاء للطلاب المسجلين فقط.
+    const batchSize = 500
+
+    for (
+      let i = 0;
+      i < studentIds.length;
+      i += batchSize
+    ) {
+      const batch = studentIds.slice(
+        i,
+        i + batchSize,
+      )
+
+      if (batch.length === 0) continue
+
+      const {
+        data: students,
+        error: studentsError,
+      } = await supabaseAdmin
+        .from('students')
+        .select('id, fee_exempt')
+        .in('id', batch)
+
+      if (studentsError) {
+        throw studentsError
       }
+
+      totalExempt += (students ?? []).filter(
+        (student) => student.fee_exempt === true,
+      ).length
     }
 
-    const totalStudents =
-      studentsCountResult.count ?? 0
-
-    const totalExempt =
-      exemptCountResult.count ?? 0
-
-    // تحميل مبالغ الدفعات فقط، على دفعات داخل السيرفر.
     let totalPaid = 0
     let from = 0
-    const batchSize = 1000
 
     while (true) {
       const {
@@ -412,13 +422,10 @@ export async function loadPaymentsSummary(
         .from('payments')
         .select('amount')
         .eq('academic_year_id', academicYearId)
-        .range(from, from + batchSize - 1)
+        .range(from, from + 999)
 
       if (paymentsError) {
-        return {
-          data: null,
-          error: paymentsError,
-        }
+        throw paymentsError
       }
 
       const rows = payments ?? []
@@ -429,20 +436,16 @@ export async function loadPaymentsSummary(
         0,
       )
 
-      if (rows.length < batchSize) {
-        break
-      }
+      if (rows.length < 1000) break
 
-      from += batchSize
+      from += 1000
     }
 
-    const payingStudents = Math.max(
-      totalStudents - totalExempt,
-      0,
-    )
+    const totalStudents = studentIds.length
 
     const totalDue =
-      payingStudents * Number(annualFee ?? 0)
+      Math.max(totalStudents - totalExempt, 0) *
+      Number(annualFee ?? 0)
 
     return {
       data: {
@@ -459,4 +462,5 @@ export async function loadPaymentsSummary(
       error,
     }
   }
+}
 }
