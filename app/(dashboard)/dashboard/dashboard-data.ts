@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -12,6 +11,7 @@ import {
   loadActiveEnrollments,
   loadAssignments,
   loadAttendancePage,
+  loadStudentAttendanceHistoryPage,
   loadAttendanceStatuses as loadAttendanceStatusesFromRepository,
   loadCourses as loadCoursesFromRepository,
   loadCourseTeachers,
@@ -130,6 +130,12 @@ let dashboardDataLoading = false
 
 // كاش مستقل لكل دورة وتاريخ.
 const attendanceDateCache = new Map<
+  string,
+  AttendanceRecord[]
+>()
+
+// كاش مستقل لسجل حضور كل طالب في كل دورة وفترة.
+const studentAttendanceCache = new Map<
   string,
   AttendanceRecord[]
 >()
@@ -397,6 +403,15 @@ export function useDashboardData() {
     dashboardCache?.students ?? [],
   )
 
+  // سجل حضور الطالب المختار فقط.
+  const [
+    studentAttendanceRecords,
+    setStudentAttendanceRecords,
+  ] = useState<AttendanceRecord[]>([])
+
+  const [studentAttendanceLoading, setStudentAttendanceLoading] =
+    useState(false)
+
   const [selectedCourseId, setSelectedCourseId] =
     useState(
       dashboardCache?.selectedCourseId ?? '',
@@ -415,6 +430,9 @@ export function useDashboardData() {
 
   // يمنع استجابة طلب قديم من استبدال بيانات الاختيار الجديد.
   const attendanceRequestId = useRef(0)
+
+  // يمنع استجابة سجل طالب قديم من استبدال سجل الطالب الجديد.
+  const studentAttendanceRequestId = useRef(0)
 
   // إذا كانت هناك بيانات محفوظة من تحميل سابق،
   // نربطها بمفتاح الدورة والتاريخ الصحيح.
@@ -610,6 +628,131 @@ export function useDashboardData() {
       })
     },
     [updateDashboardCache],
+  )
+
+  // تحميل سجل حضور طالب واحد عند اختياره فقط.
+  const loadStudentAttendanceHistory = useCallback(
+    async (
+      studentId: string,
+      courseId: string,
+      fromDate: string,
+      toDate: string,
+      forceRefresh = false,
+    ) => {
+      const normalizedStudentId = normalizeId(studentId)
+      const normalizedCourseId = normalizeId(courseId)
+      const normalizedFromDate = normalizeAttendanceDate(fromDate)
+      const normalizedToDate = normalizeAttendanceDate(toDate)
+
+      const requestId = ++studentAttendanceRequestId.current
+
+      if (
+        !normalizedStudentId ||
+        !normalizedCourseId ||
+        !normalizedFromDate ||
+        !normalizedToDate
+      ) {
+        setStudentAttendanceRecords([])
+        setStudentAttendanceLoading(false)
+        return []
+      }
+
+      const cacheKey = [
+        normalizedCourseId,
+        normalizedStudentId,
+        normalizedFromDate,
+        normalizedToDate,
+      ].join('|')
+
+      // استخدام الكاش إذا كان سجل الطالب محملاً مسبقاً.
+      if (
+        !forceRefresh &&
+        studentAttendanceCache.has(cacheKey)
+      ) {
+        const cachedRecords =
+          studentAttendanceCache.get(cacheKey) ?? []
+
+        if (requestId === studentAttendanceRequestId.current) {
+          setStudentAttendanceRecords(cachedRecords)
+          setStudentAttendanceLoading(false)
+        }
+
+        return cachedRecords
+      }
+
+      setStudentAttendanceRecords([])
+      setStudentAttendanceLoading(true)
+
+      try {
+        const allRows: AttendanceRecord[] = []
+        let from = 0
+
+        while (true) {
+          const { data, error } =
+            await loadStudentAttendanceHistoryPage(
+              normalizedStudentId,
+              normalizedCourseId,
+              normalizedFromDate,
+              normalizedToDate,
+              from,
+              from + ATTENDANCE_PAGE_SIZE - 1,
+            )
+
+          if (error) {
+            throw error
+          }
+
+          const rows = data ?? []
+
+          allRows.push(
+            ...rows.map((row) => ({
+              id: String(row.id),
+              studentId: normalizeId(row.student_id),
+              enrollmentId: row.enrollment_id
+                ? normalizeId(row.enrollment_id)
+                : null,
+              attendanceDate: normalizeAttendanceDate(
+                row.attendance_date,
+              ),
+              statusId: normalizeId(row.status_id),
+              note: row.note ?? null,
+              courseId: normalizeId(row.course_id),
+            })),
+          )
+
+          if (rows.length < ATTENDANCE_PAGE_SIZE) {
+            break
+          }
+
+          from += ATTENDANCE_PAGE_SIZE
+        }
+
+        // نحفظ النتيجة حتى لو كانت فارغة.
+        studentAttendanceCache.set(cacheKey, allRows)
+
+        if (requestId === studentAttendanceRequestId.current) {
+          setStudentAttendanceRecords(allRows)
+        }
+
+        return allRows
+      } catch (error) {
+        console.error(
+          'Student attendance history load error:',
+          error,
+        )
+
+        if (requestId === studentAttendanceRequestId.current) {
+          setStudentAttendanceRecords([])
+        }
+
+        return []
+      } finally {
+        if (requestId === studentAttendanceRequestId.current) {
+          setStudentAttendanceLoading(false)
+        }
+      }
+    },
+    [],
   )
 
   const loadBackgroundData = useCallback(
@@ -816,6 +959,7 @@ export function useDashboardData() {
 
         if (!yearResult.data) {
           attendanceRequestId.current += 1
+          studentAttendanceRequestId.current += 1
 
           setAcademicYear(null)
           setCourses([])
@@ -825,6 +969,8 @@ export function useDashboardData() {
           setTeachers([])
           setStudents([])
           setAttendanceRecords([])
+          setStudentAttendanceRecords([])
+          setStudentAttendanceLoading(false)
           setAttendanceStatuses([])
           setPendingRegistrationCount(0)
           setSelectedCourseId('')
@@ -1087,6 +1233,9 @@ export function useDashboardData() {
     teachers,
     attendanceStatuses,
     attendanceRecords,
+    studentAttendanceRecords,
+    studentAttendanceLoading,
+    loadStudentAttendanceHistory,
     students,
     selectedCourseId,
     setSelectedCourseId,
