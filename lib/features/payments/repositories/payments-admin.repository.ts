@@ -85,6 +85,51 @@ export async function loadPaymentsStudents() {
 }
 
 /**
+ * تحميل صفحة من الطلاب مع البحث في جميع السجلات.
+ */
+export async function loadPaymentsStudentsPage(
+  page: number = 0,
+  pageSize: number = 50,
+  search: string = '',
+) {
+  const safePage = Math.max(0, page)
+  const safePageSize = Math.min(
+    100,
+    Math.max(1, pageSize),
+  )
+
+  const from = safePage * safePageSize
+  const to = from + safePageSize - 1
+
+  let query = supabaseAdmin
+    .from('students')
+    .select(
+      'id, name, personal_id, fee_exempt, created_at',
+      { count: 'exact' },
+    )
+    .order('created_at', {
+      ascending: false,
+    })
+    .range(from, to)
+
+  const searchTerm = search.trim()
+
+  if (searchTerm) {
+    const safeSearch = searchTerm
+      .replace(/[,%()\\]/g, '')
+      .replace(/\./g, '')
+
+    if (safeSearch) {
+      query = query.or(
+        `name.ilike.%${safeSearch}%,personal_id.ilike.%${safeSearch}%`,
+      )
+    }
+  }
+
+  return await query
+}
+
+/**
  * تحميل تسجيلات الطلاب للسنة الدراسية.
  */
 export async function loadPaymentsEnrollments(
@@ -95,6 +140,28 @@ export async function loadPaymentsEnrollments(
     .select('student_id, level_id, course_id')
     .eq('academic_year_id', academicYearId)
     .eq('status', 'نشط')
+}
+
+/**
+ * تحميل تسجيلات مجموعة محددة من الطلاب.
+ */
+export async function loadPaymentsEnrollmentsForStudents(
+  academicYearId: string,
+  studentIds: string[],
+) {
+  if (studentIds.length === 0) {
+    return {
+      data: [],
+      error: null,
+    }
+  }
+
+  return await supabaseAdmin
+    .from('enrollments')
+    .select('student_id, level_id, course_id')
+    .eq('academic_year_id', academicYearId)
+    .eq('status', 'نشط')
+    .in('student_id', studentIds)
 }
 
 /**
@@ -118,6 +185,44 @@ export async function loadPaymentsByAcademicYear(
       created_at
     `)
     .eq('academic_year_id', academicYearId)
+    .order('payment_date', {
+      ascending: false,
+    })
+    .order('created_at', {
+      ascending: false,
+    })
+}
+
+/**
+ * تحميل دفعات مجموعة محددة من الطلاب فقط.
+ */
+export async function loadPaymentsForStudents(
+  academicYearId: string,
+  studentIds: string[],
+) {
+  if (studentIds.length === 0) {
+    return {
+      data: [],
+      error: null,
+    }
+  }
+
+  return await supabaseAdmin
+    .from('payments')
+    .select(`
+      id,
+      student_id,
+      academic_year_id,
+      course_id,
+      amount,
+      payment_method,
+      payment_date,
+      reference_number,
+      notes,
+      created_at
+    `)
+    .eq('academic_year_id', academicYearId)
+    .in('student_id', studentIds)
     .order('payment_date', {
       ascending: false,
     })
@@ -167,45 +272,6 @@ export async function loadActivePaymentEnrollment(
     .eq('academic_year_id', academicYearId)
     .eq('status', 'نشط')
     .maybeSingle()
-}
-
-/**
- * تحميل صفحة من الطلاب مع البحث في جميع السجلات.
- */
-export async function loadPaymentsStudentsPage(
-  page: number = 0,
-  pageSize: number = 50,
-  search: string = '',
-) {
-  const from = page * pageSize
-  const to = from + pageSize - 1
-
-  let query = supabaseAdmin
-    .from('students')
-    .select(
-      'id, name, personal_id, fee_exempt, created_at',
-      { count: 'exact' },
-    )
-    .order('created_at', {
-      ascending: false,
-    })
-    .range(from, to)
-
-  const searchTerm = search.trim()
-
-  if (searchTerm) {
-    const safeSearch = searchTerm
-      .replace(/[,%()\\]/g, '')
-      .replace(/\./g, '')
-
-    if (safeSearch) {
-      query = query.or(
-        `name.ilike.%${safeSearch}%,personal_id.ilike.%${safeSearch}%`,
-      )
-    }
-  }
-
-  return await query
 }
 
 /**
@@ -349,47 +415,71 @@ export async function updateStudentPayment(
     .single()
 }
 
-
 /**
  * حساب إحصائيات المدفوعات لجميع الطلاب
- * دون إرسال سجلات الدفعات كاملة إلى الواجهة.
+ * المسجلين في السنة الدراسية الحالية.
+ *
+ * تتم قراءة البيانات على دفعات داخل السيرفر.
+ * لا يتم إرسال جميع سجلات الطلاب أو الدفعات للواجهة.
  */
 export async function loadPaymentsSummary(
   academicYearId: string,
   annualFee: number,
 ) {
   try {
-    const {
-      data: enrollments,
-      error: enrollmentsError,
-    } = await loadPaymentsEnrollments(academicYearId)
+    const batchSize = 1000
 
-    if (enrollmentsError) {
-      throw enrollmentsError
+    const studentIds = new Set<string>()
+
+    // تحميل جميع التسجيلات النشطة على دفعات.
+    let enrollmentFrom = 0
+
+    while (true) {
+      const {
+        data: enrollments,
+        error: enrollmentsError,
+      } = await supabaseAdmin
+        .from('enrollments')
+        .select('student_id')
+        .eq('academic_year_id', academicYearId)
+        .eq('status', 'نشط')
+        .range(
+          enrollmentFrom,
+          enrollmentFrom + batchSize - 1,
+        )
+
+      if (enrollmentsError) {
+        throw enrollmentsError
+      }
+
+      const rows = enrollments ?? []
+
+      for (const enrollment of rows) {
+        if (enrollment.student_id) {
+          studentIds.add(enrollment.student_id)
+        }
+      }
+
+      if (rows.length < batchSize) {
+        break
+      }
+
+      enrollmentFrom += batchSize
     }
 
-    // نحتفظ بكل طالب مرة واحدة فقط.
-    const studentIds = [
-      ...new Set(
-        (enrollments ?? []).map(
-          (enrollment) => enrollment.student_id,
-        ),
-      ),
-    ]
+    const uniqueStudentIds = Array.from(studentIds)
 
     let totalExempt = 0
 
-    // نقرأ حالة الإعفاء للطلاب المسجلين فقط.
-    const batchSize = 500
-
+    // تحميل حالة الإعفاء للطلاب المسجلين فقط.
     for (
       let i = 0;
-      i < studentIds.length;
-      i += batchSize
+      i < uniqueStudentIds.length;
+      i += 500
     ) {
-      const batch = studentIds.slice(
+      const batch = uniqueStudentIds.slice(
         i,
-        i + batchSize,
+        i + 500,
       )
 
       if (batch.length === 0) continue
@@ -411,8 +501,9 @@ export async function loadPaymentsSummary(
       ).length
     }
 
+    // حساب مجموع الدفعات على دفعات.
     let totalPaid = 0
-    let from = 0
+    let paymentFrom = 0
 
     while (true) {
       const {
@@ -422,7 +513,10 @@ export async function loadPaymentsSummary(
         .from('payments')
         .select('amount')
         .eq('academic_year_id', academicYearId)
-        .range(from, from + 999)
+        .range(
+          paymentFrom,
+          paymentFrom + batchSize - 1,
+        )
 
       if (paymentsError) {
         throw paymentsError
@@ -436,12 +530,14 @@ export async function loadPaymentsSummary(
         0,
       )
 
-      if (rows.length < 1000) break
+      if (rows.length < batchSize) {
+        break
+      }
 
-      from += 1000
+      paymentFrom += batchSize
     }
 
-    const totalStudents = studentIds.length
+    const totalStudents = uniqueStudentIds.length
 
     const totalDue =
       Math.max(totalStudents - totalExempt, 0) *
@@ -462,5 +558,4 @@ export async function loadPaymentsSummary(
       error,
     }
   }
-}
 }
