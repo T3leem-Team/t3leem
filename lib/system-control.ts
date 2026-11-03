@@ -1,16 +1,8 @@
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-)
+import {
+  loadSystemSettings,
+  updateSystemSettings,
+} from './features/app-core/repositories/system-control.repository'
 
 const MAINTENANCE_CACHE_TTL_MS = 3_000
 
@@ -28,11 +20,7 @@ export async function isMaintenanceMode(): Promise<boolean> {
     return cachedMaintenanceMode
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('system_settings')
-    .select('system_enabled')
-    .eq('id', 1)
-    .maybeSingle()
+  const { data, error } = await loadSystemSettings()
 
   if (error || !data) {
     console.error('System settings lookup error:', error)
@@ -51,13 +39,10 @@ export async function isMaintenanceMode(): Promise<boolean> {
 export async function setMaintenanceMode(
   enabled: boolean,
 ) {
-  const { error } = await supabaseAdmin
-    .from('system_settings')
-    .update({
-      system_enabled: !enabled,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', 1)
+  const { error } = await updateSystemSettings(
+    enabled,
+    new Date().toISOString(),
+  )
 
   if (error) {
     console.error('System settings update error:', error)
