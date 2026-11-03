@@ -3,6 +3,7 @@
 
 import {
   loadStudentsRepositoryData,
+  loadStudentAttendanceData,
   type RepositoryStudentFilters,
 } from '@/lib/features/students/repositories/students.repository'
 
@@ -370,22 +371,13 @@ function mapStudentsRepositoryDataToStudentList(
     attendanceRows,
   } = repositoryData
 
-  // المحافظة على أنواع البيانات العامة المستخدمة حالياً في النظام.
   const loadedCourses = repositoryCourses as Course[]
 
   const currentCourse = repositoryCurrentCourse as Course | null
 
-  /*
-   * نعرف من وجود حالات الحضور أن بيانات الحضور تم تحميلها.
-   * عند تعطيل تحميل الحضور تكون القائمتان فارغتين.
-   */
   const hasAttendanceData =
     loadedAttendanceStatuses.length > 0
 
-  /*
-   * فهارس داخل الذاكرة لتقليل البحث المتكرر أثناء بناء قائمة الطلاب.
-   * نحافظ على أول توزيع وأول سجل حضور مطابق، مثل سلوك find السابق.
-   */
   const assignmentByStudentCourse = new Map<
     string,
     TeacherStudentAssignment
@@ -485,10 +477,6 @@ function mapStudentsRepositoryDataToStudentList(
         })
       )
 
-      /*
-       * ملخصات الحضور تُحسب فقط إذا كانت بيانات الحضور محمّلة.
-       * في تحميل القائمة العادي نتركها فارغة.
-       */
       const attendanceSummaries = hasAttendanceData
         ? loadedCourses.map((course) => {
             const assignment = assignmentByStudentCourse.get(
@@ -548,71 +536,36 @@ function mapStudentsRepositoryDataToStudentList(
 
       return {
         id: student.id,
-
         studentId: student.student_id ?? '',
-
         name: student.name ?? '',
-
         personalId: student.personal_id ?? '',
-
         gender: student.gender ?? '',
-
         age: student.age ?? null,
-
         grade: enrollment?.levelName ?? '',
-
         className: enrollment?.className ?? '',
-
         phone: student.phone ?? '',
-
         whatsapp: student.whatsapp ?? '',
-
-        guardianRelation:
-          student.guardian_relation ?? '',
-
+        guardianRelation: student.guardian_relation ?? '',
         studentPhone: student.student_phone ?? '',
-
-        enrollmentCourseId:
-          enrollment?.courseId ?? '',
-
-        enrollmentCourseName:
-          enrollment?.courseName ?? '',
-
+        enrollmentCourseId: enrollment?.courseId ?? '',
+        enrollmentCourseName: enrollment?.courseName ?? '',
         status: student.status ?? '',
-
         paymentStatus,
-
         amountDue: annualFee,
-
         amountPaid,
-
         feeExempt,
-
         chronicDiseases: student.health_notes ?? '',
-
         notes: student.notes ?? '',
-
         source: student.source ?? '',
-
         createdAt: student.created_at ?? '',
-
         updatedAt: student.updated_at ?? '',
-
-        academicYearId:
-          student.academic_year_id ?? currentYear.id,
-
+        academicYearId: student.academic_year_id ?? currentYear.id,
         academicYearName: currentYear.name ?? '',
-
         attendance: currentStatus,
-
         courseStatuses,
-
         attendanceSummaries,
-
         attendanceRecords,
-
-        dynamicValues:
-          dynamicValuesMap.get(student.id) ?? {},
+        dynamicValues: dynamicValuesMap.get(student.id) ?? {},
       }
     }
   )
@@ -693,8 +646,6 @@ export async function loadStudentsCachePage(options: {
     limit: options.limit ?? 50,
     search: options.search,
     filters: options.filters,
-
-    // تحميل قائمة الطلاب بدون سجلات الحضور.
     includeAttendance: false,
   })
 
@@ -727,14 +678,9 @@ export async function loadStudentsCache(options?: {
   const requestVersion = studentsCacheVersion
 
   const loadingPromise = (async (): Promise<StudentsCacheData> => {
-    /*
-     * جلب البيانات من Repository
-     */
     const repositoryData = await loadStudentsRepositoryData({
       offset: 0,
       limit: loadAll ? 500 : 50,
-
-      // تحميل قائمة الطلاب بدون سجلات الحضور.
       includeAttendance: false,
     })
 
@@ -761,8 +707,6 @@ export async function loadStudentsCache(options?: {
         const page = await loadStudentsRepositoryData({
           offset,
           limit: 500,
-
-          // تعطيل الحضور في جميع الدفعات الإضافية أيضاً.
           includeAttendance: false,
         })
 
@@ -780,32 +724,19 @@ export async function loadStudentsCache(options?: {
 
     const data: StudentsCacheData = {
       academicLevels: loadedAcademicLevels,
-
       currentAcademicYearId: currentYear.id,
-
       currentAcademicYearName: currentYear.name ?? '',
-
       currentAnnualFee: annualFee,
-
       courses: loadedCourses,
-
       currentCourseId: currentCourse?.id ?? null,
-
       currentCourseName: currentCourse?.name ?? '',
-
       dynamicFields: loadedDynamicFields,
-
-      studentList:
-        mappedStudents as StudentTableStudent[],
-
+      studentList: mappedStudents as StudentTableStudent[],
       attendanceStatuses: loadedAttendanceStatuses,
-
       supabaseStatus: finalStatus,
-
       totalStudents,
     }
 
-    // الطلب القديم لا يستبدل الكاش إذا تغير الإصدار أثناء تحميله.
     if (requestVersion === studentsCacheVersion) {
       studentsCache = data
     }
@@ -818,9 +749,118 @@ export async function loadStudentsCache(options?: {
   try {
     return await loadingPromise
   } finally {
-    // لا نمسح مرجع طلب أحدث من هذا الطلب.
     if (studentsCacheLoading === loadingPromise) {
       studentsCacheLoading = null
     }
+  }
+}
+
+/*
+ * تحميل تفاصيل حضور طالب واحد عند فتح تفاصيل الحضور فقط.
+ */
+export async function loadStudentAttendanceDetails(
+  studentId: string,
+) {
+  const cache = studentsCache
+
+  if (!cache) {
+    throw new Error('بيانات الطلاب غير محمّلة')
+  }
+
+  if (!studentId) {
+    throw new Error('معرّف الطالب غير موجود')
+  }
+
+  const student = cache.studentList.find(
+    (item) => item.id === studentId
+  )
+
+  if (!student) {
+    throw new Error('الطالب غير موجود في الكاش')
+  }
+
+  const repositoryData = await loadStudentAttendanceData(
+    studentId,
+    cache.courses.map((course) => course.id),
+  )
+
+  const statusNameById = new Map<string, string>()
+
+  repositoryData.loadedAttendanceStatuses.forEach((status) => {
+    statusNameById.set(status.id, status.name)
+  })
+
+  const attendanceByStudentCourseDate = new Map<
+    string,
+    AttendanceRecord
+  >()
+
+  const attendanceRecords: StudentAttendanceRecord[] = []
+
+  repositoryData.attendanceRows.forEach((record) => {
+    const key = getAttendanceKey(
+      record.studentId,
+      record.courseId,
+      record.attendanceDate,
+    )
+
+    if (!attendanceByStudentCourseDate.has(key)) {
+      attendanceByStudentCourseDate.set(key, record)
+    }
+
+    const status = normalizeAttendanceStatus(
+      statusNameById.get(record.statusId) ?? '',
+    )
+
+    if (status) {
+      attendanceRecords.push({
+        id: record.id,
+        studentId: record.studentId,
+        courseId: record.courseId,
+        attendanceDate: record.attendanceDate,
+        status,
+        note: record.note,
+      })
+    }
+  })
+
+  const assignmentByStudentCourse = new Map<
+    string,
+    TeacherStudentAssignment
+  >()
+
+  repositoryData.assignments.forEach((assignment) => {
+    const key = getAssignmentKey(
+      assignment.student_id,
+      assignment.course_id,
+    )
+
+    if (!assignmentByStudentCourse.has(key)) {
+      assignmentByStudentCourse.set(key, assignment)
+    }
+  })
+
+  const attendanceSummaries = cache.courses.map((course) => {
+    const assignment = assignmentByStudentCourse.get(
+      getAssignmentKey(studentId, course.id),
+    )
+
+    const teacherName = assignment
+      ? repositoryData.teacherNames.get(assignment.teacher_id) ?? ''
+      : ''
+
+    return calculateAttendanceSummary(
+      studentId,
+      course,
+      attendanceByStudentCourseDate,
+      statusNameById,
+      teacherName,
+      repositoryData.today,
+    )
+  })
+
+  return {
+    attendanceSummaries,
+    attendanceRecords,
   }
 }
