@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -212,7 +213,7 @@ export function PaymentStudents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // البحث في جميع الطلاب من الخادم، وليس فقط الطلاب المحمّلين.
+  // البحث الشامل في جميع الطلاب من الخادم.
   useEffect(() => {
     if (!initialLoadDoneRef.current) return
 
@@ -268,7 +269,7 @@ export function PaymentStudents() {
     }
   }
 
-  // تحديث البيانات بعد إضافة أو تعديل دفعة، مع الاحتفاظ بعدد الصفحات المحمّلة.
+  // تحديث البيانات بعد إضافة أو تعديل دفعة.
   const refreshLoadedPayments = async (): Promise<StudentRow[]> => {
     const previousCount = getPaymentsCache()?.studentList.length ?? 50
 
@@ -297,8 +298,34 @@ export function PaymentStudents() {
     return cache.studentList
   }
 
+  // الاسم والرقم الشخصي يستخدمان البحث من الخادم.
   const updateFilter = (key: keyof Filters, value: string) => {
-    setFilters((current) => ({ ...current, [key]: value }))
+    if (key === 'name') {
+      setFilters((current) => ({
+        ...current,
+        name: value,
+        personalId: '',
+      }))
+
+      setSearch(value)
+      return
+    }
+
+    if (key === 'personalId') {
+      setFilters((current) => ({
+        ...current,
+        name: '',
+        personalId: value,
+      }))
+
+      setSearch(value)
+      return
+    }
+
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }))
   }
 
   const grades = useMemo(() => {
@@ -327,20 +354,14 @@ export function PaymentStudents() {
     [studentList],
   )
 
+  // الاسم والرقم الشخصي تتم تصفيتهما في الخادم.
+  // بقية الفلاتر تبقى محلية.
   const filteredStudents = useMemo(
     () =>
       studentList.filter((student) => {
         const remaining = student.feeExempt
           ? 0
           : Math.max(student.amountDue - student.amountPaid, 0)
-
-        const matchesName =
-          !filters.name ||
-          student.name.toLowerCase().includes(filters.name.toLowerCase())
-
-        const matchesPersonalId =
-          !filters.personalId ||
-          student.personalId.includes(filters.personalId)
 
         const matchesGrade =
           !filters.grade || student.grade === filters.grade
@@ -362,8 +383,6 @@ export function PaymentStudents() {
           student.paymentStatus === filters.paymentStatus
 
         return (
-          matchesName &&
-          matchesPersonalId &&
           matchesGrade &&
           matchesDue &&
           matchesPaid &&
@@ -374,7 +393,7 @@ export function PaymentStudents() {
     [studentList, filters],
   )
 
-  // الإحصائيات من جميع طلاب السنة الدراسية، وليس من الصفحة الحالية.
+  // الإحصائيات من جميع طلاب السنة الدراسية.
   const totalDue = summary.totalDue
   const totalPaid = summary.totalPaid
   const totalExempt = summary.totalExempt
@@ -424,7 +443,10 @@ export function PaymentStudents() {
     (value) => value !== '',
   )
 
-  const clearFilters = () => setFilters(emptyFilters)
+  const clearFilters = () => {
+    setFilters(emptyFilters)
+    setSearch('')
+  }
 
   const openPaymentDialog = (student: StudentRow) => {
     void openDetailsDialog(student)
@@ -716,29 +738,6 @@ export function PaymentStudents() {
           <StatCard key={stat.label} stat={stat} />
         ))}
       </div>
-
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-semibold">البحث في جميع الطلاب</p>
-              <p className="text-sm text-muted-foreground">
-                البحث يشمل جميع الطلاب، حتى غير المحمّلين في الجدول.
-              </p>
-            </div>
-
-            <div className="w-full sm:max-w-sm">
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="اسم الطالب أو الرقم الشخصي..."
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <PaymentStudentsTable
         students={filteredStudents}
