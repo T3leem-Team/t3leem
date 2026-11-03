@@ -305,16 +305,9 @@ export async function loadStudentAttendanceHistoryPage(
     .order('id', { ascending: false })
     .range(from, to)
 
-  if (error) {
-    return {
-      data: [],
-      error: error.message,
-    }
-  }
-
   return {
     data: (data ?? []) as AttendanceRow[],
-    error: null,
+    error,
   }
 }
 
