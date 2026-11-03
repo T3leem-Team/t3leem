@@ -861,6 +861,150 @@ export async function loadStudentsRepositoryData(
   }
 }
 
+export async function loadStudentAttendanceData(
+  studentId: string,
+  courseIds: string[],
+) {
+  if (!studentId) {
+    throw new Error('معرّف الطالب غير موجود')
+  }
+
+  /*
+   * حالات الحضور
+   */
+  const {
+    data: statusesData,
+    error: statusesError,
+  } = await supabase
+    .from('attendance_statuses')
+    .select('id, name, is_active, sort_order')
+    .order('sort_order', { ascending: true })
+
+  if (statusesError) {
+    throw new Error(
+      `خطأ في تحميل حالات الحضور: ${statusesError.message}`
+    )
+  }
+
+  const loadedAttendanceStatuses: RepositoryAttendanceStatus[] = (
+    statusesData ?? []
+  ).map((status) => ({
+    id: status.id,
+    name: status.name,
+    isActive: Boolean(status.is_active),
+    sortOrder: Number(status.sort_order ?? 0),
+  }))
+
+  let attendanceRows: RepositoryAttendanceRecord[] = []
+  let assignments: RepositoryTeacherStudentAssignment[] = []
+  const teacherNames = new Map<string, string>()
+
+  const validCourseIds = Array.from(
+    new Set(courseIds.filter(Boolean))
+  )
+
+  if (validCourseIds.length > 0) {
+    /*
+     * سجلات حضور هذا الطالب فقط
+     */
+    let from = 0
+
+    while (true) {
+      const {
+        data: attendanceData,
+        error: attendanceError,
+      } = await supabase
+        .from('attendance')
+        .select(
+          'id, student_id, enrollment_id, attendance_date, status_id, note, course_id'
+        )
+        .eq('student_id', studentId)
+        .in('course_id', validCourseIds)
+        .order('id', { ascending: true })
+        .range(from, from + ATTENDANCE_PAGE_SIZE - 1)
+
+      if (attendanceError) {
+        throw new Error(
+          `خطأ في تحميل سجلات الحضور: ${attendanceError.message}`
+        )
+      }
+
+      const page = attendanceData ?? []
+
+      attendanceRows.push(
+        ...page.map((record) => ({
+          id: record.id,
+          studentId: record.student_id,
+          enrollmentId: record.enrollment_id ?? null,
+          courseId: record.course_id,
+          attendanceDate: record.attendance_date,
+          statusId: record.status_id,
+          note: record.note ?? '',
+        }))
+      )
+
+      if (page.length < ATTENDANCE_PAGE_SIZE) break
+
+      from += ATTENDANCE_PAGE_SIZE
+    }
+
+    /*
+     * توزيع الطالب على المعلمين
+     */
+    const {
+      data: assignmentsData,
+      error: assignmentsError,
+    } = await supabase
+      .from('teacher_student_assignments')
+      .select('id, course_id, teacher_id, student_id')
+      .eq('student_id', studentId)
+      .in('course_id', validCourseIds)
+      .order('id', { ascending: true })
+
+    if (assignmentsError) {
+      throw new Error(
+        `خطأ في تحميل توزيع الطالب: ${assignmentsError.message}`
+      )
+    }
+
+    assignments = assignmentsData ?? []
+
+    /*
+     * أسماء المعلمين المرتبطين بالطالب
+     */
+    if (assignments.length > 0) {
+      const teacherIds = Array.from(
+        new Set(assignments.map((item) => item.teacher_id))
+      )
+
+      const {
+        data: teachersData,
+        error: teachersError,
+      } = await supabase
+        .from('teachers')
+        .select('id, name')
+        .in('id', teacherIds)
+
+      if (teachersError) {
+        throw new Error(
+          `خطأ في تحميل أسماء المعلمين: ${teachersError.message}`
+        )
+      }
+
+      ;(teachersData ?? []).forEach((teacher) => {
+        teacherNames.set(teacher.id, teacher.name ?? '')
+      })
+    }
+  }
+
+  return {
+    today: getTodayString(),
+    loadedAttendanceStatuses,
+    attendanceRows,
+    assignments,
+    teacherNames,
+  }
+}
 export async function checkStudentStatusPageEnabled() {
   return await supabase.rpc('is_student_status_enabled')
 }
