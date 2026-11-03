@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 
@@ -15,6 +16,7 @@ import {
 import {
   getStudentsCache,
   loadStudentsCache,
+  loadStudentsCachePage,
   updateStudentsCacheStudentList,
   type AcademicLevel,
   type AttendanceStatus,
@@ -124,7 +126,29 @@ export function StudentsView() {
 
   const [studentList, setStudentList] = useState<
     StudentTableStudent[]
-  >(initialCache?.studentList ?? [])
+  >(initialCache?.studentList.slice(0, 50) ?? [])
+
+  const [totalStudents, setTotalStudents] = useState(
+    initialCache?.totalStudents ?? 0
+  )
+
+  const [totalFilteredStudents, setTotalFilteredStudents] = useState(
+    initialCache?.totalStudents ?? 0
+  )
+
+  const [isLoadingMoreStudents, setIsLoadingMoreStudents] =
+    useState(false)
+
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false)
+
+  const [hasLoadedInitialStudents, setHasLoadedInitialStudents] =
+    useState(false)
+
+  const [queryRefreshVersion, setQueryRefreshVersion] = useState(0)
+
+  const loadMoreLock = useRef(false)
+  const activeQueryKey = useRef('')
+  const lastQueryKey = useRef('')
 
   const [attendanceStatuses, setAttendanceStatuses] = useState<
     AttendanceStatus[]
@@ -235,9 +259,15 @@ export function StudentsView() {
         setCurrentCourseId(data.currentCourseId)
         setCurrentCourseName(data.currentCourseName)
         setDynamicFields(data.dynamicFields)
-        setStudentList(data.studentList)
+        setStudentList(data.studentList.slice(0, 50))
+        setTotalStudents(data.totalStudents)
+        setTotalFilteredStudents(data.totalStudents)
         setAttendanceStatuses(data.attendanceStatuses)
         setSupabaseStatus(data.supabaseStatus)
+        const initialKey = JSON.stringify({ search: '', filters: emptyFilters, refresh: 0 })
+        activeQueryKey.current = initialKey
+        lastQueryKey.current = initialKey
+        setHasLoadedInitialStudents(true)
       } catch (error) {
         console.error('StudentsView load error:', error)
 
@@ -263,6 +293,120 @@ export function StudentsView() {
       cancelled = true
     }
   }, [])
+
+  const queryKey = JSON.stringify({
+    search: search.trim(),
+    filters,
+    refresh: queryRefreshVersion,
+  })
+
+  // إعادة جلب أول 50 نتيجة من قاعدة البيانات عند تغيير البحث أو الفلاتر.
+  useEffect(() => {
+    if (!hasLoadedInitialStudents || queryKey === lastQueryKey.current) {
+      return
+    }
+
+    activeQueryKey.current = queryKey
+    lastQueryKey.current = queryKey
+    setIsLoadingStudents(true)
+    setIsLoadingMoreStudents(false)
+    setLoadMoreFailed(false)
+    loadMoreLock.current = false
+    setStudentList([])
+    setTotalFilteredStudents(0)
+    setSelectedStudentId('')
+
+    let cancelled = false
+    const timeout = window.setTimeout(async () => {
+      try {
+        const result = await loadStudentsCachePage({
+          offset: 0,
+          search,
+          filters,
+        })
+
+        if (cancelled || activeQueryKey.current !== queryKey) return
+
+        setStudentList(result.students)
+        setTotalFilteredStudents(result.totalStudents)
+        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+          updateStudentsCacheStudentList(result.students, totalStudents)
+        }
+        setSupabaseStatus('تم تحديث نتائج البحث والتصفية ✅')
+      } catch (error) {
+        console.error('Students search/filter error:', error)
+        if (!cancelled) {
+          setSupabaseStatus(
+            error instanceof Error
+              ? `تعذر تحميل نتائج البحث: ${error.message}`
+              : 'تعذر تحميل نتائج البحث.'
+          )
+        }
+      } finally {
+        if (!cancelled) setIsLoadingStudents(false)
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [queryKey, hasLoadedInitialStudents, search, filters])
+
+  const loadMoreStudents = async () => {
+    if (
+      loadMoreLock.current ||
+      isLoadingStudents ||
+      studentList.length >= totalFilteredStudents
+    ) {
+      return
+    }
+
+    const requestKey = activeQueryKey.current
+    const requestOffset = studentList.length
+    loadMoreLock.current = true
+    setLoadMoreFailed(false)
+    setIsLoadingMoreStudents(true)
+
+    try {
+      const result = await loadStudentsCachePage({
+        offset: requestOffset,
+        search,
+        filters,
+      })
+
+      if (activeQueryKey.current !== requestKey) return
+
+      if (result.students.length === 0) {
+        setTotalFilteredStudents(requestOffset)
+        return
+      }
+
+      setStudentList((current) => {
+        const existingIds = new Set(current.map((student) => student.id))
+        const next = [
+          ...current,
+          ...result.students.filter((student) => !existingIds.has(student.id)),
+        ]
+        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+          updateStudentsCacheStudentList(next, totalStudents)
+        }
+        return next
+      })
+      setTotalFilteredStudents(result.totalStudents)
+    } catch (error) {
+      console.error('Load more students error:', error)
+      setLoadMoreFailed(true)
+      setSupabaseStatus(
+        error instanceof Error
+          ? `تعذر تحميل بقية الطلاب: ${error.message}`
+          : 'تعذر تحميل بقية الطلاب.'
+      )
+    } finally {
+      loadMoreLock.current = false
+      setIsLoadingMoreStudents(false)
+    }
+  }
 
   /*
    * تحديث الفلاتر
@@ -538,10 +682,14 @@ export function StudentsView() {
           : student
       )
 
-      updateStudentsCacheStudentList(next)
+      if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+        updateStudentsCacheStudentList(next, totalStudents)
+      }
 
       return next
     })
+
+    setQueryRefreshVersion((current) => current + 1)
 
     setSupabaseStatus(
       nextFeeExempt
@@ -605,12 +753,20 @@ export function StudentsView() {
           (student) => student.id !== selectedStudentId
         )
 
-        updateStudentsCacheStudentList(next)
+        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+          updateStudentsCacheStudentList(
+            next,
+            Math.max(0, totalStudents - 1),
+            [selectedStudentId],
+          )
+        }
 
         return next
       })
 
       setSelectedStudentId('')
+      setTotalStudents((current) => Math.max(0, current - 1))
+      setTotalFilteredStudents((current) => Math.max(0, current - 1))
 
       setSupabaseStatus(
         `تم حذف الطالب «${selected.name}» نهائيًا من النظام ✅`
@@ -694,7 +850,13 @@ export function StudentsView() {
           (student) => !ids.includes(student.id)
         )
 
-        updateStudentsCacheStudentList(next)
+        if (!search.trim() && JSON.stringify(filters) === JSON.stringify(emptyFilters)) {
+          updateStudentsCacheStudentList(
+            next,
+            Math.max(0, totalStudents - selectedStudents.length),
+            ids,
+          )
+        }
 
         return next
       })
@@ -702,6 +864,8 @@ export function StudentsView() {
       if (ids.includes(selectedStudentId)) {
         setSelectedStudentId('')
       }
+      setTotalStudents((current) => Math.max(0, current - selectedStudents.length))
+      setTotalFilteredStudents((current) => Math.max(0, current - selectedStudents.length))
 
       setSupabaseStatus(
         `تم حذف ${selectedStudents.length} طالب نهائيًا من النظام ✅`
@@ -726,14 +890,47 @@ export function StudentsView() {
    * تصدير بيانات الطلاب إلى Excel
    */
   const exportStudentsToExcel = async () => {
-    if (filteredStudents.length === 0) {
+    setSupabaseStatus('جاري تجهيز جميع نتائج التصدير...')
+
+    const exportStudents: StudentTableStudent[] = []
+    let exportOffset = 0
+    let exportTotal = 0
+
+    try {
+      while (true) {
+        const page = await loadStudentsCachePage({
+          offset: exportOffset,
+          limit: 500,
+          search,
+          filters,
+        })
+
+        exportTotal = page.totalStudents
+        exportStudents.push(...page.students)
+        exportOffset += page.students.length
+
+        if (page.students.length === 0 || exportOffset >= exportTotal) {
+          break
+        }
+      }
+    } catch (error) {
+      console.error('Export students load error:', error)
+      setSupabaseStatus(
+        error instanceof Error
+          ? `تعذر تجهيز ملف Excel: ${error.message}`
+          : 'تعذر تجهيز ملف Excel.'
+      )
+      return
+    }
+
+    if (exportStudents.length === 0) {
       setSupabaseStatus(
         'لا توجد بيانات لتصديرها إلى Excel'
       )
       return
     }
 
-    const exportData = filteredStudents.map(
+    const exportData = exportStudents.map(
       (student, index) => {
         const remaining = student.feeExempt
           ? 0
@@ -846,8 +1043,30 @@ export function StudentsView() {
     URL.revokeObjectURL(url)
 
     setSupabaseStatus(
-      `تم تنزيل ${filteredStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
+      `تم تنزيل ${exportStudents.length} طالب كملف Excel مع جميع بيانات الطلاب وحقول التسجيل ✅`
     )
+  }
+
+  const setStudentListFromForm: React.Dispatch<
+    React.SetStateAction<StudentTableStudent[]>
+  > = (value) => {
+    setStudentList((current) => {
+      const next = typeof value === 'function' ? value(current) : value
+      const currentIds = new Set(current.map((student) => student.id))
+      const nextIds = new Set(next.map((student) => student.id))
+      const addedCount = next.filter((student) => !currentIds.has(student.id)).length
+      const removedCount = current.filter((student) => !nextIds.has(student.id)).length
+
+      if (addedCount || removedCount) {
+        setTotalStudents((total) =>
+          Math.max(0, total + addedCount - removedCount),
+        )
+      }
+
+      return next
+    })
+
+    setQueryRefreshVersion((current) => current + 1)
   }
 
   /*
@@ -875,6 +1094,12 @@ export function StudentsView() {
       dynamicFields={dynamicFields}
       studentList={studentList}
       filteredStudents={filteredStudents}
+      totalStudents={totalStudents}
+      totalFilteredStudents={totalFilteredStudents}
+      loadMoreStudents={loadMoreStudents}
+      hasMoreStudents={studentList.length < totalFilteredStudents && !loadMoreFailed}
+      isLoadingMoreStudents={isLoadingMoreStudents}
+      loadMoreFailed={loadMoreFailed}
       attendanceStatuses={attendanceStatuses}
       selectedStudentId={selectedStudentId}
       setSelectedStudentId={setSelectedStudentId}
@@ -894,7 +1119,7 @@ export function StudentsView() {
       deleteSelectedStudents={deleteSelectedStudents}
       deleteStudent={deleteStudent}
       setSupabaseStatus={setSupabaseStatus}
-      setStudentList={setStudentList}
+      setStudentList={setStudentListFromForm}
     />
   )
 }
