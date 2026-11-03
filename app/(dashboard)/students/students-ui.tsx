@@ -75,6 +75,12 @@ interface StudentsUIProps {
   dynamicFields: StudentDynamicField[]
   studentList: StudentTableStudent[]
   filteredStudents: StudentTableStudent[]
+  totalStudents: number
+  totalFilteredStudents: number
+  loadMoreStudents: () => void
+  hasMoreStudents: boolean
+  isLoadingMoreStudents: boolean
+  loadMoreFailed: boolean
   attendanceStatuses: AttendanceStatus[]
 
   selectedStudentId: string
@@ -125,6 +131,12 @@ export function StudentsUI({
   dynamicFields,
   studentList,
   filteredStudents,
+  totalStudents,
+  totalFilteredStudents,
+  loadMoreStudents,
+  hasMoreStudents,
+  isLoadingMoreStudents,
+  loadMoreFailed,
   attendanceStatuses,
   selectedStudentId,
   setSelectedStudentId,
@@ -159,8 +171,8 @@ export function StudentsUI({
     maximumFractionDigits: 3,
   })
 
-  const formattedTotal = studentList.length.toLocaleString('ar-BH')
-  const formattedResults = filteredStudents.length.toLocaleString('ar-BH')
+  const formattedTotal = totalStudents.toLocaleString('ar-BH')
+  const formattedResults = totalFilteredStudents.toLocaleString('ar-BH')
 
   const canDelete =
     isDeletionSettingLoaded && allowStudentDeletion
@@ -503,7 +515,7 @@ export function StudentsUI({
               type="button"
               variant="outline"
               size="sm"
-              disabled={filteredStudents.length === 0}
+              disabled={totalFilteredStudents === 0 || isLoadingStudents}
               onClick={exportStudentsToExcel}
               className={`${actionButtonClass} border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60`}
             >
@@ -821,6 +833,11 @@ export function StudentsUI({
               selectionMode={selectionMode}
               selectedStudentIds={selectedStudentIds}
               allStudentsSelected={allStudentsSelected}
+              onLoadMore={loadMoreStudents}
+              hasMore={hasMoreStudents}
+              isLoadingMore={isLoadingMoreStudents}
+              loadMoreFailed={loadMoreFailed}
+              isLoading={isLoadingStudents}
               onToggleStudentSelection={toggleStudentSelection}
               onToggleSelectAll={toggleSelectAll}
               onSelectStudent={(id) => {
