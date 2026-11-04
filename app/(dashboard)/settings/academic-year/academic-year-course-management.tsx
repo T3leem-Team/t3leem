@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react'
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 import {
   closeSettingsAcademicYearCourse,
@@ -1567,120 +1567,97 @@ export default function AcademicYearCourseManagement({
               },
             ]
 
-      const workbook =
-        XLSX.utils.book_new()
+      const workbook = new ExcelJS.Workbook()
 
-      const summarySheet =
-        XLSX.utils.json_to_sheet(
-          summaryRows,
-        )
+workbook.creator = 'T3LEEM'
+workbook.created = new Date()
 
-      const detailSheet =
-        XLSX.utils.json_to_sheet(
-          detailRows,
-        )
+const createSheet = (
+  name: string,
+  rows: Record<string, string | number>[],
+  widths: number[],
+) => {
+  const worksheet = workbook.addWorksheet(name)
 
-      const courseSheet =
-        XLSX.utils.json_to_sheet(
-          courseInfoRows,
-        )
+  if (rows.length === 0) {
+    return worksheet
+  }
 
-      const teacherSheet =
-        XLSX.utils.json_to_sheet(
-          courseTeachersRows,
-        )
+  const headers = Object.keys(rows[0])
 
-      summarySheet['!cols'] = [
-        { wch: 5 },
-        { wch: 28 },
-        { wch: 18 },
-        { wch: 12 },
-        { wch: 8 },
-        { wch: 16 },
-        { wch: 18 },
-        { wch: 20 },
-        { wch: 18 },
-        { wch: 24 },
-        { wch: 22 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 12 },
-        { wch: 12 },
-        { wch: 20 },
-        { wch: 18 },
-        { wch: 30 },
-        { wch: 30 },
-      ]
+  worksheet.columns = headers.map(
+    (header, index) => ({
+      header,
+      key: header,
+      width: widths[index] ?? 15,
+    }),
+  )
 
-      detailSheet['!cols'] = [
-        { wch: 7 },
-        { wch: 12 },
-        { wch: 28 },
-        { wch: 18 },
-        { wch: 20 },
-        { wch: 18 },
-        { wch: 24 },
-        { wch: 22 },
-        { wch: 12 },
-        { wch: 18 },
-        { wch: 14 },
-        { wch: 18 },
-        { wch: 35 },
-      ]
+  worksheet.addRows(rows)
 
-      courseSheet['!cols'] = [
-        { wch: 25 },
-        { wch: 16 },
-        { wch: 16 },
-        { wch: 16 },
-        { wch: 45 },
-        { wch: 18 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 24 },
-      ]
+  return worksheet
+}
 
-      teacherSheet['!cols'] = [
-        { wch: 30 },
-        { wch: 30 },
-      ]
+createSheet(
+  'ملخص الطلاب',
+  summaryRows,
+  [
+    5, 28, 18, 12, 8,
+    16, 18, 20, 18, 24,
+    22, 10, 10, 10, 12,
+    12, 20, 18, 30, 30,
+  ],
+)
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        summarySheet,
-        'ملخص الطلاب',
-      )
+createSheet(
+  'تفاصيل الحضور',
+  detailRows,
+  [
+    7, 12, 28, 18, 20,
+    18, 24, 22, 12, 18,
+    14, 18, 35,
+  ],
+)
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        detailSheet,
-        'تفاصيل الحضور',
-      )
+createSheet(
+  'بيانات الدورة',
+  courseInfoRows,
+  [
+    25, 16, 16, 16, 45,
+    18, 14, 14, 14, 24,
+  ],
+)
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        courseSheet,
-        'بيانات الدورة',
-      )
+createSheet(
+  'المعلمون والمواد',
+  courseTeachersRows,
+  [30, 30],
+)
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        teacherSheet,
-        'المعلمون والمواد',
-      )
+const fileName = `${safeFileName(
+  course.name || 'الدورة',
+)}-تفاصيل-الدورة.xlsx`
 
-      const fileName = `${safeFileName(
-        course.name ||
-          'الدورة',
-      )}-تفاصيل-الدورة.xlsx`
+const excelBuffer = await workbook.xlsx.writeBuffer()
 
-      XLSX.writeFile(
-        workbook,
-        fileName,
-      )
+const blob = new Blob(
+  [excelBuffer as BlobPart],
+  {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  },
+)
 
+const url = URL.createObjectURL(blob)
+
+const link = document.createElement('a')
+link.href = url
+link.download = fileName
+
+document.body.appendChild(link)
+link.click()
+link.remove()
+
+URL.revokeObjectURL(url)
       setSupabaseStatus(
         'تم تنزيل ملف Excel الكامل للدورة بنجاح ✅',
       )
@@ -2397,11 +2374,11 @@ export default function AcademicYearCourseManagement({
 
                         <p className="mt-1 text-xl font-semibold">
                           {
-                            summaryData
                               .attendance
                               .notRecorded
                           }
                         </p>
+                            summaryData
                       </div>
 
                       <div className="rounded-lg bg-primary/10 p-3">
