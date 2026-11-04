@@ -292,102 +292,103 @@ export default function Page() {
     }
   }
 
-  return (
+ return (
   <div className="space-y-6">
     <div
       dir="rtl"
-      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      className="flex flex-col items-start gap-3 sm:flex-row sm:items-center"
     >
-      <PageHeader
-        title="المستخدمون والصلاحيات"
-        description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
-      />
-
       <button
         type="button"
         onClick={() => router.back()}
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        className="ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
       >
         <ArrowRight className="h-4 w-4" />
         عودة
       </button>
+
+      <div className="w-full">
+        <PageHeader
+          title="المستخدمون والصلاحيات"
+          description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
+        />
+      </div>
     </div>
 
-      {showForm ? (
-        <div className="fixed inset-0 z-[100]">
-          <button
-            type="button"
-            aria-label="إغلاق"
-            onClick={resetForm}
-            className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
-          />
+    {showForm ? (
+      <div className="fixed inset-0 z-[100]">
+        <button
+          type="button"
+          aria-label="إغلاق"
+          onClick={resetForm}
+          className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
+        />
 
-          <aside
-            dir="rtl"
-            className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col overflow-y-auto border-l bg-background shadow-2xl"
-          >
-            <div className="p-6">
-              {error && (
-                <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {error}
-                </div>
+        <aside
+          dir="rtl"
+          className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col overflow-y-auto border-l bg-background shadow-2xl"
+        >
+          <div className="p-6">
+            {error && (
+              <div className="mb-5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
+            <UsersForm
+              key={editingId ?? 'new-user'}
+              initialData={initialFormData}
+              editing={editingId !== null}
+              saving={saving}
+              permissions={permissions}
+              dashboardSections={dashboardSections.filter(
+                (section) => section.is_active,
               )}
+              rolePermissionIds={getRolePermissionIds(
+                initialFormData.role,
+              )}
+              onSubmit={handleSave}
+              onCancel={resetForm}
+            />
+          </div>
+        </aside>
+      </div>
+    ) : (
+      <>
+        <UsersTable
+          users={users}
+          filteredUsers={filteredUsers}
+          permissions={permissions}
+          loading={loading}
+          saving={saving}
+          error={error}
+          search={search}
+          showForm={showForm}
+          selectedUserId={selectedUserId}
+          getEffectivePermissionIds={getEffectivePermissionIds}
+          getRolePermissionIds={getRolePermissionIds}
+          onSearchChange={setSearch}
+          onAdd={openAddForm}
+          onEdit={openEditForm}
+          onToggleActive={handleToggleActive}
+          onSelectUser={setSelectedUserId}
+          onShowDetails={(userId) => {
+            setSelectedUserId(userId)
+            setDetailsOpen(true)
+          }}
+        />
 
-              <UsersForm
-                key={editingId ?? 'new-user'}
-                initialData={initialFormData}
-                editing={editingId !== null}
-                saving={saving}
-                permissions={permissions}
-                dashboardSections={dashboardSections.filter(
-                  (section) => section.is_active,
-                )}
-                rolePermissionIds={getRolePermissionIds(
-                  initialFormData.role,
-                )}
-                onSubmit={handleSave}
-                onCancel={resetForm}
-              />
-            </div>
-          </aside>
-        </div>
-      ) : (
-        <>
-          <UsersTable
-            users={users}
-            filteredUsers={filteredUsers}
+        {detailsOpen && selectedDetailsUser && (
+          <UsersDetailsDialog
+            user={selectedDetailsUser}
             permissions={permissions}
-            loading={loading}
-            saving={saving}
-            error={error}
-            search={search}
-            showForm={showForm}
-            selectedUserId={selectedUserId}
+            dashboardSections={dashboardSections}
             getEffectivePermissionIds={getEffectivePermissionIds}
             getRolePermissionIds={getRolePermissionIds}
-            onSearchChange={setSearch}
-            onAdd={openAddForm}
-            onEdit={openEditForm}
-            onToggleActive={handleToggleActive}
-            onSelectUser={setSelectedUserId}
-            onShowDetails={(userId) => {
-              setSelectedUserId(userId)
-              setDetailsOpen(true)
-            }}
+            onClose={() => setDetailsOpen(false)}
           />
-
-          {detailsOpen && selectedDetailsUser && (
-            <UsersDetailsDialog
-              user={selectedDetailsUser}
-              permissions={permissions}
-              dashboardSections={dashboardSections}
-              getEffectivePermissionIds={getEffectivePermissionIds}
-              getRolePermissionIds={getRolePermissionIds}
-              onClose={() => setDetailsOpen(false)}
-            />
-          )}
-        </>
-      )}
-    </div>
-  )
-}
+        )}
+      </>
+    )}
+  </div>
+)
