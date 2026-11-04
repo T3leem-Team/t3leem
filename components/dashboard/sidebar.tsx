@@ -61,8 +61,6 @@ type LogoutWindow = Window & {
 const DEFAULT_SCHOOL_NAME = 'تعليم'
 const DEFAULT_SCHOOL_SUBTITLE = 'نظام إدارة المدارس'
 
-let schoolSettingsCache: SchoolSettings | null = null
-
 const iconMap = {
   LayoutDashboard,
   ShieldCheck,
@@ -136,29 +134,22 @@ export function Sidebar({
   const [loggingOut, setLoggingOut] =
     useState(false)
 
+  // قيم ابتدائية ثابتة ومتطابقة بين السيرفر والمتصفح
   const [schoolSettings, setSchoolSettings] =
-    useState<SchoolSettings>(
-      schoolSettingsCache ?? {
-        id: 1,
-        school_name: DEFAULT_SCHOOL_NAME,
-        school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
-      },
-    )
+    useState<SchoolSettings>({
+      id: 1,
+      school_name: DEFAULT_SCHOOL_NAME,
+      school_subtitle: DEFAULT_SCHOOL_SUBTITLE,
+    })
 
   const [schoolDialogOpen, setSchoolDialogOpen] =
     useState(false)
 
   const [schoolName, setSchoolName] =
-    useState(
-      schoolSettingsCache?.school_name ??
-        DEFAULT_SCHOOL_NAME,
-    )
+    useState(DEFAULT_SCHOOL_NAME)
 
   const [schoolSubtitle, setSchoolSubtitle] =
-    useState(
-      schoolSettingsCache?.school_subtitle ??
-        DEFAULT_SCHOOL_SUBTITLE,
-    )
+    useState(DEFAULT_SCHOOL_SUBTITLE)
 
   const [savingSchoolSettings, setSavingSchoolSettings] =
     useState(false)
@@ -480,8 +471,6 @@ export function Sidebar({
           const settings: SchoolSettings =
             data.settings
 
-          schoolSettingsCache = settings
-
           setSchoolSettings(settings)
           setSchoolName(settings.school_name)
           setSchoolSubtitle(settings.school_subtitle)
@@ -575,8 +564,6 @@ export function Sidebar({
       }
 
       const updatedSettings = data.settings
-
-      schoolSettingsCache = updatedSettings
 
       setSchoolSettings(updatedSettings)
       setSchoolName(updatedSettings.school_name)
