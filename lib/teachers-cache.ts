@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -44,21 +43,17 @@ export function setTeachersCache(data: TeachersCache) {
 export function updateTeachersCache(
   patch: Partial<TeachersCache>,
 ) {
+  // لا تنشئ كاشًا فارغًا إذا لم يكتمل تحميل البيانات بعد.
+  if (!teachersCache) {
+    return
+  }
+
   teachersCacheVersion += 1
   teachersCacheLoading = null
 
+  // حدّث البيانات المطلوبة مع المحافظة على بقية الكاش.
   teachersCache = {
-    teachers: teachersCache?.teachers ?? [],
-    courses: teachersCache?.courses ?? [],
-    students: teachersCache?.students ?? [],
-    assignments: teachersCache?.assignments ?? [],
-    attendanceStatuses: teachersCache?.attendanceStatuses ?? [],
-    attendanceRecords: teachersCache?.attendanceRecords ?? [],
-    allowTeacherTransfer: teachersCache?.allowTeacherTransfer ?? false,
-    allowTeacherRemove: teachersCache?.allowTeacherRemove ?? false,
-    courseTeacherIds: teachersCache?.courseTeacherIds ?? {},
-    teacherCourseSubjects: teachersCache?.teacherCourseSubjects ?? [],
-    academicLevels: teachersCache?.academicLevels ?? [],
+    ...teachersCache,
     ...patch,
   }
 }
@@ -76,10 +71,12 @@ export async function loadTeachersCache(
 ): Promise<TeachersCache> {
   const force = options?.force ?? false
 
+  // استخدم الكاش الموجود إذا لم يُطلب تحديث إجباري.
   if (!force && teachersCache) {
     return teachersCache
   }
 
+  // لا تبدأ طلبًا مكررًا أثناء وجود طلب تحميل.
   if (!force && teachersCacheLoading) {
     return teachersCacheLoading
   }
@@ -87,7 +84,7 @@ export async function loadTeachersCache(
   const requestVersion = ++teachersCacheVersion
 
   const loadingPromise = (async (): Promise<TeachersCache> => {
-    // تحميل البيانات من Repository
+    // تحميل البيانات من Repository.
     const data = await loadTeachersRepositoryData()
 
     // لا تسمح لطلب قديم بالكتابة فوق الكاش الأحدث.
