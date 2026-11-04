@@ -356,52 +356,36 @@ export function getLessonDateStatus(
 }
 
 export function useDashboardData() {
-  const hasDashboardCache = dashboardCache !== null
-
-  const [loading, setLoading] = useState(!hasDashboardCache)
+  // تكون قيم أول عرض متطابقة بين السيرفر والمتصفح.
+  // نسترجع الكاش بعد اكتمال Hydration داخل useEffect.
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+  const initializedRef = useRef(false)
 
   const [academicYear, setAcademicYear] =
-    useState<AcademicYear | null>(
-      dashboardCache?.academicYear ?? null,
-    )
+    useState<AcademicYear | null>(null)
 
-  const [courses, setCourses] = useState<Course[]>(
-    dashboardCache?.courses ?? [],
-  )
+  const [courses, setCourses] = useState<Course[]>([])
 
   const [enrollments, setEnrollments] =
-    useState<Enrollment[]>(
-      dashboardCache?.enrollments ?? [],
-    )
+    useState<Enrollment[]>([])
 
   const [assignments, setAssignments] =
-    useState<Assignment[]>(
-      dashboardCache?.assignments ?? [],
-    )
+    useState<Assignment[]>([])
 
   const [courseTeachers, setCourseTeachers] =
-    useState<CourseTeacher[]>(
-      dashboardCache?.courseTeachers ?? [],
-    )
+    useState<CourseTeacher[]>([])
 
-  const [teachers, setTeachers] = useState<Teacher[]>(
-    dashboardCache?.teachers ?? [],
-  )
+  const [teachers, setTeachers] = useState<Teacher[]>([])
 
   const [attendanceStatuses, setAttendanceStatuses] =
-    useState<AttendanceStatus[]>(
-      dashboardCache?.attendanceStatuses ?? [],
-    )
+    useState<AttendanceStatus[]>([])
 
   const [attendanceRecords, setAttendanceRecords] =
-    useState<AttendanceRecord[]>(
-      dashboardCache?.attendanceRecords ?? [],
-    )
+    useState<AttendanceRecord[]>([])
 
-  const [students, setStudents] = useState<Student[]>(
-    dashboardCache?.students ?? [],
-  )
+  const [students, setStudents] = useState<Student[]>([])
 
   // سجل حضور الطالب المختار فقط.
   const [
@@ -413,20 +397,14 @@ export function useDashboardData() {
     useState(false)
 
   const [selectedCourseId, setSelectedCourseId] =
-    useState(
-      dashboardCache?.selectedCourseId ?? '',
-    )
+    useState('')
 
-  const [selectedDate, setSelectedDate] = useState(
-    dashboardCache?.selectedDate ?? getLocalDateString(),
-  )
+  const [selectedDate, setSelectedDate] = useState('')
 
   const [
     pendingRegistrationCount,
     setPendingRegistrationCount,
-  ] = useState(
-    dashboardCache?.pendingRegistrationCount ?? 0,
-  )
+  ] = useState(0)
 
   // يمنع استجابة طلب قديم من استبدال بيانات الاختيار الجديد.
   const attendanceRequestId = useRef(0)
@@ -1122,10 +1100,41 @@ export function useDashboardData() {
     ],
   )
 
+  // استرجاع الكاش أو بدء التحميل بعد أول عرض متطابق للسيرفر والمتصفح.
   useEffect(() => {
-    if (dashboardCache !== null) {
+    if (initializedRef.current) {
       return
     }
+
+    initializedRef.current = true
+
+    const cache = dashboardCache
+
+    if (cache !== null) {
+      setAcademicYear(cache.academicYear)
+      setCourses(cache.courses)
+      setEnrollments(cache.enrollments)
+      setAssignments(cache.assignments)
+      setCourseTeachers(cache.courseTeachers)
+      setTeachers(cache.teachers)
+      setAttendanceStatuses(cache.attendanceStatuses)
+      setAttendanceRecords(cache.attendanceRecords)
+      setStudents(cache.students)
+      setPendingRegistrationCount(
+        cache.pendingRegistrationCount,
+      )
+      setSelectedCourseId(cache.selectedCourseId)
+      setSelectedDate(
+        cache.selectedDate || getLocalDateString(),
+      )
+
+      setLoading(false)
+      setHydrated(true)
+      return
+    }
+
+    setSelectedDate(getLocalDateString())
+    setHydrated(true)
 
     if (dashboardDataLoading) {
       return
@@ -1139,11 +1148,14 @@ export function useDashboardData() {
   }, [loadData])
 
   useEffect(() => {
+    if (!hydrated) return
+
     updateDashboardCache({
       selectedCourseId,
       selectedDate,
     })
   }, [
+    hydrated,
     selectedCourseId,
     selectedDate,
     updateDashboardCache,
@@ -1151,6 +1163,8 @@ export function useDashboardData() {
 
   // تحميل بيانات الدورة والتاريخ المختارين فقط.
   useEffect(() => {
+    if (!hydrated) return
+
     if (!selectedCourseId || !selectedDate) {
       attendanceRequestId.current += 1
       setAttendanceRecords([])
@@ -1167,6 +1181,7 @@ export function useDashboardData() {
       selectedDate,
     )
   }, [
+    hydrated,
     selectedCourseId,
     selectedDate,
     loadAttendance,
@@ -1174,12 +1189,15 @@ export function useDashboardData() {
   ])
 
   useEffect(() => {
+    if (!hydrated) return
+
     if (attendanceStatuses.length > 0) {
       return
     }
 
     void loadAttendanceStatuses()
   }, [
+    hydrated,
     attendanceStatuses.length,
     loadAttendanceStatuses,
   ])
@@ -1187,6 +1205,8 @@ export function useDashboardData() {
   // عند الرجوع للنافذة نحدّث اليوم الحالي فقط.
   // لا يوجد تحديث دوري كل 5 ثوانٍ.
   useEffect(() => {
+    if (!hydrated) return
+
     if (!selectedCourseId || !selectedDate) {
       return
     }
@@ -1217,6 +1237,7 @@ export function useDashboardData() {
       )
     }
   }, [
+    hydrated,
     selectedCourseId,
     selectedDate,
     loadAttendance,
