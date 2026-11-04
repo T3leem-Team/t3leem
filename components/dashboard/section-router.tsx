@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -15,8 +16,8 @@ import { CommunicationView } from '@/components/sections/communication'
 
 import {
   clearDashboardSections,
-  getDashboardSections,
-  saveDashboardSections,
+  DashboardSectionsError,
+  loadDashboardSections,
   type DashboardSection,
 } from '@/lib/dashboard-sections-cache'
 
@@ -62,9 +63,6 @@ const routes: {
   },
 ]
 
-let sectionsCache: DashboardSection[] | null = null
-let sectionsLoading = false
-
 function getSectionKey(pathname: string) {
   if (pathname === '/') return 'dashboard'
   if (pathname.startsWith('/settings')) return 'settings'
@@ -79,140 +77,63 @@ function getSectionKey(pathname: string) {
   return null
 }
 
-async function refreshSections(
-  router: ReturnType<typeof useRouter>,
-) {
-  if (sectionsLoading) {
-    return
-  }
-
-  sectionsLoading = true
-
-  try {
-    const response = await fetch(
-      '/api/auth/dashboard-sections',
-      {
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store',
-      },
-    )
-
-    if (!response.ok) {
-       if (response.status === 401) {
-         clearDashboardSections()
-         sectionsCache = null
-         router.replace('/login')
-       } else {
-         console.error(
-           'Dashboard sections request failed:',
-          response.status,
-        )
-      }
-
-      return
-    }
-
-    const data = await response.json()
-
-    const allowedSections: DashboardSection[] =
-      Array.isArray(data.sections)
-        ? [...data.sections]
-            .filter(
-              (section) =>
-                section &&
-                typeof section.section_key ===
-                  'string' &&
-                typeof section.href ===
-                  'string',
-            )
-            .sort(
-              (
-                a: DashboardSection,
-                b: DashboardSection,
-              ) =>
-                (a.sort_order ?? 0) -
-                (b.sort_order ?? 0),
-            )
-        : []
-
-    sectionsCache = allowedSections
-
-    saveDashboardSections(
-      allowedSections,
-    )
-  } catch (error) {
-    console.error(
-      'Section access check error:',
-      error,
-    )
-  } finally {
-    sectionsLoading = false
-  }
-}
-
 export function SectionRouter() {
   const pathname = usePathname()
   const router = useRouter()
 
   const [sections, setSections] =
     useState<DashboardSection[] | null>(null)
+
+  const [loadError, setLoadError] =
+    useState(false)
+
   /*
    * --------------------------------------------------
-   * تحديث الصلاحيات في الخلفية
-   * --------------------------------------------------
+   * تحميل الصلاحيات
    *
-   * إذا كانت الصلاحيات موجودة:
-   * - لا نعرض Loading.
-   * - لا ننتظر الطلب.
-   * - نحدثها في الخلفية فقط.
-   *
-   * إذا لم تكن موجودة:
-   * - ننتظر أول طلب.
+   * يستخدم نفس Promise الموجود في Sidebar.
+   * إذا كان الطلب جاريًا، تتم مشاركته بدل إنشاء طلب جديد.
+   * وإذا كانت البيانات مخزنة وحديثة، لا يتم إرسال طلب.
    * --------------------------------------------------
    */
-
   useEffect(() => {
     let cancelled = false
 
     async function checkAccess() {
-      if (sectionsCache) {
-        /*
-         * لدينا صلاحيات جاهزة.
-         *
-         * لا نغير الـ UI.
-         * فقط نحدث البيانات في الخلفية.
-         */
-        await refreshSections(router)
+      try {
+        setLoadError(false)
 
-        if (
-          !cancelled &&
-          sectionsCache
-        ) {
-          setSections(
-            [...sectionsCache],
-          )
+        const loadedSections =
+          await loadDashboardSections()
+
+        if (!cancelled) {
+          setSections([...loadedSections])
+        }
+      } catch (error) {
+        if (cancelled) {
+          return
         }
 
-        return
-      }
+        if (
+          error instanceof DashboardSectionsError &&
+          error.status === 401
+        ) {
+          clearDashboardSections()
+          setSections(null)
+          router.replace('/login')
+          return
+        }
 
-      /*
-       * لا يوجد كاش إطلاقًا.
-       */
-      await refreshSections(router)
-
-      if (
-        !cancelled &&
-        sectionsCache
-      ) {
-        setSections(
-          [...sectionsCache],
+        console.error(
+          'Section access check error:',
+          error,
         )
+
+        setLoadError(true)
       }
     }
 
-    checkAccess()
+    void checkAccess()
 
     return () => {
       cancelled = true
@@ -224,7 +145,6 @@ export function SectionRouter() {
    * التحقق من القسم الحالي
    * --------------------------------------------------
    */
-
   useEffect(() => {
     if (!sections) {
       return
@@ -237,8 +157,7 @@ export function SectionRouter() {
       currentSectionKey === null ||
       sections.some(
         (section) =>
-          section.section_key ===
-          currentSectionKey,
+          section.section_key === currentSectionKey,
       )
 
     if (hasAccess) {
@@ -250,13 +169,9 @@ export function SectionRouter() {
 
     if (
       firstAllowedSection?.href &&
-      firstAllowedSection.href !==
-        pathname
+      firstAllowedSection.href !== pathname
     ) {
-      router.replace(
-        firstAllowedSection.href,
-      )
-
+      router.replace(firstAllowedSection.href)
       return
     }
 
@@ -282,9 +197,54 @@ export function SectionRouter() {
 
   /*
    * --------------------------------------------------
-   * فقط إذا لم تكن لدينا أي صلاحيات جاهزة
+   * حالة التحميل
    * --------------------------------------------------
    */
+  if (!sections && loadError) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-destructive">
+            تعذر تحميل صلاحيات الوصول.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(false)
+
+              void loadDashboardSections({
+                forceRefresh: true,
+              })
+                .then((loadedSections) => {
+                  setSections([...loadedSections])
+                })
+                .catch((error) => {
+                  console.error(
+                    'Retry dashboard sections error:',
+                    error,
+                  )
+
+                  if (
+                    error instanceof DashboardSectionsError &&
+                    error.status === 401
+                  ) {
+                    clearDashboardSections()
+                    router.replace('/login')
+                    return
+                  }
+
+                  setLoadError(true)
+                })
+            }}
+            className="mt-3 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground hover:opacity-90"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!sections) {
     return (
@@ -303,8 +263,7 @@ export function SectionRouter() {
     currentSectionKey === null ||
     sections.some(
       (section) =>
-        section.section_key ===
-        currentSectionKey,
+        section.section_key === currentSectionKey,
     )
 
   if (!hasAccess) {
