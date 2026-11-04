@@ -3,6 +3,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomBytes } from 'crypto'
+import { isMaintenanceMode } from '@/lib/system-control'
 
 import {
   loadLoginProfile,
@@ -515,6 +516,46 @@ export async function POST(request: NextRequest) {
       )
     }
 
+
+        /*
+         * 4. فحص وضع الصيانة بعد نجاح كلمة المرور.
+         * المدير الأساسي مستثنى من وضع الصيانة.
+         */
+        const isPrimaryAdmin =
+          profile.username === 'admin' &&
+          profile.role === 'Admin'
+    
+        if (!isPrimaryAdmin) {
+          const maintenanceStartedAt = Date.now()
+    
+          try {
+            const maintenanceMode = await isMaintenanceMode()
+    
+            markLoginStep(
+              'maintenance check',
+              maintenanceStartedAt,
+            )
+    
+            if (maintenanceMode) {
+              return NextResponse.json(
+                {
+                  error: 'النظام تحت الصيانة حاليًا.',
+                  maintenance: true,
+                },
+                { status: 503 },
+              )
+            }
+          } catch (error) {
+            console.error('Login maintenance check error:', error)
+    
+            return NextResponse.json(
+              {
+                error: 'تعذر التحقق من حالة النظام حاليًا.',
+              },
+              { status: 503 },
+            )
+          }
+        }
     /*
      * 4. بعد نجاح كلمة المرور فقط:
      * قراءة الكوكي وتوليد البصمة التقريبية.
