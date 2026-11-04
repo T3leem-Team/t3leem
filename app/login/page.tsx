@@ -1,4 +1,3 @@
-
 'use client'
 
 import {
@@ -127,51 +126,13 @@ export default function LoginPage() {
       return
     }
 
-    const startedAt = performance.now()
-    let lastTimingAt = startedAt
-
-    const markTiming = (step: string) => {
-      const now = performance.now()
-
-      console.info(
-        `[LOGIN PAGE TIMING] ${step}: ${Math.round(now - lastTimingAt)}ms | total: ${Math.round(now - startedAt)}ms`,
-      )
-
-      lastTimingAt = now
-    }
-
-    async function timedFetch(
-      label: string,
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> {
-      const requestStartedAt = performance.now()
-
-      try {
-        const response = await fetch(input, init)
-
-        console.info(
-          `[LOGIN FETCH] ${label}: ${Math.round(performance.now() - requestStartedAt)}ms | status: ${response.status}`,
-        )
-
-        return response
-      } catch (fetchError) {
-        console.info(
-          `[LOGIN FETCH] ${label}: failed after ${Math.round(performance.now() - requestStartedAt)}ms`,
-        )
-
-        throw fetchError
-      }
-    }
-
     setLoading(true)
 
     try {
       /*
        * 1. تسجيل الدخول الأساسي.
        */
-      const loginResponse = await timedFetch(
-        'main login',
+      const loginResponse = await fetch(
         '/api/auth/login',
         {
           method: 'POST',
@@ -190,8 +151,6 @@ export default function LoginPage() {
       const loginData =
         await loginResponse.json().catch(() => null)
 
-      markTiming('read main login response')
-
       if (!loginResponse.ok) {
         setError(
           typeof loginData?.error === 'string'
@@ -200,15 +159,13 @@ export default function LoginPage() {
         )
 
         setLoading(false)
-        markTiming('stop: main login failed')
         return
       }
 
       /*
        * 2. تحميل أقسام لوحة التحكم.
        */
-      const sectionsResponse = await timedFetch(
-        'dashboard sections',
+      const sectionsResponse = await fetch(
         '/api/auth/dashboard-sections',
         {
           method: 'GET',
@@ -220,8 +177,6 @@ export default function LoginPage() {
       const sectionsData =
         await sectionsResponse.json().catch(() => null)
 
-      markTiming('read dashboard sections response')
-
       if (!sectionsResponse.ok) {
         setError(
           typeof sectionsData?.error === 'string'
@@ -230,7 +185,6 @@ export default function LoginPage() {
         )
 
         setLoading(false)
-        markTiming('stop: dashboard sections failed')
         return
       }
 
@@ -253,13 +207,7 @@ export default function LoginPage() {
               )
           : []
 
-      const cacheStartedAt = performance.now()
-
       saveDashboardSections(sections)
-
-      console.info(
-        `[LOGIN PAGE TIMING] save dashboard sections cache: ${Math.round(performance.now() - cacheStartedAt)}ms`,
-      )
 
       const firstSection = sections[0]
 
@@ -307,8 +255,6 @@ export default function LoginPage() {
           })
       }
 
-      markTiming('start dashboard cache preloading')
-
       /*
        * 3. التوجيه إلى الصفحة الرئيسية المسموح بها.
        */
@@ -319,11 +265,7 @@ export default function LoginPage() {
         requestAnimationFrame(() => resolve())
       })
 
-      markTiming(`before router.replace: ${destination}`)
-
       router.replace(destination)
-
-      markTiming('router.replace called')
     } catch (submitError) {
       console.error(
         'Login request error:',
