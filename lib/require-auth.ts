@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { validateCurrentAccess } from '@/lib/auth-guard'
-import { isMaintenanceMode } from '@/lib/system-control'
 
 const SESSION_COOKIE = 't3leem_session_id'
 
@@ -70,46 +69,6 @@ export async function requireAuth() {
     return {
       access: null,
       response,
-    }
-  }
-
-  // 2. فحص الصيانة المركزي
-  try {
-    const maintenanceStartedAt = performance.now()
-    const maintenanceMode = await isMaintenanceMode()
-
-    markTiming('isMaintenanceMode', maintenanceStartedAt)
-
-    // المدير الأساسي مستثنى من وضع الصيانة
-    const isPrimaryAdmin =
-      access.username === 'admin' &&
-      access.role === 'Admin'
-
-    if (maintenanceMode && !isPrimaryAdmin) {
-      return {
-        access: null,
-        response: NextResponse.json(
-          {
-            authenticated: false,
-            maintenance: true,
-            error: 'النظام تحت الصيانة حاليًا.',
-          },
-          { status: 503 },
-        ),
-      }
-    }
-  } catch (error) {
-    console.error('Maintenance check error:', error)
-
-    return {
-      access: null,
-      response: NextResponse.json(
-        {
-          authenticated: false,
-          error: 'تعذر التحقق من حالة النظام حالياً.',
-        },
-        { status: 503 },
-      ),
     }
   }
 
