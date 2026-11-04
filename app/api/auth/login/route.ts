@@ -378,6 +378,19 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const markLoginStep = (
+    step: string,
+    stepStartedAt: number,
+  ) => {
+    console.info(
+      `[LOGIN TIMING] ${step}: ${
+        Date.now() - stepStartedAt
+      }ms | total: ${
+        Date.now() - loginStartedAt
+      }ms`,
+    )
+  }
+
   try {
     /*
      * 1. قراءة بيانات تسجيل الدخول.
@@ -408,10 +421,12 @@ export async function POST(request: NextRequest) {
     /*
      * 2. البحث عن حساب المستخدم.
      */
+    const profileStartedAt = Date.now()
+
     const { data: profile, error: profileError } =
       await loadLoginProfile(username)
 
-    markLoginTiming('profile lookup')
+    markLoginStep('profile lookup', profileStartedAt)
 
     if (profileError) {
       console.error(
@@ -458,6 +473,8 @@ export async function POST(request: NextRequest) {
       },
     )
 
+    const passwordStartedAt = Date.now()
+
     const {
       data: passwordAuthData,
       error: passwordError,
@@ -466,7 +483,10 @@ export async function POST(request: NextRequest) {
       password,
     })
 
-    markLoginTiming('password verification')
+    markLoginStep(
+      'password verification',
+      passwordStartedAt,
+    )
 
     if (
       passwordError ||
@@ -511,14 +531,26 @@ export async function POST(request: NextRequest) {
     let recoveryCandidate: TrustedDevice | null = null
 
     /*
+     * قياس إجمالي مرحلة التحقق من الجهاز.
+     */
+    const deviceValidationStartedAt = Date.now()
+
+    /*
      * 5. محاولة مطابقة الكوكي الموجودة.
      */
     if (existingDeviceToken) {
       const tokenHash = hashDeviceToken(existingDeviceToken)
 
+      const tokenLookupStartedAt = Date.now()
+
       const { data, error } = await loadTrustedDeviceByToken(
         tokenHash,
         profile.auth_user_id,
+      )
+
+      markLoginStep(
+        'trusted device token lookup',
+        tokenLookupStartedAt,
       )
 
       if (error) {
@@ -545,12 +577,19 @@ export async function POST(request: NextRequest) {
       cookieMissingOrInvalid &&
       isAutomaticRecoveryAllowed()
     ) {
+      const blockedLookupStartedAt = Date.now()
+
       const {
         data: blockedFingerprintRecords,
         error: blockedFingerprintError,
       } = await loadBlockedFingerprintRecords(
         profile.auth_user_id,
         fingerprintHash,
+      )
+
+      markLoginStep(
+        'blocked fingerprint lookup',
+        blockedLookupStartedAt,
       )
 
       if (blockedFingerprintError) {
@@ -573,11 +612,18 @@ export async function POST(request: NextRequest) {
           '[DEVICE RECOVERY] blocked: matching revoked/rejected record exists',
         )
       } else {
+        const approvedLookupStartedAt = Date.now()
+
         const { data, error } =
           await loadApprovedDevicesByFingerprint(
             profile.auth_user_id,
             fingerprintHash,
           )
+
+        markLoginStep(
+          'approved fingerprint lookup',
+          approvedLookupStartedAt,
+        )
 
         if (error) {
           console.error(
@@ -643,6 +689,8 @@ export async function POST(request: NextRequest) {
       const newDeviceToken = randomBytes(32).toString('hex')
       const now = new Date().toISOString()
 
+      const recoveryStartedAt = Date.now()
+
       const { data: recovered, error: recoveryError } =
         await recoverTrustedDevice(
           recoveryCandidate.id,
@@ -651,6 +699,11 @@ export async function POST(request: NextRequest) {
           hashDeviceToken(newDeviceToken),
           now,
         )
+
+      markLoginStep(
+        'trusted device recovery',
+        recoveryStartedAt,
+      )
 
       if (recoveryError) {
         console.error(
@@ -868,6 +921,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    markLoginStep(
+      'total device validation',
+      deviceValidationStartedAt,
+    )
+
     /*
      * 14. تجهيز جلسة Supabase Auth.
      */
@@ -906,11 +964,18 @@ export async function POST(request: NextRequest) {
 
     const session = passwordAuthData.session
 
+    const setSessionStartedAt = Date.now()
+
     const { error: setSessionError } =
       await supabase.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       })
+
+    markLoginStep(
+      'setSession',
+      setSessionStartedAt,
+    )
 
     if (setSessionError) {
       console.error(
@@ -937,6 +1002,8 @@ export async function POST(request: NextRequest) {
         SESSION_COOKIE_MAX_DAYS * 24 * 60 * 60 * 1000,
     )
 
+    const activeSessionStartedAt = Date.now()
+
     const {
       data: activeSessionId,
       error: sessionError,
@@ -946,6 +1013,11 @@ export async function POST(request: NextRequest) {
       fingerprintHash,
       detectedType,
       expiresAt.toISOString(),
+    )
+
+    markLoginStep(
+      'create active session RPC',
+      activeSessionStartedAt,
     )
 
     if (sessionError || !activeSessionId) {
