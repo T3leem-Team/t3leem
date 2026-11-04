@@ -2368,18 +2368,14 @@ URL.revokeObjectURL(url)
                       </div>
 
                       <div className="rounded-lg bg-muted p-3">
-                        <p className="text-xs text-muted-foreground">
-                          لم يسجل
-                        </p>
-
-                        <p className="mt-1 text-xl font-semibold">
-                          {
-                              .attendance
-                              .notRecorded
-                          }
-                        </p>
-                            summaryData
-                      </div>
+                          <p className="text-xs text-muted-foreground">
+                            لم يسجل
+                          </p>
+                        
+                          <p className="mt-1 text-xl font-semibold">
+                            {summaryData.attendance.notRecorded}
+                          </p>
+                        </div>
 
                       <div className="rounded-lg bg-primary/10 p-3">
                         <p className="text-xs text-primary">
