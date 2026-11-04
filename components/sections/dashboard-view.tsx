@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -11,7 +12,11 @@ import {
   BookOpen,
 } from 'lucide-react'
 
-import { getDashboardSections } from '@/lib/dashboard-sections-cache'
+import {
+  clearDashboardSections,
+  DashboardSectionsError,
+  loadDashboardSections,
+} from '@/lib/dashboard-sections-cache'
 
 import {
   Card,
@@ -102,33 +107,61 @@ export function DashboardView() {
   }
 
   useEffect(() => {
-    const sections = getDashboardSections()
+    let cancelled = false
 
-    if (!sections) {
-      router.replace('/login')
-      return
+    async function checkAccess() {
+      try {
+        const sections = await loadDashboardSections()
+
+        if (cancelled) return
+
+        const hasDashboard = sections.some(
+          (section) => section.section_key === 'dashboard',
+        )
+
+        if (hasDashboard) {
+          setCheckingAccess(false)
+          return
+        }
+
+        const firstAllowedSection = sections.find(
+          (section) =>
+            typeof section.href === 'string' &&
+            section.href.trim(),
+        )
+
+        if (firstAllowedSection?.href) {
+          router.replace(firstAllowedSection.href)
+          return
+        }
+
+        router.replace('/login')
+      } catch (error) {
+        if (cancelled) return
+
+        if (
+          error instanceof DashboardSectionsError &&
+          error.status === 401
+        ) {
+          clearDashboardSections()
+          router.replace('/login')
+          return
+        }
+
+        console.error(
+          'Dashboard access check error:',
+          error,
+        )
+
+        setCheckingAccess(false)
+      }
     }
 
-    const hasDashboard = sections.some(
-      (section) => section.section_key === 'dashboard',
-    )
+    void checkAccess()
 
-    if (hasDashboard) {
-      setCheckingAccess(false)
-      return
+    return () => {
+      cancelled = true
     }
-
-    const firstAllowedSection = sections.find(
-      (section) =>
-        typeof section.href === 'string' && section.href.trim(),
-    )
-
-    if (firstAllowedSection?.href) {
-      router.replace(firstAllowedSection.href)
-      return
-    }
-
-    router.replace('/login')
   }, [router])
 
   const {
