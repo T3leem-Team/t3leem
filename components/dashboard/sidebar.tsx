@@ -1,4 +1,3 @@
-
 'use client'
 
 import Link from 'next/link'
@@ -24,10 +23,17 @@ import {
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { clearAllCaches } from '@/lib/clear-all-caches'
+
 import {
   loadSidebarPendingRegistrationCount,
   loadSidebarUserProfile,
 } from '@/lib/features/dashboard/repositories/dashboard.repository'
+
+import {
+  clearDashboardSections,
+  DashboardSectionsError,
+  loadDashboardSections,
+} from '@/lib/dashboard-sections-cache'
 
 type DashboardSection = {
   id: string
@@ -180,7 +186,6 @@ export function Sidebar({
     let requestInProgress = false
 
     async function loadPendingRegistrationCount() {
-      // منع تداخل الاستعلامات إذا تأخر رد Supabase
       if (
         cancelled ||
         requestInProgress ||
@@ -244,10 +249,8 @@ export function Sidebar({
         return
       }
 
-      // جلب العدد عند فتح الصفحة أو الرجوع إليها
       void loadPendingRegistrationCount()
 
-      // ثم التحديث كل دقيقتين
       intervalId = window.setInterval(() => {
         void loadPendingRegistrationCount()
       }, 120000)
@@ -386,6 +389,7 @@ export function Sidebar({
   /*
    * -------------------------------------------------------
    * الأقسام المسموحة
+   * استخدام الكاش المشترك مع SectionRouter
    * -------------------------------------------------------
    */
   useEffect(() => {
@@ -395,41 +399,29 @@ export function Sidebar({
       try {
         setLoading(true)
 
-        const response = await fetch(
-          '/api/auth/dashboard-sections',
-          {
-            method: 'GET',
-            credentials: 'include',
-            cache: 'no-store',
-          },
-        )
+        const loadedSections =
+          await loadDashboardSections()
 
-        if (!response.ok) {
+        if (!cancelled) {
+          setSections(
+            loadedSections as DashboardSection[],
+          )
+        }
+      } catch (error) {
+        if (
+          error instanceof DashboardSectionsError &&
+          error.status === 401
+        ) {
+          clearDashboardSections()
+
           if (!cancelled) {
             setSections([])
+            router.replace('/login')
           }
 
           return
         }
 
-        const data = await response.json()
-
-        if (!cancelled) {
-          const loadedSections =
-            Array.isArray(data.sections)
-              ? data.sections
-                  .slice()
-                  .sort(
-                    (
-                      a: DashboardSection,
-                      b: DashboardSection,
-                    ) => a.sort_order - b.sort_order,
-                  )
-              : []
-
-          setSections(loadedSections)
-        }
-      } catch (error) {
         console.error(
           'Load dashboard sections error:',
           error,
@@ -450,7 +442,7 @@ export function Sidebar({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [router])
 
   /*
    * -------------------------------------------------------
@@ -599,12 +591,6 @@ export function Sidebar({
   /*
    * -------------------------------------------------------
    * تسجيل الخروج
-   *
-   * 1. منع النقر المتكرر.
-   * 2. مسح الكاش.
-   * 3. بدء طلب الخروج دون انتظاره.
-   * 4. مشاركة وعد الخروج مع صفحة الدخول.
-   * 5. الانتقال مباشرة إلى صفحة الدخول.
    * -------------------------------------------------------
    */
   function handleLogout() {
