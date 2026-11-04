@@ -608,8 +608,8 @@ export function TeachersView() {
   }
 
   const currentCourse =
-    courses[0] ?? null
-
+    courses.find((course) => !course.isClosed) ?? null
+  
   const actualCurrentCourseTeacherIds =
     currentCourse
       ? new Set(
