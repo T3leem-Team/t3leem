@@ -220,8 +220,11 @@ export default function LoginPage() {
                     )
                   )
                 })
-                .sort((a, b) => a.sort_order - b.sort_order)
-            : []
+                .sort((
+                      a: DashboardSection,
+                      b: DashboardSection,
+                    ) => a.sort_order - b.sort_order)
+              : []
 
       saveDashboardSections(sections)
 
