@@ -69,12 +69,37 @@ jobs:
             process.exit(1);
           }
 
+          const sections = [
+            'dependencies',
+            'devDependencies',
+            'optionalDependencies',
+            'peerDependencies',
+          ];
+
+          const hasXlsx = sections.some(
+            (section) => Boolean(pkg[section]?.xlsx)
+          );
+
+          if (hasXlsx) {
+            console.error('ERROR: Old xlsx dependency must be removed.');
+            process.exit(1);
+          }
+
           console.log(`ExcelJS requested version: ${pkg.dependencies.exceljs}`);
-          console.log(`Existing xlsx dependency preserved: ${Boolean(pkg.dependencies.xlsx)}`);
+          console.log('Old xlsx dependency: removed');
           NODE
 
       - name: Regenerate lockfile
         run: pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
+
+      - name: Verify old xlsx removal
+        run: |
+          if grep -nE '^[[:space:]]*xlsx(@[^:]+)?:' pnpm-lock.yaml; then
+            echo "ERROR: Old xlsx package still exists in pnpm-lock.yaml."
+            exit 1
+          fi
+
+          echo "Verified: old xlsx package is absent from pnpm-lock.yaml."
 
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -113,7 +138,7 @@ jobs:
             },
             {
               name: 'zod 4.6.6 or newer',
-              pattern: /zod@(?:4\.(?:6\.\d+|[7-9]\.\d+|[1-9]\d+\.\d+)|[5-9]\.\d+\.\d+|[1-9]\d+\.\d+\.\d+)(?:\(|:)/,
+              pattern: /zod@(?:4\.(?:6\.\d+|[7-9]\.\d+|[1-9]\d+\.\d+)|[5-9]\.\d+\.\d+|[1-9]\d*\.\d+\.\d+)(?:\(|:)/,
             },
           ];
 
@@ -148,5 +173,5 @@ jobs:
           fi
 
           git diff --cached --stat
-          git commit -m "fix: update uuid dependency security"
+          git commit -m "security: remove vulnerable xlsx dependency"
           git push origin main
