@@ -1,5 +1,9 @@
 export type DashboardSection = {
+  id: string
   section_key: string
+  section_name: string
+  description?: string | null
+  icon?: string | null
   href: string
   sort_order: number
 }
@@ -43,10 +47,18 @@ function isValidSection(
   const item = section as Record<string, unknown>
 
   return (
+    typeof item.id === 'string' &&
     typeof item.section_key === 'string' &&
+    typeof item.section_name === 'string' &&
     typeof item.href === 'string' &&
     typeof item.sort_order === 'number' &&
-    Number.isFinite(item.sort_order)
+    Number.isFinite(item.sort_order) &&
+    (item.description === undefined ||
+      item.description === null ||
+      typeof item.description === 'string') &&
+    (item.icon === undefined ||
+      item.icon === null ||
+      typeof item.icon === 'string')
   )
 }
 
@@ -58,7 +70,11 @@ function normalizeSections(
   return value
     .filter(isValidSection)
     .map((section) => ({
+      id: section.id,
       section_key: section.section_key,
+      section_name: section.section_name,
+      description: section.description ?? null,
+      icon: section.icon ?? null,
       href: section.href,
       sort_order: section.sort_order,
     }))
