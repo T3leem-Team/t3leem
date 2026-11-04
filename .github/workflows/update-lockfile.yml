@@ -1,5 +1,4 @@
-
-name: Check ExcelJS Security
+name: Check Minimatch Compatibility
 
 on:
   workflow_dispatch:
@@ -7,17 +6,13 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: check-exceljs-security
-  cancel-in-progress: false
-
 jobs:
-  check-dependencies:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Checkout main
+      - name: Checkout
         uses: actions/checkout@v5
         with:
           ref: main
@@ -27,56 +22,24 @@ jobs:
         with:
           version: 12.3.4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Check latest ExcelJS
+      - name: Check dependency requirements
         run: |
-          echo "=========================================="
-          echo "LATEST EXCELJS VERSION"
-          echo "=========================================="
-          pnpm view exceljs version
+          echo "===== GLOB 7 ====="
+          pnpm view glob@7.2.3 dependencies
 
           echo ""
-          echo "=========================================="
-          echo "CURRENT EXCELJS DEPENDENCIES"
-          echo "=========================================="
-          pnpm view exceljs@4.4.0 dependencies
+          echo "===== READDIR-GLOB 1 ====="
+          pnpm view readdir-glob@1.1.3 dependencies
 
           echo ""
-          echo "=========================================="
-          echo "LATEST EXCELJS DEPENDENCIES"
-          echo "=========================================="
-          pnpm view exceljs@latest dependencies
-
-      - name: Check latest archiver
-        run: |
-          echo "=========================================="
-          echo "LATEST ARCHIVER VERSION"
-          echo "=========================================="
-          pnpm view archiver version
+          echo "===== MINIMATCH 11.0.1 ====="
+          pnpm view minimatch@11.0.1 engines
 
           echo ""
-          echo "=========================================="
-          echo "ARCHIVER DEPENDENCIES"
-          echo "=========================================="
-          pnpm view archiver@latest dependencies
-
-      - name: Inspect current dependency trees
-        run: |
-          echo "=========================================="
-          echo "MINIMATCH"
-          echo "=========================================="
-          pnpm why minimatch
-
-          echo ""
-          echo "=========================================="
-          echo "EXCELJS"
-          echo "=========================================="
-          pnpm why exceljs
+          echo "===== MINIMATCH 11 API ====="
+          pnpm view minimatch@11.0.1 exports
