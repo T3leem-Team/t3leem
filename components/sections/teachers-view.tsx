@@ -332,10 +332,7 @@ export function TeachersView() {
         const permissionData =
           await permissionsResponse.json()
 
-        console.log(
-          'TEACHERS ACCESS - permissions:',
-          permissionData,
-        )
+     
 
         setCurrentUserRole(
           permissionData?.role ??
@@ -368,12 +365,7 @@ export function TeachersView() {
             permissionData?.allowTeacherRemove,
           )
 
-        console.log(
-          'TEACHERS ACCESS - transfer:',
-          nextAllowTeacherTransfer,
-          'remove:',
-          nextAllowTeacherRemove,
-        )
+        
 
         setAllowTeacherTransfer(
           nextAllowTeacherTransfer,
