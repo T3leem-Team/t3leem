@@ -1595,6 +1595,23 @@ const createSheet = (
 
   worksheet.addRows(rows)
 
+  worksheet.views = [
+    { state: 'frozen', ySplit: 1 },
+  ]
+
+  const headerRow = worksheet.getRow(1)
+
+  headerRow.font = {
+    bold: true,
+  }
+
+  headerRow.alignment = {
+    vertical: 'middle',
+    horizontal: 'center',
+  }
+
+  headerRow.height = 24
+
   return worksheet
 }
 
@@ -1657,8 +1674,10 @@ document.body.appendChild(link)
 link.click()
 link.remove()
 
-URL.revokeObjectURL(url)
-      setSupabaseStatus(
+window.setTimeout(() => {
+  URL.revokeObjectURL(url)
+}, 1000)
+  setSupabaseStatus(
         'تم تنزيل ملف Excel الكامل للدورة بنجاح ✅',
       )
     } catch (error) {
