@@ -188,24 +188,40 @@ export default function LoginPage() {
         return
       }
 
-      const sections: DashboardSection[] =
-        Array.isArray(sectionsData?.sections)
-          ? [...sectionsData.sections]
-              .filter(
-                (section) =>
-                  section &&
-                  typeof section.section_key === 'string' &&
-                  typeof section.href === 'string',
-              )
-              .sort(
-                (
-                  a: DashboardSection,
-                  b: DashboardSection,
-                ) =>
-                  (a.sort_order ?? 0) -
-                  (b.sort_order ?? 0),
-              )
-          : []
+          const sections: DashboardSection[] =
+          Array.isArray(sectionsData?.sections)
+            ? sectionsData.sections
+                .filter((section: unknown): section is DashboardSection => {
+                  if (
+                    typeof section !== 'object' ||
+                    section === null
+                  ) {
+                    return false
+                  }
+  
+                  const item = section as Record<string, unknown>
+  
+                  return (
+                    typeof item.id === 'string' &&
+                    typeof item.section_key === 'string' &&
+                    typeof item.section_name === 'string' &&
+                    typeof item.href === 'string' &&
+                    typeof item.sort_order === 'number' &&
+                    Number.isFinite(item.sort_order) &&
+                    (
+                      item.icon === undefined ||
+                      item.icon === null ||
+                      typeof item.icon === 'string'
+                    ) &&
+                    (
+                      item.description === undefined ||
+                      item.description === null ||
+                      typeof item.description === 'string'
+                    )
+                  )
+                })
+                .sort((a, b) => a.sort_order - b.sort_order)
+            : []
 
       saveDashboardSections(sections)
 
