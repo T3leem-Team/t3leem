@@ -496,25 +496,7 @@ export function AttendanceView(
       return undefined
     }
 
-    console.log('[Attendance Debug]', {
-      studentId,
-      currentCourseId: currentCourse.id,
-      date,
-      matchingRecords: attendanceRecords
-        .filter(
-          (record) =>
-            record.studentId === studentId &&
-            record.courseId === currentCourse.id &&
-            record.attendanceDate === date,
-        )
-        .map((record) => ({
-          studentId: record.studentId,
-          courseId: record.courseId,
-          attendanceDate: record.attendanceDate,
-          statusId: record.statusId,
-        })),
-    })
-
+  
     return attendanceRecords.find(
       (record) =>
         record.studentId === studentId &&
@@ -553,22 +535,7 @@ export function AttendanceView(
       ? 'غير منضم'
       : localStatus || statusFromDatabase
 
-    console.log('[Attendance Status Debug]', {
-      studentId,
-      date,
-      joinDate: student?.joinDate,
-      beforeJoinDate,
-      statusId: record?.statusId,
-      availableStatuses: attendanceStatuses.map(
-        (status) => ({
-          id: status.id,
-          name: status.name,
-        }),
-      ),
-      statusFromDatabase,
-      localStatus,
-      finalStatus,
-    })
+   
 
     return finalStatus
   }
