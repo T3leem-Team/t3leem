@@ -1,27 +1,26 @@
 
-name: Fix dependency security
+name: Check ExcelJS Security
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: fix-dependency-security
+  group: check-exceljs-security
   cancel-in-progress: false
 
 jobs:
-  fix-dependencies:
+  check-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout main
         uses: actions/checkout@v5
         with:
           ref: main
-          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -34,178 +33,50 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Check workspace overrides
-        run: |
-          echo "=== pnpm-workspace.yaml ==="
-          cat pnpm-workspace.yaml
-
-          echo "=== pnpm version ==="
-          pnpm --version
-
-          grep -qE '^overrides:' pnpm-workspace.yaml || {
-            echo "ERROR: overrides section is missing."
-            exit 1
-          }
-
-          grep -qE '^[[:space:]]+ip-address:[[:space:]]*10\.7\.4[[:space:]]*$' pnpm-workspace.yaml || {
-            echo "ERROR: ip-address override must be 10.7.4."
-            exit 1
-          }
-
-          grep -qE '^[[:space:]]+uuid:[[:space:]]*\^?11\.1\.1' pnpm-workspace.yaml || {
-            echo "ERROR: uuid override to 11.1.1 or newer is missing."
-            exit 1
-          }
-
-      - name: Verify ExcelJS dependency
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-
-          if (!pkg.dependencies?.exceljs) {
-            console.error('ERROR: exceljs is missing from package.json dependencies.');
-            process.exit(1);
-          }
-
-          const sections = [
-            'dependencies',
-            'devDependencies',
-            'optionalDependencies',
-            'peerDependencies',
-          ];
-
-          const hasXlsx = sections.some(
-            (section) => Boolean(pkg[section]?.xlsx)
-          );
-
-          if (hasXlsx) {
-            console.error('ERROR: Old xlsx dependency must be removed.');
-            process.exit(1);
-          }
-
-          console.log(`ExcelJS requested version: ${pkg.dependencies.exceljs}`);
-          console.log('Old xlsx dependency: removed');
-          NODE
-
-      - name: Regenerate lockfile
-        run: pnpm install --lockfile-only --force --ignore-scripts --no-frozen-lockfile
-
-      - name: Verify old xlsx removal
-        run: |
-          if grep -nE '^[[:space:]]*xlsx(@[^:]+)?:' pnpm-lock.yaml; then
-            echo "ERROR: Old xlsx package still exists in pnpm-lock.yaml."
-            exit 1
-          fi
-
-          echo "Verified: old xlsx package is absent from pnpm-lock.yaml."
-
-      - name: Verify frozen installation
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Inspect actual dependency versions
+      - name: Check latest ExcelJS
         run: |
           echo "=========================================="
-          echo "ACTUAL VERSION: ip-address"
+          echo "LATEST EXCELJS VERSION"
           echo "=========================================="
-          pnpm why ip-address || true
+          pnpm view exceljs version
 
           echo ""
           echo "=========================================="
-          echo "ACTUAL VERSION: zod"
+          echo "CURRENT EXCELJS DEPENDENCIES"
           echo "=========================================="
-          pnpm why zod || true
+          pnpm view exceljs@4.4.0 dependencies
 
           echo ""
           echo "=========================================="
-          echo "LOCKFILE ENTRIES"
+          echo "LATEST EXCELJS DEPENDENCIES"
           echo "=========================================="
-          grep -n -A 5 -B 2 -E 'ip-address|zod@' pnpm-lock.yaml || true
+          pnpm view exceljs@latest dependencies
 
-      - name: Inspect vulnerable dependency trees
+      - name: Check latest archiver
         run: |
           echo "=========================================="
-          echo "DEPENDENCY TREE: minimatch"
+          echo "LATEST ARCHIVER VERSION"
           echo "=========================================="
-          pnpm why minimatch || true
+          pnpm view archiver version
 
           echo ""
           echo "=========================================="
-          echo "DEPENDENCY TREE: @hono/node-server"
+          echo "ARCHIVER DEPENDENCIES"
           echo "=========================================="
-          pnpm why @hono/node-server || true
+          pnpm view archiver@latest dependencies
 
-          echo ""
-          echo "=========================================="
-          echo "DEPENDENCY TREE: deepmerge"
-          echo "=========================================="
-          pnpm why deepmerge || true
-
-      - name: Verify dependency versions
+      - name: Inspect current dependency trees
         run: |
+          echo "=========================================="
+          echo "MINIMATCH"
+          echo "=========================================="
+          pnpm why minimatch
+
+          echo ""
+          echo "=========================================="
+          echo "EXCELJS"
+          echo "=========================================="
           pnpm why exceljs
-          pnpm why uuid
-          pnpm why ip-address
-          pnpm why nanoid
-          pnpm why zod
-
-      - name: Verify lockfile versions
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-
-          const lock = fs.readFileSync('pnpm-lock.yaml', 'utf8');
-
-          const checks = [
-            {
-              name: 'exceljs',
-              pattern: /exceljs@[^:\s(]+(?:\(|:)/,
-            },
-            {
-              name: 'uuid 11.1.1 or newer',
-              pattern: /uuid@(?:11\.(?:[1-9]\d*|[1-9]\d*\.\d+)|1[2-9]\.\d+\.\d+|[2-9]\d*\.\d+\.\d+)(?:\(|:)/,
-            },
-            {
-              name: 'ip-address 10.7.4',
-              pattern: /ip-address@10\.7\.4(?:\(|:)/,
-            },
-            {
-              name: 'nanoid 3.3.18',
-              pattern: /nanoid@3\.3\.18(?:\(|:)/,
-            },
-            {
-              name: 'zod 4.6.6 or newer',
-              pattern: /zod@(?:4\.(?:6\.\d+|[7-9]\.\d+|[1-9]\d+\.\d+)|[5-9]\.\d+\.\d+|[1-9]\d*\.\d+\.\d+)(?:\(|:)/,
-            },
-          ];
-
-          console.log('=== Lockfile version checks (informational) ===');
-
-          for (const item of checks) {
-            const found = item.pattern.test(lock);
-            console.log(`${item.name}: ${found ? 'FOUND' : 'NOT FOUND'}`);
-          }
-
-          console.log('Version inspection completed. See actual dependency versions above.');
-          NODE
-
-      - name: Audit dependencies
-        run: pnpm audit --audit-level=high
-        continue-on-error: true
-
-      - name: Commit lockfile only
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add pnpm-lock.yaml
-
-          if git diff --cached --quiet; then
-            echo "No lockfile changes to commit."
-            exit 0
-          fi
-
-          git diff --cached --stat
-          git commit -m "security: remove vulnerable xlsx dependency"
-          git push origin main
