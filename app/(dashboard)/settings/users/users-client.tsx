@@ -294,14 +294,11 @@ export default function Page() {
 
  return (
   <div className="space-y-6">
-    <div
-      dir="rtl"
-      className="flex flex-col items-start gap-3 sm:flex-row sm:items-center"
-    >
+    <div dir="rtl" className="flex flex-col items-start gap-4">
       <button
         type="button"
         onClick={() => router.back()}
-        className="ml-auto inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
       >
         <ArrowRight className="h-4 w-4" />
         عودة
@@ -314,6 +311,8 @@ export default function Page() {
         />
       </div>
     </div>
+
+ 
 
     {showForm ? (
       <div className="fixed inset-0 z-[100]">
