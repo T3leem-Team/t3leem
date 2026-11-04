@@ -156,32 +156,7 @@ export function SectionRouter() {
   const router = useRouter()
 
   const [sections, setSections] =
-    useState<DashboardSection[] | null>(
-      () => {
-        /*
-         * أول شيء:
-         * حاول استخدام الكاش الموجود في الذاكرة.
-         */
-        if (sectionsCache) {
-          return sectionsCache
-        }
-
-        /*
-         * إذا كانت الصفحة فتحت بعد LoginPage مباشرة،
-         * نقرأ النتيجة التي حفظها LoginPage.
-         */
-        const stored =
-          getDashboardSections()
-
-        if (stored) {
-          sectionsCache = stored
-          return stored
-        }
-
-        return null
-      },
-    )
-
+    useState<DashboardSection[] | null>(null)
   /*
    * --------------------------------------------------
    * تحديث الصلاحيات في الخلفية
