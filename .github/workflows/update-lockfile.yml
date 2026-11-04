@@ -104,6 +104,25 @@ jobs:
       - name: Verify frozen installation
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Inspect vulnerable dependency trees
+        run: |
+          echo "=========================================="
+          echo "DEPENDENCY TREE: minimatch"
+          echo "=========================================="
+          pnpm why minimatch || true
+
+          echo ""
+          echo "=========================================="
+          echo "DEPENDENCY TREE: @hono/node-server"
+          echo "=========================================="
+          pnpm why @hono/node-server || true
+
+          echo ""
+          echo "=========================================="
+          echo "DEPENDENCY TREE: deepmerge"
+          echo "=========================================="
+          pnpm why deepmerge || true
+
       - name: Verify dependency versions
         run: |
           pnpm why exceljs
