@@ -293,22 +293,25 @@ export default function Page() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title="المستخدمون والصلاحيات"
-          description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
-        />
+  <div className="space-y-6">
+    <div
+      dir="rtl"
+      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <PageHeader
+        title="المستخدمون والصلاحيات"
+        description="إدارة حسابات المستخدمين والأدوار وأقسام النظام والصلاحيات التفصيلية."
+      />
 
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-        >
-          <ArrowRight className="h-4 w-4" />
-          عودة
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+      >
+        <ArrowRight className="h-4 w-4" />
+        عودة
+      </button>
+    </div>
 
       {showForm ? (
         <div className="fixed inset-0 z-[100]">
