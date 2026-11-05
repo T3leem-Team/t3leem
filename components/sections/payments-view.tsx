@@ -18,7 +18,7 @@ export function PaymentsView() {
   return (
     <div dir="rtl" className="space-y-6">
 
-      <div className="flex flex-col gap-4 md:flex-row-reverse">
+      <div className="grid gap-4 md:grid-cols-3">
 
         {/* المدفوعات */}
         <button
