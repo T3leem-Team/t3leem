@@ -60,9 +60,10 @@ export default function PaymentStudentsTable({
 
         <div
           ref={scrollRef}
-          dir="rtl"
+          dir="ltr"
           className="h-[65vh] min-h-[350px] max-h-[650px] overflow-auto"
         >
+          <div dir="rtl">
           <div dir="rtl">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
