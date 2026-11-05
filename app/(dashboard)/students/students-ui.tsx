@@ -274,163 +274,114 @@ export function StudentsUI({
       dir="rtl"
       className="mx-auto min-w-0 max-w-[1600px] space-y-5 pb-6"
     >
-      {/* عنوان الصفحة */}
+      {/* رأس الصفحة المختصر: العنوان + حالة الاتصال + إضافة طالب */}
       <div className="overflow-hidden rounded-2xl border border-sky-200/70 bg-gradient-to-l from-sky-50 via-white to-white shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
         <PageHeader
           title="إدارة الطلاب"
           description="إدارة سجلات الطلاب والرسوم والبيانات الدراسية"
           action={
-            <Button
-              type="button"
-              onClick={openAddStudent}
-              className="h-10 w-full gap-2 rounded-xl bg-sky-600 px-4 text-white shadow-sm transition-colors hover:bg-sky-700 sm:w-auto"
-            >
-              <UserPlus className="size-4" />
-              إضافة طالب
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div
+                title={supabaseStatus || 'حالة الاتصال غير محددة'}
+                className={`inline-flex h-9 max-w-[220px] items-center gap-2 rounded-xl border px-3 text-xs font-medium ${
+                  isLoadingStudents
+                    ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300'
+                    : isConnected
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {isLoadingStudents ? (
+                  <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                ) : (
+                  <Database className="size-3.5 shrink-0" />
+                )}
+                <span className="truncate">
+                  {isLoadingStudents
+                    ? 'جارٍ التحميل'
+                    : isConnected
+                      ? 'متصل بقاعدة البيانات'
+                      : 'حالة الاتصال'}
+                </span>
+                <span
+                  className={`size-2 shrink-0 rounded-full ${
+                    isLoadingStudents
+                      ? 'animate-pulse bg-amber-500'
+                      : isConnected
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-400'
+                  }`}
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={openAddStudent}
+                className="h-9 shrink-0 gap-2 rounded-xl bg-sky-600 px-3 text-white shadow-sm transition-colors hover:bg-sky-700"
+              >
+                <UserPlus className="size-4" />
+                إضافة طالب
+              </Button>
+            </div>
           }
         />
       </div>
 
-      {/* حالة اتصال قاعدة البيانات */}
-      <section
-        className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-sm ${
-          isConnected
-            ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 via-white to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900'
-            : 'border-slate-200 bg-gradient-to-l from-slate-50 via-white to-white dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900'
-        }`}
-      >
-        <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${
-            isConnected
-              ? 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-              : 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          {isLoadingStudents ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Database className="size-4" />
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            اتصال قاعدة البيانات
-          </p>
-
-          <p
-            title={supabaseStatus}
-            className={`mt-0.5 break-words text-xs ${
-              isConnected
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : 'text-slate-500 dark:text-slate-400'
-            }`}
-          >
-            {isLoadingStudents
-              ? 'جارٍ تحميل بيانات الطلاب...'
-              : supabaseStatus || 'حالة الاتصال غير محددة'}
-          </p>
-        </div>
-
-        <span
-          className={`size-2.5 shrink-0 rounded-full ${
-            isLoadingStudents
-              ? 'animate-pulse bg-amber-400'
-              : isConnected
-                ? 'bg-emerald-500'
-                : 'bg-slate-400'
-          }`}
-        />
-      </section>
-
-      {/* معلومات الدراسة */}
-      <section className="overflow-hidden rounded-2xl border border-indigo-200/70 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex items-center gap-3 border-b border-indigo-100 bg-gradient-to-l from-indigo-50/80 via-white to-white px-4 py-3 dark:border-slate-700 dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
-          <div className="flex size-9 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
-            <CalendarDays className="size-4" />
-          </div>
-
-          <div>
-            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-              معلومات الدراسة
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              السنة والدورة والرسوم الحالية
+      {/* معلومات الدراسة في شريط واحد لتقليل ارتفاع الصفحة */}
+      <section className="grid grid-cols-1 gap-2 rounded-2xl border border-indigo-200/70 bg-white p-2 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-3">
+        <div className="flex min-w-0 items-center gap-2 rounded-xl bg-indigo-50/70 px-3 py-2 dark:bg-indigo-950/20">
+          <CalendarDays className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">السنة الدراسية</p>
+            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {currentAcademicYearName || 'غير محددة'}
             </p>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-3 sm:p-4">
-          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-900/70 dark:bg-indigo-950/20">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-              <CalendarDays className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                السنة الدراسية
-              </p>
-              <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {currentAcademicYearName || 'غير محددة'}
-              </p>
-            </div>
+        <div className="flex min-w-0 items-center gap-2 rounded-xl bg-sky-50/70 px-3 py-2 dark:bg-sky-950/20">
+          <BookOpen className="size-4 shrink-0 text-sky-600 dark:text-sky-300" />
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">الدورة الحالية</p>
+            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+              {currentCourseName || 'غير محددة'}
+            </p>
           </div>
-
-          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-sky-100 bg-sky-50/50 p-3 dark:border-sky-900/70 dark:bg-sky-950/20">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
-              <BookOpen className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                الدورة الحالية
-              </p>
-              <p className="mt-1 truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-                {currentCourseName || 'غير محددة'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex min-w-0 items-center gap-3 rounded-xl border border-amber-100 bg-amber-50/50 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-              <Wallet className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                الرسوم السنوية
-              </p>
-              <p className="mt-1 text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
-                {formattedAnnualFee} د.ب
-              </p>
-            </div>
+        </div>
+        <div className="flex min-w-0 items-center gap-2 rounded-xl bg-amber-50/70 px-3 py-2 dark:bg-amber-950/20">
+          <Wallet className="size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+          <div className="min-w-0">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">الرسوم السنوية</p>
+            <p className="truncate text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
+              {formattedAnnualFee} د.ب
+            </p>
           </div>
         </div>
       </section>
 
       {/* الإحصائيات */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="group flex items-center gap-3 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-sky-900 dark:from-sky-950/50 dark:via-slate-900 dark:to-slate-900">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sky-700 transition-transform group-hover:scale-105 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300">
-            <Users className="size-5" />
+      <section className="grid grid-cols-2 gap-2">
+        <div className="group flex items-center gap-3 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-white p-3 shadow-sm transition-all hover:shadow-md dark:border-sky-900 dark:from-sky-950/50 dark:via-slate-900 dark:to-slate-900">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sky-700 transition-transform group-hover:scale-105 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300">
+            <Users className="size-4" />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium text-sky-800 dark:text-sky-300">
               إجمالي الطلاب
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-sky-950 dark:text-sky-100">
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-sky-950 dark:text-sky-100">
               {formattedTotal}
             </p>
           </div>
         </div>
 
-        <div className="group flex items-center gap-3 overflow-hidden rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50 via-white to-white p-4 shadow-sm transition-all hover:shadow-md dark:border-violet-900 dark:from-violet-950/50 dark:via-slate-900 dark:to-slate-900">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-violet-200 bg-violet-100 text-violet-700 transition-transform group-hover:scale-105 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300">
-            <Filter className="size-5" />
+        <div className="group flex items-center gap-3 overflow-hidden rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50 via-white to-white p-3 shadow-sm transition-all hover:shadow-md dark:border-violet-900 dark:from-violet-950/50 dark:via-slate-900 dark:to-slate-900">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-violet-200 bg-violet-100 text-violet-700 transition-transform group-hover:scale-105 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300">
+            <Filter className="size-4" />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium text-violet-800 dark:text-violet-300">
               النتائج الحالية
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-violet-950 dark:text-violet-100">
+            <p className="mt-0.5 text-xl font-bold tabular-nums text-violet-950 dark:text-violet-100">
               {formattedResults}
             </p>
           </div>
