@@ -58,12 +58,13 @@ export default function PaymentStudentsTable({
           </span>
         </div>
 
+        {/* Scroll container: LTR moves the vertical scrollbar to the right */}
         <div
           ref={scrollRef}
           dir="ltr"
           className="h-[65vh] min-h-[350px] max-h-[650px] overflow-auto"
         >
-          <div dir="rtl">
+          {/* Keep Arabic table content RTL */}
           <div dir="rtl">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
@@ -302,4 +303,3 @@ export default function PaymentStudentsTable({
     </Card>
   )
 }
-8
