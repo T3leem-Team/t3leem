@@ -437,96 +437,6 @@ export function StudentsUI({
         </div>
       </section>
 
-      {/* إجراءات الطالب */}
-      <Card className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="border-b border-slate-100 bg-gradient-to-l from-slate-50 via-white to-white p-4 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
-                <Pencil className="size-4" />
-              </div>
-
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 sm:text-base">
-                  إجراءات الطالب
-                </h2>
-                <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                  {selectedStudentId
-                    ? `الطالب المحدد: ${selectedStudent?.name ?? 'طالب محدد'}`
-                    : 'حدّد طالباً من السجل لتفعيل الإجراءات'}
-                </p>
-              </div>
-            </div>
-
-            {selectedStudentId && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300">
-                <CheckCircle2 className="size-3.5" />
-                طالب محدد
-              </span>
-            )}
-          </div>
-        </div>
-
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!selectedStudentId}
-              onClick={openEditStudent}
-              className={`${actionButtonClass} border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-indigo-950/40`}
-            >
-              <Pencil className="size-4" />
-              تعديل
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!selectedStudentId}
-              onClick={() => void toggleFeeExemption()}
-              className={`${actionButtonClass} border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-amber-950/30`}
-            >
-              <Wallet className="size-4" />
-              {selectedStudent?.feeExempt
-                ? 'إلغاء الإعفاء'
-                : 'إعفاء من الرسوم'}
-            </Button>
-
-            {canDelete && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!selectedStudentId}
-                onClick={() => void deleteStudent()}
-                className={`${actionButtonClass} border-rose-200 bg-rose-50/60 text-rose-700 hover:border-rose-300 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/60`}
-              >
-                <Trash2 className="size-4" />
-                حذف الطالب
-              </Button>
-            )}
-
-            <div className="hidden h-7 w-px bg-border sm:block" />
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={totalFilteredStudents === 0 || isLoadingStudents}
-              onClick={exportStudentsToExcel}
-              className={`${actionButtonClass} border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60`}
-            >
-              <FileSpreadsheet className="size-4" />
-              تنزيل Excel
-              <Download className="size-3.5 opacity-70" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* سجل الطلاب والبحث */}
       <Card className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-3 border-b border-cyan-100 bg-gradient-to-l from-cyan-50/80 via-white to-white px-4 py-4 dark:border-slate-700 dark:from-cyan-950/30 dark:via-slate-900 dark:to-slate-900">
@@ -598,6 +508,78 @@ export function StudentsUI({
                 <Settings2 className="size-4" />
                 {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
               </Button>
+
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-800/40">
+                <div className="flex min-w-0 items-center gap-2 px-2">
+                  <Pencil className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      إجراءات الطالب
+                    </p>
+                    <p className="max-w-[220px] truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {selectedStudentId
+                        ? `الطالب المحدد: ${selectedStudent?.name ?? 'طالب محدد'}`
+                        : 'حدّد طالباً من السجل لتفعيل الإجراءات'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedStudentId}
+              onClick={openEditStudent}
+              className={`${actionButtonClass} border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-indigo-950/40`}
+            >
+              <Pencil className="size-4" />
+              تعديل
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedStudentId}
+              onClick={() => void toggleFeeExemption()}
+              className={`${actionButtonClass} border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-amber-950/30`}
+            >
+              <Wallet className="size-4" />
+              {selectedStudent?.feeExempt
+                ? 'إلغاء الإعفاء'
+                : 'إعفاء من الرسوم'}
+            </Button>
+
+            {canDelete && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedStudentId}
+                onClick={() => void deleteStudent()}
+                className={`${actionButtonClass} border-rose-200 bg-rose-50/60 text-rose-700 hover:border-rose-300 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/60`}
+              >
+                <Trash2 className="size-4" />
+                حذف الطالب
+              </Button>
+            )}
+
+            <div className="hidden h-7 w-px bg-border sm:block" />
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={totalFilteredStudents === 0 || isLoadingStudents}
+              onClick={exportStudentsToExcel}
+              className={`${actionButtonClass} border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60`}
+            >
+              <FileSpreadsheet className="size-4" />
+              تنزيل Excel
+              <Download className="size-3.5 opacity-70" />
+            </Button>
+          </div>
+              </div>
 
               {canDelete && (
                 <>
