@@ -446,152 +446,148 @@ export function StudentsUI({
             </div>
           </section>
 
-          {/* أزرار التحكم بالجدول */}
+          {/* أدوات الجدول وإجراءات الطالب */}
           <section className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowColumns((current) => !current)}
-                className="h-9 gap-2 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
-              >
-                <Settings2 className="size-4" />
-                {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
-              </Button>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowColumns((current) => !current)}
+                  className="h-10 w-full justify-center gap-2 rounded-xl border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 sm:w-auto sm:px-4 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
+                >
+                  <Settings2 className="size-4" />
+                  {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
+                </Button>
 
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-800/40">
-                <div className="flex min-w-0 items-center gap-2 px-2">
-                  <Pencil className="size-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                      إجراءات الطالب
-                    </p>
-                    <p className="max-w-[220px] truncate text-[11px] text-slate-500 dark:text-slate-400">
-                      {selectedStudentId
-                        ? `الطالب المحدد: ${selectedStudent?.name ?? 'طالب محدد'}`
-                        : 'حدّد طالباً من السجل لتفعيل الإجراءات'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!selectedStudentId}
-              onClick={openEditStudent}
-              className={`${actionButtonClass} border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-indigo-950/40`}
-            >
-              <Pencil className="size-4" />
-              تعديل
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!selectedStudentId}
-              onClick={() => void toggleFeeExemption()}
-              className={`${actionButtonClass} border-slate-200 bg-white hover:border-amber-200 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-amber-950/30`}
-            >
-              <Wallet className="size-4" />
-              {selectedStudent?.feeExempt
-                ? 'إلغاء الإعفاء'
-                : 'إعفاء من الرسوم'}
-            </Button>
-
-            {canDelete && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!selectedStudentId}
-                onClick={() => void deleteStudent()}
-                className={`${actionButtonClass} border-rose-200 bg-rose-50/60 text-rose-700 hover:border-rose-300 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-950/60`}
-              >
-                <Trash2 className="size-4" />
-                حذف الطالب
-              </Button>
-            )}
-
-            <div className="hidden h-7 w-px bg-border sm:block" />
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={totalFilteredStudents === 0 || isLoadingStudents}
-              onClick={exportStudentsToExcel}
-              className={`${actionButtonClass} border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60`}
-            >
-              <FileSpreadsheet className="size-4" />
-              تنزيل Excel
-              <Download className="size-3.5 opacity-70" />
-            </Button>
-          </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={totalFilteredStudents === 0 || isLoadingStudents}
+                  onClick={exportStudentsToExcel}
+                  className="h-10 w-full justify-center gap-2 rounded-xl border-emerald-200 bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100 sm:w-auto sm:px-4 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
+                >
+                  <FileSpreadsheet className="size-4" />
+                  تنزيل Excel
+                  <Download className="size-3.5 opacity-70" />
+                </Button>
               </div>
 
-              {canDelete && (
-                <>
+              <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                      <Pencil className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">إجراءات الطالب</p>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        {selectedStudentId
+                          ? `الطالب المحدد: ${selectedStudent?.name ?? 'طالب محدد'}`
+                          : 'اختر طالباً من الجدول لتفعيل الإجراءات'}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedStudentId && (
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      محدد
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      if (selectionMode) {
-                        exitSelectionMode()
-                      } else {
-                        setSelectionMode(true)
-                        setSelectedStudentIds([])
-                      }
-                    }}
-                    className={`h-9 gap-2 rounded-lg ${
-                      selectionMode
-                        ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
-                        : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
-                    }`}
+                    disabled={!selectedStudentId}
+                    onClick={openEditStudent}
+                    className="h-10 min-w-0 gap-2 rounded-xl border-slate-200 bg-white px-3 dark:border-slate-700 dark:bg-slate-900"
                   >
-                    {selectionMode ? (
-                      <X className="size-4" />
-                    ) : (
-                      <CheckCircle2 className="size-4" />
-                    )}
-                    {selectionMode ? 'إلغاء التحديد' : 'تحديد'}
+                    <Pencil className="size-4 shrink-0" />
+                    تعديل
                   </Button>
-
-                  {selectionMode && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={filteredStudents.length === 0}
-                        onClick={toggleSelectAll}
-                        className="h-9 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
-                      >
-                        <Users className="size-4" />
-                        {allStudentsSelected
-                          ? 'إلغاء تحديد الكل'
-                          : 'تحديد الكل'}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={selectedCount === 0 || deleteSaving}
-                        onClick={openDeleteConfirmation}
-                        className="h-9 gap-2 rounded-lg"
-                      >
-                        <Trash2 className="size-4" />
-                        مسح المحدد ({selectedCount})
-                      </Button>
-                    </>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedStudentId}
+                    onClick={() => void toggleFeeExemption()}
+                    className="h-10 min-w-0 gap-2 rounded-xl border-amber-200 bg-white px-3 text-amber-700 hover:bg-amber-50 dark:border-amber-900 dark:bg-slate-900 dark:text-amber-300"
+                  >
+                    <Wallet className="size-4 shrink-0" />
+                    <span className="truncate">{selectedStudent?.feeExempt ? 'إلغاء الإعفاء' : 'إعفاء من الرسوم'}</span>
+                  </Button>
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!selectedStudentId}
+                      onClick={() => void deleteStudent()}
+                      className="col-span-2 h-10 gap-2 rounded-xl border-rose-200 bg-rose-50/60 px-3 text-rose-700 hover:bg-rose-100 sm:col-span-1 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
+                    >
+                      <Trash2 className="size-4" />
+                      حذف الطالب
+                    </Button>
                   )}
-                </>
-              )}
+                </div>
+              </div>
             </div>
+
+            {canDelete && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectionMode) {
+                      exitSelectionMode()
+                    } else {
+                      setSelectionMode(true)
+                      setSelectedStudentIds([])
+                    }
+                  }}
+                  className={`h-9 gap-2 rounded-lg ${
+                    selectionMode
+                      ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                      : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
+                  }`}
+                >
+                  {selectionMode ? <X className="size-4" /> : <CheckCircle2 className="size-4" />}
+                  {selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد'}
+                </Button>
+                {selectionMode && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={filteredStudents.length === 0}
+                      onClick={toggleSelectAll}
+                      className="h-9 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                    >
+                      <Users className="size-4" />
+                      {allStudentsSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={selectedCount === 0 || deleteSaving}
+                      onClick={openDeleteConfirmation}
+                      className="h-9 gap-2 rounded-lg"
+                    >
+                      <Trash2 className="size-4" />
+                      مسح المحدد ({selectedCount})
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
 
             {selectionMode && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50/80 to-white px-3 py-2.5 dark:border-sky-900 dark:from-sky-950/40 dark:to-slate-900">
