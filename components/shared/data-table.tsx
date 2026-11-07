@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
@@ -45,10 +46,12 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Record<string, string[]>>({})
+  const [draftFilters, setDraftFilters] = useState<Record<string, string[]>>({})
   const [sort, setSort] = useState<{
     column: string
     direction: 'asc' | 'desc'
   } | null>(null)
+
   const [visibleColumns, setVisibleColumns] = useState(
     columns.map((column) => column.id)
   )
@@ -75,14 +78,18 @@ export function DataTable<T>({
         const selected = filters[column.id]
         if (!selected?.length) return true
 
-        return selected.includes(String(column.accessor(row) ?? ''))
+        return selected.includes(
+          String(column.accessor(row) ?? '')
+        )
       })
 
       return matchesSearch && matchesFilters
     })
 
     if (sort) {
-      const column = columns.find((item) => item.id === sort.column)
+      const column = columns.find(
+        (item) => item.id === sort.column
+      )
 
       if (column) {
         result = [...result].sort((a, b) => {
@@ -90,7 +97,8 @@ export function DataTable<T>({
           const second = column.accessor(b)
 
           const comparison =
-            typeof first === 'number' && typeof second === 'number'
+            typeof first === 'number' &&
+            typeof second === 'number'
               ? first - second
               : String(first ?? '').localeCompare(
                   String(second ?? ''),
@@ -98,7 +106,9 @@ export function DataTable<T>({
                   { numeric: true }
                 )
 
-          return sort.direction === 'asc' ? comparison : -comparison
+          return sort.direction === 'asc'
+            ? comparison
+            : -comparison
         })
       }
     }
@@ -106,7 +116,11 @@ export function DataTable<T>({
     return result
   }, [data, columns, search, filters, sort])
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize))
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredData.length / Math.max(1, pageSize))
+  )
+
   const currentPage = Math.min(page, totalPages)
 
   const pageData = filteredData.slice(
@@ -126,19 +140,76 @@ export function DataTable<T>({
 
       return null
     })
+
     setPage(1)
   }
 
-  const toggleFilter = (columnId: string, value: string) => {
-    setFilters((current) => {
+  // تغيير الاختيارات المؤقتة داخل نافذة الفلتر
+  const toggleDraftFilter = (
+    columnId: string,
+    value: string
+  ) => {
+    setDraftFilters((current) => {
       const selected = current[columnId] ?? []
+
       const next = selected.includes(value)
         ? selected.filter((item) => item !== value)
         : [...selected, value]
 
-      return { ...current, [columnId]: next }
+      return {
+        ...current,
+        [columnId]: next,
+      }
     })
+  }
+
+  // فتح الفلتر مع تحميل الاختيارات المطبقة سابقاً
+  const openColumnFilter = (columnId: string) => {
+    setDraftFilters((current) => ({
+      ...current,
+      [columnId]: [...(filters[columnId] ?? [])],
+    }))
+
+    setFilterSearch('')
+    setOpenFilter(columnId)
+  }
+
+  // تطبيق اختيارات الفلتر
+  const applyColumnFilter = (columnId: string) => {
+    setFilters((current) => {
+      const selected = draftFilters[columnId] ?? []
+
+      if (selected.length === 0) {
+        const next = { ...current }
+        delete next[columnId]
+        return next
+      }
+
+      return {
+        ...current,
+        [columnId]: selected,
+      }
+    })
+
     setPage(1)
+    setOpenFilter(null)
+  }
+
+  // مسح فلتر العمود
+  const clearColumnFilter = (columnId: string) => {
+    setFilters((current) => {
+      const next = { ...current }
+      delete next[columnId]
+      return next
+    })
+
+    setDraftFilters((current) => ({
+      ...current,
+      [columnId]: [],
+    }))
+
+    setPage(1)
+    setOpenFilter(null)
   }
 
   const toggleRow = (id: string | number) => {
@@ -150,6 +221,7 @@ export function DataTable<T>({
   }
 
   const pageIds = pageData.map(getRowId)
+
   const allSelected =
     pageIds.length > 0 &&
     pageIds.every((id) => selectedRows.includes(id))
@@ -162,14 +234,20 @@ export function DataTable<T>({
     )
   }
 
+  const hasActiveFilters = Object.values(filters).some(
+    (items) => items.length > 0
+  )
+
   return (
     <div dir="rtl" className="w-full space-y-3">
 
       {/* البحث وتخصيص الأعمدة */}
       <div className="flex flex-wrap items-center justify-between gap-3">
+
         {searchable && (
           <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+
             <input
               value={search}
               onChange={(e) => {
@@ -182,6 +260,7 @@ export function DataTable<T>({
           </div>
         )}
 
+        {/* تخصيص الأعمدة */}
         <details className="relative">
           <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-600">
             <SlidersHorizontal size={16} />
@@ -205,12 +284,15 @@ export function DataTable<T>({
                   onChange={() =>
                     setVisibleColumns((current) =>
                       current.includes(column.id)
-                        ? current.filter((id) => id !== column.id)
+                        ? current.filter(
+                            (id) => id !== column.id
+                          )
                         : [...current, column.id]
                     )
                   }
                   className="accent-teal-600"
                 />
+
                 {column.header}
               </label>
             ))}
@@ -218,7 +300,9 @@ export function DataTable<T>({
             <button
               type="button"
               onClick={() =>
-                setVisibleColumns(columns.map((column) => column.id))
+                setVisibleColumns(
+                  columns.map((column) => column.id)
+                )
               }
               className="mt-2 w-full border-t pt-2 text-xs text-teal-700"
             >
@@ -227,16 +311,18 @@ export function DataTable<T>({
           </div>
         </details>
 
-        {Object.values(filters).some((items) => items.length > 0) && (
+        {/* مسح جميع الفلاتر */}
+        {hasActiveFilters && (
           <button
             type="button"
             onClick={() => {
               setFilters({})
+              setDraftFilters({})
               setPage(1)
             }}
-            className="text-xs text-teal-700"
+            className="text-xs text-teal-700 hover:text-teal-900"
           >
-            مسح الفلاتر
+            مسح جميع الفلاتر
           </button>
         )}
       </div>
@@ -252,6 +338,7 @@ export function DataTable<T>({
         >
           <thead className="sticky top-0 z-20 bg-gray-50">
             <tr className="border-b border-gray-200">
+
               {selectable && (
                 <th className="sticky right-0 z-30 bg-gray-50 px-3 py-3">
                   <input
@@ -266,6 +353,7 @@ export function DataTable<T>({
 
               {activeColumns.map((column) => {
                 const selected = filters[column.id] ?? []
+
                 const options =
                   column.filterOptions ??
                   Array.from(
@@ -276,12 +364,17 @@ export function DataTable<T>({
                     )
                   )
 
+                const draftSelected =
+                  draftFilters[column.id] ?? []
+
                 return (
                   <th
                     key={column.id}
                     className={`relative whitespace-nowrap bg-gray-50 px-4 py-3 font-semibold text-gray-700 ${column.className ?? ''}`}
                   >
                     <div className="flex items-center gap-2">
+
+                      {/* الترتيب */}
                       {column.sortable !== false ? (
                         <button
                           type="button"
@@ -289,6 +382,7 @@ export function DataTable<T>({
                           className="flex items-center gap-1.5 hover:text-teal-700"
                         >
                           {column.header}
+
                           {sort?.column === column.id ? (
                             sort.direction === 'asc' ? (
                               <ChevronUp size={14} />
@@ -296,22 +390,28 @@ export function DataTable<T>({
                               <ChevronDown size={14} />
                             )
                           ) : (
-                            <ChevronDown size={13} className="text-gray-300" />
+                            <ChevronDown
+                              size={13}
+                              className="text-gray-300"
+                            />
                           )}
                         </button>
                       ) : (
                         column.header
                       )}
 
+                      {/* الفلترة متعددة الخيارات */}
                       {column.filterable !== false && (
                         <div className="relative">
+
                           <button
                             type="button"
                             onClick={() => {
-                              setOpenFilter(
-                                openFilter === column.id ? null : column.id
-                              )
-                              setFilterSearch('')
+                              if (openFilter === column.id) {
+                                setOpenFilter(null)
+                              } else {
+                                openColumnFilter(column.id)
+                              }
                             }}
                             className={`rounded p-1 hover:bg-gray-200 ${
                               selected.length
@@ -321,6 +421,12 @@ export function DataTable<T>({
                             aria-label={`فلترة ${column.header}`}
                           >
                             <Filter size={14} />
+
+                            {selected.length > 0 && (
+                              <span className="mr-1 text-[10px]">
+                                {selected.length}
+                              </span>
+                            )}
                           </button>
 
                           {openFilter === column.id && (
@@ -330,19 +436,23 @@ export function DataTable<T>({
                                 onClick={() => setOpenFilter(null)}
                               />
 
-                              <div className="absolute right-0 top-8 z-40 w-60 rounded-xl border border-gray-200 bg-white p-3 text-right font-normal shadow-xl">
-                                <div className="mb-2 flex items-center justify-between">
+                              <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 text-right font-normal shadow-xl">
+
+                                <div className="mb-3 flex items-center justify-between">
                                   <span className="text-xs font-semibold">
                                     فلترة: {column.header}
                                   </span>
+
                                   <button
                                     type="button"
                                     onClick={() => setOpenFilter(null)}
+                                    aria-label="إغلاق الفلتر"
                                   >
                                     <X size={15} />
                                   </button>
                                 </div>
 
+                                {/* البحث في الخيارات */}
                                 <input
                                   value={filterSearch}
                                   onChange={(e) =>
@@ -352,52 +462,77 @@ export function DataTable<T>({
                                   className="mb-2 h-9 w-full rounded-md border px-2 text-xs outline-none focus:border-teal-600"
                                 />
 
+                                {/* الخيارات */}
                                 <div className="max-h-48 space-y-1 overflow-y-auto">
+
                                   {options
                                     .filter((value) =>
                                       value
                                         .toLowerCase()
-                                        .includes(filterSearch.toLowerCase())
+                                        .includes(
+                                          filterSearch.toLowerCase()
+                                        )
                                     )
                                     .map((value) => (
                                       <label
                                         key={value}
-                                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-gray-50"
+                                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-gray-50"
                                       >
                                         <input
                                           type="checkbox"
-                                          checked={selected.includes(value)}
+                                          checked={draftSelected.includes(value)}
                                           onChange={() =>
-                                            toggleFilter(column.id, value)
+                                            toggleDraftFilter(
+                                              column.id,
+                                              value
+                                            )
                                           }
                                           className="accent-teal-600"
                                         />
-                                        {value || 'فارغ'}
+
+                                        <span>
+                                          {value || 'فارغ'}
+                                        </span>
                                       </label>
                                     ))}
+
+                                  {options.filter((value) =>
+                                    value
+                                      .toLowerCase()
+                                      .includes(
+                                        filterSearch.toLowerCase()
+                                      )
+                                  ).length === 0 && (
+                                    <p className="py-4 text-center text-xs text-gray-400">
+                                      لا توجد خيارات
+                                    </p>
+                                  )}
                                 </div>
 
-                                <div className="mt-2 flex justify-between border-t pt-2">
+                                {/* أزرار عامة للفلتر */}
+                                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      setFilters((current) => ({
-                                        ...current,
-                                        [column.id]: [],
-                                      }))
+                                      clearColumnFilter(column.id)
                                     }
-                                    className="text-xs text-gray-500"
+                                    className="text-xs text-gray-500 hover:text-red-600"
                                   >
-                                    مسح التحديد
+                                    مسح
                                   </button>
+
                                   <button
                                     type="button"
-                                    onClick={() => setOpenFilter(null)}
-                                    className="text-xs text-teal-700"
+                                    onClick={() =>
+                                      applyColumnFilter(column.id)
+                                    }
+                                    className="rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
                                   >
-                                    تم
+                                    تطبيق
                                   </button>
                                 </div>
+
                               </div>
                             </>
                           )}
@@ -414,7 +549,9 @@ export function DataTable<T>({
             {pageData.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeColumns.length + (selectable ? 1 : 0)}
+                  colSpan={
+                    activeColumns.length + (selectable ? 1 : 0)
+                  }
                   className="px-4 py-12 text-center text-gray-400"
                 >
                   {emptyMessage}
@@ -435,7 +572,9 @@ export function DataTable<T>({
                     {selectable && (
                       <td
                         className={`sticky right-0 z-10 px-3 py-3 ${
-                          isSelected ? 'bg-teal-50' : 'bg-white'
+                          isSelected
+                            ? 'bg-teal-50'
+                            : 'bg-white'
                         }`}
                       >
                         <input
@@ -472,12 +611,20 @@ export function DataTable<T>({
 
       {/* ترقيم الصفحات */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+
         <span>
-          عرض {filteredData.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+          عرض{' '}
+          {filteredData.length === 0
+            ? 0
+            : (currentPage - 1) * pageSize + 1}
           {' - '}
-          {Math.min(currentPage * pageSize, filteredData.length)}
+          {Math.min(
+            currentPage * pageSize,
+            filteredData.length
+          )}
           {' من '}
           {filteredData.length} سجل
+
           {selectable && selectedRows.length > 0 && (
             <span className="mr-2 text-teal-700">
               · تم تحديد {selectedRows.length}
@@ -486,11 +633,15 @@ export function DataTable<T>({
         </span>
 
         <div className="flex items-center gap-2">
+
           <button
             type="button"
             disabled={currentPage <= 1}
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            onClick={() =>
+              setPage((value) => Math.max(1, value - 1))
+            }
             className="rounded-md border p-1.5 disabled:opacity-30"
+            aria-label="الصفحة السابقة"
           >
             <ChevronRight size={16} />
           </button>
@@ -503,12 +654,16 @@ export function DataTable<T>({
             type="button"
             disabled={currentPage >= totalPages}
             onClick={() =>
-              setPage((value) => Math.min(totalPages, value + 1))
+              setPage((value) =>
+                Math.min(totalPages, value + 1)
+              )
             }
             className="rounded-md border p-1.5 disabled:opacity-30"
+            aria-label="الصفحة التالية"
           >
             <ChevronLeft size={16} />
           </button>
+
         </div>
       </div>
     </div>
