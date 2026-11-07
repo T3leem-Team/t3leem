@@ -1,4 +1,6 @@
+
 'use client'
+
 import { DataTable, type DataTableColumn } from '@/components/shared/data-table'
 
 type Student = {
@@ -26,11 +28,36 @@ const students: Student[] = [
 ]
 
 const columns: DataTableColumn<Student>[] = [
-  { id: 'name', header: 'اسم الطالب', accessor: (row) => row.name },
-  { id: 'personalId', header: 'الرقم الشخصي', accessor: (row) => row.personalId },
-  { id: 'grade', header: 'الصف', accessor: (row) => row.grade },
-  { id: 'phone', header: 'رقم الهاتف', accessor: (row) => row.phone },
-  { id: 'status', header: 'الحالة', accessor: (row) => row.status },
+  {
+    id: 'name',
+    header: 'اسم الطالب',
+    accessor: (row) => row.name,
+    filterType: 'text',
+  },
+  {
+    id: 'personalId',
+    header: 'الرقم الشخصي',
+    accessor: (row) => row.personalId,
+    filterType: 'text',
+  },
+  {
+    id: 'grade',
+    header: 'الصف',
+    accessor: (row) => row.grade,
+    filterType: 'multi-select',
+  },
+  {
+    id: 'phone',
+    header: 'رقم الهاتف',
+    accessor: (row) => row.phone,
+    filterType: 'text',
+  },
+  {
+    id: 'status',
+    header: 'الحالة',
+    accessor: (row) => row.status,
+    filterType: 'multi-select',
+  },
 ]
 
 export default function TablePreviewPage() {
