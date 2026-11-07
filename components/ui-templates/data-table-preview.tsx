@@ -4,8 +4,7 @@
 import { useMemo, useState } from 'react'
 import {
   Search, SlidersHorizontal, ChevronDown,
-  ChevronLeft, ChevronRight, Users, RotateCcw,
-  ArrowUpDown
+  ChevronLeft, ChevronRight, Users, RotateCcw
 } from 'lucide-react'
 
 type Student = {
@@ -33,59 +32,110 @@ const students: Student[] = Array.from({ length: 87 }, (_, i) => ({
   status: statuses[i % 3]
 }))
 
+const columnDefinitions = [
+  { key: 'id', label: 'التسلسل', searchable: false, filterable: false },
+  { key: 'name', label: 'اسم الطالب', searchable: true, filterable: true },
+  { key: 'personalId', label: 'الرقم الشخصي', searchable: true, filterable: true },
+  { key: 'grade', label: 'الصف الدراسي', searchable: false, filterable: true },
+  { key: 'phone', label: 'رقم الهاتف', searchable: true, filterable: true },
+  { key: 'status', label: 'الحالة', searchable: false, filterable: true },
+] as const
+
+type ColumnKey = typeof columnDefinitions[number]['key']
+
 export default function DataTablePreview() {
   const [search, setSearch] = useState('')
-  const [grade, setGrade] = useState('الكل')
-  const [status, setStatus] = useState('الكل')
+  const [columnFilters, setColumnFilters] = useState({
+    name: '',
+    personalId: '',
+    grade: 'الكل',
+    phone: '',
+    status: 'الكل',
+  })
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const [showColumns, setShowColumns] = useState(false)
-  const [visible, setVisible] = useState({
-    id: true, name: true, personalId: true,
-    grade: true, phone: true, status: true
+  const [columnSearch, setColumnSearch] = useState('')
+  const [visible, setVisible] = useState<Record<ColumnKey, boolean>>({
+    id: true,
+    name: true,
+    personalId: true,
+    grade: true,
+    phone: true,
+    status: true,
   })
 
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
     return students.filter(student => {
-      const q = search.trim().toLowerCase()
-      const matchesSearch =
+      const matchesGlobal =
         !q ||
         student.name.toLowerCase().includes(q) ||
         student.personalId.includes(q) ||
         student.phone.includes(q)
 
-      return matchesSearch &&
-        (grade === 'الكل' || student.grade === grade) &&
-        (status === 'الكل' || student.status === status)
+      const matchesName = student.name
+        .toLowerCase()
+        .includes(columnFilters.name.trim().toLowerCase())
+
+      const matchesPersonalId = student.personalId
+        .includes(columnFilters.personalId.trim())
+
+      const matchesGrade =
+        columnFilters.grade === 'الكل' ||
+        student.grade === columnFilters.grade
+
+      const matchesPhone = student.phone
+        .includes(columnFilters.phone.trim())
+
+      const matchesStatus =
+        columnFilters.status === 'الكل' ||
+        student.status === columnFilters.status
+
+      return matchesGlobal &&
+        matchesName &&
+        matchesPersonalId &&
+        matchesGrade &&
+        matchesPhone &&
+        matchesStatus
     })
-  }, [search, grade, status])
+  }, [search, columnFilters])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const start = (currentPage - 1) * pageSize
   const displayed = filtered.slice(start, start + pageSize)
 
-  const resetFilters = () => {
-    setSearch('')
-    setGrade('الكل')
-    setStatus('الكل')
+  const updateFilter = (key: keyof typeof columnFilters, value: string) => {
+    setColumnFilters(current => ({ ...current, [key]: value }))
     setPage(1)
   }
 
-  const columns = [
-    { key: 'id', label: 'التسلسل' },
-    { key: 'name', label: 'اسم الطالب' },
-    { key: 'personalId', label: 'الرقم الشخصي' },
-    { key: 'grade', label: 'الصف' },
-    { key: 'phone', label: 'رقم الهاتف' },
-    { key: 'status', label: 'الحالة' }
-  ] as const
+  const resetFilters = () => {
+    setSearch('')
+    setColumnFilters({
+      name: '',
+      personalId: '',
+      grade: 'الكل',
+      phone: '',
+      status: 'الكل',
+    })
+    setPage(1)
+  }
+
+  const visibleColumns = columnDefinitions.filter(col => visible[col.key])
+  const filteredColumns = columnDefinitions.filter(col =>
+    col.label.includes(columnSearch.trim())
+  )
+
+  const smallInput =
+    'h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs font-normal text-slate-600 outline-none focus:border-teal-500'
 
   return (
     <main dir="rtl" className="min-h-screen bg-[#f5f7fa] p-3 sm:p-6">
       <div className="mx-auto max-w-[1500px] space-y-5">
 
-        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -97,7 +147,7 @@ export default function DataTablePreview() {
               سجل الطلاب
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              معاينة تصميم قالب جدول موحّد
+              معاينة قالب جدول الطلاب
             </p>
           </div>
 
@@ -112,7 +162,6 @@ export default function DataTablePreview() {
           </div>
         </div>
 
-        {/* Table Card */}
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
           {/* Toolbar */}
@@ -121,7 +170,7 @@ export default function DataTablePreview() {
               <div>
                 <h2 className="font-bold text-slate-900">قائمة الطلاب</h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  عرض وإدارة بيانات الطلاب
+                  ابحث عن الطلاب أو استخدم فلتر كل عمود
                 </p>
               </div>
 
@@ -131,28 +180,10 @@ export default function DataTablePreview() {
                   <input
                     value={search}
                     onChange={e => { setSearch(e.target.value); setPage(1) }}
-                    placeholder="ابحث عن طالب..."
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pr-9 pl-3 text-sm outline-none transition focus:border-teal-500 focus:bg-white sm:w-64"
+                    placeholder="بحث عام: الاسم، الرقم، الهاتف..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pr-9 pl-3 text-sm outline-none transition focus:border-teal-500 focus:bg-white sm:w-72"
                   />
                 </div>
-
-                <select
-                  value={grade}
-                  onChange={e => { setGrade(e.target.value); setPage(1) }}
-                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-teal-500"
-                >
-                  <option value="الكل">كل الصفوف</option>
-                  {grades.map(g => <option key={g}>{g}</option>)}
-                </select>
-
-                <select
-                  value={status}
-                  onChange={e => { setStatus(e.target.value); setPage(1) }}
-                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-teal-500"
-                >
-                  <option value="الكل">كل الحالات</option>
-                  {statuses.map(s => <option key={s}>{s}</option>)}
-                </select>
 
                 <button
                   onClick={() => setShowColumns(!showColumns)}
@@ -163,13 +194,13 @@ export default function DataTablePreview() {
                   }`}
                 >
                   <SlidersHorizontal size={16} />
-                  الأعمدة
+                  تخصيص الأعمدة
                   <ChevronDown size={14} />
                 </button>
 
                 <button
                   onClick={resetFilters}
-                  title="إعادة ضبط الفلاتر"
+                  title="إعادة ضبط البحث والفلاتر"
                   className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
                 >
                   <RotateCcw size={16} />
@@ -178,23 +209,56 @@ export default function DataTablePreview() {
             </div>
 
             {showColumns && (
-              <div className="mt-4 flex flex-wrap gap-3 rounded-xl bg-slate-50 p-3">
-                {columns.map(col => (
-                  <label key={col.key} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={visible[col.key]}
-                      onChange={e => setVisible(v => ({ ...v, [col.key]: e.target.checked }))}
-                      className="accent-teal-600"
-                    />
-                    {col.label}
-                  </label>
-                ))}
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">الأعمدة الظاهرة</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      اختر الأعمدة التي تريد عرضها في الجدول
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold text-teal-700">
+                    {visibleColumns.length} من {columnDefinitions.length}
+                  </span>
+                </div>
+
+                <div className="relative mb-3">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <input
+                    value={columnSearch}
+                    onChange={e => setColumnSearch(e.target.value)}
+                    placeholder="ابحث عن اسم العمود..."
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white pr-9 pl-3 text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {filteredColumns.map(col => (
+                    <label key={col.key} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={visible[col.key]}
+                        disabled={col.key === 'id'}
+                        onChange={e => setVisible(v => ({
+                          ...v,
+                          [col.key]: e.target.checked
+                        }))}
+                        className="accent-teal-600"
+                      />
+                      {col.label}
+                    </label>
+                  ))}
+                  {filteredColumns.length === 0 && (
+                    <p className="col-span-full py-3 text-center text-xs text-slate-400">
+                      لا يوجد عمود بهذا الاسم
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Table information */}
+          {/* Results summary */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-xs text-slate-500 sm:px-5">
             <div>
               النتائج:
@@ -216,7 +280,7 @@ export default function DataTablePreview() {
             </div>
           </div>
 
-          {/* Scroll area: LTR wrapper keeps vertical scrollbar on the right */}
+          {/* Scroll area: vertical scrollbar on the right */}
           <div
             dir="ltr"
             className="mx-3 mb-3 overflow-auto rounded-xl border border-slate-200 sm:mx-5"
@@ -226,26 +290,81 @@ export default function DataTablePreview() {
               <table className="w-full border-collapse text-right text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50">
                   <tr className="border-b border-slate-200 text-xs font-bold text-slate-600">
-                    {visible.id && <th className="w-20 px-4 py-4">#</th>}
-                    {visible.name && <th className="min-w-52 px-4 py-4">اسم الطالب</th>}
-                    {visible.personalId && <th className="px-4 py-4">الرقم الشخصي</th>}
-                    {visible.grade && <th className="px-4 py-4">الصف</th>}
-                    {visible.phone && <th className="px-4 py-4">رقم الهاتف</th>}
-                    {visible.status && <th className="px-4 py-4">الحالة</th>}
+                    {visible.id && <th className="w-20 px-4 py-3">التسلسل</th>}
+                    {visible.name && <th className="min-w-52 px-4 py-3">اسم الطالب</th>}
+                    {visible.personalId && <th className="min-w-36 px-4 py-3">الرقم الشخصي</th>}
+                    {visible.grade && <th className="min-w-32 px-4 py-3">الصف الدراسي</th>}
+                    {visible.phone && <th className="min-w-36 px-4 py-3">رقم الهاتف</th>}
+                    {visible.status && <th className="min-w-32 px-4 py-3">الحالة</th>}
                   </tr>
-                  <tr className="border-b border-slate-200 bg-white text-xs text-slate-400">
-                    {visible.id && <th className="px-4 py-2"><ArrowUpDown size={13} /></th>}
-                    {visible.name && <th className="px-4 py-2">اسم الطالب</th>}
-                    {visible.personalId && <th className="px-4 py-2">الرقم الشخصي</th>}
-                    {visible.grade && <th className="px-4 py-2">الصف الدراسي</th>}
-                    {visible.phone && <th className="px-4 py-2">الهاتف</th>}
-                    {visible.status && <th className="px-4 py-2">حالة الطالب</th>}
+
+                  {/* Individual column filters */}
+                  <tr className="border-b border-slate-200 bg-white">
+                    {visible.id && (
+                      <th className="px-2 py-2">
+                        <span className="text-[10px] font-normal text-slate-400">—</span>
+                      </th>
+                    )}
+                    {visible.name && (
+                      <th className="px-2 py-2">
+                        <input
+                          value={columnFilters.name}
+                          onChange={e => updateFilter('name', e.target.value)}
+                          placeholder="بحث بالاسم"
+                          className={smallInput}
+                        />
+                      </th>
+                    )}
+                    {visible.personalId && (
+                      <th className="px-2 py-2">
+                        <input
+                          value={columnFilters.personalId}
+                          onChange={e => updateFilter('personalId', e.target.value)}
+                          placeholder="بحث بالرقم"
+                          className={smallInput}
+                        />
+                      </th>
+                    )}
+                    {visible.grade && (
+                      <th className="px-2 py-2">
+                        <select
+                          value={columnFilters.grade}
+                          onChange={e => updateFilter('grade', e.target.value)}
+                          className={smallInput}
+                        >
+                          <option value="الكل">كل الصفوف</option>
+                          {grades.map(g => <option key={g}>{g}</option>)}
+                        </select>
+                      </th>
+                    )}
+                    {visible.phone && (
+                      <th className="px-2 py-2">
+                        <input
+                          value={columnFilters.phone}
+                          onChange={e => updateFilter('phone', e.target.value)}
+                          placeholder="بحث بالهاتف"
+                          className={smallInput}
+                        />
+                      </th>
+                    )}
+                    {visible.status && (
+                      <th className="px-2 py-2">
+                        <select
+                          value={columnFilters.status}
+                          onChange={e => updateFilter('status', e.target.value)}
+                          className={smallInput}
+                        >
+                          <option value="الكل">كل الحالات</option>
+                          {statuses.map(s => <option key={s}>{s}</option>)}
+                        </select>
+                      </th>
+                    )}
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {displayed.map((student, index) => (
-                    <tr key={student.id} className="group transition hover:bg-teal-50/40">
+                    <tr key={student.id} className="transition hover:bg-teal-50/40">
                       {visible.id && (
                         <td className="px-4 py-4 font-semibold tabular-nums text-slate-400">
                           {start + index + 1}
@@ -285,10 +404,12 @@ export default function DataTablePreview() {
 
                   {displayed.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-16 text-center">
+                      <td colSpan={visibleColumns.length} className="px-4 py-16 text-center">
                         <Search className="mx-auto mb-3 text-slate-300" size={28} />
                         <p className="font-semibold text-slate-600">لا توجد نتائج</p>
-                        <p className="mt-1 text-xs text-slate-400">جرّب تغيير كلمات البحث أو الفلاتر</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          جرّب تغيير البحث أو الفلاتر
+                        </p>
                       </td>
                     </tr>
                   )}
@@ -297,7 +418,7 @@ export default function DataTablePreview() {
             </div>
           </div>
 
-          {/* Footer */}
+          {/* Pagination */}
           <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <p className="text-xs text-slate-500">
               عرض <span className="font-bold text-slate-800">{filtered.length ? start + 1 : 0}</span>
