@@ -1,3 +1,4 @@
+'use client'
 import { DataTable, type DataTableColumn } from '@/components/shared/data-table'
 
 type Student = {
