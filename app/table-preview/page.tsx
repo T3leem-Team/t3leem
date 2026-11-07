@@ -1,7 +1,9 @@
-
 'use client'
 
-import { DataTable, type DataTableColumn } from '@/components/shared/data-table'
+import {
+  DataTable,
+  type DataTableColumn,
+} from '@/components/shared/data-table'
 
 type Student = {
   id: number
@@ -25,6 +27,9 @@ const students: Student[] = [
   { id: 10, name: 'راشد سلمان', personalId: '100010', grade: 'الرابع', phone: '39000010', status: 'متأخر' },
   { id: 11, name: 'عمر جاسم', personalId: '100011', grade: 'الخامس', phone: '39000011', status: 'منتظم' },
   { id: 12, name: 'ناصر فهد', personalId: '100012', grade: 'السادس', phone: '39000012', status: 'منتظم' },
+  { id: 13, name: 'حسن إبراهيم', personalId: '100013', grade: 'الأول', phone: '39000013', status: 'متأخر' },
+  { id: 14, name: 'جاسم علي', personalId: '100014', grade: 'الثاني', phone: '39000014', status: 'منتظم' },
+  { id: 15, name: 'فهد يوسف', personalId: '100015', grade: 'الثالث', phone: '39000015', status: 'معفى' },
 ]
 
 const columns: DataTableColumn<Student>[] = [
