@@ -3,7 +3,6 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import {
-  Search,
   SlidersHorizontal,
   Filter,
   ChevronUp,
@@ -31,7 +30,6 @@ type DataTableProps<T> = {
   data: T[]
   getRowId: (row: T) => string | number
   pageSize?: number
-  searchable?: boolean
   selectable?: boolean
   emptyMessage?: string
 }
@@ -41,17 +39,16 @@ export function DataTable<T>({
   data,
   getRowId,
   pageSize = 10,
-  searchable = true,
   selectable = true,
   emptyMessage = 'لا توجد بيانات',
 }: DataTableProps<T>) {
   const safePageSize = Math.max(1, pageSize)
 
-  const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Record<string, string[]>>({})
   const [draftFilters, setDraftFilters] = useState<Record<string, string[]>>({})
   const [textFilters, setTextFilters] = useState<Record<string, string>>({})
   const [draftTextFilters, setDraftTextFilters] = useState<Record<string, string>>({})
+
   const [sort, setSort] = useState<{
     column: string
     direction: 'asc' | 'desc'
@@ -60,6 +57,7 @@ export function DataTable<T>({
   const [visibleColumns, setVisibleColumns] = useState(
     columns.map((column) => column.id)
   )
+
   const [selectedRows, setSelectedRows] = useState<(string | number)[]>([])
   const [page, setPage] = useState(1)
   const [openFilter, setOpenFilter] = useState<string | null>(null)
@@ -71,33 +69,26 @@ export function DataTable<T>({
 
   const filteredData = useMemo(() => {
     let result = data.filter((row) => {
-      const matchesSearch =
-        !search.trim() ||
-        columns.some((column) =>
-          String(column.accessor(row) ?? '')
-            .toLowerCase()
-            .includes(search.trim().toLowerCase())
-        )
+      return columns.every((column) => {
+        if (column.filterable === false) return true
 
-      const matchesFilters = columns.every((column) => {
         const type = column.filterType ?? 'multi-select'
+        const value = String(column.accessor(row) ?? '')
 
         if (type === 'text') {
-          const value = textFilters[column.id]?.trim().toLowerCase()
-          if (!value) return true
+          const searchValue = textFilters[column.id]?.trim().toLowerCase()
 
-          return String(column.accessor(row) ?? '')
-            .toLowerCase()
-            .includes(value)
+          if (!searchValue) return true
+
+          return value.toLowerCase().includes(searchValue)
         }
 
         const selected = filters[column.id]
+
         if (!selected?.length) return true
 
-        return selected.includes(String(column.accessor(row) ?? ''))
+        return selected.includes(value)
       })
-
-      return matchesSearch && matchesFilters
     })
 
     if (sort) {
@@ -123,7 +114,7 @@ export function DataTable<T>({
     }
 
     return result
-  }, [data, columns, search, filters, textFilters, sort])
+  }, [data, columns, filters, textFilters, sort])
 
   const totalPages = Math.max(
     1,
@@ -171,6 +162,7 @@ export function DataTable<T>({
   const toggleDraftFilter = (columnId: string, value: string) => {
     setDraftFilters((current) => {
       const selected = current[columnId] ?? []
+
       const next = selected.includes(value)
         ? selected.filter((item) => item !== value)
         : [...selected, value]
@@ -180,7 +172,9 @@ export function DataTable<T>({
   }
 
   const applyColumnFilter = (column: DataTableColumn<T>) => {
-    if (column.filterType === 'text') {
+    const type = column.filterType ?? 'multi-select'
+
+    if (type === 'text') {
       const value = (draftTextFilters[column.id] ?? '').trim()
 
       setTextFilters((current) => {
@@ -208,7 +202,9 @@ export function DataTable<T>({
   }
 
   const clearColumnFilter = (column: DataTableColumn<T>) => {
-    if (column.filterType === 'text') {
+    const type = column.filterType ?? 'multi-select'
+
+    if (type === 'text') {
       setTextFilters((current) => {
         const next = { ...current }
         delete next[column.id]
@@ -274,94 +270,76 @@ export function DataTable<T>({
   return (
     <div dir="rtl" className="w-full space-y-3">
 
-      {/* البحث وتخصيص الأعمدة */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {searchable && (
-          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              placeholder="بحث في الجدول..."
-              className="h-10 w-full rounded-lg border border-gray-200 bg-white pr-9 pl-3 text-sm outline-none transition focus:border-teal-600"
-            />
-          </div>
-        )}
+      {/* تخصيص الأعمدة ومسح الفلاتر */}
+      <div className="flex items-center justify-between gap-3">
+        <details className="relative">
+          <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50">
+            <SlidersHorizontal size={16} />
+            الأعمدة
+          </summary>
 
-        <div className="flex items-center gap-2">
-          <details className="relative">
-            <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50">
-              <SlidersHorizontal size={16} />
-              الأعمدة
-            </summary>
-
-            <div className="absolute left-0 top-11 z-40 max-h-72 w-52 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
-              {columns.map((column) => (
-                <label
-                  key={column.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-gray-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns.includes(column.id)}
-                    disabled={
-                      column.hideable === false ||
-                      (visibleColumns.length === 1 &&
-                        visibleColumns.includes(column.id))
-                    }
-                    onChange={() =>
-                      setVisibleColumns((current) =>
-                        current.includes(column.id)
-                          ? current.filter((id) => id !== column.id)
-                          : [...current, column.id]
-                      )
-                    }
-                    className="accent-teal-600"
-                  />
-                  {column.header}
-                </label>
-              ))}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setVisibleColumns(columns.map((column) => column.id))
-                }
-                className="mt-2 w-full border-t pt-2 text-xs text-teal-700"
+          <div className="absolute right-0 top-11 z-40 max-h-72 w-52 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+            {columns.filter((column) => column.hideable !== false).map((column) => (
+              <label
+                key={column.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-gray-50"
               >
-                إظهار جميع الأعمدة
-              </button>
-            </div>
-          </details>
+                <input
+                  type="checkbox"
+                  checked={visibleColumns.includes(column.id)}
+                  disabled={
+                    visibleColumns.length === 1 &&
+                    visibleColumns.includes(column.id)
+                  }
+                  onChange={() =>
+                    setVisibleColumns((current) =>
+                      current.includes(column.id)
+                        ? current.filter((id) => id !== column.id)
+                        : [...current, column.id]
+                    )
+                  }
+                  className="accent-teal-600"
+                />
+                {column.header}
+              </label>
+            ))}
 
-          {hasActiveFilters && (
             <button
               type="button"
-              onClick={clearAllFilters}
-              className="text-xs text-teal-700 hover:text-teal-900"
+              onClick={() =>
+                setVisibleColumns(columns.map((column) => column.id))
+              }
+              className="mt-2 w-full border-t pt-2 text-xs text-teal-700"
             >
-              مسح جميع الفلاتر
+              إظهار جميع الأعمدة
             </button>
-          )}
-        </div>
+          </div>
+        </details>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-xs text-teal-700 hover:text-teal-900"
+          >
+            مسح جميع الفلاتر
+          </button>
+        )}
       </div>
 
       {/* الجدول */}
       <div
         dir="ltr"
-        className="w-full overflow-auto rounded-xl border border-gray-200 bg-white"
+        className="max-h-[70vh] w-full overflow-auto rounded-xl border border-gray-200 bg-white"
       >
         <table
           dir="rtl"
           className="w-full min-w-max border-collapse text-right text-sm"
         >
-          <thead className="sticky top-0 z-20 bg-gray-50">
-            <tr className="border-b border-gray-200">
+          <thead>
+            <tr>
               {selectable && (
-                <th className="sticky right-0 z-30 bg-gray-50 px-3 py-3">
+                <th className="sticky right-0 top-0 z-40 bg-gray-50 px-3 py-3">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -388,6 +366,7 @@ export function DataTable<T>({
                   )
 
                 const draftSelected = draftFilters[column.id] ?? []
+
                 const isFiltered =
                   selected.length > 0 || textValue.trim().length > 0
 
@@ -398,7 +377,7 @@ export function DataTable<T>({
                 return (
                   <th
                     key={column.id}
-                    className={`relative whitespace-nowrap bg-gray-50 px-4 py-3 font-semibold text-gray-700 ${column.className ?? ''}`}
+                    className={`sticky top-0 z-30 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-4 py-3 font-semibold text-gray-700 ${column.className ?? ''}`}
                   >
                     <div className="flex items-center gap-2">
                       {column.sortable !== false ? (
@@ -408,6 +387,7 @@ export function DataTable<T>({
                           className="flex items-center gap-1.5 hover:text-teal-700"
                         >
                           {column.header}
+
                           {sort?.column === column.id ? (
                             sort.direction === 'asc' ? (
                               <ChevronUp size={14} />
@@ -432,18 +412,18 @@ export function DataTable<T>({
                                 : openColumnFilter(column.id)
                             }
                             className={`rounded p-1 hover:bg-gray-200 ${
-                              isFiltered
-                                ? 'text-teal-700'
-                                : 'text-gray-400'
+                              isFiltered ? 'text-teal-700' : 'text-gray-400'
                             }`}
                             aria-label={`فلترة ${column.header}`}
                           >
                             <Filter size={14} />
+
                             {type === 'multi-select' && selected.length > 0 && (
                               <span className="mr-1 text-[10px]">
                                 {selected.length}
                               </span>
                             )}
+
                             {type === 'text' && textValue && (
                               <span className="mr-1 text-[10px]">●</span>
                             )}
@@ -458,11 +438,12 @@ export function DataTable<T>({
                                 onClick={() => setOpenFilter(null)}
                               />
 
-                              <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 text-right font-normal shadow-xl">
+                              <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 text-right font-normal text-gray-700 shadow-xl">
                                 <div className="mb-3 flex items-center justify-between">
                                   <span className="text-xs font-semibold">
                                     فلترة: {column.header}
                                   </span>
+
                                   <button
                                     type="button"
                                     onClick={() => setOpenFilter(null)}
