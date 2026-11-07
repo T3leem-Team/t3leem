@@ -1,6 +1,5 @@
-
-import DataTablePreview from '@/components/ui-templates/data-table-preview'
+import { DataTable } from '@/components/shared/data-table'
 
 export default function TablePreviewPage() {
-  return <DataTablePreview />
+  return <DataTable />
 }
