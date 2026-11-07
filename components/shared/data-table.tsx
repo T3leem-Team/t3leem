@@ -1,15 +1,14 @@
-
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
 import {
+  Search,
   SlidersHorizontal,
-  Filter,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  X,
+  Check,
 } from 'lucide-react'
 
 export type DataTableColumn<T> = {
@@ -30,6 +29,7 @@ type DataTableProps<T> = {
   data: T[]
   getRowId: (row: T) => string | number
   pageSize?: number
+  searchable?: boolean
   selectable?: boolean
   emptyMessage?: string
 }
@@ -39,16 +39,13 @@ export function DataTable<T>({
   data,
   getRowId,
   pageSize = 10,
+  searchable = true,
   selectable = true,
   emptyMessage = 'لا توجد بيانات',
 }: DataTableProps<T>) {
-  const safePageSize = Math.max(1, pageSize)
-
+  const [search, setSearch] = useState('')
   const [filters, setFilters] = useState<Record<string, string[]>>({})
-  const [draftFilters, setDraftFilters] = useState<Record<string, string[]>>({})
   const [textFilters, setTextFilters] = useState<Record<string, string>>({})
-  const [draftTextFilters, setDraftTextFilters] = useState<Record<string, string>>({})
-
   const [sort, setSort] = useState<{
     column: string
     direction: 'asc' | 'desc'
@@ -57,11 +54,10 @@ export function DataTable<T>({
   const [visibleColumns, setVisibleColumns] = useState(
     columns.map((column) => column.id)
   )
-
   const [selectedRows, setSelectedRows] = useState<(string | number)[]>([])
   const [page, setPage] = useState(1)
-  const [openFilter, setOpenFilter] = useState<string | null>(null)
-  const [filterSearch, setFilterSearch] = useState('')
+
+  const safePageSize = Math.max(1, pageSize)
 
   const activeColumns = columns.filter((column) =>
     visibleColumns.includes(column.id)
@@ -69,26 +65,30 @@ export function DataTable<T>({
 
   const filteredData = useMemo(() => {
     let result = data.filter((row) => {
-      return columns.every((column) => {
+      const matchesSearch =
+        !search.trim() ||
+        columns.some((column) =>
+          String(column.accessor(row) ?? '')
+            .toLocaleLowerCase('ar')
+            .includes(search.trim().toLocaleLowerCase('ar'))
+        )
+
+      const matchesColumnFilters = columns.every((column) => {
         if (column.filterable === false) return true
 
-        const type = column.filterType ?? 'multi-select'
         const value = String(column.accessor(row) ?? '')
+        const type = column.filterType ?? 'multi-select'
 
         if (type === 'text') {
-          const searchValue = textFilters[column.id]?.trim().toLowerCase()
-
-          if (!searchValue) return true
-
-          return value.toLowerCase().includes(searchValue)
+          const query = textFilters[column.id]?.trim().toLocaleLowerCase('ar')
+          return !query || value.toLocaleLowerCase('ar').includes(query)
         }
 
-        const selected = filters[column.id]
-
-        if (!selected?.length) return true
-
-        return selected.includes(value)
+        const selected = filters[column.id] ?? []
+        return selected.length === 0 || selected.includes(value)
       })
+
+      return matchesSearch && matchesColumnFilters
     })
 
     if (sort) {
@@ -114,13 +114,9 @@ export function DataTable<T>({
     }
 
     return result
-  }, [data, columns, filters, textFilters, sort])
+  }, [data, columns, search, filters, textFilters, sort])
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredData.length / safePageSize)
-  )
-
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / safePageSize))
   const currentPage = Math.min(page, totalPages)
 
   const pageData = filteredData.slice(
@@ -140,111 +136,53 @@ export function DataTable<T>({
 
       return null
     })
-
     setPage(1)
   }
 
-  const openColumnFilter = (columnId: string) => {
-    setDraftFilters((current) => ({
-      ...current,
-      [columnId]: [...(filters[columnId] ?? [])],
-    }))
-
-    setDraftTextFilters((current) => ({
-      ...current,
-      [columnId]: textFilters[columnId] ?? '',
-    }))
-
-    setFilterSearch('')
-    setOpenFilter(columnId)
-  }
-
-  const toggleDraftFilter = (columnId: string, value: string) => {
-    setDraftFilters((current) => {
+  const toggleFilterOption = (columnId: string, value: string) => {
+    setFilters((current) => {
       const selected = current[columnId] ?? []
-
       const next = selected.includes(value)
         ? selected.filter((item) => item !== value)
         : [...selected, value]
 
       return { ...current, [columnId]: next }
     })
-  }
-
-  const applyColumnFilter = (column: DataTableColumn<T>) => {
-    const type = column.filterType ?? 'multi-select'
-
-    if (type === 'text') {
-      const value = (draftTextFilters[column.id] ?? '').trim()
-
-      setTextFilters((current) => {
-        const next = { ...current }
-
-        if (value) next[column.id] = value
-        else delete next[column.id]
-
-        return next
-      })
-    } else {
-      setFilters((current) => {
-        const selected = draftFilters[column.id] ?? []
-        const next = { ...current }
-
-        if (selected.length) next[column.id] = selected
-        else delete next[column.id]
-
-        return next
-      })
-    }
-
     setPage(1)
-    setOpenFilter(null)
   }
 
   const clearColumnFilter = (column: DataTableColumn<T>) => {
-    const type = column.filterType ?? 'multi-select'
-
-    if (type === 'text') {
+    if (column.filterType === 'text') {
       setTextFilters((current) => {
         const next = { ...current }
         delete next[column.id]
         return next
       })
-
-      setDraftTextFilters((current) => ({
-        ...current,
-        [column.id]: '',
-      }))
     } else {
       setFilters((current) => {
         const next = { ...current }
         delete next[column.id]
         return next
       })
-
-      setDraftFilters((current) => ({
-        ...current,
-        [column.id]: [],
-      }))
     }
-
     setPage(1)
-    setOpenFilter(null)
   }
 
-  const toggleRow = (id: string | number) => {
-    setSelectedRows((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-    )
+  const clearAllFilters = () => {
+    setFilters({})
+    setTextFilters({})
+    setSearch('')
+    setPage(1)
   }
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    Object.values(filters).some((items) => items.length > 0) ||
+    Object.values(textFilters).some((value) => value.trim().length > 0)
 
   const pageIds = pageData.map(getRowId)
-
   const allSelected =
-    pageIds.length > 0 &&
-    pageIds.every((id) => selectedRows.includes(id))
+    pageIds.length > 0 && pageIds.every((id) => selectedRows.includes(id))
 
   const toggleAll = () => {
     setSelectedRows((current) =>
@@ -254,285 +192,241 @@ export function DataTable<T>({
     )
   }
 
-  const hasActiveFilters =
-    Object.values(filters).some((items) => items.length > 0) ||
-    Object.values(textFilters).some((value) => value.trim().length > 0)
-
-  const clearAllFilters = () => {
-    setFilters({})
-    setDraftFilters({})
-    setTextFilters({})
-    setDraftTextFilters({})
-    setPage(1)
-    setOpenFilter(null)
-  }
-
   return (
-    <div dir="rtl" className="w-full space-y-3">
+    <div dir="rtl" className="w-full space-y-3 text-sm">
+      {/* البحث وتخصيص الأعمدة */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {searchable && (
+          <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
+              placeholder="بحث في الجدول..."
+              className="h-9 w-full rounded-md border border-gray-200 bg-white pr-9 pl-3 text-xs outline-none transition focus:border-teal-600"
+            />
+          </div>
+        )}
 
-      {/* تخصيص الأعمدة ومسح الفلاتر */}
-      <div className="flex items-center justify-between gap-3">
-        <details className="relative">
-          <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-600 hover:bg-gray-50">
-            <SlidersHorizontal size={16} />
-            الأعمدة
-          </summary>
+        <div className="flex items-center gap-3">
+          <details className="relative">
+            <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-600 hover:bg-gray-50">
+              <SlidersHorizontal size={15} />
+              تخصيص الأعمدة
+            </summary>
 
-          <div className="absolute right-0 top-11 z-40 max-h-72 w-52 overflow-y-auto rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
-            {columns.filter((column) => column.hideable !== false).map((column) => (
-              <label
-                key={column.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-gray-50"
+            <div className="absolute left-0 top-10 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+              {columns.map((column) => (
+                <label
+                  key={column.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.includes(column.id)}
+                    disabled={
+                      column.hideable === false ||
+                      (visibleColumns.length === 1 &&
+                        visibleColumns.includes(column.id))
+                    }
+                    onChange={() =>
+                      setVisibleColumns((current) =>
+                        current.includes(column.id)
+                          ? current.filter((id) => id !== column.id)
+                          : [...current, column.id]
+                      )
+                    }
+                    className="accent-teal-700"
+                  />
+                  {column.header}
+                </label>
+              ))}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setVisibleColumns(columns.map((column) => column.id))
+                }
+                className="mt-1 w-full border-t border-gray-100 pt-2 text-xs text-teal-700"
               >
-                <input
-                  type="checkbox"
-                  checked={visibleColumns.includes(column.id)}
-                  disabled={
-                    visibleColumns.length === 1 &&
-                    visibleColumns.includes(column.id)
-                  }
-                  onChange={() =>
-                    setVisibleColumns((current) =>
-                      current.includes(column.id)
-                        ? current.filter((id) => id !== column.id)
-                        : [...current, column.id]
-                    )
-                  }
-                  className="accent-teal-600"
-                />
-                {column.header}
-              </label>
-            ))}
+                إظهار جميع الأعمدة
+              </button>
+            </div>
+          </details>
 
+          {hasActiveFilters && (
             <button
               type="button"
-              onClick={() =>
-                setVisibleColumns(columns.map((column) => column.id))
-              }
-              className="mt-2 w-full border-t pt-2 text-xs text-teal-700"
+              onClick={clearAllFilters}
+              className="text-xs text-gray-500 hover:text-red-600"
             >
-              إظهار جميع الأعمدة
+              مسح الفلاتر
             </button>
-          </div>
-        </details>
-
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearAllFilters}
-            className="text-xs text-teal-700 hover:text-teal-900"
-          >
-            مسح جميع الفلاتر
-          </button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* الجدول */}
       <div
         dir="ltr"
-        className="max-h-[70vh] w-full overflow-auto rounded-xl border border-gray-200 bg-white"
+        className="max-h-[70vh] w-full overflow-auto rounded-lg border border-gray-200 bg-white"
       >
         <table
           dir="rtl"
-          className="w-full min-w-max border-collapse text-right text-sm"
+          className="w-full min-w-max border-collapse text-right text-xs"
         >
-          <thead>
-            <tr>
+          <thead className="text-gray-700">
+            {/* عناوين الأعمدة */}
+            <tr className="bg-gray-50">
               {selectable && (
-                <th className="sticky right-0 top-0 z-40 bg-gray-50 px-3 py-3">
+                <th className="sticky right-0 top-0 z-40 w-10 border-b border-gray-200 bg-gray-50 px-3 py-3">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleAll}
                     aria-label="تحديد جميع صفوف الصفحة"
-                    className="accent-teal-600"
+                    className="accent-teal-700"
                   />
                 </th>
               )}
 
-              {activeColumns.map((column) => {
-                const selected = filters[column.id] ?? []
-                const textValue = textFilters[column.id] ?? ''
-                const type = column.filterType ?? 'multi-select'
+              {activeColumns.map((column) => (
+                <th
+                  key={column.id}
+                  className={`sticky top-0 z-30 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold ${column.className ?? ''}`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>{column.header}</span>
+                    {column.sortable !== false && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(column.id)}
+                        className="text-gray-400 hover:text-teal-700"
+                        aria-label={`ترتيب ${column.header}`}
+                      >
+                        {sort?.column === column.id ? (
+                          sort.direction === 'asc' ? (
+                            <ChevronUp size={13} />
+                          ) : (
+                            <ChevronDown size={13} />
+                          )
+                        ) : (
+                          <ChevronDown size={13} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
 
+            {/* الفلاتر داخل رأس كل عمود */}
+            <tr className="bg-white">
+              {selectable && (
+                <th className="sticky right-0 top-[38px] z-40 border-b border-gray-200 bg-white px-2 py-2" />
+              )}
+
+              {activeColumns.map((column) => {
+                const type = column.filterType ?? 'multi-select'
                 const options =
                   column.filterOptions ??
                   Array.from(
-                    new Set(
-                      data.map((row) =>
-                        String(column.accessor(row) ?? '')
-                      )
-                    )
+                    new Set(data.map((row) => String(column.accessor(row) ?? '')))
                   )
 
-                const draftSelected = draftFilters[column.id] ?? []
-
-                const isFiltered =
-                  selected.length > 0 || textValue.trim().length > 0
-
-                const filteredOptions = options.filter((value) =>
-                  value.toLowerCase().includes(filterSearch.toLowerCase())
-                )
+                const selected = filters[column.id] ?? []
+                const textValue = textFilters[column.id] ?? ''
 
                 return (
                   <th
                     key={column.id}
-                    className={`sticky top-0 z-30 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-4 py-3 font-semibold text-gray-700 ${column.className ?? ''}`}
+                    className={`sticky top-[38px] z-20 min-w-[145px] border-b border-gray-200 bg-white px-2 py-2 ${column.className ?? ''}`}
                   >
-                    <div className="flex items-center gap-2">
-                      {column.sortable !== false ? (
-                        <button
-                          type="button"
-                          onClick={() => toggleSort(column.id)}
-                          className="flex items-center gap-1.5 hover:text-teal-700"
-                        >
-                          {column.header}
-
-                          {sort?.column === column.id ? (
-                            sort.direction === 'asc' ? (
-                              <ChevronUp size={14} />
-                            ) : (
-                              <ChevronDown size={14} />
-                            )
-                          ) : (
-                            <ChevronDown size={13} className="text-gray-300" />
-                          )}
-                        </button>
-                      ) : (
-                        column.header
-                      )}
-
-                      {column.filterable !== false && (
-                        <div className="relative">
+                    {column.filterable === false ? null : type === 'text' ? (
+                      <div className="relative">
+                        <input
+                          value={textValue}
+                          onChange={(event) => {
+                            setTextFilters((current) => ({
+                              ...current,
+                              [column.id]: event.target.value,
+                            }))
+                            setPage(1)
+                          }}
+                          placeholder="تصفية..."
+                          className={`h-8 w-full rounded border px-2 text-[11px] font-normal outline-none focus:border-teal-600 ${
+                            textValue
+                              ? 'border-teal-500 bg-teal-50/40'
+                              : 'border-gray-200 bg-white'
+                          }`}
+                        />
+                        {textValue && (
                           <button
                             type="button"
-                            onClick={() =>
-                              openFilter === column.id
-                                ? setOpenFilter(null)
-                                : openColumnFilter(column.id)
-                            }
-                            className={`rounded p-1 hover:bg-gray-200 ${
-                              isFiltered ? 'text-teal-700' : 'text-gray-400'
-                            }`}
-                            aria-label={`فلترة ${column.header}`}
+                            onClick={() => clearColumnFilter(column)}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600"
+                            aria-label={`مسح فلتر ${column.header}`}
                           >
-                            <Filter size={14} />
-
-                            {type === 'multi-select' && selected.length > 0 && (
-                              <span className="mr-1 text-[10px]">
-                                {selected.length}
-                              </span>
-                            )}
-
-                            {type === 'text' && textValue && (
-                              <span className="mr-1 text-[10px]">●</span>
-                            )}
+                            ×
                           </button>
+                        )}
+                      </div>
+                    ) : (
+                      <details className="relative font-normal">
+                        <summary
+                          className={`flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded border px-2 text-[11px] ${
+                            selected.length
+                              ? 'border-teal-500 bg-teal-50/40 text-teal-800'
+                              : 'border-gray-200 bg-white text-gray-500'
+                          }`}
+                        >
+                          <span>
+                            {selected.length
+                              ? `تم اختيار ${selected.length}`
+                              : 'الكل'}
+                          </span>
+                          <ChevronDown size={12} />
+                        </summary>
 
-                          {openFilter === column.id && (
-                            <>
-                              <button
-                                type="button"
-                                aria-label="إغلاق نافذة الفلتر"
-                                className="fixed inset-0 z-30 cursor-default"
-                                onClick={() => setOpenFilter(null)}
+                        <div className="absolute right-0 top-9 z-50 max-h-56 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-right shadow-xl">
+                          {options.map((option) => (
+                            <label
+                              key={option}
+                              className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-normal hover:bg-gray-50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected.includes(option)}
+                                onChange={() =>
+                                  toggleFilterOption(column.id, option)
+                                }
+                                className="accent-teal-700"
                               />
+                              <span>{option || 'فارغ'}</span>
+                            </label>
+                          ))}
 
-                              <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-gray-200 bg-white p-3 text-right font-normal text-gray-700 shadow-xl">
-                                <div className="mb-3 flex items-center justify-between">
-                                  <span className="text-xs font-semibold">
-                                    فلترة: {column.header}
-                                  </span>
+                          {options.length === 0 && (
+                            <p className="py-3 text-center text-xs text-gray-400">
+                              لا توجد خيارات
+                            </p>
+                          )}
 
-                                  <button
-                                    type="button"
-                                    onClick={() => setOpenFilter(null)}
-                                    aria-label="إغلاق الفلتر"
-                                    className="rounded p-1 text-gray-400 hover:bg-gray-100"
-                                  >
-                                    <X size={15} />
-                                  </button>
-                                </div>
-
-                                {type === 'text' ? (
-                                  <input
-                                    autoFocus
-                                    value={draftTextFilters[column.id] ?? ''}
-                                    onChange={(e) =>
-                                      setDraftTextFilters((current) => ({
-                                        ...current,
-                                        [column.id]: e.target.value,
-                                      }))
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        applyColumnFilter(column)
-                                      }
-                                    }}
-                                    placeholder={`ابحث في ${column.header}...`}
-                                    className="h-10 w-full rounded-md border border-gray-200 px-3 text-xs outline-none focus:border-teal-600"
-                                  />
-                                ) : (
-                                  <>
-                                    <input
-                                      value={filterSearch}
-                                      onChange={(e) =>
-                                        setFilterSearch(e.target.value)
-                                      }
-                                      placeholder="ابحث في الخيارات..."
-                                      className="mb-2 h-9 w-full rounded-md border border-gray-200 px-2 text-xs outline-none focus:border-teal-600"
-                                    />
-
-                                    <div className="max-h-48 space-y-1 overflow-y-auto">
-                                      {filteredOptions.map((value) => (
-                                        <label
-                                          key={value}
-                                          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-gray-50"
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={draftSelected.includes(value)}
-                                            onChange={() =>
-                                              toggleDraftFilter(column.id, value)
-                                            }
-                                            className="accent-teal-600"
-                                          />
-                                          <span>{value || 'فارغ'}</span>
-                                        </label>
-                                      ))}
-
-                                      {filteredOptions.length === 0 && (
-                                        <p className="py-4 text-center text-xs text-gray-400">
-                                          لا توجد خيارات
-                                        </p>
-                                      )}
-                                    </div>
-                                  </>
-                                )}
-
-                                <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => clearColumnFilter(column)}
-                                    className="text-xs text-gray-500 hover:text-red-600"
-                                  >
-                                    مسح
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => applyColumnFilter(column)}
-                                    className="rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
-                                  >
-                                    تطبيق
-                                  </button>
-                                </div>
-                              </div>
-                            </>
+                          {selected.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => clearColumnFilter(column)}
+                              className="mt-1 w-full border-t border-gray-100 py-2 text-xs text-red-600"
+                            >
+                              مسح التصفية
+                            </button>
                           )}
                         </div>
-                      )}
-                    </div>
+                      </details>
+                    )}
                   </th>
                 )
               })}
@@ -557,22 +451,28 @@ export function DataTable<T>({
                 return (
                   <tr
                     key={id}
-                    className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${
-                      isSelected ? 'bg-teal-50' : ''
+                    className={`border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50 ${
+                      isSelected ? 'bg-teal-50' : 'bg-white'
                     }`}
                   >
                     {selectable && (
                       <td
-                        className={`sticky right-0 z-10 px-3 py-3 ${
+                        className={`sticky right-0 z-10 w-10 px-3 py-3 ${
                           isSelected ? 'bg-teal-50' : 'bg-white'
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleRow(id)}
+                          onChange={() =>
+                            setSelectedRows((current) =>
+                              isSelected
+                                ? current.filter((item) => item !== id)
+                                : [...current, id]
+                            )
+                          }
                           aria-label="تحديد الصف"
-                          className="accent-teal-600"
+                          className="accent-teal-700"
                         />
                       </td>
                     )}
@@ -583,7 +483,7 @@ export function DataTable<T>({
                       return (
                         <td
                           key={column.id}
-                          className={`whitespace-nowrap px-4 py-3 text-gray-700 ${column.className ?? ''}`}
+                          className={`whitespace-nowrap px-3 py-3 text-gray-700 ${column.className ?? ''}`}
                         >
                           {column.render
                             ? column.render(value, row)
@@ -599,7 +499,7 @@ export function DataTable<T>({
         </table>
       </div>
 
-      {/* ترقيم الصفحات */}
+      {/* معلومات النتائج والتنقل */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
         <span>
           عرض{' '}
@@ -610,7 +510,6 @@ export function DataTable<T>({
           {Math.min(currentPage * safePageSize, filteredData.length)}
           {' من '}
           {filteredData.length} سجل
-
           {selectable && selectedRows.length > 0 && (
             <span className="mr-2 text-teal-700">
               · تم تحديد {selectedRows.length}
@@ -623,10 +522,10 @@ export function DataTable<T>({
             type="button"
             disabled={currentPage <= 1}
             onClick={() => setPage((value) => Math.max(1, value - 1))}
-            className="rounded-md border p-1.5 disabled:opacity-30"
+            className="rounded border border-gray-200 p-1.5 hover:bg-gray-50 disabled:opacity-30"
             aria-label="الصفحة السابقة"
           >
-            <ChevronRight size={16} />
+            <ChevronRight size={15} />
           </button>
 
           <span className="min-w-16 text-center tabular-nums">
@@ -636,13 +535,11 @@ export function DataTable<T>({
           <button
             type="button"
             disabled={currentPage >= totalPages}
-            onClick={() =>
-              setPage((value) => Math.min(totalPages, value + 1))
-            }
-            className="rounded-md border p-1.5 disabled:opacity-30"
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            className="rounded border border-gray-200 p-1.5 hover:bg-gray-50 disabled:opacity-30"
             aria-label="الصفحة التالية"
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={15} />
           </button>
         </div>
       </div>
