@@ -62,7 +62,7 @@ const columns: DataTableColumn<Student>[] = [
 
 export default function TablePreviewPage() {
   return (
-    <main dir="rtl" className="min-h-screen bg-gray-50 p-4 md:p-8">
+    <main dir="rtl" className="min-h-screen bg-gray-50 p-3 md:p-6">
       <DataTable
         columns={columns}
         data={students}
