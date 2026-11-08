@@ -34,11 +34,13 @@ type DataTableProps<T> = {
   emptyMessage?: string
 }
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+
 export function DataTable<T>({
   columns,
   data,
   getRowId,
-  pageSize = 10,
+  pageSize = 50,
   searchable = true,
   emptyMessage = 'لا توجد بيانات',
 }: DataTableProps<T>) {
@@ -56,7 +58,14 @@ export function DataTable<T>({
   const [selectedRow, setSelectedRow] = useState<string | number | null>(null)
   const [page, setPage] = useState(1)
 
-  const safePageSize = Math.max(1, pageSize)
+  const initialPageSize = Math.min(
+    100,
+    Math.max(10, PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : 50)
+  )
+
+  const [rowsPerPage, setRowsPerPage] = useState(initialPageSize)
+
+  const safePageSize = Math.min(100, Math.max(10, rowsPerPage))
 
   const activeColumns = columns.filter((column) =>
     visibleColumns.includes(column.id)
@@ -79,7 +88,10 @@ export function DataTable<T>({
         const type = column.filterType ?? 'multi-select'
 
         if (type === 'text') {
-          const query = textFilters[column.id]?.trim().toLocaleLowerCase('ar')
+          const query = textFilters[column.id]
+            ?.trim()
+            .toLocaleLowerCase('ar')
+
           return !query || value.toLocaleLowerCase('ar').includes(query)
         }
 
@@ -115,7 +127,11 @@ export function DataTable<T>({
     return result
   }, [data, columns, search, filters, textFilters, sort])
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / safePageSize))
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredData.length / safePageSize)
+  )
+
   const currentPage = Math.min(page, totalPages)
 
   const pageData = filteredData.slice(
@@ -208,7 +224,7 @@ export function DataTable<T>({
               تخصيص الأعمدة
             </summary>
 
-            <div className="absolute left-0 top-10 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+            <div className="absolute right-0 top-10 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
               {columns.map((column) => (
                 <label
                   key={column.id}
@@ -263,14 +279,16 @@ export function DataTable<T>({
       <div
         dir="rtl"
         className="max-h-[70vh] w-full overflow-auto rounded-lg border border-gray-200 bg-white"
-        style={{ scrollbarGutter: 'stable' }}
+        style={{
+          scrollbarGutter: 'stable',
+          direction: 'rtl',
+        }}
       >
         <table
           dir="rtl"
           className="w-full min-w-max border-collapse text-right text-xs"
         >
           <thead className="text-gray-700">
-            {/* عناوين الأعمدة */}
             <tr className="bg-gray-50">
               <th className="sticky right-0 top-0 z-40 w-14 min-w-14 border-b border-gray-200 bg-gray-50 px-3 py-3 text-center font-semibold">
                 م
@@ -313,10 +331,15 @@ export function DataTable<T>({
 
               {activeColumns.map((column) => {
                 const type = column.filterType ?? 'multi-select'
+
                 const options =
                   column.filterOptions ??
                   Array.from(
-                    new Set(data.map((row) => String(column.accessor(row) ?? '')))
+                    new Set(
+                      data.map((row) =>
+                        String(column.accessor(row) ?? '')
+                      )
+                    )
                   )
 
                 const selected = filters[column.id] ?? []
@@ -430,12 +453,15 @@ export function DataTable<T>({
               pageData.map((row, index) => {
                 const id = getRowId(row)
                 const isSelected = selectedRow === id
-                const serial = (currentPage - 1) * safePageSize + index + 1
+                const serial =
+                  (currentPage - 1) * safePageSize + index + 1
 
                 return (
                   <tr
                     key={id}
-                    onClick={() => setSelectedRow(isSelected ? null : id)}
+                    onClick={() =>
+                      setSelectedRow(isSelected ? null : id)
+                    }
                     className={`cursor-pointer border-b border-gray-100 transition-colors last:border-0 ${
                       isSelected
                         ? 'bg-teal-50'
@@ -472,18 +498,41 @@ export function DataTable<T>({
         </table>
       </div>
 
-      {/* معلومات النتائج والتنقل */}
+      {/* معلومات النتائج والتحكم بعدد الصفوف والتنقل */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
-        <span>
-          عرض{' '}
-          {filteredData.length === 0
-            ? 0
-            : (currentPage - 1) * safePageSize + 1}
-          {' - '}
-          {Math.min(currentPage * safePageSize, filteredData.length)}
-          {' من '}
-          {filteredData.length} سجل
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span>
+            عرض{' '}
+            {filteredData.length === 0
+              ? 0
+              : (currentPage - 1) * safePageSize + 1}
+            {' - '}
+            {Math.min(currentPage * safePageSize, filteredData.length)}
+            {' من '}
+            {filteredData.length} سجل
+          </span>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="data-table-page-size">عدد الصفوف:</label>
+            <select
+              id="data-table-page-size"
+              value={safePageSize}
+              onChange={(event) => {
+                setRowsPerPage(
+                  Math.min(100, Math.max(10, Number(event.target.value)))
+                )
+                setPage(1)
+              }}
+              className="h-8 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-teal-600"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         <div className="flex items-center gap-2">
           <button
@@ -503,7 +552,9 @@ export function DataTable<T>({
           <button
             type="button"
             disabled={currentPage >= totalPages}
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            onClick={() =>
+              setPage((value) => Math.min(totalPages, value + 1))
+            }
             className="rounded border border-gray-200 p-1.5 hover:bg-gray-50 disabled:opacity-30"
             aria-label="الصفحة التالية"
           >
