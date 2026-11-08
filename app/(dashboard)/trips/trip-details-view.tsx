@@ -37,6 +37,7 @@ type ParticipantEditor = {
   student: ResultStudent
   payment: string
   response: ResponseStatus
+  responseAutoChanged: boolean
   error: string
 }
 
@@ -272,6 +273,7 @@ export function TripDetailsView({
         paymentInputs[student.id] ??
         normalizePaymentInput(student.payment_amount),
       response: responseInputs[student.id] ?? student.response,
+      responseAutoChanged: false,
       error: '',
     })
   }
@@ -281,6 +283,10 @@ export function TripDetailsView({
       if (!current) return current
 
       const amount = parsePaymentInput(value)
+      const shouldAutoAccept =
+        Number.isFinite(amount) &&
+        amount > 0 &&
+        current.response !== 'accepted'
 
       return {
         ...current,
@@ -289,6 +295,8 @@ export function TripDetailsView({
           Number.isFinite(amount) && amount > 0
             ? 'accepted'
             : current.response,
+        responseAutoChanged:
+          shouldAutoAccept || current.responseAutoChanged,
         error: '',
       }
     })
@@ -300,6 +308,7 @@ export function TripDetailsView({
         ? {
             ...current,
             response: value,
+            responseAutoChanged: false,
             error: '',
           }
         : current,
@@ -419,12 +428,7 @@ export function TripDetailsView({
       return
     }
 
-    const currentPaymentTimer = paymentTimers.current[student.id]
-
-    if (currentPaymentTimer) {
-      clearTimeout(currentPaymentTimer)
-      delete paymentTimers.current[student.id]
-    }
+    clearPaymentTimer(student.id)
 
     setSavingStudentId(student.id)
     setPaymentSavingId(student.id)
@@ -898,6 +902,13 @@ export function TripDetailsView({
 
   const { trip, course, levels } = data
 
+  const participantResponseClass =
+    participantEditor?.response === 'accepted'
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 focus:border-emerald-400 focus:ring-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:focus:ring-emerald-900/40'
+      : participantEditor?.response === 'rejected'
+        ? 'border-red-300 bg-red-50 text-red-800 focus:border-red-400 focus:ring-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300 dark:focus:ring-red-900/40'
+        : 'border-slate-200 bg-white text-slate-800 focus:border-blue-400 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-blue-900/40'
+
   return (
     <div
       dir="rtl"
@@ -1341,12 +1352,36 @@ export function TripDetailsView({
                   disabled={
                     savingStudentId === participantEditor.student.id
                   }
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className={`h-11 w-full rounded-xl border px-3 text-sm font-semibold outline-none transition focus:ring-2 disabled:opacity-60 ${participantResponseClass}`}
                 >
-                  <option value="pending">بانتظار الرد</option>
-                  <option value="accepted">موافق</option>
-                  <option value="rejected">رافض</option>
+                  <option
+                    value="pending"
+                    className="bg-white font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    بانتظار الرد
+                  </option>
+                  <option
+                    value="accepted"
+                    className="bg-emerald-50 font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                  >
+                    موافق
+                  </option>
+                  <option
+                    value="rejected"
+                    className="bg-red-50 font-semibold text-red-800 dark:bg-red-950 dark:text-red-300"
+                  >
+                    رافض
+                  </option>
                 </select>
+
+                {participantEditor.responseAutoChanged && (
+                  <div className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      تم تغيير حالة الرد تلقائياً إلى «موافق» بسبب إدخال مبلغ دفع.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1359,9 +1394,8 @@ export function TripDetailsView({
 
                 <input
                   id="participant-payment"
-                  type="number"
-                  min="0"
-                  step="0.001"
+                  type="text"
+                  inputMode="decimal"
                   value={participantEditor.payment}
                   onChange={(event) =>
                     updateEditorPayment(event.target.value)
