@@ -81,8 +81,10 @@ export function TripResultsTable({
 }: Props) {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [columnsLoaded, setColumnsLoaded] = useState(false)
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'student' | 'admin' | 'none'>('all')
-  const [paymentFilter, setPaymentFilter] = useState('all')
+
+  const [activeFilter, setActiveFilter] = useState(
+    responseFilter === 'all' ? 'all' : `response:${responseFilter}`,
+  )
 
   const defaultColumns = () =>
     RESULT_COLUMNS
@@ -157,21 +159,34 @@ export function TripResultsTable({
   ).sort((a, b) => a - b)
 
   const filteredStudents = students
-    .filter((student) =>
-      responseFilter === 'all'
-        ? true
-        : student.response === responseFilter,
-    )
     .filter((student) => {
-      if (sourceFilter === 'all') return true
-      if (sourceFilter === 'none') return student.response_source === null
-      return student.response_source === sourceFilter
+      if (activeFilter === 'all') return true
+
+      if (activeFilter.startsWith('response:')) {
+        return student.response === activeFilter.slice('response:'.length)
+      }
+
+      if (activeFilter === 'source:admin') {
+        return student.response_source === 'admin'
+      }
+
+      if (activeFilter === 'source:student') {
+        return student.response_source === 'student'
+      }
+
+      if (activeFilter === 'source:none') {
+        return student.response_source === null
+      }
+
+      if (activeFilter.startsWith('payment:')) {
+        return (
+          String(student.payment_amount) ===
+          activeFilter.slice('payment:'.length)
+        )
+      }
+
+      return true
     })
-    .filter((student) =>
-      paymentFilter === 'all'
-        ? true
-        : String(student.payment_amount) === paymentFilter,
-    )
     .filter((student) => {
       const query = search.trim().toLowerCase()
       if (!query) return true
@@ -242,7 +257,11 @@ export function TripResultsTable({
           >
             <Settings2 className="h-4 w-4" />
             تخصيص الأعمدة
-            <ChevronDown className={`h-4 w-4 transition-transform ${showColumnSettings ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${
+                showColumnSettings ? 'rotate-180' : ''
+              }`}
+            />
           </button>
         </div>
 
@@ -276,7 +295,11 @@ export function TripResultsTable({
                     visibleColumns.includes(column.id)
                       ? 'border-blue-100 bg-blue-50/70 text-slate-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-slate-200'
                       : 'border-slate-100 bg-slate-50/50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400'
-                  } ${column.id === 'student' ? 'cursor-not-allowed opacity-80' : ''}`}
+                  } ${
+                    column.id === 'student'
+                      ? 'cursor-not-allowed opacity-80'
+                      : ''
+                  }`}
                 >
                   <input
                     type="checkbox"
@@ -297,7 +320,7 @@ export function TripResultsTable({
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_repeat(3,minmax(170px,200px))]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
           <div className="relative">
             <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -311,52 +334,43 @@ export function TripResultsTable({
 
           <div className="relative">
             <select
-              value={responseFilter}
-              onChange={(event) =>
-                onResponseFilterChange(event.target.value as 'all' | ResponseStatus)
-              }
-              aria-label="تصفية الطلاب حسب الرد"
-              className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pl-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-            >
-              <option value="all">جميع الردود</option>
-              <option value="accepted">الموافقون فقط</option>
-              <option value="rejected">الرافضون فقط</option>
-              <option value="pending">الذين لم يردوا</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
+              value={activeFilter}
+              onChange={(event) => {
+                const value = event.target.value
+                setActiveFilter(value)
 
-          <div className="relative">
-            <select
-              value={sourceFilter}
-              onChange={(event) =>
-                setSourceFilter(event.target.value as 'all' | 'student' | 'admin' | 'none')
-              }
-              aria-label="تصفية الطلاب حسب نوع الرد"
+                onResponseFilterChange(
+                  value.startsWith('response:')
+                    ? (value.slice('response:'.length) as ResponseStatus)
+                    : 'all',
+                )
+              }}
+              aria-label="تصفية الطلاب"
               className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pl-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
-              <option value="all">جميع أنواع الرد</option>
-              <option value="admin">رد يدوي</option>
-              <option value="student">رد من الرابط</option>
-              <option value="none">بدون نوع رد</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
+              <option value="all">كل التصفية</option>
 
-          <div className="relative">
-            <select
-              value={paymentFilter}
-              onChange={(event) => setPaymentFilter(event.target.value)}
-              aria-label="تصفية الطلاب حسب مبلغ الدفع"
-              className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pl-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-            >
-              <option value="all">جميع مبالغ الدفع</option>
-              {paymentOptions.map((amount) => (
-                <option key={amount} value={String(amount)}>
-                  {formatPayment(amount)}
-                </option>
-              ))}
+              <optgroup label="الرد">
+                <option value="response:accepted">موافق</option>
+                <option value="response:rejected">رافض</option>
+                <option value="response:pending">بانتظار الرد</option>
+              </optgroup>
+
+              <optgroup label="نوع الرد">
+                <option value="source:admin">يدوي</option>
+                <option value="source:student">من الرابط</option>
+                <option value="source:none">بدون نوع رد</option>
+              </optgroup>
+
+              <optgroup label="الدفع">
+                {paymentOptions.map((amount) => (
+                  <option key={amount} value={`payment:${amount}`}>
+                    {formatPayment(amount)}
+                  </option>
+                ))}
+              </optgroup>
             </select>
+
             <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
         </div>
@@ -366,15 +380,46 @@ export function TripResultsTable({
         <table className="w-full min-w-[1000px] border-collapse text-right text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-100/70 text-slate-600 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300">
-              <th className="w-14 px-4 py-3.5 text-center text-xs font-semibold">#</th>
-              {visibleColumns.includes('student') && <th className="px-4 py-3.5 text-xs font-semibold">الطالب</th>}
-              {visibleColumns.includes('level') && <th className="px-4 py-3.5 text-xs font-semibold">المستوى</th>}
-              {visibleColumns.includes('phone') && <th className="px-4 py-3.5 text-xs font-semibold">الهاتف</th>}
-              {visibleColumns.includes('response') && <th className="px-4 py-3.5 text-xs font-semibold">الرد</th>}
-              {visibleColumns.includes('source') && <th className="px-4 py-3.5 text-xs font-semibold">نوع الرد</th>}
-              {visibleColumns.includes('date') && <th className="px-4 py-3.5 text-xs font-semibold">تاريخ الرد</th>}
-              {visibleColumns.includes('payment') && <th className="px-4 py-3.5 text-xs font-semibold">الدفع</th>}
-              {visibleColumns.includes('note') && <th className="px-4 py-3.5 text-xs font-semibold">الملاحظة</th>}
+              <th className="w-14 px-4 py-3.5 text-center text-xs font-semibold">
+                #
+              </th>
+
+              {visibleColumns.includes('student') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">الطالب</th>
+              )}
+
+              {visibleColumns.includes('level') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">المستوى</th>
+              )}
+
+              {visibleColumns.includes('phone') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">الهاتف</th>
+              )}
+
+              {visibleColumns.includes('response') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">الرد</th>
+              )}
+
+              {visibleColumns.includes('source') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">نوع الرد</th>
+              )}
+
+              {visibleColumns.includes('date') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">
+                  تاريخ الرد
+                </th>
+              )}
+
+              {visibleColumns.includes('payment') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">الدفع</th>
+              )}
+
+              {visibleColumns.includes('note') && (
+                <th className="px-4 py-3.5 text-xs font-semibold">
+                  الملاحظة
+                </th>
+              )}
+
               <th className="px-4 py-3.5 text-xs font-semibold">الإجراءات</th>
             </tr>
           </thead>
@@ -411,6 +456,7 @@ export function TripResultsTable({
                       <div className="font-semibold text-slate-800 dark:text-slate-100">
                         {student.name}
                       </div>
+
                       {student.personal_id && (
                         <div className="mt-1 text-xs text-slate-500">
                           الرقم الشخصي: {student.personal_id}
@@ -435,7 +481,11 @@ export function TripResultsTable({
 
                   {visibleColumns.includes('response') && (
                     <td className="px-4 py-4">
-                      <span className={`inline-flex rounded-lg border px-2.5 py-1.5 text-xs font-medium ${responseClass(student.response)}`}>
+                      <span
+                        className={`inline-flex rounded-lg border px-2.5 py-1.5 text-xs font-medium ${responseClass(
+                          student.response,
+                        )}`}
+                      >
                         {student.response === 'accepted'
                           ? 'موافق'
                           : student.response === 'rejected'
@@ -447,7 +497,11 @@ export function TripResultsTable({
 
                   {visibleColumns.includes('source') && (
                     <td className="px-4 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${sourceClass(student.response_source)}`}>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${sourceClass(
+                          student.response_source,
+                        )}`}
+                      >
                         {sourceLabel(student.response_source)}
                       </span>
                     </td>
@@ -506,16 +560,13 @@ export function TripResultsTable({
 
         {(filteredStudents.length !== students.length ||
           search !== '' ||
-          responseFilter !== 'all' ||
-          sourceFilter !== 'all' ||
-          paymentFilter !== 'all') && (
+          activeFilter !== 'all') && (
           <button
             type="button"
             onClick={() => {
               onSearchChange('')
               onResponseFilterChange('all')
-              setSourceFilter('all')
-              setPaymentFilter('all')
+              setActiveFilter('all')
             }}
             className="text-xs font-medium text-blue-700 dark:text-blue-300"
           >
