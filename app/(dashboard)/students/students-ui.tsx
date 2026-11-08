@@ -461,8 +461,9 @@ export function StudentsUI({
           </div>
         </div>
 
-        <CardContent className="p-3 sm:p-4">
+        <CardContent className="space-y-3 p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
+            {/* إضافة طالب */}
             <Button
               type="button"
               size="sm"
@@ -473,6 +474,68 @@ export function StudentsUI({
               إضافة طالب
             </Button>
 
+            {/* التحديد والحذف الجماعي */}
+            {canDelete && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectionMode) {
+                      exitSelectionMode()
+                    } else {
+                      setSelectionMode(true)
+                      setSelectedStudentIds([])
+                    }
+                  }}
+                  className={`h-9 shrink-0 gap-2 rounded-lg ${
+                    selectionMode
+                      ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
+                      : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
+                  }`}
+                >
+                  {selectionMode ? (
+                    <X className="size-4" />
+                  ) : (
+                    <CheckCircle2 className="size-4" />
+                  )}
+                  {selectionMode ? 'إلغاء التحديد' : 'تحديد'}
+                </Button>
+
+                {selectionMode && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={filteredStudents.length === 0}
+                      onClick={toggleSelectAll}
+                      className="h-9 shrink-0 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                    >
+                      <Users className="size-4" />
+                      {allStudentsSelected
+                        ? 'إلغاء تحديد الكل'
+                        : 'تحديد الكل'}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={selectedCount === 0 || deleteSaving}
+                      onClick={openDeleteConfirmation}
+                      className="h-9 shrink-0 gap-2 rounded-lg"
+                    >
+                      <Trash2 className="size-4" />
+                      مسح المحدد ({selectedCount})
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* تعديل الطالب */}
             <Button
               type="button"
               variant="outline"
@@ -485,6 +548,7 @@ export function StudentsUI({
               تعديل
             </Button>
 
+            {/* الإعفاء من الرسوم */}
             <Button
               type="button"
               variant="outline"
@@ -499,6 +563,7 @@ export function StudentsUI({
                 : 'إعفاء من الرسوم'}
             </Button>
 
+            {/* حذف طالب واحد */}
             {canDelete && (
               <Button
                 type="button"
@@ -513,6 +578,7 @@ export function StudentsUI({
               </Button>
             )}
 
+            {/* تنزيل Excel - دائماً آخر زر */}
             <div className="hidden h-7 w-px bg-border sm:block" />
 
             <Button
@@ -528,6 +594,24 @@ export function StudentsUI({
               <Download className="size-3.5 opacity-70" />
             </Button>
           </div>
+
+          {/* معلومات التحديد */}
+          {selectionMode && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50/80 to-white px-3 py-2.5 dark:border-sky-900 dark:from-sky-950/40 dark:to-slate-900">
+              <span className="flex items-center gap-2 text-sm text-sky-900 dark:text-sky-200">
+                <CheckCircle2 className="size-4 shrink-0" />
+                تم تحديد
+                <span className="font-bold tabular-nums">
+                  {selectedCount}
+                </span>
+                طالب
+              </span>
+
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                تحديد الكل يشمل النتائج الظاهرة حاليًا.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -553,10 +637,9 @@ export function StudentsUI({
         </div>
 
         <CardContent className="min-w-0 space-y-3 p-3 sm:p-4">
-          {/* أدوات البحث والتحكم بالجدول */}
+          {/* البحث وتخصيص الأعمدة */}
           <section className="border-b border-slate-200 pb-3 dark:border-slate-700">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {/* البحث */}
               <div className="relative min-w-[220px] flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
 
@@ -581,95 +664,17 @@ export function StudentsUI({
                 )}
               </div>
 
-              {canDelete && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (selectionMode) {
-                        exitSelectionMode()
-                      } else {
-                        setSelectionMode(true)
-                        setSelectedStudentIds([])
-                      }
-                    }}
-                    className={`h-9 shrink-0 gap-2 rounded-lg ${
-                      selectionMode
-                        ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
-                        : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
-                    }`}
-                  >
-                    {selectionMode ? (
-                      <X className="size-4" />
-                    ) : (
-                      <CheckCircle2 className="size-4" />
-                    )}
-                    {selectionMode ? 'إلغاء التحديد' : 'تحديد'}
-                  </Button>
-
-                  {selectionMode && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={filteredStudents.length === 0}
-                        onClick={toggleSelectAll}
-                        className="h-9 shrink-0 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
-                      >
-                        <Users className="size-4" />
-                        {allStudentsSelected
-                          ? 'إلغاء تحديد الكل'
-                          : 'تحديد الكل'}
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={selectedCount === 0 || deleteSaving}
-                        onClick={openDeleteConfirmation}
-                        className="h-9 shrink-0 gap-2 rounded-lg"
-                      >
-                        <Trash2 className="size-4" />
-                        مسح المحدد ({selectedCount})
-                      </Button>
-                    </>
-                  )}
-                </>
-              )}
-
-              {/* تخصيص الأعمدة - في أقصى اليسار */}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setShowColumns((current) => !current)}
-                className="h-9 shrink-0 gap-2 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
+                className="h-9 shrink-0 gap-2 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70 sm:mr-auto"
               >
                 <Settings2 className="size-4" />
                 {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
               </Button>
             </div>
-
-            {selectionMode && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50/80 to-white px-3 py-2.5 dark:border-sky-900 dark:from-sky-950/40 dark:to-slate-900">
-                <span className="flex items-center gap-2 text-sm text-sky-900 dark:text-sky-200">
-                  <CheckCircle2 className="size-4 shrink-0" />
-                  تم تحديد
-                  <span className="font-bold tabular-nums">
-                    {selectedCount}
-                  </span>
-                  طالب
-                </span>
-
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  تحديد الكل يشمل النتائج الظاهرة حاليًا.
-                </span>
-              </div>
-            )}
           </section>
 
           {/* لوحة تخصيص الأعمدة */}
