@@ -166,13 +166,13 @@ export function StudentsUI({
   const [deleteSaving, setDeleteSaving] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState('')
 
-  const formattedAnnualFee = currentAnnualFee.toLocaleString('ar-BH', {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
+  const formattedAnnualFee = currentAnnualFee.toLocaleString('en-BH', {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
   })
-
-  const formattedTotal = totalStudents.toLocaleString('ar-BH')
-  const formattedResults = totalFilteredStudents.toLocaleString('ar-BH')
+  
+  const formattedTotal = totalStudents.toLocaleString('en-BH')
+  const formattedResults = totalFilteredStudents.toLocaleString('en-BH')
 
   const canDelete =
     isDeletionSettingLoaded && allowStudentDeletion
