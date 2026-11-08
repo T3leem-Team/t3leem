@@ -21,6 +21,7 @@ const tripStudentSelect = `
   response,
   response_note,
   responded_at,
+  response_source,
   payment_amount
 `
 
