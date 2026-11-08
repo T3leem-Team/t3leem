@@ -275,227 +275,230 @@ export function DataTable<T>({
         </div>
       </div>
 
+    
       {/* الجدول */}
-       <div
-          dir="rtl"
-          className="max-h-[70vh] w-full overflow-y-auto overflow-x-auto rounded-lg border border-gray-200 bg-white"
-          style={{
-            direction: 'rtl',
-            scrollbarGutter: 'stable',
-          }}
-        >
-        <table
-          dir="rtl"
-          className="w-full min-w-max border-collapse text-right text-xs"
-        >
-          <thead className="text-gray-700">
-            <tr className="bg-gray-50">
-              <th className="sticky right-0 top-0 z-40 w-14 min-w-14 border-b border-gray-200 bg-gray-50 px-3 py-3 text-center font-semibold">
-                م
-              </th>
-
-              {activeColumns.map((column) => (
-                <th
-                  key={column.id}
-                  className={`sticky top-0 z-30 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold ${column.className ?? ''}`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span>{column.header}</span>
-
-                    {column.sortable !== false && (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(column.id)}
-                        className="text-gray-400 hover:text-teal-700"
-                        aria-label={`ترتيب ${column.header}`}
-                      >
-                        {sort?.column === column.id ? (
-                          sort.direction === 'asc' ? (
-                            <ChevronUp size={13} />
-                          ) : (
-                            <ChevronDown size={13} />
-                          )
-                        ) : (
-                          <ChevronDown size={13} />
-                        )}
-                      </button>
-                    )}
-                  </div>
+      <div
+        dir="ltr"
+        className="max-h-[70vh] w-full overflow-auto rounded-lg border border-gray-200 bg-white"
+        style={{
+          direction: 'ltr',
+          scrollbarGutter: 'stable',
+        }}
+      >
+        <div dir="rtl" style={{ direction: 'rtl' }}>
+          <table
+            dir="rtl"
+            className="w-full min-w-max border-collapse text-right text-xs"
+          >
+            <thead className="text-gray-700">
+              <tr className="bg-gray-50">
+                <th className="sticky right-0 top-0 z-40 w-14 min-w-14 border-b border-gray-200 bg-gray-50 px-3 py-3 text-center font-semibold">
+                  م
                 </th>
-              ))}
-            </tr>
 
-            {/* الفلاتر داخل رأس كل عمود */}
-            <tr className="bg-white">
-              <th className="sticky right-0 top-[38px] z-40 border-b border-gray-200 bg-white px-2 py-2" />
-
-              {activeColumns.map((column) => {
-                const type = column.filterType ?? 'multi-select'
-
-                const options =
-                  column.filterOptions ??
-                  Array.from(
-                    new Set(
-                      data.map((row) =>
-                        String(column.accessor(row) ?? '')
-                      )
-                    )
-                  )
-
-                const selected = filters[column.id] ?? []
-                const textValue = textFilters[column.id] ?? ''
-
-                return (
+                {activeColumns.map((column) => (
                   <th
                     key={column.id}
-                    className={`sticky top-[38px] z-20 min-w-[145px] border-b border-gray-200 bg-white px-2 py-2 ${column.className ?? ''}`}
+                    className={`sticky top-0 z-30 whitespace-nowrap border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold ${column.className ?? ''}`}
                   >
-                    {column.filterable === false ? null : type === 'text' ? (
-                      <div className="relative">
-                        <input
-                          value={textValue}
-                          onChange={(event) => {
-                            setTextFilters((current) => ({
-                              ...current,
-                              [column.id]: event.target.value,
-                            }))
-                            setPage(1)
-                          }}
-                          placeholder="تصفية..."
-                          className={`h-8 w-full rounded border px-2 text-[11px] font-normal outline-none focus:border-teal-600 ${
-                            textValue
-                              ? 'border-teal-500 bg-teal-50/40'
-                              : 'border-gray-200 bg-white'
-                          }`}
-                        />
+                    <div className="flex items-center gap-1.5">
+                      <span>{column.header}</span>
 
-                        {textValue && (
-                          <button
-                            type="button"
-                            onClick={() => clearColumnFilter(column)}
-                            className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600"
-                            aria-label={`مسح فلتر ${column.header}`}
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <details className="relative font-normal">
-                        <summary
-                          className={`flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded border px-2 text-[11px] ${
-                            selected.length
-                              ? 'border-teal-500 bg-teal-50/40 text-teal-800'
-                              : 'border-gray-200 bg-white text-gray-500'
-                          }`}
+                      {column.sortable !== false && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(column.id)}
+                          className="text-gray-400 hover:text-teal-700"
+                          aria-label={`ترتيب ${column.header}`}
                         >
-                          <span>
-                            {selected.length
-                              ? `تم اختيار ${selected.length}`
-                              : 'الكل'}
-                          </span>
-                          <ChevronDown size={12} />
-                        </summary>
-
-                        <div className="absolute right-0 top-9 z-50 max-h-56 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-right shadow-xl">
-                          {options.map((option) => (
-                            <label
-                              key={option}
-                              className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-normal hover:bg-gray-50"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selected.includes(option)}
-                                onChange={() =>
-                                  toggleFilterOption(column.id, option)
-                                }
-                                className="accent-teal-700"
-                              />
-                              <span>{option || 'فارغ'}</span>
-                            </label>
-                          ))}
-
-                          {options.length === 0 && (
-                            <p className="py-3 text-center text-xs text-gray-400">
-                              لا توجد خيارات
-                            </p>
+                          {sort?.column === column.id ? (
+                            sort.direction === 'asc' ? (
+                              <ChevronUp size={13} />
+                            ) : (
+                              <ChevronDown size={13} />
+                            )
+                          ) : (
+                            <ChevronDown size={13} />
                           )}
+                        </button>
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
 
-                          {selected.length > 0 && (
+              {/* الفلاتر داخل رأس كل عمود */}
+              <tr className="bg-white">
+                <th className="sticky right-0 top-[38px] z-40 border-b border-gray-200 bg-white px-2 py-2" />
+
+                {activeColumns.map((column) => {
+                  const type = column.filterType ?? 'multi-select'
+
+                  const options =
+                    column.filterOptions ??
+                    Array.from(
+                      new Set(
+                        data.map((row) =>
+                          String(column.accessor(row) ?? '')
+                        )
+                      )
+                    )
+
+                  const selected = filters[column.id] ?? []
+                  const textValue = textFilters[column.id] ?? ''
+
+                  return (
+                    <th
+                      key={column.id}
+                      className={`sticky top-[38px] z-20 min-w-[145px] border-b border-gray-200 bg-white px-2 py-2 ${column.className ?? ''}`}
+                    >
+                      {column.filterable === false ? null : type === 'text' ? (
+                        <div className="relative">
+                          <input
+                            value={textValue}
+                            onChange={(event) => {
+                              setTextFilters((current) => ({
+                                ...current,
+                                [column.id]: event.target.value,
+                              }))
+                              setPage(1)
+                            }}
+                            placeholder="تصفية..."
+                            className={`h-8 w-full rounded border px-2 text-[11px] font-normal outline-none focus:border-teal-600 ${
+                              textValue
+                                ? 'border-teal-500 bg-teal-50/40'
+                                : 'border-gray-200 bg-white'
+                            }`}
+                          />
+
+                          {textValue && (
                             <button
                               type="button"
                               onClick={() => clearColumnFilter(column)}
-                              className="mt-1 w-full border-t border-gray-100 py-2 text-xs text-red-600"
+                              className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-600"
+                              aria-label={`مسح فلتر ${column.header}`}
                             >
-                              مسح التصفية
+                              ×
                             </button>
                           )}
                         </div>
-                      </details>
-                    )}
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
+                      ) : (
+                        <details className="relative font-normal">
+                          <summary
+                            className={`flex h-8 cursor-pointer list-none items-center justify-between gap-2 rounded border px-2 text-[11px] ${
+                              selected.length
+                                ? 'border-teal-500 bg-teal-50/40 text-teal-800'
+                                : 'border-gray-200 bg-white text-gray-500'
+                            }`}
+                          >
+                            <span>
+                              {selected.length
+                                ? `تم اختيار ${selected.length}`
+                                : 'الكل'}
+                            </span>
+                            <ChevronDown size={12} />
+                          </summary>
 
-          <tbody>
-            {pageData.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={activeColumns.length + 1}
-                  className="px-4 py-12 text-center text-gray-400"
-                >
-                  {emptyMessage}
-                </td>
+                          <div className="absolute right-0 top-9 z-50 max-h-56 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 text-right shadow-xl">
+                            {options.map((option) => (
+                              <label
+                                key={option}
+                                className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs font-normal hover:bg-gray-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected.includes(option)}
+                                  onChange={() =>
+                                    toggleFilterOption(column.id, option)
+                                  }
+                                  className="accent-teal-700"
+                                />
+                                <span>{option || 'فارغ'}</span>
+                              </label>
+                            ))}
+
+                            {options.length === 0 && (
+                              <p className="py-3 text-center text-xs text-gray-400">
+                                لا توجد خيارات
+                              </p>
+                            )}
+
+                            {selected.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => clearColumnFilter(column)}
+                                className="mt-1 w-full border-t border-gray-100 py-2 text-xs text-red-600"
+                              >
+                                مسح التصفية
+                              </button>
+                            )}
+                          </div>
+                        </details>
+                      )}
+                    </th>
+                  )
+                })}
               </tr>
-            ) : (
-              pageData.map((row, index) => {
-                const id = getRowId(row)
-                const isSelected = selectedRow === id
-                const serial =
-                  (currentPage - 1) * safePageSize + index + 1
+            </thead>
 
-                return (
-                  <tr
-                    key={id}
-                    onClick={() =>
-                      setSelectedRow(isSelected ? null : id)
-                    }
-                    className={`cursor-pointer border-b border-gray-100 transition-colors last:border-0 ${
-                      isSelected
-                        ? 'bg-teal-50'
-                        : 'bg-white hover:bg-gray-50'
-                    }`}
+            <tbody>
+              {pageData.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={activeColumns.length + 1}
+                    className="px-4 py-12 text-center text-gray-400"
                   >
-                    <td
-                      className={`sticky right-0 z-10 w-14 min-w-14 px-3 py-3 text-center tabular-nums ${
-                        isSelected ? 'bg-teal-50' : 'bg-white'
+                    {emptyMessage}
+                  </td>
+                </tr>
+              ) : (
+                pageData.map((row, index) => {
+                  const id = getRowId(row)
+                  const isSelected = selectedRow === id
+                  const serial =
+                    (currentPage - 1) * safePageSize + index + 1
+
+                  return (
+                    <tr
+                      key={id}
+                      onClick={() =>
+                        setSelectedRow(isSelected ? null : id)
+                      }
+                      className={`cursor-pointer border-b border-gray-100 transition-colors last:border-0 ${
+                        isSelected
+                          ? 'bg-teal-50'
+                          : 'bg-white hover:bg-gray-50'
                       }`}
                     >
-                      {serial}
-                    </td>
+                      <td
+                        className={`sticky right-0 z-10 w-14 min-w-14 px-3 py-3 text-center tabular-nums ${
+                          isSelected ? 'bg-teal-50' : 'bg-white'
+                        }`}
+                      >
+                        {serial}
+                      </td>
 
-                    {activeColumns.map((column) => {
-                      const value = column.accessor(row)
+                      {activeColumns.map((column) => {
+                        const value = column.accessor(row)
 
-                      return (
-                        <td
-                          key={column.id}
-                          className={`whitespace-nowrap px-3 py-3 text-gray-700 ${column.className ?? ''}`}
-                        >
-                          {column.render
-                            ? column.render(value, row)
-                            : String(value ?? '—')}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+                        return (
+                          <td
+                            key={column.id}
+                            className={`whitespace-nowrap px-3 py-3 text-gray-700 ${column.className ?? ''}`}
+                          >
+                            {column.render
+                              ? column.render(value, row)
+                              : String(value ?? '—')}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* معلومات النتائج والتحكم بعدد الصفوف والتنقل */}
@@ -562,6 +565,3 @@ export function DataTable<T>({
           </button>
         </div>
       </div>
-    </div>
-  )
-}
