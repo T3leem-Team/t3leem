@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useState } from 'react'
@@ -21,7 +22,6 @@ import {
   Settings2,
 } from 'lucide-react'
 
-import { PageHeader } from '@/components/dashboard/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StudentDetails } from './student-details'
@@ -272,24 +272,18 @@ export function StudentsUI({
   return (
     <div
       dir="rtl"
-      className="mx-auto min-w-0 max-w-[1600px] space-y-5 pb-6"
+      className="mx-auto min-w-0 max-w-[1600px] space-y-4 pb-6"
     >
       {/* عنوان الصفحة */}
-      <div className="overflow-hidden rounded-2xl border border-sky-200/70 bg-gradient-to-l from-sky-50 via-white to-white shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-        <PageHeader
-          title="إدارة الطلاب"
-          description="إدارة سجلات الطلاب والرسوم والبيانات الدراسية"
-          action={
-            <Button
-              type="button"
-              onClick={openAddStudent}
-              className="h-10 w-full gap-2 rounded-xl bg-sky-600 px-4 text-white shadow-sm transition-colors hover:bg-sky-700 sm:w-auto"
-            >
-              <UserPlus className="size-4" />
-              إضافة طالب
-            </Button>
-          }
-        />
+      <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-sky-200/70 bg-gradient-to-l from-sky-50 via-white to-white px-4 py-3 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            إدارة الطلاب
+          </h1>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            إدارة سجلات الطلاب والرسوم والبيانات الدراسية
+          </p>
+        </div>
       </div>
 
       {/* حالة اتصال قاعدة البيانات */}
@@ -471,6 +465,16 @@ export function StudentsUI({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
+              size="sm"
+              onClick={openAddStudent}
+              className={`${actionButtonClass} bg-sky-600 text-white shadow-sm hover:bg-sky-700`}
+            >
+              <UserPlus className="size-4" />
+              إضافة طالب
+            </Button>
+
+            <Button
+              type="button"
               variant="outline"
               size="sm"
               disabled={!selectedStudentId}
@@ -527,7 +531,7 @@ export function StudentsUI({
         </CardContent>
       </Card>
 
-      {/* سجل الطلاب والبحث */}
+      {/* سجل الطلاب */}
       <Card className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-3 border-b border-cyan-100 bg-gradient-to-l from-cyan-50/80 via-white to-white px-4 py-4 dark:border-slate-700 dark:from-cyan-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-200 bg-cyan-100 text-cyan-700 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">
@@ -548,56 +552,34 @@ export function StudentsUI({
           </div>
         </div>
 
-        <CardContent className="min-w-0 space-y-4 p-3 sm:p-4">
-          {/* البحث عن طالب */}
-          <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
-            <div className="flex items-center justify-between gap-2">
-              <label
-                htmlFor="students-search"
-                className="text-sm font-semibold text-slate-700 dark:text-slate-200"
-              >
-                البحث عن طالب
-              </label>
+        <CardContent className="min-w-0 space-y-3 p-3 sm:p-4">
+          {/* أدوات البحث والتحكم بالجدول */}
+          <section className="border-b border-slate-200 pb-3 dark:border-slate-700">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {/* البحث */}
+              <div className="relative min-w-[220px] flex-1">
+                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
 
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-white hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-slate-100"
-                >
-                  <X className="size-3.5" />
-                  مسح البحث
-                </button>
-              )}
-            </div>
+                <input
+                  id="students-search"
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="ابحث بالاسم أو الرقم الشخصي أو الهاتف..."
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 pr-9 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+                />
 
-            <div className="relative">
-              <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-
-              <input
-                id="students-search"
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="الاسم، الرقم الشخصي، الهاتف، الصف..."
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 pr-9 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-sky-700 dark:focus:ring-sky-950"
-              />
-            </div>
-          </section>
-
-          {/* أزرار التحكم بالجدول */}
-          <section className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowColumns((current) => !current)}
-                className="h-9 gap-2 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
-              >
-                <Settings2 className="size-4" />
-                {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
-              </Button>
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    aria-label="مسح البحث"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
 
               {canDelete && (
                 <>
@@ -613,7 +595,7 @@ export function StudentsUI({
                         setSelectedStudentIds([])
                       }
                     }}
-                    className={`h-9 gap-2 rounded-lg ${
+                    className={`h-9 shrink-0 gap-2 rounded-lg ${
                       selectionMode
                         ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200'
                         : 'border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300'
@@ -635,7 +617,7 @@ export function StudentsUI({
                         size="sm"
                         disabled={filteredStudents.length === 0}
                         onClick={toggleSelectAll}
-                        className="h-9 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
+                        className="h-9 shrink-0 gap-2 rounded-lg border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300"
                       >
                         <Users className="size-4" />
                         {allStudentsSelected
@@ -649,7 +631,7 @@ export function StudentsUI({
                         size="sm"
                         disabled={selectedCount === 0 || deleteSaving}
                         onClick={openDeleteConfirmation}
-                        className="h-9 gap-2 rounded-lg"
+                        className="h-9 shrink-0 gap-2 rounded-lg"
                       >
                         <Trash2 className="size-4" />
                         مسح المحدد ({selectedCount})
@@ -658,10 +640,22 @@ export function StudentsUI({
                   )}
                 </>
               )}
+
+              {/* تخصيص الأعمدة - في أقصى اليسار */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowColumns((current) => !current)}
+                className="h-9 shrink-0 gap-2 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
+              >
+                <Settings2 className="size-4" />
+                {showColumns ? 'إخفاء الأعمدة' : 'تخصيص الأعمدة'}
+              </Button>
             </div>
 
             {selectionMode && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50/80 to-white px-3 py-2.5 dark:border-sky-900 dark:from-sky-950/40 dark:to-slate-900">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50/80 to-white px-3 py-2.5 dark:border-sky-900 dark:from-sky-950/40 dark:to-slate-900">
                 <span className="flex items-center gap-2 text-sm text-sky-900 dark:text-sky-200">
                   <CheckCircle2 className="size-4 shrink-0" />
                   تم تحديد
@@ -676,150 +670,150 @@ export function StudentsUI({
                 </span>
               </div>
             )}
+          </section>
 
-            {/* لوحة تخصيص الأعمدة */}
-            {showColumns && (
-              <div className="overflow-hidden rounded-2xl border border-indigo-200/70 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 bg-gradient-to-l from-indigo-50/80 via-white to-white p-4 dark:border-slate-700 dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
-                      <Settings2 className="size-5" />
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        تخصيص الأعمدة
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        اختر الأعمدة التي تريد ظهورها في جدول الطلاب.
-                      </p>
-                    </div>
+          {/* لوحة تخصيص الأعمدة */}
+          {showColumns && (
+            <div className="overflow-hidden rounded-2xl border border-indigo-200/70 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-indigo-100 bg-gradient-to-l from-indigo-50/80 via-white to-white p-4 dark:border-slate-700 dark:from-indigo-950/40 dark:via-slate-900 dark:to-slate-900">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                    <Settings2 className="size-5" />
                   </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowColumns(false)}
-                    className="h-9 gap-2 rounded-lg"
-                  >
-                    <X className="size-4" />
-                    إغلاق
-                  </Button>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      تخصيص الأعمدة
+                    </h3>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      اختر الأعمدة التي تريد ظهورها في جدول الطلاب.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="space-y-5 p-3 sm:p-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowColumns(false)}
+                  className="h-9 gap-2 rounded-lg"
+                >
+                  <X className="size-4" />
+                  إغلاق
+                </Button>
+              </div>
+
+              <div className="space-y-5 p-3 sm:p-4">
+                <div>
+                  <h4 className="mb-3 text-xs font-bold text-slate-500 dark:text-slate-400">
+                    الأعمدة الأساسية
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {baseColumns.map((column) => (
+                      <label
+                        key={column.key}
+                        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns[column.key] !== false}
+                          onChange={() => toggleColumn(column.key)}
+                          className="size-4 shrink-0 accent-indigo-600"
+                        />
+                        <span className="truncate text-slate-700 dark:text-slate-200">
+                          {column.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 text-xs font-bold text-slate-500 dark:text-slate-400">
+                    الأعمدة الإضافية
+                  </h4>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {extraColumns.map((column) => (
+                      <label
+                        key={column.key}
+                        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!visibleColumns[column.key]}
+                          onChange={() => toggleColumn(column.key)}
+                          className="size-4 shrink-0 accent-indigo-600"
+                        />
+                        <span className="truncate text-slate-700 dark:text-slate-200">
+                          {column.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {(dynamicFields.some((field) => field.is_active) ||
+                  courses.length > 0) && (
                   <div>
                     <h4 className="mb-3 text-xs font-bold text-slate-500 dark:text-slate-400">
-                      الأعمدة الأساسية
+                      الحقول والدورات
                     </h4>
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {baseColumns.map((column) => (
-                        <label
-                          key={column.key}
-                          className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={visibleColumns[column.key] !== false}
-                            onChange={() => toggleColumn(column.key)}
-                            className="size-4 shrink-0 accent-indigo-600"
-                          />
-                          <span className="truncate text-slate-700 dark:text-slate-200">
-                            {column.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="mb-3 text-xs font-bold text-slate-500 dark:text-slate-400">
-                      الأعمدة الإضافية
-                    </h4>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {extraColumns.map((column) => (
-                        <label
-                          key={column.key}
-                          className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!!visibleColumns[column.key]}
-                            onChange={() => toggleColumn(column.key)}
-                            className="size-4 shrink-0 accent-indigo-600"
-                          />
-                          <span className="truncate text-slate-700 dark:text-slate-200">
-                            {column.label}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {(dynamicFields.some((field) => field.is_active) ||
-                    courses.length > 0) && (
-                    <div>
-                      <h4 className="mb-3 text-xs font-bold text-slate-500 dark:text-slate-400">
-                        الحقول والدورات
-                      </h4>
-
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {dynamicFields
-                          .filter((field) => field.is_active)
-                          .map((field) => (
-                            <label
-                              key={field.id}
-                              className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={
-                                  !!visibleColumns[`dynamic-${field.id}`]
-                                }
-                                onChange={() =>
-                                  toggleColumn(`dynamic-${field.id}`)
-                                }
-                                className="size-4 shrink-0 accent-indigo-600"
-                              />
-                              <span className="truncate text-slate-700 dark:text-slate-200">
-                                {field.name}
-                              </span>
-                            </label>
-                          ))}
-
-                        {courses.map((course) => (
+                      {dynamicFields
+                        .filter((field) => field.is_active)
+                        .map((field) => (
                           <label
-                            key={course.id}
-                            className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-800 dark:hover:bg-sky-950/30"
+                            key={field.id}
+                            className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
                           >
                             <input
                               type="checkbox"
                               checked={
-                                !!visibleColumns[`course-${course.id}`]
+                                !!visibleColumns[`dynamic-${field.id}`]
                               }
                               onChange={() =>
-                                toggleColumn(`course-${course.id}`)
+                                toggleColumn(`dynamic-${field.id}`)
                               }
-                              className="size-4 shrink-0 accent-sky-600"
+                              className="size-4 shrink-0 accent-indigo-600"
                             />
                             <span className="truncate text-slate-700 dark:text-slate-200">
-                              {course.name}
+                              {field.name}
                             </span>
                           </label>
                         ))}
-                      </div>
+
+                      {courses.map((course) => (
+                        <label
+                          key={course.id}
+                          className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm transition-colors hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-800 dark:hover:bg-sky-950/30"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={
+                              !!visibleColumns[`course-${course.id}`]
+                            }
+                            onChange={() =>
+                              toggleColumn(`course-${course.id}`)
+                            }
+                            className="size-4 shrink-0 accent-sky-600"
+                          />
+                          <span className="truncate text-slate-700 dark:text-slate-200">
+                            {course.name}
+                          </span>
+                        </label>
+                      ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+            </div>
+          )}
 
           {/* جدول الطلاب */}
-          <section className="min-w-0 border-t border-slate-200 pt-4 dark:border-slate-700">
+          <section className="min-w-0 border-t border-slate-200 pt-3 dark:border-slate-700">
             <StudentsTable
               students={filteredStudents}
               courses={courses}
