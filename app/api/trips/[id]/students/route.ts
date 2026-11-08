@@ -90,6 +90,7 @@ type TripStudentRow = {
   response_note: string | null
   responded_at: string | null
   payment_amount: number | null
+  response_source: string | null
 }
 
 function normalizePercentage(
@@ -838,6 +839,7 @@ export async function GET(
             response: saved?.response ?? 'pending',
             response_note: saved?.response_note ?? null,
             responded_at: saved?.responded_at ?? null,
+            response_source: saved?.response_source ?? null,
             payment_amount: saved?.payment_amount ?? 0,
             trip_student_id: saved?.id ?? null,
           }
