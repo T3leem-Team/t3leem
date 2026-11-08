@@ -1629,6 +1629,7 @@ function AcceptedWaitingCard() {
   )
 }
 
+
 function StudentTripCard({
   trip,
   responding,
@@ -1641,6 +1642,10 @@ function StudentTripCard({
     response: TripResponse,
   ) => void
 }) {
+  const hasResponded =
+    trip.response === 'accepted' ||
+    trip.response === 'rejected'
+
   const responseLabel =
     trip.response === 'accepted'
       ? 'تمت الموافقة'
@@ -1667,7 +1672,6 @@ function StudentTripCard({
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays className="size-3.5" />
-
                 {trip.trip_date
                   ? formatDate(trip.trip_date)
                   : 'التاريخ غير محدد'}
@@ -1676,16 +1680,13 @@ function StudentTripCard({
               {trip.meeting_time && (
                 <span className="inline-flex items-center gap-1.5">
                   <Clock3 className="size-3.5" />
-
-                  التجمع:{' '}
-                  {formatTime(trip.meeting_time)}
+                  التجمع: {formatTime(trip.meeting_time)}
                 </span>
               )}
 
               {trip.trip_location && (
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="size-3.5" />
-
                   {trip.trip_location}
                 </span>
               )}
@@ -1721,15 +1722,13 @@ function StudentTripCard({
           />
         </div>
 
-        {(trip.trip_description ||
-          trip.trip_note) && (
+        {(trip.trip_description || trip.trip_note) && (
           <div className="space-y-2">
             {trip.trip_description && (
               <div className="rounded-xl border bg-background p-3">
                 <p className="mb-1 text-xs font-semibold text-muted-foreground">
                   وصف الرحلة
                 </p>
-
                 <p className="text-sm leading-6">
                   {trip.trip_description}
                 </p>
@@ -1741,7 +1740,6 @@ function StudentTripCard({
                 <p className="mb-1 text-xs font-semibold text-muted-foreground">
                   ملاحظة
                 </p>
-
                 <p className="text-sm leading-6">
                   {trip.trip_note}
                 </p>
@@ -1755,74 +1753,50 @@ function StudentTripCard({
             <p className="mb-1 text-xs font-semibold text-muted-foreground">
               ملاحظتك
             </p>
-
             <p className="text-sm">
               {trip.response_note}
             </p>
           </div>
         )}
 
-        <div className="border-t border-blue-100 pt-4">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            يرجى تحديد الرد على الرحلة
-          </p>
+        {!hasResponded && (
+          <div className="border-t border-blue-100 pt-4">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              يرجى تحديد الرد على الرحلة
+            </p>
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              disabled={responding}
-              onClick={() =>
-                onRespond(
-                  trip.trip_id,
-                  'accepted',
-                )
-              }
-              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                trip.response === 'accepted'
-                  ? 'border-green-600 bg-green-600 text-white shadow-sm'
-                  : 'border-green-200 bg-green-50/50 text-green-700 hover:border-green-400 hover:bg-green-100'
-              }`}
-            >
-              <Check className="size-4" />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={responding}
+                onClick={() =>
+                  onRespond(trip.trip_id, 'accepted')
+                }
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50/50 px-4 py-3 text-sm font-semibold text-green-700 transition-all hover:border-green-400 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Check className="size-4" />
+                {responding ? 'جاري الحفظ...' : 'أوافق'}
+              </button>
 
-              {responding &&
-              trip.response !== 'accepted'
-                ? 'جاري الحفظ...'
-                : trip.response === 'accepted'
-                  ? 'تمت الموافقة'
-                  : 'أوافق'}
-            </button>
-
-            <button
-              type="button"
-              disabled={responding}
-              onClick={() =>
-                onRespond(
-                  trip.trip_id,
-                  'rejected',
-                )
-              }
-              className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                trip.response === 'rejected'
-                  ? 'border-red-600 bg-red-600 text-white shadow-sm'
-                  : 'border-red-200 bg-red-50/50 text-red-700 hover:border-red-400 hover:bg-red-100'
-              }`}
-            >
-              <X className="size-4" />
-
-              {responding &&
-              trip.response !== 'rejected'
-                ? 'جاري الحفظ...'
-                : trip.response === 'rejected'
-                  ? 'تم الاعتذار'
-                  : 'أعتذر'}
-            </button>
+              <button
+                type="button"
+                disabled={responding}
+                onClick={() =>
+                  onRespond(trip.trip_id, 'rejected')
+                }
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/50 px-4 py-3 text-sm font-semibold text-red-700 transition-all hover:border-red-400 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X className="size-4" />
+                {responding ? 'جاري الحفظ...' : 'أعتذر'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
 }
+
 
 function TripInfoItem({
   label,
