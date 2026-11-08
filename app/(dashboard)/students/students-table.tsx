@@ -1,7 +1,6 @@
-
 'use client'
 
-import { Filter, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -279,19 +278,15 @@ export function StudentsTable({
     placeholder: string,
   ) => {
     return (
-      <div className="flex items-center gap-1">
-        <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
-
-        <input
-          value={filters[key] as string}
-          onChange={(event) =>
-            onUpdateFilter(key, event.target.value)
-          }
-          placeholder={placeholder}
-          className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
-          onClick={(event) => event.stopPropagation()}
-        />
-      </div>
+      <input
+        value={filters[key] as string}
+        onChange={(event) =>
+          onUpdateFilter(key, event.target.value)
+        }
+        placeholder={placeholder}
+        className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+        onClick={(event) => event.stopPropagation()}
+      />
     )
   }
 
@@ -301,26 +296,22 @@ export function StudentsTable({
     options: string[],
   ) => {
     return (
-      <div className="flex items-center gap-1">
-        <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <select
+        value={filters[key] as string}
+        onChange={(event) =>
+          onUpdateFilter(key, event.target.value)
+        }
+        onClick={(event) => event.stopPropagation()}
+        className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+      >
+        <option value="">{placeholder}</option>
 
-        <select
-          value={filters[key] as string}
-          onChange={(event) =>
-            onUpdateFilter(key, event.target.value)
-          }
-          onClick={(event) => event.stopPropagation()}
-          className="h-8 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
-        >
-          <option value="">{placeholder}</option>
-
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      </div>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
     )
   }
 
@@ -393,89 +384,81 @@ export function StudentsTable({
               {/* فلتر المستويات الدراسية المتعددة */}
               {visibleColumns.grade !== false && (
                 <TableHead className="min-w-[170px]">
-                  <div className="flex items-center gap-1">
-                    <Filter className="h-3 w-3 shrink-0 text-muted-foreground" />
-
-                    <div
-                      ref={gradeMenuRef}
-                      className="relative w-full min-w-0"
+                  <div
+                    ref={gradeMenuRef}
+                    className="relative w-full min-w-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setGradeMenuOpen((open) => !open)
+                      }}
+                      aria-label="تصفية حسب المستويات"
+                      aria-expanded={gradeMenuOpen}
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors hover:border-sky-300 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
                     >
-                      <button
-                        type="button"
-                        onClick={(event) => {
+                      <span className="truncate">
+                        {filters.grade.length === 0
+                          ? 'كل المستويات'
+                          : filters.grade.length === 1
+                            ? filters.grade[0]
+                            : `${filters.grade.length} مستويات محددة`}
+                      </span>
+
+                      <span className="shrink-0">▾</span>
+                    </button>
+
+                    {gradeMenuOpen && (
+                      <div
+                        className="absolute right-0 top-full z-[100] mt-1 max-h-64 w-full min-w-[190px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                        onClick={(event) =>
                           event.stopPropagation()
-                          setGradeMenuOpen((open) => !open)
-                        }}
-                        aria-label="تصفية حسب المستويات"
-                        aria-expanded={gradeMenuOpen}
-                        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none transition-colors hover:border-sky-300 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-sky-700 dark:focus:ring-sky-950"
+                        }
                       >
-                        <span className="truncate">
-                          {filters.grade.length === 0
-                            ? 'كل المستويات'
-                            : filters.grade.length === 1
-                              ? filters.grade[0]
-                              : `${filters.grade.length} مستويات محددة`}
-                        </span>
-
-                        <span className="shrink-0">▾</span>
-                      </button>
-
-                      {gradeMenuOpen && (
-                        <div
-                          className="absolute right-0 top-full z-[100] mt-1 max-h-64 w-full min-w-[190px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                          onClick={(event) =>
-                            event.stopPropagation()
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateFilter('grade', [])
                           }
+                          className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                            filters.grade.length === 0
+                              ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                              : 'text-slate-700 dark:text-slate-200'
+                          }`}
                         >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onUpdateFilter('grade', [])
-                            }
-                            className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                              filters.grade.length === 0
-                                ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
-                                : 'text-slate-700 dark:text-slate-200'
-                            }`}
-                          >
-                            <span className="w-4 shrink-0 text-center">
-                              {filters.grade.length === 0
-                                ? '✓'
-                                : ''}
-                            </span>
+                          <span className="w-4 shrink-0 text-center">
+                            {filters.grade.length === 0 ? '✓' : ''}
+                          </span>
 
-                            كل المستويات
-                          </button>
+                          كل المستويات
+                        </button>
 
-                          {gradeOptions.map((option) => {
-                            const checked =
-                              filters.grade.includes(option)
+                        {gradeOptions.map((option) => {
+                          const checked =
+                            filters.grade.includes(option)
 
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={() =>
-                                  toggleGrade(option)
-                                }
-                                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                                  checked
-                                    ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
-                                    : 'text-slate-700 dark:text-slate-200'
-                                }`}
-                              >
-                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-300 text-[10px] dark:border-slate-600">
-                                  {checked ? '✓' : ''}
-                                </span>
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => toggleGrade(option)}
+                              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-right text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                                checked
+                                  ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                                  : 'text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-300 text-[10px] dark:border-slate-600">
+                                {checked ? '✓' : ''}
+                              </span>
 
-                                <span>{option}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                              <span>{option}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 </TableHead>
               )}
