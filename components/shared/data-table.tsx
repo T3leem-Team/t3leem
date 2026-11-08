@@ -276,14 +276,14 @@ export function DataTable<T>({
       </div>
 
       {/* الجدول */}
-      <div
-        dir="rtl"
-        className="max-h-[70vh] w-full overflow-auto rounded-lg border border-gray-200 bg-white"
-        style={{
-          scrollbarGutter: 'stable',
-          direction: 'rtl',
-        }}
-      >
+       <div
+          dir="rtl"
+          className="max-h-[70vh] w-full overflow-y-auto overflow-x-auto rounded-lg border border-gray-200 bg-white"
+          style={{
+            direction: 'rtl',
+            scrollbarGutter: 'stable',
+          }}
+        >
         <table
           dir="rtl"
           className="w-full min-w-max border-collapse text-right text-xs"
