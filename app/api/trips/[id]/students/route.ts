@@ -1603,6 +1603,18 @@ export async function PATCH(
         )
       }
 
+      if (
+        roundedAmount > 0 &&
+        tripResponse !== 'accepted'
+      ) {
+        return NextResponse.json(
+          {
+            error: 'لا يمكن تسجيل مبلغ دفع إلا إذا كانت حالة الرد موافق.',
+          },
+          { status: 400 },
+        )
+      }
+
       const responseNote =
         typeof body.response_note === 'string'
           ? body.response_note.trim() || null
