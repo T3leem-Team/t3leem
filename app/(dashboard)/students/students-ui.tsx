@@ -274,69 +274,50 @@ export function StudentsUI({
       dir="rtl"
       className="mx-auto min-w-0 max-w-[1600px] space-y-4 pb-6"
     >
-      {/* عنوان الصفحة */}
-      <div className="flex min-w-0 items-center justify-between gap-3 overflow-hidden rounded-xl border border-sky-200/70 bg-gradient-to-l from-sky-50 via-white to-white px-4 py-3 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            إدارة الطلاب
-          </h1>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            إدارة سجلات الطلاب والرسوم والبيانات الدراسية
-          </p>
-        </div>
-      </div>
+    {/* عنوان الصفحة وحالة اتصال قاعدة البيانات */}
+<div className="flex min-w-0 flex-wrap items-center justify-between gap-3 overflow-hidden rounded-xl border border-sky-200/70 bg-gradient-to-l from-sky-50 via-white to-white px-4 py-3 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
+  <div className="min-w-0">
+    <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+      إدارة الطلاب
+    </h1>
+    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+      إدارة سجلات الطلاب والرسوم والبيانات الدراسية
+    </p>
+  </div>
 
-      {/* حالة اتصال قاعدة البيانات */}
-      <section
-        className={`flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 shadow-sm ${
-          isConnected
-            ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 via-white to-white dark:border-emerald-900 dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900'
-            : 'border-slate-200 bg-gradient-to-l from-slate-50 via-white to-white dark:border-slate-700 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900'
-        }`}
-      >
-        <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${
-            isConnected
-              ? 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-              : 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-          }`}
-        >
-          {isLoadingStudents ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Database className="size-4" />
-          )}
-        </div>
+  <div
+    className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 ${
+      isConnected
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+        : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+    }`}
+    title={supabaseStatus}
+  >
+    {isLoadingStudents ? (
+      <Loader2 className="size-4 animate-spin" />
+    ) : (
+      <Database className="size-4" />
+    )}
 
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            اتصال قاعدة البيانات
-          </p>
+    <span className="text-xs font-semibold">
+      {isLoadingStudents
+        ? 'جارٍ الاتصال...'
+        : isConnected
+          ? 'قاعدة البيانات متصلة'
+          : 'حالة الاتصال'}
+    </span>
 
-          <p
-            title={supabaseStatus}
-            className={`mt-0.5 break-words text-xs ${
-              isConnected
-                ? 'text-emerald-700 dark:text-emerald-300'
-                : 'text-slate-500 dark:text-slate-400'
-            }`}
-          >
-            {isLoadingStudents
-              ? 'جارٍ تحميل بيانات الطلاب...'
-              : supabaseStatus || 'حالة الاتصال غير محددة'}
-          </p>
-        </div>
-
-        <span
-          className={`size-2.5 shrink-0 rounded-full ${
-            isLoadingStudents
-              ? 'animate-pulse bg-amber-400'
-              : isConnected
-                ? 'bg-emerald-500'
-                : 'bg-slate-400'
-          }`}
-        />
-      </section>
+    <span
+      className={`size-2 shrink-0 rounded-full ${
+        isLoadingStudents
+          ? 'animate-pulse bg-amber-400'
+          : isConnected
+            ? 'bg-emerald-500'
+            : 'bg-slate-400'
+      }`}
+    />
+  </div>
+</div>
 
       {/* معلومات الدراسة */}
       <section className="overflow-hidden rounded-2xl border border-indigo-200/70 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
