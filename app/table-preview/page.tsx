@@ -1,3 +1,4 @@
+
 'use client'
 
 import {
@@ -14,23 +15,40 @@ type Student = {
   status: string
 }
 
-const students: Student[] = [
-  { id: 1, name: 'أحمد محمد', personalId: '100001', grade: 'الأول', phone: '39000001', status: 'منتظم' },
-  { id: 2, name: 'علي حسن', personalId: '100002', grade: 'الثاني', phone: '39000002', status: 'متأخر' },
-  { id: 3, name: 'محمد عبدالله', personalId: '100003', grade: 'الثالث', phone: '39000003', status: 'منتظم' },
-  { id: 4, name: 'يوسف خالد', personalId: '100004', grade: 'الرابع', phone: '39000004', status: 'معفى' },
-  { id: 5, name: 'حسين علي', personalId: '100005', grade: 'الخامس', phone: '39000005', status: 'منتظم' },
-  { id: 6, name: 'سلمان أحمد', personalId: '100006', grade: 'السادس', phone: '39000006', status: 'متأخر' },
-  { id: 7, name: 'جعفر محمود', personalId: '100007', grade: 'الأول', phone: '39000007', status: 'منتظم' },
-  { id: 8, name: 'عبدالله يوسف', personalId: '100008', grade: 'الثاني', phone: '39000008', status: 'معفى' },
-  { id: 9, name: 'حمد إبراهيم', personalId: '100009', grade: 'الثالث', phone: '39000009', status: 'منتظم' },
-  { id: 10, name: 'راشد سلمان', personalId: '100010', grade: 'الرابع', phone: '39000010', status: 'متأخر' },
-  { id: 11, name: 'عمر جاسم', personalId: '100011', grade: 'الخامس', phone: '39000011', status: 'منتظم' },
-  { id: 12, name: 'ناصر فهد', personalId: '100012', grade: 'السادس', phone: '39000012', status: 'منتظم' },
-  { id: 13, name: 'حسن إبراهيم', personalId: '100013', grade: 'الأول', phone: '39000013', status: 'متأخر' },
-  { id: 14, name: 'جاسم علي', personalId: '100014', grade: 'الثاني', phone: '39000014', status: 'منتظم' },
-  { id: 15, name: 'فهد يوسف', personalId: '100015', grade: 'الثالث', phone: '39000015', status: 'معفى' },
+const sampleStudents: Omit<Student, 'id' | 'personalId' | 'phone'>[] = [
+  { name: 'أحمد محمد', grade: 'الأول', status: 'منتظم' },
+  { name: 'علي حسن', grade: 'الثاني', status: 'متأخر' },
+  { name: 'محمد عبدالله', grade: 'الثالث', status: 'منتظم' },
+  { name: 'يوسف خالد', grade: 'الرابع', status: 'معفى' },
+  { name: 'حسين علي', grade: 'الخامس', status: 'منتظم' },
+  { name: 'سلمان أحمد', grade: 'السادس', status: 'متأخر' },
+  { name: 'جعفر محمود', grade: 'الأول', status: 'منتظم' },
+  { name: 'عبدالله يوسف', grade: 'الثاني', status: 'معفى' },
+  { name: 'حمد إبراهيم', grade: 'الثالث', status: 'منتظم' },
+  { name: 'راشد سلمان', grade: 'الرابع', status: 'متأخر' },
+  { name: 'عمر جاسم', grade: 'الخامس', status: 'منتظم' },
+  { name: 'ناصر فهد', grade: 'السادس', status: 'منتظم' },
+  { name: 'حسن إبراهيم', grade: 'الأول', status: 'متأخر' },
+  { name: 'جاسم علي', grade: 'الثاني', status: 'منتظم' },
+  { name: 'فهد يوسف', grade: 'الثالث', status: 'معفى' },
 ]
+
+const students: Student[] = Array.from(
+  { length: 150 },
+  (_, index) => {
+    const id = index + 1
+    const sample = sampleStudents[index % sampleStudents.length]
+
+    return {
+      id,
+      name: sample.name,
+      personalId: String(100000 + id),
+      grade: sample.grade,
+      phone: String(39000000 + id),
+      status: sample.status,
+    }
+  },
+)
 
 const columns: DataTableColumn<Student>[] = [
   {
@@ -72,7 +90,7 @@ export default function TablePreviewPage() {
         columns={columns}
         data={students}
         getRowId={(student) => student.id}
-        pageSize={5}
+        pageSize={100}
       />
     </main>
   )
