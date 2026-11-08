@@ -224,7 +224,7 @@ export function DataTable<T>({
               تخصيص الأعمدة
             </summary>
 
-            <div className="absolute right-0 top-10 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+            <div className="absolute left-0 top-10 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
               {columns.map((column) => (
                 <label
                   key={column.id}
