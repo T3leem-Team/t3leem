@@ -81,6 +81,8 @@ export function TripResultsTable({
 }: Props) {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [columnsLoaded, setColumnsLoaded] = useState(false)
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'student' | 'admin' | 'none'>('all')
+  const [paymentFilter, setPaymentFilter] = useState('all')
 
   const defaultColumns = () =>
     RESULT_COLUMNS
@@ -150,11 +152,25 @@ export function TripResultsTable({
     setVisibleColumns(defaultColumns())
   }
 
+  const paymentOptions = Array.from(
+    new Set(students.map((student) => student.payment_amount)),
+  ).sort((a, b) => a - b)
+
   const filteredStudents = students
     .filter((student) =>
       responseFilter === 'all'
         ? true
         : student.response === responseFilter,
+    )
+    .filter((student) => {
+      if (sourceFilter === 'all') return true
+      if (sourceFilter === 'none') return student.response_source === null
+      return student.response_source === sourceFilter
+    })
+    .filter((student) =>
+      paymentFilter === 'all'
+        ? true
+        : String(student.payment_amount) === paymentFilter,
     )
     .filter((student) => {
       const query = search.trim().toLowerCase()
@@ -281,7 +297,7 @@ export function TripResultsTable({
           </div>
         )}
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_repeat(3,minmax(170px,200px))]">
           <div className="relative">
             <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -306,6 +322,40 @@ export function TripResultsTable({
               <option value="accepted">الموافقون فقط</option>
               <option value="rejected">الرافضون فقط</option>
               <option value="pending">الذين لم يردوا</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="relative">
+            <select
+              value={sourceFilter}
+              onChange={(event) =>
+                setSourceFilter(event.target.value as 'all' | 'student' | 'admin' | 'none')
+              }
+              aria-label="تصفية الطلاب حسب نوع الرد"
+              className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pl-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option value="all">جميع أنواع الرد</option>
+              <option value="admin">رد يدوي</option>
+              <option value="student">رد من الرابط</option>
+              <option value="none">بدون نوع رد</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="relative">
+            <select
+              value={paymentFilter}
+              onChange={(event) => setPaymentFilter(event.target.value)}
+              aria-label="تصفية الطلاب حسب مبلغ الدفع"
+              className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pl-9 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option value="all">جميع مبالغ الدفع</option>
+              {paymentOptions.map((amount) => (
+                <option key={amount} value={String(amount)}>
+                  {formatPayment(amount)}
+                </option>
+              ))}
             </select>
             <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           </div>
@@ -454,12 +504,18 @@ export function TripResultsTable({
           عدد النتائج: {filteredStudents.length}
         </span>
 
-        {filteredStudents.length !== students.length && (
+        {(filteredStudents.length !== students.length ||
+          search !== '' ||
+          responseFilter !== 'all' ||
+          sourceFilter !== 'all' ||
+          paymentFilter !== 'all') && (
           <button
             type="button"
             onClick={() => {
               onSearchChange('')
               onResponseFilterChange('all')
+              setSourceFilter('all')
+              setPaymentFilter('all')
             }}
             className="text-xs font-medium text-blue-700 dark:text-blue-300"
           >
