@@ -14,15 +14,17 @@ import {
   MapPin,
   BookOpen,
   Banknote,
-  Clock3,
   Users,
   LockKeyhole,
+  ClipboardList,
 } from 'lucide-react'
 
 import { EligibleStudentsSection } from './eligible-students-section'
 import { TripResultsSection } from './trip-results-section'
 import { useTripDetails } from './trip-details-hook'
 import { exportTripStudents } from './trip-export'
+
+import type { ResultStudent } from './trip-results-table'
 
 import type {
   ResponseSource,
@@ -31,36 +33,12 @@ import type {
   TripStatus,
 } from './trip-types'
 
-type ResultStudent = {
-  id: string
-  name: string
-  personal_id: string | null
-  phone: string | null
-  whatsapp?: string | null
-  level: {
-    id: string
-    name: string
-    sort_order: number | null
-  } | null
+type ParticipantEditor = {
+  student: ResultStudent
+  payment: string
   response: ResponseStatus
-  response_note: string | null
-  response_source: ResponseSource
-  responded_at: string | null
-  payment_amount: number
+  error: string
 }
-
-type ParticipantDialog =
-  | {
-      type: 'remove-payment'
-      studentId: string
-      studentName: string
-    }
-  | {
-      type: 'change-response'
-      studentId: string
-      studentName: string
-      response: ResponseStatus
-    }
 
 function formatDate(value: string | null) {
   if (!value) return 'بدون تاريخ'
@@ -273,8 +251,8 @@ export function TripDetailsView({
     Record<string, 'saved' | 'error'>
   >({})
 
-  const [participantDialog, setParticipantDialog] =
-    useState<ParticipantDialog | null>(null)
+  const [participantEditor, setParticipantEditor] =
+    useState<ParticipantEditor | null>(null)
 
   function clearPaymentTimer(studentId: string) {
     const existingTimer = paymentTimers.current[studentId]
@@ -285,163 +263,56 @@ export function TripDetailsView({
     }
   }
 
-  function clearParticipantSaveStatus(studentId: string) {
-    clearPaymentTimer(studentId)
+  function openParticipantEditor(student: ResultStudent) {
+    if (!canEditParticipantData) return
 
-    setPaymentStatus((current) => {
-      const next = { ...current }
-      delete next[studentId]
-      return next
-    })
-
-    setSaveStatus((current) => {
-      const next = { ...current }
-      delete next[studentId]
-      return next
+    setParticipantEditor({
+      student,
+      payment:
+        paymentInputs[student.id] ??
+        normalizePaymentInput(student.payment_amount),
+      response: responseInputs[student.id] ?? student.response,
+      error: '',
     })
   }
 
-  function handlePaymentChange(student: Student, value: string) {
-    const previousValue =
-      paymentInputs[student.id] ??
-      normalizePaymentInput(student.payment_amount)
+  function updateEditorPayment(value: string) {
+    setParticipantEditor((current) => {
+      if (!current) return current
 
-    const previousAmount = parsePaymentInput(previousValue)
-    const nextAmount = parsePaymentInput(value)
+      const amount = parsePaymentInput(value)
 
-    if (
-      Number.isFinite(previousAmount) &&
-      previousAmount > 0 &&
-      Number.isFinite(nextAmount) &&
-      nextAmount === 0
-    ) {
-      setParticipantDialog({
-        type: 'remove-payment',
-        studentId: student.id,
-        studentName: student.name,
-      })
-
-      return
-    }
-
-    setPaymentInputs((current) => ({
-      ...current,
-      [student.id]: value,
-    }))
-
-    clearParticipantSaveStatus(student.id)
-
-    if (Number.isFinite(nextAmount) && nextAmount > 0) {
-      setResponseInputs((current) => ({
+      return {
         ...current,
-        [student.id]: 'accepted',
-      }))
-    }
-  }
-
-  function handleResponseChange(
-    student: ResultStudent,
-    value: ResponseStatus,
-  ) {
-    const currentPayment =
-      paymentInputs[student.id] ??
-      normalizePaymentInput(student.payment_amount)
-
-    const currentAmount = parsePaymentInput(currentPayment)
-
-    if (
-      Number.isFinite(currentAmount) &&
-      currentAmount > 0 &&
-      value !== 'accepted'
-    ) {
-      setParticipantDialog({
-        type: 'change-response',
-        studentId: student.id,
-        studentName: student.name,
-        response: value,
-      })
-
-      return
-    }
-
-    setResponseInputs((current) => ({
-      ...current,
-      [student.id]: value,
-    }))
-
-    setSaveStatus((current) => {
-      const next = { ...current }
-      delete next[student.id]
-      return next
+        payment: value,
+        response:
+          Number.isFinite(amount) && amount > 0
+            ? 'accepted'
+            : current.response,
+        error: '',
+      }
     })
   }
 
-  function confirmRemovePayment(responseValue: ResponseStatus) {
-    if (!participantDialog) return
-
-    const studentId = participantDialog.studentId
-
-    setPaymentInputs((current) => ({
-      ...current,
-      [studentId]: '',
-    }))
-
-    setResponseInputs((current) => ({
-      ...current,
-      [studentId]: responseValue,
-    }))
-
-    clearParticipantSaveStatus(studentId)
-    setParticipantDialog(null)
-  }
-
-  function confirmResponseChange() {
-    if (
-      !participantDialog ||
-      participantDialog.type !== 'change-response'
-    ) {
-      return
-    }
-
-    const { studentId, response } = participantDialog
-
-    setPaymentInputs((current) => ({
-      ...current,
-      [studentId]: '',
-    }))
-
-    setResponseInputs((current) => ({
-      ...current,
-      [studentId]: response,
-    }))
-
-    clearParticipantSaveStatus(studentId)
-    setParticipantDialog(null)
-  }
-
-  function hasUnsavedChanges(student: ResultStudent) {
-    const currentPayment =
-      paymentInputs[student.id] ??
-      normalizePaymentInput(student.payment_amount)
-
-    const currentResponse =
-      responseInputs[student.id] ?? student.response
-
-    const parsedPayment = parsePaymentInput(currentPayment)
-
-    const paymentChanged =
-      !Number.isFinite(parsedPayment) ||
-      parsedPayment < 0 ||
-      Math.round(parsedPayment * 1000) / 1000 !==
-        Math.round(Number(student.payment_amount || 0) * 1000) / 1000
-
-    return (
-      paymentChanged ||
-      currentResponse !== student.response
+  function updateEditorResponse(value: ResponseStatus) {
+    setParticipantEditor((current) =>
+      current
+        ? {
+            ...current,
+            response: value,
+            error: '',
+          }
+        : current,
     )
   }
 
-  async function saveParticipantUpdate(tableStudent: ResultStudent) {
+  async function saveParticipantUpdate(
+    tableStudent: ResultStudent,
+    draft?: {
+      payment: string
+      response: ResponseStatus
+    },
+  ) {
     if (!canEditParticipantData) return
     if (savingStudentId === tableStudent.id) return
 
@@ -450,72 +321,111 @@ export function TripDetailsView({
     )
 
     if (!student) {
+      setParticipantEditor((current) =>
+        current?.student.id === tableStudent.id
+          ? {
+              ...current,
+              error: 'تعذر العثور على بيانات الطالب.',
+            }
+          : current,
+      )
+
       setError('تعذر العثور على بيانات الطالب.')
       return
     }
 
     const rawPayment =
+      draft?.payment ??
       paymentInputs[student.id] ??
       normalizePaymentInput(student.payment_amount)
 
     const amount = parsePaymentInput(rawPayment)
 
     if (!Number.isFinite(amount) || amount < 0) {
+      const message =
+        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.'
+
       setSaveStatus((current) => ({
         ...current,
         [student.id]: 'error',
       }))
 
-      setError(
-        'مبلغ الدفع يجب أن يكون رقمًا صحيحًا أو عشريًا ولا يمكن أن يكون سالبًا.',
+      setParticipantEditor((current) =>
+        current?.student.id === student.id
+          ? { ...current, error: message }
+          : current,
       )
+
+      setError(message)
       return
     }
 
     const roundedAmount = Math.round(amount * 1000) / 1000
 
     const responseValue =
-      responseInputs[student.id] ?? student.response
+      draft?.response ??
+      responseInputs[student.id] ??
+      student.response
 
     if (
       responseValue !== 'pending' &&
       responseValue !== 'accepted' &&
       responseValue !== 'rejected'
     ) {
+      const message = 'قيمة رد الطالب غير صحيحة.'
+
       setSaveStatus((current) => ({
         ...current,
         [student.id]: 'error',
       }))
 
-      setError('قيمة رد الطالب غير صحيحة.')
+      setParticipantEditor((current) =>
+        current?.student.id === student.id
+          ? { ...current, error: message }
+          : current,
+      )
+
+      setError(message)
       return
     }
 
     if (roundedAmount > 0 && responseValue !== 'accepted') {
-      setSaveStatus((current) => ({
-        ...current,
-        [student.id]: 'error',
-      }))
+      const message =
+        'لا يمكن تسجيل مبلغ دفع إلا إذا كانت حالة الرد موافق.'
 
-      setError(
-        'لا يمكن تسجيل مبلغ دفع إلا إذا كانت حالة الرد موافق.',
+      setParticipantEditor((current) =>
+        current?.student.id === student.id
+          ? { ...current, error: message }
+          : current,
       )
+
+      setError(message)
       return
     }
 
+    const originalAmount =
+      Math.round(Number(student.payment_amount || 0) * 1000) / 1000
+
     if (
-      roundedAmount ===
-        Math.round(Number(student.payment_amount || 0) * 1000) / 1000 &&
+      roundedAmount === originalAmount &&
       responseValue === student.response
     ) {
       setSaveStatus((current) => ({
         ...current,
         [student.id]: 'saved',
       }))
+
+      setParticipantEditor(null)
       return
     }
 
-    clearPaymentTimer(student.id)
+    const currentPaymentTimer = paymentTimers.current[student.id]
+
+    if (currentPaymentTimer) {
+      clearTimeout(currentPaymentTimer)
+      delete paymentTimers.current[student.id]
+    }
+
     setSavingStudentId(student.id)
     setPaymentSavingId(student.id)
 
@@ -559,6 +469,7 @@ export function TripDetailsView({
       }
 
       const updatedStudent = result?.student
+
       const savedPayment = Number(
         updatedStudent?.payment_amount ?? roundedAmount,
       )
@@ -604,7 +515,8 @@ export function TripDetailsView({
 
       setPaymentInputs((current) => ({
         ...current,
-        [student.id]: savedPayment > 0 ? String(savedPayment) : '',
+        [student.id]:
+          savedPayment > 0 ? String(savedPayment) : '',
       }))
 
       setResponseInputs((current) => {
@@ -623,9 +535,15 @@ export function TripDetailsView({
         [student.id]: 'saved',
       }))
 
+      setParticipantEditor(null)
       setSuccess(`تم حفظ المبلغ والرد للطالب ${student.name}.`)
     } catch (err) {
       console.error('Save participant update error:', err)
+
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'تعذر حفظ مبلغ الدفع ورد الطالب.'
 
       setPaymentStatus((current) => ({
         ...current,
@@ -637,18 +555,23 @@ export function TripDetailsView({
         [student.id]: 'error',
       }))
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'تعذر حفظ مبلغ الدفع ورد الطالب.',
+      setParticipantEditor((current) =>
+        current?.student.id === student.id
+          ? {
+              ...current,
+              error: message,
+            }
+          : current,
       )
+
+      setError(message)
     } finally {
       setSavingStudentId(null)
       setPaymentSavingId(null)
     }
   }
 
-  // يبقى الحفظ السابق لقسم الطلاب المؤهلين كما هو.
+  // الحفظ الخاص بقسم الطلاب المؤهلين - دون تغيير.
   async function savePayment(student: Student, inputValue?: string) {
     if (!canEditParticipantData) return
 
@@ -719,7 +642,8 @@ export function TripDetailsView({
 
       setPaymentInputs((current) => ({
         ...current,
-        [student.id]: roundedAmount > 0 ? String(roundedAmount) : '',
+        [student.id]:
+          roundedAmount > 0 ? String(roundedAmount) : '',
       }))
 
       setPaymentStatus((current) => ({
@@ -742,7 +666,7 @@ export function TripDetailsView({
     }
   }
 
-  // يبقى الحفظ السابق لقسم الطلاب المؤهلين كما هو.
+  // الحفظ الخاص بقسم الطلاب المؤهلين - دون تغيير.
   async function saveResponse(
     student: Student,
     responseValue: ResponseStatus,
@@ -1152,7 +1076,7 @@ export function TripDetailsView({
       {/* Additional details */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/30 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
         <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-800/40">
-          <Clock3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
             تفاصيل ومواعيد الرحلة
           </h2>
@@ -1232,27 +1156,8 @@ export function TripDetailsView({
             onSearchChange={setSearch}
             responseFilter={responseFilter}
             onResponseFilterChange={setResponseFilter}
-            paymentInputs={paymentInputs}
-            responseInputs={responseInputs}
-            paymentStatus={paymentStatus}
-            responseSavingId={responseSavingId}
             canEditParticipantData={canEditParticipantData}
-            onPaymentChange={(student, value) => {
-              const fullStudent = data.students.find(
-                (item) => item.id === student.id,
-              )
-
-              if (fullStudent) {
-                handlePaymentChange(fullStudent, value)
-              }
-            }}
-            onResponseChange={(student, value) => {
-              handleResponseChange(student, value)
-            }}
-            onSaveStudent={saveParticipantUpdate}
-            hasUnsavedChanges={hasUnsavedChanges}
-            savingStudentId={savingStudentId}
-            saveStatus={saveStatus}
+            onOpenActions={openParticipantEditor}
             formatDateTime={formatDateTime}
             formatPayment={formatPayment}
           />
@@ -1368,133 +1273,179 @@ export function TripDetailsView({
         </section>
       )}
 
-      {/* Participant payment / response confirmation */}
-      {participantDialog && (
+      {/* Participant actions modal */}
+      {participantEditor && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
-          onClick={() => setParticipantDialog(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!savingStudentId) {
+              setParticipantEditor(null)
+            }
+          }}
         >
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="participant-dialog-title"
+            aria-labelledby="participant-editor-title"
             className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
             onClick={(event) => event.stopPropagation()}
           >
-            {participantDialog.type === 'remove-payment' ? (
-              <>
-                <div className="mb-4 flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                    <Banknote className="h-5 w-5" />
-                  </span>
-
-                  <div className="min-w-0">
-                    <h3
-                      id="participant-dialog-title"
-                      className="font-bold text-slate-800 dark:text-slate-100"
-                    >
-                      تغيير حالة الرد
-                    </h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                      تم تصفير مبلغ الدفع للطالب{' '}
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {participantDialog.studentName}
-                      </span>
-                      . اختر حالة الرد الجديدة.
-                    </p>
-                  </div>
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+                  <ClipboardList className="h-5 w-5" />
                 </div>
 
-                <div className="grid gap-2">
-                  <button
-                    type="button"
-                    onClick={() => confirmRemovePayment('accepted')}
-                    className="flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
-                  >
-                    <Check className="h-4 w-4" />
-                    موافق
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => confirmRemovePayment('rejected')}
-                    className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/60"
-                  >
-                    <X className="h-4 w-4" />
-                    رافض
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => confirmRemovePayment('pending')}
-                    className="flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  >
-                    <Clock3 className="h-4 w-4" />
-                    بانتظار الرد
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setParticipantDialog(null)}
-                  className="mt-4 h-10 w-full rounded-xl px-4 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                <h3
+                  id="participant-editor-title"
+                  className="text-lg font-bold text-slate-800 dark:text-slate-100"
                 >
-                  إلغاء
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="mb-4 flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                    <Banknote className="h-5 w-5" />
-                  </span>
+                  إجراءات الطالب
+                </h3>
 
-                  <div className="min-w-0">
-                    <h3
-                      id="participant-dialog-title"
-                      className="font-bold text-slate-800 dark:text-slate-100"
-                    >
-                      تأكيد تغيير حالة الرد
-                    </h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                      الطالب{' '}
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {participantDialog.studentName}
-                      </span>{' '}
-                      لديه مبلغ دفع مسجل. لتغيير حالة الرد إلى{' '}
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {participantDialog.response === 'rejected'
-                          ? 'رافض'
-                          : 'بانتظار الرد'}
-                      </span>
-                      ، يجب تصفير مبلغ الدفع أولاً.
-                    </p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  {participantEditor.student.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  savingStudentId === participantEditor.student.id
+                }
+                onClick={() => setParticipantEditor(null)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-slate-800"
+                aria-label="إغلاق النافذة"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label
+                  htmlFor="participant-response"
+                  className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                >
+                  حالة الرد
+                </label>
+
+                <select
+                  id="participant-response"
+                  value={participantEditor.response}
+                  onChange={(event) =>
+                    updateEditorResponse(
+                      event.target.value as ResponseStatus,
+                    )
+                  }
+                  disabled={
+                    savingStudentId === participantEditor.student.id
+                  }
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="pending">بانتظار الرد</option>
+                  <option value="accepted">موافق</option>
+                  <option value="rejected">رافض</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="participant-payment"
+                  className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                >
+                  مبلغ الدفع
+                </label>
+
+                <input
+                  id="participant-payment"
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={participantEditor.payment}
+                  onChange={(event) =>
+                    updateEditorPayment(event.target.value)
+                  }
+                  disabled={
+                    savingStudentId === participantEditor.student.id
+                  }
+                  placeholder="0.000"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-left text-sm tabular-nums text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  المبلغ المحفوظ حالياً:{' '}
+                  {formatPayment(
+                    participantEditor.student.payment_amount,
+                  )}
+                </p>
+              </div>
+
+              {parsePaymentInput(participantEditor.payment) > 0 &&
+                participantEditor.response !== 'accepted' && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                    لا يمكن تسجيل مبلغ دفع مع حالة رافض أو بانتظار الرد.
+                    غيّر حالة الرد إلى موافق أو صفّر المبلغ.
                   </div>
-                </div>
+                )}
 
-                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
-                  عند التأكيد سيتم تصفير المبلغ وتغيير حالة الرد. لن يتم حفظ التعديل في قاعدة البيانات إلا عند الضغط على زر الحفظ في الجدول.
+              {participantEditor.error && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"
+                >
+                  {participantEditor.error}
                 </div>
+              )}
+            </div>
 
-                <div className="mt-5 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setParticipantDialog(null)}
-                    className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  >
-                    إلغاء
-                  </button>
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                disabled={
+                  savingStudentId === participantEditor.student.id
+                }
+                onClick={() => setParticipantEditor(null)}
+                className="h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                إلغاء
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={confirmResponseChange}
-                    className="h-10 flex-1 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                  >
-                    تأكيد التغيير
-                  </button>
-                </div>
-              </>
-            )}
+              <button
+                type="button"
+                disabled={
+                  savingStudentId === participantEditor.student.id ||
+                  !Number.isFinite(
+                    parsePaymentInput(participantEditor.payment),
+                  ) ||
+                  parsePaymentInput(participantEditor.payment) < 0 ||
+                  (parsePaymentInput(participantEditor.payment) > 0 &&
+                    participantEditor.response !== 'accepted')
+                }
+                onClick={() =>
+                  void saveParticipantUpdate(
+                    participantEditor.student,
+                    {
+                      payment: participantEditor.payment,
+                      response: participantEditor.response,
+                    },
+                  )
+                }
+                className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingStudentId === participantEditor.student.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جارٍ الحفظ
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" />
+                    حفظ التعديلات
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
