@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
@@ -8,7 +9,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Check,
 } from 'lucide-react'
 
 export type DataTableColumn<T> = {
@@ -40,7 +40,6 @@ export function DataTable<T>({
   getRowId,
   pageSize = 10,
   searchable = true,
-  selectable = true,
   emptyMessage = 'لا توجد بيانات',
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('')
@@ -54,7 +53,7 @@ export function DataTable<T>({
   const [visibleColumns, setVisibleColumns] = useState(
     columns.map((column) => column.id)
   )
-  const [selectedRows, setSelectedRows] = useState<(string | number)[]>([])
+  const [selectedRow, setSelectedRow] = useState<string | number | null>(null)
   const [page, setPage] = useState(1)
 
   const safePageSize = Math.max(1, pageSize)
@@ -136,6 +135,7 @@ export function DataTable<T>({
 
       return null
     })
+
     setPage(1)
   }
 
@@ -148,6 +148,7 @@ export function DataTable<T>({
 
       return { ...current, [columnId]: next }
     })
+
     setPage(1)
   }
 
@@ -165,6 +166,7 @@ export function DataTable<T>({
         return next
       })
     }
+
     setPage(1)
   }
 
@@ -179,18 +181,6 @@ export function DataTable<T>({
     search.trim().length > 0 ||
     Object.values(filters).some((items) => items.length > 0) ||
     Object.values(textFilters).some((value) => value.trim().length > 0)
-
-  const pageIds = pageData.map(getRowId)
-  const allSelected =
-    pageIds.length > 0 && pageIds.every((id) => selectedRows.includes(id))
-
-  const toggleAll = () => {
-    setSelectedRows((current) =>
-      allSelected
-        ? current.filter((id) => !pageIds.includes(id))
-        : Array.from(new Set([...current, ...pageIds]))
-    )
-  }
 
   return (
     <div dir="rtl" className="w-full space-y-3 text-sm">
@@ -271,8 +261,9 @@ export function DataTable<T>({
 
       {/* الجدول */}
       <div
-        dir="ltr"
+        dir="rtl"
         className="max-h-[70vh] w-full overflow-auto rounded-lg border border-gray-200 bg-white"
+        style={{ scrollbarGutter: 'stable' }}
       >
         <table
           dir="rtl"
@@ -281,17 +272,9 @@ export function DataTable<T>({
           <thead className="text-gray-700">
             {/* عناوين الأعمدة */}
             <tr className="bg-gray-50">
-              {selectable && (
-                <th className="sticky right-0 top-0 z-40 w-10 border-b border-gray-200 bg-gray-50 px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    aria-label="تحديد جميع صفوف الصفحة"
-                    className="accent-teal-700"
-                  />
-                </th>
-              )}
+              <th className="sticky right-0 top-0 z-40 w-14 min-w-14 border-b border-gray-200 bg-gray-50 px-3 py-3 text-center font-semibold">
+                م
+              </th>
 
               {activeColumns.map((column) => (
                 <th
@@ -300,6 +283,7 @@ export function DataTable<T>({
                 >
                   <div className="flex items-center gap-1.5">
                     <span>{column.header}</span>
+
                     {column.sortable !== false && (
                       <button
                         type="button"
@@ -325,9 +309,7 @@ export function DataTable<T>({
 
             {/* الفلاتر داخل رأس كل عمود */}
             <tr className="bg-white">
-              {selectable && (
-                <th className="sticky right-0 top-[38px] z-40 border-b border-gray-200 bg-white px-2 py-2" />
-              )}
+              <th className="sticky right-0 top-[38px] z-40 border-b border-gray-200 bg-white px-2 py-2" />
 
               {activeColumns.map((column) => {
                 const type = column.filterType ?? 'multi-select'
@@ -363,6 +345,7 @@ export function DataTable<T>({
                               : 'border-gray-200 bg-white'
                           }`}
                         />
+
                         {textValue && (
                           <button
                             type="button"
@@ -437,45 +420,35 @@ export function DataTable<T>({
             {pageData.length === 0 ? (
               <tr>
                 <td
-                  colSpan={activeColumns.length + (selectable ? 1 : 0)}
+                  colSpan={activeColumns.length + 1}
                   className="px-4 py-12 text-center text-gray-400"
                 >
                   {emptyMessage}
                 </td>
               </tr>
             ) : (
-              pageData.map((row) => {
+              pageData.map((row, index) => {
                 const id = getRowId(row)
-                const isSelected = selectedRows.includes(id)
+                const isSelected = selectedRow === id
+                const serial = (currentPage - 1) * safePageSize + index + 1
 
                 return (
                   <tr
                     key={id}
-                    className={`border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50 ${
-                      isSelected ? 'bg-teal-50' : 'bg-white'
+                    onClick={() => setSelectedRow(isSelected ? null : id)}
+                    className={`cursor-pointer border-b border-gray-100 transition-colors last:border-0 ${
+                      isSelected
+                        ? 'bg-teal-50'
+                        : 'bg-white hover:bg-gray-50'
                     }`}
                   >
-                    {selectable && (
-                      <td
-                        className={`sticky right-0 z-10 w-10 px-3 py-3 ${
-                          isSelected ? 'bg-teal-50' : 'bg-white'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            setSelectedRows((current) =>
-                              isSelected
-                                ? current.filter((item) => item !== id)
-                                : [...current, id]
-                            )
-                          }
-                          aria-label="تحديد الصف"
-                          className="accent-teal-700"
-                        />
-                      </td>
-                    )}
+                    <td
+                      className={`sticky right-0 z-10 w-14 min-w-14 px-3 py-3 text-center tabular-nums ${
+                        isSelected ? 'bg-teal-50' : 'bg-white'
+                      }`}
+                    >
+                      {serial}
+                    </td>
 
                     {activeColumns.map((column) => {
                       const value = column.accessor(row)
@@ -510,11 +483,6 @@ export function DataTable<T>({
           {Math.min(currentPage * safePageSize, filteredData.length)}
           {' من '}
           {filteredData.length} سجل
-          {selectable && selectedRows.length > 0 && (
-            <span className="mr-2 text-teal-700">
-              · تم تحديد {selectedRows.length}
-            </span>
-          )}
         </span>
 
         <div className="flex items-center gap-2">
