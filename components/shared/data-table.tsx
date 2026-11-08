@@ -537,7 +537,7 @@ export function DataTable<T>({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={currentPage <= 1}
@@ -565,3 +565,6 @@ export function DataTable<T>({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
