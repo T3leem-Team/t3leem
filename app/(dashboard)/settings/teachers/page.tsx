@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -403,8 +404,8 @@ export default function Page() {
       </div>
 
       <PageHeader
-        title="المعلمون"
-        description="إدارة بيانات المعلمين وحالاتهم"
+        title="إدارة المعلمين"
+        description="إدارة بيانات المعلمين وحالاتهم وإعدادات عرضهم."
       />
 
       {statusMessage && (
@@ -413,6 +414,7 @@ export default function Page() {
         </div>
       )}
 
+      {/* البحث وأزرار التحكم */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -428,14 +430,27 @@ export default function Page() {
           />
         </div>
 
-        <Button
-          type="button"
-          onClick={openAddForm}
-          disabled={saving}
-        >
-          <Plus className="size-4" />
-          إضافة معلم
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              router.push('/settings/teachers/display-settings')
+            }
+          >
+            <Edit3 className="size-4" />
+            ضبط صفحة المعلمين
+          </Button>
+
+          <Button
+            type="button"
+            onClick={openAddForm}
+            disabled={saving}
+          >
+            <Plus className="size-4" />
+            إضافة معلم
+          </Button>
+        </div>
       </div>
 
       <Card>
