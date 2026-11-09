@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Users } from 'lucide-react'
+import { Search, Users, ChevronDown, ChevronUp } from 'lucide-react'
 
 import {
   Card,
@@ -73,9 +73,17 @@ function getGradeColor(colorKey: string) {
     hash = (hash * 31 + colorKey.charCodeAt(i)) | 0
   }
 
-  const index = Math.abs(hash) % gradeColors.length
+  return gradeColors[Math.abs(hash) % gradeColors.length]
+}
 
-  return gradeColors[index]
+function getShortSubjectName(name: string) {
+  const words = name.trim().split(/\s+/)
+
+  if (words.length <= 2) {
+    return name
+  }
+
+  return `${words.slice(0, 2).join(' ')}...`
 }
 
 export function TeachersViewTeachersList({
@@ -98,6 +106,9 @@ export function TeachersViewTeachersList({
       teacherAliases: [],
     })
 
+  const [expandedSubjects, setExpandedSubjects] =
+    useState<string[]>([])
+
   // تحميل إعدادات العرض المحفوظة
   useEffect(() => {
     let active = true
@@ -107,9 +118,7 @@ export function TeachersViewTeachersList({
         const { data, error } =
           await loadTeacherDisplaySettings()
 
-        if (error) {
-          throw error
-        }
+        if (error) throw error
 
         if (!active || !data) return
 
@@ -163,7 +172,7 @@ export function TeachersViewTeachersList({
         .map((assignment) => assignment.studentId),
     )
 
-    const teacherLevels = Array.from(
+    return Array.from(
       new Map(
         students
           .filter(
@@ -195,11 +204,9 @@ export function TeachersViewTeachersList({
 
       return a.name.localeCompare(b.name, 'ar')
     })
-
-    return teacherLevels
   }
 
-  // تطبيق طريقة العرض المختارة على مستويات المعلم
+  // تطبيق إعدادات عرض المستويات
   const getDisplayedGrades = (
     teacherId: string,
     teacherGrades: {
@@ -265,6 +272,109 @@ export function TeachersViewTeachersList({
     }))
   }
 
+  // المواد المرتبطة بالمعلم
+  const getTeacherSubjects = (teacherId: string) =>
+    Array.from(
+      new Set(
+        teacherCourseSubjects
+          .filter(
+            (item) =>
+              item.courseId === currentCourse?.id &&
+              item.teacherId === teacherId,
+          )
+          .map((item) => item.subjectName),
+      ),
+    )
+
+  // إظهار المادة كاملة أو مختصرة
+  const toggleSubject = (key: string) => {
+    setExpandedSubjects((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key],
+    )
+  }
+
+  // عرض المواد
+  const renderSubjects = (
+    teacherId: string,
+    subjects: string[],
+  ) => {
+    if (subjects.length === 0) {
+      return (
+        <span className="text-xs text-muted-foreground">
+          —
+        </span>
+      )
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {subjects.map((subject, index) => {
+          const key = `${teacherId}-${subject}-${index}`
+          const isExpanded = expandedSubjects.includes(key)
+          const isLong = subject.trim().split(/\s+/).length > 2
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+
+                if (isLong) {
+                  toggleSubject(key)
+                }
+              }}
+              className={`inline-flex items-center gap-1 rounded-md border border-transparent bg-muted/70 px-2 py-1 text-xs text-foreground transition-colors ${
+                isLong
+                  ? 'cursor-pointer hover:border-primary/30 hover:bg-primary/5'
+                  : 'cursor-default'
+              }`}
+              aria-expanded={isLong ? isExpanded : undefined}
+            >
+              <span>
+                {isExpanded
+                  ? subject
+                  : getShortSubjectName(subject)}
+              </span>
+
+              {isLong && (
+                isExpanded
+                  ? <ChevronUp className="size-3 shrink-0 text-muted-foreground" />
+                  : <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // عرض المستويات
+  const renderGrades = (grades: DisplayedGrade[]) => {
+    if (grades.length === 0) {
+      return (
+        <span className="text-xs text-muted-foreground">
+          —
+        </span>
+      )
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {grades.map((grade, index) => (
+          <span
+            key={`${grade.colorKey}-${index}`}
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
+          >
+            {grade.name}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
       {/* البحث */}
@@ -281,7 +391,6 @@ export function TeachersViewTeachersList({
         />
       </div>
 
-      {/* جدول المعلمين */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
@@ -303,145 +412,164 @@ export function TeachersViewTeachersList({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[580px] text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="w-14 px-3 py-3 text-center text-xs font-semibold text-muted-foreground">
-                      #
-                    </th>
+            <>
+              {/* عرض الكمبيوتر */}
+              <div className="hidden sm:block">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="w-16 px-3 py-3 text-center text-xs font-semibold text-muted-foreground">
+                          #
+                        </th>
 
-                    <th className="min-w-[150px] px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
-                      المعلم
-                    </th>
+                        <th className="min-w-[170px] px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
+                          المعلم
+                        </th>
 
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
-                      المواد والمستويات
-                    </th>
+                        <th className="min-w-[180px] px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
+                          المستوى
+                        </th>
 
-                    <th className="w-28 px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
-                      عدد الطلاب
-                    </th>
-                  </tr>
-                </thead>
+                        <th className="min-w-[180px] px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
+                          المادة
+                        </th>
 
-                <tbody>
-                  {filteredTeachers.map((teacher, index) => {
-                    const teacherGrades =
-                      getTeacherGrades(teacher.id)
-
-                    const displayedGrades =
-                      getDisplayedGrades(
-                        teacher.id,
-                        teacherGrades,
-                      )
-
-                    const teacherSubjects =
-                      Array.from(
-                        new Set(
-                          teacherCourseSubjects
-                            .filter(
-                              (item) =>
-                                item.courseId ===
-                                  currentCourse?.id &&
-                                item.teacherId ===
-                                  teacher.id,
-                            )
-                            .map(
-                              (item) =>
-                                item.subjectName,
-                            ),
-                        ),
-                      )
-
-                    const studentCount =
-                      getStudentCount(teacher.id)
-
-                    return (
-                      <tr
-                        key={teacher.id}
-                        onClick={() =>
-                          onSelectTeacher(teacher.id)
-                        }
-                        className="group cursor-pointer border-b last:border-0 transition-colors hover:bg-muted/30"
-                      >
-                        {/* التسلسل */}
-                        <td className="px-3 py-3 text-center">
-                          <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted/70 text-xs font-semibold tabular-nums text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
-                            {index + 1}
-                          </span>
-                        </td>
-
-                        {/* اسم المعلم */}
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onSelectTeacher(teacher.id)
-                            }}
-                            className="text-right font-semibold text-foreground transition-colors hover:text-primary"
-                          >
-                            {teacher.name}
-                          </button>
-                        </td>
-
-                        {/* المواد والمستويات */}
-                        <td className="px-4 py-3">
-                          <div className="flex min-w-0 flex-col items-start gap-2">
-                            {teacherSubjects.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {teacherSubjects.map(
-                                  (subject) => (
-                                    <span
-                                      key={subject}
-                                      className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground"
-                                    >
-                                      {subject}
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                لا توجد مواد
-                              </span>
-                            )}
-
-                            {displayedGrades.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {displayedGrades.map(
-                                  (grade, gradeIndex) => (
-                                    <span
-                                      key={`${teacher.id}-${grade.colorKey}-${gradeIndex}`}
-                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
-                                    >
-                                      {grade.name}
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* عدد الطلاب */}
-                        <td className="px-4 py-3 text-center">
-                          <span className="inline-flex min-w-9 items-center justify-center rounded-lg bg-muted/60 px-2.5 py-1 text-sm font-semibold tabular-nums">
-                            {studentCount}
-                          </span>
-                        </td>
+                        <th className="w-28 px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
+                          عدد الطلاب
+                        </th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+
+                    <tbody>
+                      {filteredTeachers.map((teacher, index) => {
+                        const grades = getDisplayedGrades(
+                          teacher.id,
+                          getTeacherGrades(teacher.id),
+                        )
+
+                        const subjects =
+                          getTeacherSubjects(teacher.id)
+
+                        return (
+                          <tr
+                            key={teacher.id}
+                            onClick={() =>
+                              onSelectTeacher(teacher.id)
+                            }
+                            className="group cursor-pointer border-b last:border-0 transition-colors hover:bg-muted/30"
+                          >
+                            <td className="px-3 py-3 text-center">
+                              <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted/70 text-xs font-semibold tabular-nums text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
+                                {index + 1}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  onSelectTeacher(teacher.id)
+                                }}
+                                className="text-right font-semibold text-foreground transition-colors hover:text-primary"
+                              >
+                                {teacher.name}
+                              </button>
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {renderGrades(grades)}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {renderSubjects(
+                                teacher.id,
+                                subjects,
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 text-center">
+                              <span className="inline-flex min-w-9 items-center justify-center rounded-lg bg-muted/60 px-2.5 py-1 text-sm font-semibold tabular-nums">
+                                {getStudentCount(teacher.id)}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* عرض الجوال */}
+              <div className="divide-y sm:hidden">
+                {filteredTeachers.map((teacher, index) => {
+                  const grades = getDisplayedGrades(
+                    teacher.id,
+                    getTeacherGrades(teacher.id),
+                  )
+
+                  const subjects =
+                    getTeacherSubjects(teacher.id)
+
+                  return (
+                    <div
+                      key={teacher.id}
+                      onClick={() =>
+                        onSelectTeacher(teacher.id)
+                      }
+                      className="cursor-pointer space-y-3 p-3 transition-colors active:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                          {index + 1}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onSelectTeacher(teacher.id)
+                          }}
+                          className="min-w-0 flex-1 truncate text-right text-sm font-semibold text-foreground hover:text-primary"
+                        >
+                          {teacher.name}
+                        </button>
+
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-muted/70 px-2.5 py-1 text-xs font-semibold tabular-nums">
+                          <Users className="size-3.5 text-muted-foreground" />
+                          {getStudentCount(teacher.id)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 pr-9">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          المستوى
+                        </p>
+
+                        {renderGrades(grades)}
+                      </div>
+
+                      <div className="space-y-1.5 pr-9">
+                        <p className="text-[11px] font-medium text-muted-foreground">
+                          المادة
+                        </p>
+
+                        {renderSubjects(
+                          teacher.id,
+                          subjects,
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
-      {/* عدد النتائج */}
       {!loading && filteredTeachers.length > 0 && (
         <div className="px-1 text-xs text-muted-foreground">
           عرض {filteredTeachers.length} معلم
