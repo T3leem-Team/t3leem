@@ -79,9 +79,7 @@ function getGradeColor(colorKey: string) {
 function getShortSubjectName(name: string) {
   const words = name.trim().split(/\s+/)
 
-  if (words.length <= 2) {
-    return name
-  }
+  if (words.length <= 2) return name
 
   return `${words.slice(0, 2).join(' ')}...`
 }
@@ -286,8 +284,8 @@ export function TeachersViewTeachersList({
       ),
     )
 
-  // إظهار المادة كاملة أو مختصرة
-  const toggleSubject = (key: string) => {
+  // فتح وإغلاق المستويات والمواد بشكل مستقل
+  const toggleExpanded = (key: string) => {
     setExpandedSubjects((current) =>
       current.includes(key)
         ? current.filter((item) => item !== key)
@@ -295,7 +293,59 @@ export function TeachersViewTeachersList({
     )
   }
 
-  // عرض المواد
+  // عرض المستويات: المستوى الأول فقط ثم بقية المستويات عند الضغط
+  const renderGrades = (
+    teacherId: string,
+    grades: DisplayedGrade[],
+  ) => {
+    if (grades.length === 0) {
+      return (
+        <span className="text-xs text-muted-foreground">
+          —
+        </span>
+      )
+    }
+
+    const key = `grades-${teacherId}`
+    const isExpanded = expandedSubjects.includes(key)
+    const visibleGrades = isExpanded
+      ? grades
+      : grades.slice(0, 1)
+
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {visibleGrades.map((grade, index) => (
+          <span
+            key={`${grade.colorKey}-${index}`}
+            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
+          >
+            {grade.name}
+          </span>
+        ))}
+
+        {grades.length > 1 && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleExpanded(key)
+            }}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {isExpanded
+              ? 'عرض أقل'
+              : `+${grades.length - 1} أخرى`}
+
+            {isExpanded
+              ? <ChevronUp className="size-3" />
+              : <ChevronDown className="size-3" />}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // عرض المواد: أول كلمتين ثم كامل المادة عند الضغط
   const renderSubjects = (
     teacherId: string,
     subjects: string[],
@@ -311,9 +361,10 @@ export function TeachersViewTeachersList({
     return (
       <div className="flex flex-wrap gap-1.5">
         {subjects.map((subject, index) => {
-          const key = `${teacherId}-${subject}-${index}`
+          const key = `subjects-${teacherId}-${subject}-${index}`
           const isExpanded = expandedSubjects.includes(key)
-          const isLong = subject.trim().split(/\s+/).length > 2
+          const isLong =
+            subject.trim().split(/\s+/).length > 2
 
           return (
             <button
@@ -323,7 +374,7 @@ export function TeachersViewTeachersList({
                 event.stopPropagation()
 
                 if (isLong) {
-                  toggleSubject(key)
+                  toggleExpanded(key)
                 }
               }}
               className={`inline-flex items-center gap-1 rounded-md border border-transparent bg-muted/70 px-2 py-1 text-xs text-foreground transition-colors ${
@@ -347,30 +398,6 @@ export function TeachersViewTeachersList({
             </button>
           )
         })}
-      </div>
-    )
-  }
-
-  // عرض المستويات
-  const renderGrades = (grades: DisplayedGrade[]) => {
-    if (grades.length === 0) {
-      return (
-        <span className="text-xs text-muted-foreground">
-          —
-        </span>
-      )
-    }
-
-    return (
-      <div className="flex flex-wrap gap-1.5">
-        {grades.map((grade, index) => (
-          <span
-            key={`${grade.colorKey}-${index}`}
-            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
-          >
-            {grade.name}
-          </span>
-        ))}
       </div>
     )
   }
@@ -479,7 +506,7 @@ export function TeachersViewTeachersList({
                             </td>
 
                             <td className="px-4 py-3">
-                              {renderGrades(grades)}
+                              {renderGrades(teacher.id, grades)}
                             </td>
 
                             <td className="px-4 py-3">
@@ -548,7 +575,7 @@ export function TeachersViewTeachersList({
                           المستوى
                         </p>
 
-                        {renderGrades(grades)}
+                        {renderGrades(teacher.id, grades)}
                       </div>
 
                       <div className="space-y-1.5 pr-9">
