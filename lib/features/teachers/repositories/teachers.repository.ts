@@ -695,3 +695,127 @@ export async function loadActiveAcademicLevels() {
       ascending: true,
     })
 }
+
+export async function loadTeacherDisplayOptions() {
+  const [
+    academicYearResult,
+    levelsResult,
+  ] = await Promise.all([
+    supabase
+      .from('academic_years')
+      .select('id')
+      .eq('is_current', true)
+      .eq('is_active', true)
+      .maybeSingle(),
+
+    supabase
+      .from('levels')
+      .select('id, name, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', {
+        ascending: true,
+      }),
+  ])
+
+  if (academicYearResult.error) {
+    throw new Error(
+      `خطأ في تحميل السنة الدراسية: ${academicYearResult.error.message}`,
+    )
+  }
+
+  if (levelsResult.error) {
+    throw new Error(
+      `خطأ في تحميل المستويات: ${levelsResult.error.message}`,
+    )
+  }
+
+  const levels = levelsResult.data ?? []
+
+  if (!academicYearResult.data) {
+    return {
+      teachers: [],
+      levels,
+    }
+  }
+
+  const { data: courses, error: coursesError } =
+    await supabase
+      .from('courses')
+      .select('id, is_closed')
+      .eq(
+        'academic_year_id',
+        academicYearResult.data.id,
+      )
+      .order('created_at', {
+        ascending: true,
+      })
+
+  if (coursesError) {
+    throw new Error(
+      `خطأ في تحميل المقررات: ${coursesError.message}`,
+    )
+  }
+
+  const currentCourse = (courses ?? []).find(
+    (course) => !course.is_closed,
+  )
+
+  if (!currentCourse) {
+    return {
+      teachers: [],
+      levels,
+    }
+  }
+
+  const {
+    data: courseTeacherRows,
+    error: courseTeachersError,
+  } = await supabase
+    .from('course_teachers')
+    .select('teacher_id')
+    .eq('course_id', currentCourse.id)
+
+  if (courseTeachersError) {
+    throw new Error(
+      `خطأ في تحميل معلمي المقرر: ${courseTeachersError.message}`,
+    )
+  }
+
+  const teacherIds = Array.from(
+    new Set(
+      (courseTeacherRows ?? []).map(
+        (row) => row.teacher_id,
+      ),
+    ),
+  )
+
+  if (teacherIds.length === 0) {
+    return {
+      teachers: [],
+      levels,
+    }
+  }
+
+  const {
+    data: teacherRows,
+    error: teachersError,
+  } = await supabase
+    .from('teachers')
+    .select('id, name')
+    .in('id', teacherIds)
+    .eq('is_active', true)
+    .order('name', {
+      ascending: true,
+    })
+
+  if (teachersError) {
+    throw new Error(
+      `خطأ في تحميل المعلمين: ${teachersError.message}`,
+    )
+  }
+
+  return {
+    teachers: teacherRows ?? [],
+    levels,
+  }
+}
