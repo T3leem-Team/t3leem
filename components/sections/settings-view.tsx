@@ -140,8 +140,8 @@ const managementOptions: ManagementOption[] = [
     iconColor:
       'bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/60 dark:text-amber-300 dark:ring-amber-800',
   },
-  {
-    title: 'المعلمون',
+ {
+    title: 'إدارة المعلمين',
     description:
       'إدارة بيانات المعلمين وربطهم بالدورات والطلاب.',
     href: '/settings/teachers',
