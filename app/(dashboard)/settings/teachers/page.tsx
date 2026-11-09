@@ -11,8 +11,10 @@ import {
   Plus,
   Power,
   Search,
+  Settings2,
   Trash2,
   UserRound,
+  Users,
   X,
 } from 'lucide-react'
 
@@ -63,6 +65,10 @@ const sortTeachers = (items: Teacher[]) =>
 
 export default function Page() {
   const router = useRouter()
+
+  const [activeSection, setActiveSection] = useState<
+    'teachers' | null
+  >(null)
 
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
@@ -389,23 +395,115 @@ export default function Page() {
     )
   })
 
+  // الصفحة الرئيسية لقسم إدارة المعلمين
+  if (!activeSection) {
+    return (
+      <div className="space-y-6 pb-8">
+        <PageHeader
+          title="إدارة المعلمين"
+          description="اختر القسم الذي تريد العمل عليه."
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveSection('teachers')}
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' ||
+                event.key === ' '
+              ) {
+                event.preventDefault()
+                setActiveSection('teachers')
+              }
+            }}
+            className="group cursor-pointer border-blue-200 transition-all duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-md dark:border-blue-900"
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 transition-transform group-hover:scale-105 dark:bg-blue-900/50 dark:text-blue-300">
+                <Users className="size-7" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold">
+                  إدارة بيانات المعلمين
+                </h3>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  إضافة المعلمين وتعديل بياناتهم وإدارة حالاتهم.
+                </p>
+              </div>
+
+              <ArrowRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:-translate-x-1" />
+            </CardContent>
+          </Card>
+
+          <Card
+            role="link"
+            tabIndex={0}
+            onClick={() =>
+              router.push(
+                '/settings/teachers/display-settings'
+              )
+            }
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' ||
+                event.key === ' '
+              ) {
+                event.preventDefault()
+                router.push(
+                  '/settings/teachers/display-settings'
+                )
+              }
+            }}
+            className="group cursor-pointer border-violet-200 transition-all duration-200 hover:-translate-y-1 hover:border-violet-400 hover:shadow-md dark:border-violet-900"
+          >
+            <CardContent className="flex items-center gap-4 p-6">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-700 transition-transform group-hover:scale-105 dark:bg-violet-900/50 dark:text-violet-300">
+                <Settings2 className="size-7" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold">
+                  ضبط صفحة المعلمين
+                </h3>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  تخصيص طريقة عرض بيانات المعلمين في الصفحة الرئيسية.
+                </p>
+              </div>
+
+              <ArrowRight className="size-5 shrink-0 text-muted-foreground transition-transform group-hover:-translate-x-1" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* العودة */}
+      {/* العودة إلى القسم الرئيسي */}
       <div className="flex justify-start">
-        <button
+        <Button
           type="button"
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          variant="outline"
+          onClick={() => {
+            setActiveSection(null)
+            setStatusMessage('')
+            setSearch('')
+          }}
         >
-          <ArrowRight className="h-4 w-4" />
-          عودة
-        </button>
+          <ArrowRight className="size-4" />
+          رجوع
+        </Button>
       </div>
 
       <PageHeader
-        title="إدارة المعلمين"
-        description="إدارة بيانات المعلمين وحالاتهم وإعدادات عرضهم."
+        title="إدارة بيانات المعلمين"
+        description="إدارة بيانات المعلمين وحالاتهم."
       />
 
       {statusMessage && (
@@ -430,27 +528,14 @@ export default function Page() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              router.push('/settings/teachers/display-settings')
-            }
-          >
-            <Edit3 className="size-4" />
-            ضبط صفحة المعلمين
-          </Button>
-
-          <Button
-            type="button"
-            onClick={openAddForm}
-            disabled={saving}
-          >
-            <Plus className="size-4" />
-            إضافة معلم
-          </Button>
-        </div>
+        <Button
+          type="button"
+          onClick={openAddForm}
+          disabled={saving}
+        >
+          <Plus className="size-4" />
+          إضافة معلم
+        </Button>
       </div>
 
       <Card>
@@ -560,6 +645,7 @@ export default function Page() {
         </CardContent>
       </Card>
 
+      {/* تفاصيل المعلم */}
       {selectedTeacher && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-background shadow-xl">
@@ -701,6 +787,7 @@ export default function Page() {
         </div>
       )}
 
+      {/* نموذج الإضافة والتعديل */}
       {showForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl border bg-background shadow-xl">
@@ -838,8 +925,7 @@ export default function Page() {
                     setForm((current) => ({
                       ...current,
                       status:
-                        event.target.value ===
-                        'دوام جزئي'
+                        event.target.value === 'دوام جزئي'
                           ? 'دوام جزئي'
                           : 'دوام كامل',
                     }))
