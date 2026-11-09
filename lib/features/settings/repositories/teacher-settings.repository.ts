@@ -72,3 +72,50 @@ export async function deleteSettingsTeacher(id: string) {
     .delete()
     .eq('id', id)
 }
+
+
+export type TeacherDisplayMode =
+  | 'original'
+  | 'short'
+  | 'teacher'
+
+export type TeacherLevelAlias = {
+  id: string
+  name: string
+  levels: string[]
+}
+
+export type TeacherCustomAlias = {
+  id: string
+  teacherId: string
+  displayName: string
+}
+
+// تحميل إعدادات عرض المعلمين
+export async function loadTeacherDisplaySettings() {
+  return await supabase
+    .from('teacher_display_settings')
+    .select(
+      'display_mode, level_aliases, teacher_aliases',
+    )
+    .eq('id', 1)
+    .single()
+}
+
+// حفظ إعدادات عرض المعلمين
+export async function saveTeacherDisplaySettings(payload: {
+  display_mode: TeacherDisplayMode
+  level_aliases: TeacherLevelAlias[]
+  teacher_aliases: TeacherCustomAlias[]
+}) {
+  return await supabase
+    .from('teacher_display_settings')
+    .update({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', 1)
+    .select()
+    .single()
+}
+
