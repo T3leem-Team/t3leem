@@ -1,8 +1,7 @@
-
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Users } from 'lucide-react'
 
 import {
   Card,
@@ -56,7 +55,6 @@ type DisplayedGrade = {
   colorKey: string
 }
 
-// ألوان هادئة ومتوافقة مع هوية التطبيق
 const gradeColors = [
   'bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-800',
   'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800',
@@ -68,7 +66,6 @@ const gradeColors = [
   'bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800',
 ]
 
-// اختيار لون ثابت حسب المعرّف
 function getGradeColor(colorKey: string) {
   let hash = 0
 
@@ -154,7 +151,7 @@ export function TeachersViewTeachersList({
     [academicLevels],
   )
 
-  // تجهيز المستويات حسب ترتيبها الدراسي
+  // تجهيز مستويات المعلم حسب ترتيبها الدراسي
   const getTeacherGrades = (teacherId: string) => {
     const teacherStudentIds = new Set(
       assignments
@@ -224,7 +221,6 @@ export function TeachersViewTeachersList({
         ]
       }
 
-      // إذا لم يحدد اسم مخصص، نعرض المستويات الأصلية
       return teacherGrades.map((level) => ({
         name: level.name,
         colorKey: level.id || level.name,
@@ -248,7 +244,6 @@ export function TeachersViewTeachersList({
         const colorKey =
           matchingAlias?.id || level.id || level.name
 
-        // عدم تكرار الاسم المختصر إذا طابق أكثر من مستوى
         if (
           !displayedGrades.some(
             (item) => item.name === displayName,
@@ -264,7 +259,6 @@ export function TeachersViewTeachersList({
       return displayedGrades
     }
 
-    // العرض الأصلي
     return teacherGrades.map((level) => ({
       name: level.name,
       colorKey: level.id || level.name,
@@ -272,8 +266,9 @@ export function TeachersViewTeachersList({
   }
 
   return (
-    <>
-      <div className="relative max-w-md">
+    <div className="space-y-3">
+      {/* البحث */}
+      <div className="relative w-full max-w-sm">
         <Search className="absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 
         <input
@@ -281,52 +276,57 @@ export function TeachersViewTeachersList({
           onChange={(event) =>
             setSearch(event.target.value)
           }
-          placeholder="البحث عن معلم..."
-          className="h-10 w-full rounded-md border bg-background px-3 pr-9 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+          placeholder="ابحث عن اسم المعلم..."
+          className="h-10 w-full rounded-lg border border-input bg-background pr-9 pl-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10"
         />
       </div>
 
-      <Card>
+      {/* جدول المعلمين */}
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-10 text-center text-sm text-muted-foreground">
+            <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
               جاري تحميل بيانات المعلمين...
             </div>
           ) : filteredTeachers.length === 0 ? (
-            <div className="p-10 text-center">
+            <div className="flex min-h-48 flex-col items-center justify-center gap-2 p-6 text-center">
+              <div className="flex size-11 items-center justify-center rounded-full bg-muted">
+                <Users className="size-5 text-muted-foreground" />
+              </div>
+
               <p className="font-medium">
-                لا يوجد معلمون مرتبطون بهذه الدورة.
+                لا يوجد معلمون مرتبطون بهذه الدورة
               </p>
 
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 اربط المعلمين بالدورة من قسم السنة الدراسية والدورات.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="px-4 py-3 text-right font-medium">
+              <table className="w-full min-w-[580px] text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="w-14 px-3 py-3 text-center text-xs font-semibold text-muted-foreground">
+                      #
+                    </th>
+
+                    <th className="min-w-[150px] px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
                       المعلم
                     </th>
 
-                    <th className="px-4 py-3 text-right font-medium">
-                      المادة
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
+                      المواد والمستويات
                     </th>
 
-                    <th className="px-4 py-3 text-right font-medium">
-                      المستوى
-                    </th>
-
-                    <th className="px-4 py-3 text-right font-medium">
-                      طلاب المعلم
+                    <th className="w-28 px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
+                      عدد الطلاب
                     </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredTeachers.map((teacher) => {
+                  {filteredTeachers.map((teacher, index) => {
                     const teacherGrades =
                       getTeacherGrades(teacher.id)
 
@@ -354,71 +354,82 @@ export function TeachersViewTeachersList({
                         ),
                       )
 
+                    const studentCount =
+                      getStudentCount(teacher.id)
+
                     return (
                       <tr
                         key={teacher.id}
                         onClick={() =>
                           onSelectTeacher(teacher.id)
                         }
-                        className="cursor-pointer border-t hover:bg-muted/40"
+                        className="group cursor-pointer border-b last:border-0 transition-colors hover:bg-muted/30"
                       >
-                        <td className="px-4 py-4">
+                        {/* التسلسل */}
+                        <td className="px-3 py-3 text-center">
+                          <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted/70 text-xs font-semibold tabular-nums text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
+                            {index + 1}
+                          </span>
+                        </td>
+
+                        {/* اسم المعلم */}
+                        <td className="px-4 py-3">
                           <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation()
                               onSelectTeacher(teacher.id)
                             }}
-                            className="font-medium text-primary hover:underline"
+                            className="text-right font-semibold text-foreground transition-colors hover:text-primary"
                           >
                             {teacher.name}
                           </button>
                         </td>
 
-                        <td className="px-4 py-4">
-                          {teacherSubjects.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {teacherSubjects.map(
-                                (subject) => (
-                                  <span
-                                    key={subject}
-                                    className="rounded-full bg-muted px-2.5 py-1 text-xs"
-                                  >
-                                    {subject}
-                                  </span>
-                                ),
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              —
-                            </span>
-                          )}
+                        {/* المواد والمستويات */}
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-0 flex-col items-start gap-2">
+                            {teacherSubjects.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {teacherSubjects.map(
+                                  (subject) => (
+                                    <span
+                                      key={subject}
+                                      className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground"
+                                    >
+                                      {subject}
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                لا توجد مواد
+                              </span>
+                            )}
+
+                            {displayedGrades.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {displayedGrades.map(
+                                  (grade, gradeIndex) => (
+                                    <span
+                                      key={`${teacher.id}-${grade.colorKey}-${gradeIndex}`}
+                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
+                                    >
+                                      {grade.name}
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
 
-                        <td className="px-4 py-4">
-                          {displayedGrades.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {displayedGrades.map(
-                                (grade, index) => (
-                                  <span
-                                    key={`${teacher.id}-${grade.colorKey}-${index}`}
-                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
-                                  >
-                                    {grade.name}
-                                  </span>
-                                ),
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 font-medium tabular-nums">
-                          {getStudentCount(teacher.id)}
+                        {/* عدد الطلاب */}
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex min-w-9 items-center justify-center rounded-lg bg-muted/60 px-2.5 py-1 text-sm font-semibold tabular-nums">
+                            {studentCount}
+                          </span>
                         </td>
                       </tr>
                     )
@@ -429,6 +440,13 @@ export function TeachersViewTeachersList({
           )}
         </CardContent>
       </Card>
-    </>
+
+      {/* عدد النتائج */}
+      {!loading && filteredTeachers.length > 0 && (
+        <div className="px-1 text-xs text-muted-foreground">
+          عرض {filteredTeachers.length} معلم
+        </div>
+      )}
+    </div>
   )
 }
