@@ -626,28 +626,145 @@ export function TeachersView() {
       ),
     )
 
-  const filteredTeachers =
+   const filteredTeachers =
     useMemo(() => {
       const query = search
         .trim()
         .toLowerCase()
 
-      if (!query) {
-        return operationalTeachers
-      }
+      // ترتيب المستويات حسب sort_order
+      const levelOrderById = new Map(
+        academicLevels.map((level) => [
+          level.id,
+          Number(level.sort_order ?? 0),
+        ]),
+      )
 
-      return operationalTeachers.filter(
-        (teacher) =>
-          teacher.name
-            .toLowerCase()
-            .includes(query) ||
-          teacher.id
-            .toLowerCase()
-            .includes(query),
+      const levelOrderByName = new Map(
+        academicLevels.map((level) => [
+          level.name,
+          Number(level.sort_order ?? 0),
+        ]),
+      )
+
+      // بيانات مستويات الطلاب
+      const studentLevels = new Map(
+        students.map((student) => [
+          student.id,
+          {
+            levelId: student.levelId,
+            levelName: student.levelName,
+          },
+        ]),
+      )
+
+      // تحديد أقدم مستوى لكل معلم
+      const teacherLevelOrder = new Map<
+        string,
+        number
+      >()
+
+      assignments.forEach((assignment) => {
+        if (
+          assignment.courseId !==
+          currentCourse?.id
+        ) {
+          return
+        }
+
+        const student =
+          studentLevels.get(
+            assignment.studentId,
+          )
+
+        if (!student) {
+          return
+        }
+
+        let levelOrder =
+          student.levelId
+            ? levelOrderById.get(
+                student.levelId,
+              )
+            : undefined
+
+        if (
+          levelOrder === undefined &&
+          student.levelName
+        ) {
+          levelOrder =
+            levelOrderByName.get(
+              student.levelName,
+            )
+        }
+
+        if (levelOrder === undefined) {
+          return
+        }
+
+        const previousOrder =
+          teacherLevelOrder.get(
+            assignment.teacherId,
+          )
+
+        if (
+          previousOrder === undefined ||
+          levelOrder < previousOrder
+        ) {
+          teacherLevelOrder.set(
+            assignment.teacherId,
+            levelOrder,
+          )
+        }
+      })
+
+      // البحث
+      const matchedTeachers =
+        operationalTeachers.filter(
+          (teacher) => {
+            if (!query) {
+              return true
+            }
+
+            return (
+              teacher.name
+                .toLowerCase()
+                .includes(query) ||
+              teacher.id
+                .toLowerCase()
+                .includes(query)
+            )
+          },
+        )
+
+      // الترتيب حسب المستوى ثم الاسم
+      return [...matchedTeachers].sort(
+        (a, b) => {
+          const orderA =
+            teacherLevelOrder.get(a.id) ??
+            Number.POSITIVE_INFINITY
+
+          const orderB =
+            teacherLevelOrder.get(b.id) ??
+            Number.POSITIVE_INFINITY
+
+          if (orderA !== orderB) {
+            return orderA - orderB
+          }
+
+          return a.name.localeCompare(
+            b.name,
+            'ar',
+          )
+        },
       )
     }, [
       search,
       operationalTeachers,
+      assignments,
+      students,
+      academicLevels,
+      currentCourse?.id,
     ])
 
   const selectedTeacher =
@@ -707,7 +824,7 @@ export function TeachersView() {
       ),
     )
 
-    const attendanceStudentIdsKey =
+  const attendanceStudentIdsKey =
     [...new Set(assignedStudentIds)]
       .sort()
       .join('|')
