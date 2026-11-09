@@ -1,5 +1,7 @@
+
 'use client'
 
+import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 
 import {
@@ -15,6 +17,13 @@ import type {
 } from '@/lib/teachers-cache'
 
 import type { Student } from '@/app/(dashboard)/teachers/teacher-attendance'
+
+import {
+  loadTeacherDisplaySettings,
+  type TeacherDisplayMode,
+  type TeacherLevelAlias,
+  type TeacherCustomAlias,
+} from '@/lib/features/settings/repositories/teacher-settings.repository'
 
 type AcademicLevel = {
   id: string
@@ -36,6 +45,12 @@ type TeachersViewTeachersListProps = {
   onSelectTeacher: (teacherId: string) => void
 }
 
+type TeacherDisplaySettings = {
+  displayMode: TeacherDisplayMode
+  levelAliases: TeacherLevelAlias[]
+  teacherAliases: TeacherCustomAlias[]
+}
+
 export function TeachersViewTeachersList({
   loading,
   search,
@@ -49,6 +64,161 @@ export function TeachersViewTeachersList({
   getStudentCount,
   onSelectTeacher,
 }: TeachersViewTeachersListProps) {
+  const [displaySettings, setDisplaySettings] =
+    useState<TeacherDisplaySettings>({
+      displayMode: 'original',
+      levelAliases: [],
+      teacherAliases: [],
+    })
+
+  // تحميل إعدادات العرض المحفوظة
+  useEffect(() => {
+    let active = true
+
+    async function loadDisplaySettings() {
+      try {
+        const { data, error } =
+          await loadTeacherDisplaySettings()
+
+        if (error) {
+          throw error
+        }
+
+        if (!active || !data) return
+
+        setDisplaySettings({
+          displayMode:
+            data.display_mode as TeacherDisplayMode,
+
+          levelAliases: Array.isArray(data.level_aliases)
+            ? data.level_aliases as unknown as TeacherLevelAlias[]
+            : [],
+
+          teacherAliases: Array.isArray(data.teacher_aliases)
+            ? data.teacher_aliases as unknown as TeacherCustomAlias[]
+            : [],
+        })
+      } catch (error) {
+        console.error(
+          'تعذر تحميل إعدادات عرض المعلمين:',
+          error,
+        )
+      }
+    }
+
+    loadDisplaySettings()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const levelMap = useMemo(
+    () =>
+      new Map(
+        academicLevels.map((level) => [
+          level.id,
+          level,
+        ]),
+      ),
+    [academicLevels],
+  )
+
+  // تجهيز المستويات حسب ترتيبها الدراسي
+  const getTeacherGrades = (teacherId: string) => {
+    const teacherStudentIds = new Set(
+      assignments
+        .filter(
+          (assignment) =>
+            assignment.courseId === currentCourse?.id &&
+            assignment.teacherId === teacherId,
+        )
+        .map((assignment) => assignment.studentId),
+    )
+
+    const teacherLevels = Array.from(
+      new Map(
+        students
+          .filter(
+            (student) =>
+              teacherStudentIds.has(student.id) &&
+              Boolean(
+                student.levelName &&
+                student.levelName !== '—',
+              ),
+          )
+          .map((student) => [
+            student.levelId || student.levelName,
+            {
+              id: student.levelId || '',
+              name: student.levelName,
+            },
+          ]),
+      ).values(),
+    ).sort((a, b) => {
+      const levelA = levelMap.get(a.id)
+      const levelB = levelMap.get(b.id)
+
+      if (levelA && levelB) {
+        return levelA.sort_order - levelB.sort_order
+      }
+
+      if (levelA) return -1
+      if (levelB) return 1
+
+      return a.name.localeCompare(b.name, 'ar')
+    })
+
+    return teacherLevels
+  }
+
+  // تطبيق طريقة العرض المختارة على مستويات المعلم
+  const getDisplayedGrades = (
+    teacherId: string,
+    teacherGrades: {
+      id: string
+      name: string
+    }[],
+  ) => {
+    if (displaySettings.displayMode === 'teacher') {
+      const customAlias = displaySettings.teacherAliases.find(
+        (item) => item.teacherId === teacherId,
+      )
+
+      if (customAlias?.displayName?.trim()) {
+        return [customAlias.displayName]
+      }
+
+      // إذا لم يحدد اسم مخصص، نعرض المستويات الأصلية
+      return teacherGrades.map((level) => level.name)
+    }
+
+    if (displaySettings.displayMode === 'short') {
+      const displayedNames: string[] = []
+
+      for (const level of teacherGrades) {
+        const matchingAlias =
+          displaySettings.levelAliases.find(
+            (alias) =>
+              alias.levels.includes(level.id) &&
+              Boolean(level.id),
+          )
+
+        const displayName =
+          matchingAlias?.name ?? level.name
+
+        // عدم تكرار الاسم المختصر إذا طابق أكثر من مستوى
+        if (!displayedNames.includes(displayName)) {
+          displayedNames.push(displayName)
+        }
+      }
+
+      return displayedNames
+    }
+
+    return teacherGrades.map((level) => level.name)
+  }
+
   return (
     <>
       <div className="relative max-w-md">
@@ -105,77 +275,14 @@ export function TeachersViewTeachersList({
 
                 <tbody>
                   {filteredTeachers.map((teacher) => {
-                    const teacherStudentIds =
-                      assignments
-                        .filter(
-                          (assignment) =>
-                            assignment.courseId ===
-                              currentCourse?.id &&
-                            assignment.teacherId ===
-                              teacher.id,
-                        )
-                        .map(
-                          (assignment) =>
-                            assignment.studentId,
-                        )
-
                     const teacherGrades =
-                      Array.from(
-                        new Set(
-                          students
-                            .filter(
-                              (student) =>
-                                teacherStudentIds.includes(
-                                  student.id,
-                                ) &&
-                                Boolean(
-                                  student.levelName &&
-                                    student.levelName !==
-                                      '—',
-                                ),
-                            )
-                            .map(
-                              (student) =>
-                                student.levelName,
-                            ),
-                        ),
-                      ).sort((a, b) => {
-                        const levelA =
-                          academicLevels.find(
-                            (level) =>
-                              level.name === a,
-                          )
+                      getTeacherGrades(teacher.id)
 
-                        const levelB =
-                          academicLevels.find(
-                            (level) =>
-                              level.name === b,
-                          )
-
-                        if (levelA && levelB) {
-                          return (
-                            Number(
-                              levelA.sort_order ?? 0,
-                            ) -
-                            Number(
-                              levelB.sort_order ?? 0,
-                            )
-                          )
-                        }
-
-                        if (levelA) {
-                          return -1
-                        }
-
-                        if (levelB) {
-                          return 1
-                        }
-
-                        return String(a).localeCompare(
-                          String(b),
-                          'ar',
-                        )
-                      })
+                    const displayedGrades =
+                      getDisplayedGrades(
+                        teacher.id,
+                        teacherGrades,
+                      )
 
                     const teacherSubjects =
                       Array.from(
@@ -238,12 +345,12 @@ export function TeachersViewTeachersList({
                         </td>
 
                         <td className="px-4 py-4">
-                          {teacherGrades.length > 0 ? (
+                          {displayedGrades.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5">
-                              {teacherGrades.map(
-                                (grade) => (
+                              {displayedGrades.map(
+                                (grade, index) => (
                                   <span
-                                    key={grade}
+                                    key={`${teacher.id}-${grade}-${index}`}
                                     className="rounded-full bg-muted px-2.5 py-1 text-xs"
                                   >
                                     {grade}
