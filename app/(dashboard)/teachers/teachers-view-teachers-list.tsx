@@ -51,6 +51,36 @@ type TeacherDisplaySettings = {
   teacherAliases: TeacherCustomAlias[]
 }
 
+type DisplayedGrade = {
+  name: string
+  colorKey: string
+}
+
+// ألوان هادئة ومتوافقة مع هوية التطبيق
+const gradeColors = [
+  'bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-800',
+  'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800',
+  'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-800',
+  'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800',
+  'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800',
+  'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800',
+  'bg-cyan-50 text-cyan-700 ring-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-800',
+  'bg-indigo-50 text-indigo-700 ring-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-800',
+]
+
+// اختيار لون ثابت حسب المعرّف
+function getGradeColor(colorKey: string) {
+  let hash = 0
+
+  for (let i = 0; i < colorKey.length; i++) {
+    hash = (hash * 31 + colorKey.charCodeAt(i)) | 0
+  }
+
+  const index = Math.abs(hash) % gradeColors.length
+
+  return gradeColors[index]
+}
+
 export function TeachersViewTeachersList({
   loading,
   search,
@@ -179,44 +209,66 @@ export function TeachersViewTeachersList({
       id: string
       name: string
     }[],
-  ) => {
+  ): DisplayedGrade[] => {
     if (displaySettings.displayMode === 'teacher') {
       const customAlias = displaySettings.teacherAliases.find(
         (item) => item.teacherId === teacherId,
       )
 
       if (customAlias?.displayName?.trim()) {
-        return [customAlias.displayName]
+        return [
+          {
+            name: customAlias.displayName.trim(),
+            colorKey: customAlias.id || teacherId,
+          },
+        ]
       }
 
       // إذا لم يحدد اسم مخصص، نعرض المستويات الأصلية
-      return teacherGrades.map((level) => level.name)
+      return teacherGrades.map((level) => ({
+        name: level.name,
+        colorKey: level.id || level.name,
+      }))
     }
 
     if (displaySettings.displayMode === 'short') {
-      const displayedNames: string[] = []
+      const displayedGrades: DisplayedGrade[] = []
 
       for (const level of teacherGrades) {
         const matchingAlias =
           displaySettings.levelAliases.find(
             (alias) =>
-              alias.levels.includes(level.id) &&
-              Boolean(level.id),
+              Boolean(level.id) &&
+              alias.levels.includes(level.id),
           )
 
         const displayName =
-          matchingAlias?.name ?? level.name
+          matchingAlias?.name?.trim() || level.name
+
+        const colorKey =
+          matchingAlias?.id || level.id || level.name
 
         // عدم تكرار الاسم المختصر إذا طابق أكثر من مستوى
-        if (!displayedNames.includes(displayName)) {
-          displayedNames.push(displayName)
+        if (
+          !displayedGrades.some(
+            (item) => item.name === displayName,
+          )
+        ) {
+          displayedGrades.push({
+            name: displayName,
+            colorKey,
+          })
         }
       }
 
-      return displayedNames
+      return displayedGrades
     }
 
-    return teacherGrades.map((level) => level.name)
+    // العرض الأصلي
+    return teacherGrades.map((level) => ({
+      name: level.name,
+      colorKey: level.id || level.name,
+    }))
   }
 
   return (
@@ -350,10 +402,10 @@ export function TeachersViewTeachersList({
                               {displayedGrades.map(
                                 (grade, index) => (
                                   <span
-                                    key={`${teacher.id}-${grade}-${index}`}
-                                    className="rounded-full bg-muted px-2.5 py-1 text-xs"
+                                    key={`${teacher.id}-${grade.colorKey}-${index}`}
+                                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${getGradeColor(grade.colorKey)}`}
                                   >
-                                    {grade}
+                                    {grade.name}
                                   </span>
                                 ),
                               )}
